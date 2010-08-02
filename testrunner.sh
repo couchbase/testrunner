@@ -1,13 +1,6 @@
 #!/bin/sh
-# 
-# Syntax:
-# -c <file>   - path to config file
-# -f <file>   - path to file containing a list of servers
-# -q          - quiet mode, suppress output
-# -s <server> - single server, can be used instead of -f
-# -t <test>   - run test
 
-export SERVER SERVERFILE TESTNAME CONFIGFILE 
+export SERVER SERVERFILE TESTNAME CONFIGFILE VERSION 
 
 function usage {
 	echo "Syntax: testrunner.sh [options]"
@@ -17,16 +10,19 @@ function usage {
 	echo " -f <file>        Path to file containing server list"
 	echo " -s <server>      Hostname of server"
 	echo " -t <test>        Test name"
+	echo " -v <version>     Version to install (if installing)."
+	echo "                  Should resemble \"1.6.0beta3a-19-g81e14cc\""
 	echo
 }
 
-while getopts "c:f:hqs:t:" flag; do
+while getopts "c:f:hqs:t:v:" flag; do
 	case "$flag" in
 		c) CONFIGFILE=$OPTARG;;
 		f) SERVERFILE=$OPTARG;;
 		h) usage; exit;;
 		s) SERVER=$OPTARG;;
 		t) TESTNAME=$OPTARG;;
+		v) VERSION=$OPTARG;;
 	esac
 done
 
@@ -65,7 +61,7 @@ if [ "$?" -eq 1 ]; then
 fi
 
 if [ -n "$TESTNAME" ]; then
-	echo "[$TESTNAME] start" >> $LOGFILE
+	echo "[$TESTNAME] START "`date` >> $LOGFILE
 
 	if [ ! -x "tests/$TESTNAME/run.sh" ]; then
 		echo "[ERROR] $TESTNAME: not found" >> $LOGFILE 
@@ -75,9 +71,9 @@ if [ -n "$TESTNAME" ]; then
 	tests/$TESTNAME/run.sh >> $LOGFILE
 
 	if [ "$?" -eq 1 ]; then
-		echo "[$TESTNAME] FAIL" >> $LOGFILE
+		echo "[$TESTNAME] FAIL "`date` >> $LOGFILE
 	else
-		echo "[$TESTNAME] PASS" >> $LOGFILE
+		echo "[$TESTNAME] PASS "`date` >> $LOGFILE
 	fi
 
 	exit
