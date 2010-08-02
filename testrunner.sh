@@ -76,13 +76,17 @@ if [ -n "$TESTNAME" ]; then
 		echo "[$TESTNAME] PASS "`date` >> $LOGFILE
 	fi
 
+	# I got tired of figuring out wtf log file it was then cating it.
+	echo "LOGFILE: $LOGFILE"
+	cat $LOGFILE
+
 	exit
 fi
 
 # if a config file is specified, do each test one by one, the same way as above.
 
 for TESTNAME in `cat conf/$CONFIGFILE`; do
-	echo "[$TESTNAME] start" >> $LOGFILE
+	echo "[$TESTNAME] START "`date` >> $LOGFILE
 
 	if [ ! -x "tests/$TESTNAME/run.sh" ]; then
 		echo "[ERROR] $TESTNAME: not found" >> $LOGFILE	
@@ -90,9 +94,13 @@ for TESTNAME in `cat conf/$CONFIGFILE`; do
 		tests/$TESTNAME/run.sh >> $LOGFILE
 
 		if [ "$?" -eq 1 ]; then
-			echo "[$TESTNAME] FAIL" >> $LOGFILE
+			echo "[$TESTNAME] FAIL "`date` >> $LOGFILE
 		else
-			echo "[$TESTNAME] PASS" >> $LOGFILE
+			echo "[$TESTNAME] PASS "`date` >> $LOGFILE
 		fi
 	fi
 done
+
+# I got tired of figuring out wtf log file it was then cating it.
+echo "LOGFILE: $LOGFILE"
+cat $LOGFILE
