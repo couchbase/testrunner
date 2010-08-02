@@ -32,21 +32,25 @@ done
 
 if [ -z "$SERVERFILE" ] && [ -z "$SERVER" ]; then
 	echo "Server(s) must be specified with -f or -s."
+	usage;
 	exit 255;
 fi
 
 if [ -z "$TESTNAME" ] && [ -z "$CONFIGFILE" ]; then
 	echo "Test(s) must be specified with -c or -t."
+	usage;
 	exit 255;
 fi
 
 if [ -n "$CONFIGFILE" ] && [ -n "$TESTNAME" ]; then
 	echo "Error: Only specify -c or -t, not both."
+	usage;
 	exit 255;
 fi
 
 if [ -n "$SERVERFILE" ] && [ -s "$SERVER" ]; then
 	echo "Error: Only specify -f or -s, not both."
+	usage;
 	exit 255;
 fi
 
