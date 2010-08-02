@@ -29,6 +29,9 @@ else
 	tests/$TESTNAME/install.pl -s $SERVER 
 fi
 
+# zzzzzz
+sleep 2
+
 # We sent install.pl to background because it can take forever, and this is a
 # pain when installing to lots of servers. However, we don't want the script
 # to exit early if installs are still going on. This is where it gets fun.
@@ -37,7 +40,7 @@ if [ -z "$SERVER" ]; then
 	for entry in `cat $SERVERFILE`; do
 		ps|grep ssh|grep $entry|grep $VERSION > /dev/null
 		RUNNING=$?
-		while [ "$RUNNING" -eq "1" ]; do
+		while [ "$RUNNING" -eq "0" ]; do
 			sleep 5
 			ps|grep ssh|grep $entry|grep $VERSION > /dev/null
 			RUNNING=$?
