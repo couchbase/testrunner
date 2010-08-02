@@ -44,3 +44,37 @@ if [ -z "$SERVER" ]; then
 		done
 	done
 fi
+
+# So now we've verified that there are no more ssh processes running for any
+# of our installations. This isn't a guarentee that everything is installed
+# properly, so we should ssh into each server and verify it's installed
+# and running.
+
+# These tests were sometimes failing for no apparent reason, and I think it's
+# because they needed more time to start up. 
+sleep 10 
+
+RETCODE=0
+
+if [ -z "$SERVER" ]; then
+	for entry in `cat $SERVERFILE`; do
+		# just checking the init script should be the same. of course, this only works on linux.
+		ssh -i ~/.ssh/ustest20090719.pem root@$entry "/etc/init.d/northscale-server status" > /tmp/install.state
+		# bash will return 127 if a file isn't found. let's just check for anything other than 0.
+		RET=$?
+		if [ "$RET" -ne "0" ]; then
+			echo "[$TESTNAME] server not running on $entry: "`cat /tmp/install.state`
+			RETCODE=1
+		fi
+		rm /tmp/install.state
+	done
+else
+	ssh -i ~/.ssh/ustest20090719.pem root@$SERVER "/etc/init.d/northscale-server status" > /dev/null
+	RET=$?
+	if [ "$RET" -ne "0" ]; then
+		echo "[$TESTNAME] server not running on $SERVER"
+		RETCODE=1
+	fi
+fi
+
+exit $RETCODE
