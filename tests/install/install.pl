@@ -36,7 +36,6 @@ my $file = "northscale-server_".$os."_".$arch."_".$version.".tar.gz";
 my $md5sum = `curl -s http://builds.hq.northscale.net/latestbuilds/$file.md5`;
 chomp $md5sum;
 $md5sum =~ s/ .*$//;
-print "md5sum $md5sum\n";
 
 # first, remove any old installs and misc directories
 `ssh -i $sshkey root\@$opts{'s'} "rpm -e northscale-server; rm -rf /var/opt /opt /etc/opt; cd /tmp;" 2>&1 >/dev/null`;
@@ -45,11 +44,11 @@ print "md5sum $md5sum\n";
 my $r_md5sum = `ssh -i $sshkey root\@$opts{'s'} "md5sum /tmp/$file"`;
 chomp $r_md5sum;
 $r_md5sum =~ s/ .*$//;
-print "r_md5sum $r_md5sum\n";
 
 my $command = "cd /tmp; rm -rf northscale-server*.rpm;" ;
 
 if ($md5sum ne $r_md5sum) {
+	print "Fetching package for $opts{'s'}.\n";
 	$command .= " wget -q http://builds.hq.northscale.net/latestbuilds/$file &&";
 }
 
