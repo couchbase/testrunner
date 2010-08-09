@@ -16,8 +16,6 @@ fi
 
 export SSHKEY="~/.ssh/ustest20090719.pem"
 
-# if SERVER isn't set, make a comma delimited list out of our server file
-
 if [ -z "$SERVER" ]; then
 	for entry in `cat $SERVERFILE`; do
 		echo "[$TESTNAME] Running install.pl -s $entry"

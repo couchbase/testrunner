@@ -33,8 +33,26 @@ foreach my $line (@output) {
 }
 
 my $file = "northscale-server_".$os."_".$arch."_".$version.".tar.gz";
+my $md5sum = `curl -s http://builds.hq.northscale.net/latestbuilds/$file.md5`;
+chomp $md5sum;
+$md5sum =~ s/ .*$//;
+print "md5sum $md5sum\n";
 
-# now install the new package
-# first, remove any old package and misc directories, then install the new
-# package.
-`ssh -i $sshkey root\@$opts{'s'} "rpm -e northscale-server; rm -rf /var/opt /opt /etc/opt; cd /tmp; if [ ! -e \"$file\" ]; then wget -q http://builds.hq.northscale.net/latestbuilds/$file; fi && tar -zxf $file; rpm -i northscale-server*.rpm" 2>&1 >/dev/null` 
+# first, remove any old installs and misc directories
+`ssh -i $sshkey root\@$opts{'s'} "rpm -e northscale-server; rm -rf /var/opt /opt /etc/opt; cd /tmp;" 2>&1 >/dev/null`;
+
+# now, get the md5sum of a file if it exists
+my $r_md5sum = `ssh -i $sshkey root\@$opts{'s'} "md5sum /tmp/$file"`;
+chomp $r_md5sum;
+$r_md5sum =~ s/ .*$//;
+print "r_md5sum $r_md5sum\n";
+
+my $command = "cd /tmp; rm -rf northscale-server*.rpm;" ;
+
+if ($md5sum ne $r_md5sum) {
+	$command .= " wget -q http://builds.hq.northscale.net/latestbuilds/$file &&";
+}
+
+$command .= " tar -zxf $file; rpm -i northscale-server*.rpm";
+
+`ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;
