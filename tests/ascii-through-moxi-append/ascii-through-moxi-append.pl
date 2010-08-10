@@ -30,10 +30,10 @@ print $sock "set a 0 0 1\r\nb\r\n";
 $input = <$sock>;
 
 # now the append
-print $sock "set a 0 0 1\r\nc\r\n";
+print $sock "append a 0 0 1\r\nc\r\n";
 $input = <$sock>;
 if ($input !~ /^STORED/) {
-	print "Unexpected data from set: $input (expected: STORED)\n";
+	print "Unexpected data from append: $input (expected: STORED)\n";
 	exit 1;
 }
 

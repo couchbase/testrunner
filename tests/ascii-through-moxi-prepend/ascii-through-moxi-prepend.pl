@@ -29,11 +29,11 @@ my $input = <$sock>;
 print $sock "set a 0 0 1\r\nb\r\n";
 $input = <$sock>;
 
-# now the append
-print $sock "set a 0 0 1\r\nc\r\n";
+# now the prepend 
+print $sock "prepend a 0 0 1\r\nc\r\n";
 $input = <$sock>;
 if ($input !~ /^STORED/) {
-	print "Unexpected data from set: $input (expected: STORED)\n";
+	print "Unexpected data from prepend: $input (expected: STORED)\n";
 	exit 1;
 }
 
