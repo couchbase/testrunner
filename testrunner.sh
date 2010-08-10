@@ -1,8 +1,12 @@
 #!/bin/sh
 
-export SERVER SERVERFILE TESTNAME CONFIGFILE VERSION KEYFILE 
+export SERVER SERVERFILE TESTNAME CONFIGFILE VERSION KEYFILE PYTHONPATH 
 
-KEYFILE="/Users/randi/.ssh/ustest20090719.pem"
+PYTHONPATH="../../../deps/ep-engine/management/"
+
+if [ -z "$KEYFILE" ]; then
+	KEYFILE="/Users/randi/.ssh/ustest20090719.pem"
+fi
 
 function usage {
 	echo "Syntax: testrunner.sh [options]"
