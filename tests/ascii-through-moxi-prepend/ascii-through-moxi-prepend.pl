@@ -46,8 +46,8 @@ if ($input !~ /^VALUE a 0 2/) {
 } 
 
 $input = <$sock>;
-if ($input !~ /^bc/) {
-	print "Unexpected data from get: $input (expected: bc)\n";
+if ($input !~ /^cb/) {
+	print "Unexpected data from get: $input (expected: cb)\n";
 	exit 1;
 } 
 
