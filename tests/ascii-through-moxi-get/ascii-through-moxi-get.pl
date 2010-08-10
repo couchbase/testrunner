@@ -32,19 +32,19 @@ $input = <$sock>;
 print $sock "get a\r\n";
 $input = <$sock>;
 if ($input !~ /^VALUE a 0 1/) {
-	print "Unexpected data from set: $input\n";
+	print "Unexpected data from get: $input (expected: VALUE a 0 1)\n";
 	exit 1;
 } 
 
 $input = <$sock>;
 if ($input !~ /^b/) {
-	print "Unexpected data from set: $input\n";
+	print "Unexpected data from get: $input (expected: b)\n";
 	exit 1;
 } 
 
 $input = <$sock>;
 if ($input !~ /^END/) {
-	print "Unexpected data from set: $input\n";
+	print "Unexpected data from get: $input (expected: END)\n";
 	exit 1;
 } 
 	
