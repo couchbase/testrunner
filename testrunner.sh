@@ -1,6 +1,8 @@
 #!/bin/sh
 
-export SERVER SERVERFILE TESTNAME CONFIGFILE VERSION 
+export SERVER SERVERFILE TESTNAME CONFIGFILE VERSION KEYFILE 
+
+KEYFILE="/Users/randi/.ssh/ustest20090719.pem"
 
 function usage {
 	echo "Syntax: testrunner.sh [options]"
