@@ -7,7 +7,7 @@ my %opts;
 my ($os, $arch);
 getopts('s:', \%opts);
 
-my $sshkey = $ENV{'SSHKEY'};
+my $sshkey = $ENV{'KEYFILE'};
 my $version = $ENV{'VERSION'};
 
 # figure out what OS we're using
@@ -41,14 +41,13 @@ $md5sum =~ s/ .*$//;
 `ssh -i $sshkey root\@$opts{'s'} "rpm -e northscale-server; rm -rf /var/opt /opt /etc/opt; cd /tmp;" 2>&1 >/dev/null`;
 
 # now, get the md5sum of a file if it exists
-my $r_md5sum = `ssh -i $sshkey root\@$opts{'s'} "md5sum /tmp/$file"`;
+my $r_md5sum = `ssh -i $sshkey root\@$opts{'s'} "md5sum /tmp/$file 2>/dev/null"`;
 chomp $r_md5sum;
 $r_md5sum =~ s/ .*$//;
 
 my $command = "cd /tmp; rm -rf northscale-server*.rpm;" ;
 
 if ($md5sum ne $r_md5sum) {
-	print "Fetching package for $opts{'s'}.\n";
 	$command .= " wget -q http://builds.hq.northscale.net/latestbuilds/$file &&";
 }
 

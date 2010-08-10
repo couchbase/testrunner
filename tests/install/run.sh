@@ -6,15 +6,19 @@
 #    CONFIGFILE
 #    TESTNAME
 #    VERSION
+#    KEYFILE
 
 # If VERSION isn't set, bail.
+
+if [ -z "$KEYFILE" ]; then
+	echo "[$TESTNAME] KEYFILE is not set."
+	exit 1
+fi
 
 if [ -z "$VERSION" ]; then
 	echo "[$TESTNAME] VERSION is not set."
 	exit 1
 fi
-
-export SSHKEY="~/.ssh/ustest20090719.pem"
 
 if [ -z "$SERVER" ]; then
 	for entry in `cat $SERVERFILE`; do
@@ -28,7 +32,7 @@ else
 fi
 
 # zzzzzz
-sleep 2
+sleep 10 
 
 # We sent install.pl to background because it can take forever, and this is a
 # pain when installing to lots of servers. However, we don't want the script
@@ -60,7 +64,7 @@ RETCODE=0
 if [ -z "$SERVER" ]; then
 	for entry in `cat $SERVERFILE`; do
 		# just checking the init script should be the same. of course, this only works on linux.
-		ssh -i ~/.ssh/ustest20090719.pem root@$entry "/etc/init.d/northscale-server status" > /tmp/install.state
+		ssh -i $KEYFILE root@$entry "/etc/init.d/northscale-server status" > /tmp/install.state
 		# bash will return 127 if a file isn't found. let's just check for anything other than 0.
 		RET=$?
 		if [ "$RET" -ne "0" ]; then
@@ -70,7 +74,7 @@ if [ -z "$SERVER" ]; then
 		rm /tmp/install.state
 	done
 else
-	ssh -i ~/.ssh/ustest20090719.pem root@$SERVER "/etc/init.d/northscale-server status" > /dev/null
+	ssh -i $KEYFILE root@$SERVER "/etc/init.d/northscale-server status" > /dev/null
 	RET=$?
 	if [ "$RET" -ne "0" ]; then
 		echo "[$TESTNAME] server not running on $SERVER"
