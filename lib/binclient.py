@@ -3,7 +3,7 @@
 import mc_bin_client
 import sys
 
-port = 11210
+port = 11211
 
 server = sys.argv[1];
 
