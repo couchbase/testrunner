@@ -82,4 +82,8 @@ else
 	fi
 fi
 
+# sometimes we're running tests after install. If we run them too quickly, bad
+# things happen.
+sleep 5
+
 exit $RETCODE
