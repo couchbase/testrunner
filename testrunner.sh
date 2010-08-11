@@ -99,7 +99,7 @@ for TESTNAME in `cat conf/$CONFIGFILE`; do
 	else
 		tests/$TESTNAME/run.sh >> $LOGFILE
 
-		if [ "$?" -eq 1 ]; then
+		if [ "$?" -ne 0 ]; then
 			echo "[$TESTNAME] FAIL "`date` >> $LOGFILE
 		else
 			echo "[$TESTNAME] PASS "`date` >> $LOGFILE
