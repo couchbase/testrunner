@@ -17,7 +17,7 @@ elif sys.argv[2] == 'set':
 	mc.set(sys.argv[3], 0, 0, sys.argv[4])
 
 elif sys.argv[2] == 'incr':
-	lc = mc.incr(sys.argv[3], sys.argv[4])
+	lc = mc.incr(sys.argv[3], int(sys.argv[4]))
 	print(lc[0])
 
 elif sys.argv[2] == 'decr':
