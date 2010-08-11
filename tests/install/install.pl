@@ -29,6 +29,8 @@ foreach my $line (@output) {
 		$arch = "x86_64";
 	} elsif ($line =~ /^x86$/) {
 		$arch = "x86";
+	} elsif ($line =~ /^i686$/) {
+		$arch = "x86";
 	} 
 }
 
