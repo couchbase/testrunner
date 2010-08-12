@@ -5,7 +5,7 @@ export SERVER SERVERFILE TESTNAME CONFIGFILE VERSION KEYFILE PYTHONPATH
 PYTHONPATH="../../../deps/ep-engine/management/"
 
 if [ -z "$KEYFILE" ]; then
-	KEYFILE="/Users/randi/.ssh/ustest20090719.pem"
+	KEYFILE=~/.ssh/ustest20090719.pem
 fi
 
 function usage {

@@ -3,41 +3,76 @@
 import mc_bin_client
 import sys
 
-port = 11211
+if len(sys.argv) == 1:
+	print "[sasl username:password] <server:port> <op> <key> [value]"
+	sys.exit(1)
 
-server = sys.argv[1];
+
+if sys.argv[1] == "sasl":
+	user_password = sys.argv[2].split(":")
+	del(sys.argv[1])
+	del(sys.argv[1])
+else:
+	user_password = ["",""]
+
+server_port = sys.argv[1].split(":")
+server = server_port[0]
+if len(server_port) > 1:
+	port = int(server_port[1])
+else:
+	port = 11211
+
+op = sys.argv[2]
+
+if len(sys.argv) > 3:
+	key = sys.argv[3]
+else:
+	key = ""
+
+if len(sys.argv) > 4:
+	value = sys.argv[4]
+else:
+	value = ""
+
+user = user_password[0]
+if len(user_password) > 1:
+	password = user_password[1]
+else:
+	password = ""
 
 mc = mc_bin_client.MemcachedClient(server, port)
+if len(user) + len(password) > 0:
+	mc.sasl_auth_plain(user,password)
 
-if sys.argv[2] == 'get':
-	lc = mc.get(sys.argv[3])
+if op == 'get':
+	lc = mc.get(key)
 	print(lc[2])
 
-elif sys.argv[2] == 'set':
-	mc.set(sys.argv[3], 0, 0, sys.argv[4])
+elif op == 'set':
+	mc.set(key, 0, 0, value)
 
-elif sys.argv[2] == 'incr':
-	lc = mc.incr(sys.argv[3], int(sys.argv[4]))
+elif op == 'incr':
+	lc = mc.incr(key, int(value))
 	print(lc[0])
 
-elif sys.argv[2] == 'decr':
-	lc = mc.decr(sys.argv[3], sys.argv[4])
+elif op == 'decr':
+	lc = mc.decr(key, value)
 	print(lc[0])
 
-elif sys.argv[2] == 'flush':
+elif op == 'flush':
 	mc.flush()
 
-elif sys.argv[2] == 'append':
-	mc.append(sys.argv[3], sys.argv[4])
+elif op == 'append':
+	mc.append(key, value)
 
-elif sys.argv[2] == 'prepend':
-	mc.prepend(sys.argv[3], sys.argv[4])
+elif op == 'prepend':
+	mc.prepend(key, value)
 
-elif sys.argv[2] == 'add':
-	mc.add(sys.argv[3], 0, 0, sys.argv[4])
+elif op == 'add':
+	mc.add(key, 0, 0, value)
 
-elif sys.argv[2] == 'replace':
-	mc.replace(sys.argv[3], 0, 0, sys.argv[4])
+elif op == 'replace':
+	mc.replace(key, 0, 0, value)
 
 else:
 	sys.exit(1)
