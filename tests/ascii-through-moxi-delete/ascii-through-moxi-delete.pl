@@ -34,7 +34,7 @@ if ($input !~ /^STORED/) {
 print $sock "delete a\r\n";
 $input = <$sock>;
 
-if ($input !~ /^DELETED) {
+if ($input !~ /^DELETED/) {
 	print "Unexpected data from delete: $input (expected: DELETED)\n";
 	exit 1;
 }
