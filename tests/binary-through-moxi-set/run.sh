@@ -19,7 +19,7 @@ if [ -z "$SERVER" ]; then
 	done
 else
 	echo "[$TESTNAME] Running set against $SERVER"
-	lib/binclient.py $entry set a 1
+	lib/binclient.py $SERVER set a 1
 	if [ $? -eq 1 ]; then
 		RETVAL=1
 	fi	
