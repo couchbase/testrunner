@@ -37,7 +37,7 @@ if ($input !~ /^STORED/) {
 	exit 1;
 }
 
-$ now check the output
+# now check the output
 print $sock "get a\r\n";
 $input = <$sock>;
 if ($input !~ /^VALUE a 0 2/) {
