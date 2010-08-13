@@ -2,7 +2,7 @@
 
 export SERVER SERVERFILE TESTNAME CONFIGFILE VERSION KEYFILE PYTHONPATH 
 
-PYTHONPATH="../../../deps/ep-engine/management/"
+PYTHONPATH="lib:../../../deps/ep-engine/management/"
 
 if [ -z "$KEYFILE" ]; then
 	KEYFILE=~/.ssh/ustest20090719.pem
