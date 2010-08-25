@@ -11,6 +11,7 @@ testrunner:
 	tar xvf ${TESTRUNNER_DIST}/testrunner_libbin.tar -C ${TESTRUNNER_DIST}
 	rm -f ${TESTRUNNER_DIST}/testrunner.tar ${TESTRUNNER_DIST}/testrunner_libbin.tar
 	touch ${TESTRUNNER_DIST}/server.txt
+	mkdir ${TESTRUNNER_DIST}/logs
 	tar czvf ${DIST_DIR}/testrunner.tar.gz -C ${DIST_DIR} testrunner
 
 clean:

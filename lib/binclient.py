@@ -4,7 +4,7 @@ import mc_bin_client
 import sys
 
 if len(sys.argv) == 1:
-	print "[sasl username:password] <server:port> <op> <key> [value]"
+	print "[sasl username:password] [vbucket vbucketId] <server:port> <op> <key> [value]"
 	sys.exit(1)
 
 
@@ -14,6 +14,13 @@ if sys.argv[1] == "sasl":
 	del(sys.argv[1])
 else:
 	user_password = ["",""]
+
+if sys.argv[1] == "vbucket":
+	vbucketId = int(sys.argv[2])
+	del(sys.argv[1])
+	del(sys.argv[1])
+else:
+	vbucketId = 0
 
 server_port = sys.argv[1].split(":")
 server = server_port[0]
@@ -41,6 +48,7 @@ else:
 	password = ""
 
 mc = mc_bin_client.MemcachedClient(server, port)
+mc.vbucketId = vbucketId
 if len(user) + len(password) > 0:
 	mc.sasl_auth_plain(user,password)
 
