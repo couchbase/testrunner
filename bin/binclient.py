@@ -82,5 +82,15 @@ elif op == 'add':
 elif op == 'replace':
 	mc.replace(key, 0, 0, value)
 
+elif op == 'delete':
+	mc.delete(key)
+
+elif op == 'stats':
+	stats = mc.stats()
+	longest = max((len(x) + 2) for x in stats.keys())
+	for stat, val in sorted(stats.items()):
+		s = stat + ":"
+		print "%s%s" % (s.ljust(longest), val)
+
 else:
 	sys.exit(1)
