@@ -79,3 +79,4 @@ if ($os =~ /rhel_5.4/) {
 	$command .= " dpkg -i northscale-server*.deb";
 }
 `ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;
+`curl -d "port=SAME&initStatus=done&username=Administrator&password=password" "$opts{'s'}:8080/settings/web" &> /dev/null`;
