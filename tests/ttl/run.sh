@@ -42,18 +42,18 @@ function wait_for_persist {
     local tend=0
     local statcount=-1
 
-while [[ $statcount -lt $count ]] ; do
-    statcount=$(echo "stats" | nc $ip $port | awk '$2 ~ /^'$stat'$/{print $3}' | tr -d '\015')
-    if [[ -z $statcount ]] ; then
-statcount=-1
-    fi
+    while [[ $statcount -lt $count ]] ; do
+	statcount=$(echo "stats" | nc $ip $port | awk '$2 ~ /^'$stat'$/{print $3}' | tr -d '\015')
+	if [[ -z $statcount ]] ; then
+	    statcount=-1
+	fi
 
-    if [[ $statcount -lt $count ]] ; then
-sleep 1
-    fi
-done
-tend=$(date +%s)
-echo "$stat: $statcount, $((tend-tstart))s"
+	if [[ $statcount -lt $count ]] ; then
+	    sleep 1
+	fi
+    done
+    tend=$(date +%s)
+    echo "$stat: $statcount, $((tend-tstart))s"
 }
 
 
@@ -71,6 +71,7 @@ echo -e "set key_$$ 0 $ttl 1\na\r" | nc $SERVER 11211 | tr -d '\015' | grep STOR
 if [[ $? -ne 0 ]] ; then
     echo "[$TESTNAME] failed to set key"
     ret=1
+    exit $ret
 fi
 wait_for_persist $((pers+1)) &> /dev/null
 end=$(date +%s)
@@ -79,6 +80,7 @@ echo -e "get key_$$\r" | nc $SERVER 11211 | grep VALUE &> /dev/null
 if [[ $? -ne 0 ]] ; then
     echo "[$TESTNAME] failed to get key before restart"
     ret=1
+    exit $ret
 fi
 echo "[$TESTNAME] stopping server on $SERVER"
 ssh $SERVER service northscale-server stop &> /dev/null
