@@ -56,6 +56,11 @@ if [ -n "$SERVERFILE" ] && [ -s "$SERVER" ]; then
 	exit 255;
 fi
 
+if [ "$VERSION" == "latest" ] ; then
+    VERSION=$(curl -s http://builds.hq.northscale.net/latestbuilds/ | grep -e membase-server_x86_64 -e rpm | cut -f 2 -d "\"" | sort -t "-" -k 3 -n | tail -n1 | sed s'/^membase-server_x86_64_\(.*\).rpm$/\1/')
+fi
+
+
 # figure out our log file name
 LOGFILE=logs/`date "+%Y%m%d%H%M%S"`.log
 
@@ -66,18 +71,22 @@ if [ "$?" -eq 1 ]; then
 	exit 255
 fi
 
+ret=0
+numfailed=0
 if [ -n "$TESTNAME" ]; then
 	echo "[$TESTNAME] START "`date` >> $LOGFILE
 
 	if [ ! -x "tests/$TESTNAME/run.sh" ]; then
 		echo "[ERROR] $TESTNAME: not found" >> $LOGFILE 
-		exit
+		exit 1
 	fi
 
 	tests/$TESTNAME/run.sh >> $LOGFILE
 
 	if [ "$?" -eq 1 ]; then
 		echo "[$TESTNAME] FAIL "`date` >> $LOGFILE
+		numfailed=$((numfailed+1))
+		ret=1
 	else
 		echo "[$TESTNAME] PASS "`date` >> $LOGFILE
 	fi
@@ -96,17 +105,28 @@ for TESTNAME in `cat conf/$CONFIGFILE`; do
 
 	if [ ! -x "tests/$TESTNAME/run.sh" ]; then
 		echo "[ERROR] $TESTNAME: not found" >> $LOGFILE	
+		ret=1
 	else
 		tests/$TESTNAME/run.sh >> $LOGFILE
 
 		if [ "$?" -ne 0 ]; then
 			echo "[$TESTNAME] FAIL "`date` >> $LOGFILE
+			numfailed=$((numfailed+1))
+			ret=1
 		else
 			echo "[$TESTNAME] PASS "`date` >> $LOGFILE
 		fi
 	fi
 done
 
+if [[ -z $ret ]] ; then
+    echo "[testrunner] all tests passed" >> $LOGFILE
+else
+    echo "[testrunner] $numfailed tests failed" >> $LOGFILE
+fi
+
 # I got tired of figuring out wtf log file it was then cating it.
 echo "LOGFILE: $LOGFILE"
 cat $LOGFILE
+
+exit $ret
