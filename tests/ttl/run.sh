@@ -83,11 +83,11 @@ if [[ $? -ne 0 ]] ; then
     exit $ret
 fi
 echo "[$TESTNAME] stopping server on $SERVER"
-ssh $SERVER service northscale-server stop &> /dev/null
+ssh $SERVER service membase-server stop &> /dev/null
 curtime=$(date +%s)
 sleep $(((exptime - curtime) - (ttl/2)))
 echo "[$TESTNAME] starting server on $SERVER"
-ssh $SERVER service northscale-server restart &> /dev/null
+ssh $SERVER service membase-server restart &> /dev/null
 curtime=$(date +%s)
 echo "[$TESTNAME] we have $((exptime-curtime)) seconds left of the timeout"
 curtime=$(date +%s)
