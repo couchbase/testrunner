@@ -17,7 +17,12 @@ chomp($output);
 # It'd be prettier if we just ||'ed this, but we might someday have
 # different packages for 5.2 and 5.4 so I'm keeping them separate
 # for now.
-if ($output =~ /^CentOS release 5\.[24] \(Final\)/) {
+if ($output =~ /^CentOS release 5\.[24]/) {
+	$os = "rhel_5.4";
+	$ext = "rpm";
+}
+
+if ($output =~ /^Red Hat Enterprise Linux Server release 5\.[24]/) {
 	$os = "rhel_5.4";
 	$ext = "rpm";
 } 
@@ -26,13 +31,21 @@ unless ($os) {
 	$output = `ssh -i $sshkey root\@$opts{'s'} "cat /etc/lsb-release 2>/dev/null| grep DISTRIB_DESCRIPTION" 2> /dev/null`;
 	chomp $output;
 	
-	if ($output =~ /Ubuntu 10.04 LTS/) {
+	if ($output =~ /Ubuntu 10.04/) {
 		$os = "ubuntu_10.04";
 		$ext = "deb";
 	}
+
+	if ($output =~ /Ubuntu 9.10/) {
+		$os = "ubuntu_9.10";
+		$ext = "deb";
+	}
+
+	if ($output =~ /Ubuntu 9.04/) {
+		$os = "ubuntu_9.04";
+		$ext = "deb";
+	}
 }
-
-
 
 $output = `ssh -i $sshkey root\@$opts{'s'} "uname -m" 2> /dev/null`;
 chomp $output;
@@ -43,20 +56,17 @@ if ($output =~ /^x86_64$/) {
 } elsif ($output =~ /^x86$/ || $output =~ /^i686$/) {
 	if ($os =~ /rhel_5.4/) {
 		$arch = "x86";
-	} elsif ($os =~ /ubuntu_10.04/ || $os =~ /ubuntu_9.04/ || $os =~ /ubunty_9.10/) {
+	} elsif ($os =~ /ubuntu_10.04/ || $os =~ /ubuntu_9.04/ || $os =~ /ubuntu_9.10/) {
 		$arch = "x86";
+	} else {
+	    print "$opts{'s'}: Unknown OS/arch combo.\n";
 	}
 } else {
-	print "Unknown OS/arch combo.\n";
+	print "$opts{'s'}: Unknown OS/arch combo.\n";
 }
 
 
-my $file;
-if ($version eq "latest") {
-    $file = "membase-server_".$arch.".".$ext;
-} else {
-    $file = "membase-server_".$arch."_".$version.".".$ext;
-}
+my $file = "membase-server_".$arch."_".$version.".".$ext;
 
 my $md5sum = `curl -s http://builds.hq.northscale.net/latestbuilds/$file.md5`;
 chomp $md5sum;
@@ -64,9 +74,9 @@ $md5sum =~ s/ .*$//;
 
 # first, remove any old installs and misc directories
 if ($os =~ /rhel_5.4/) {
-	`ssh -i $sshkey root\@$opts{'s'} "rpm -e membase-server; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>&1 >/dev/null`;
+	`ssh -i $sshkey root\@$opts{'s'} "rpm -e membase-server; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 } elsif ($os =~ /ubuntu_10.04/ || $os =~ /ubuntu_9.04/ || $os =~ /ubuntu_9.10/) {
-	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server; rm -rf /var/opt/membas /opt/membase /etc/opt/membase; cd /tmp;" 2>&1 >/dev/null`;
+	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server; rm -rf /var/opt/membas /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 }
 
 # now, get the md5sum of a file if it exists
