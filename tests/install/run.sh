@@ -57,7 +57,7 @@ fi
 
 # These tests were sometimes failing for no apparent reason, and I think it's
 # because they needed more time to start up. 
-sleep 10 
+sleep 15
 
 RETCODE=0
 

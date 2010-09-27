@@ -87,14 +87,15 @@ $r_md5sum =~ s/ .*$//;
 my $command = "cd /tmp;" ;
 
 if ($md5sum ne $r_md5sum) {
-        print "[install] Fetching http://builds.hq.northscale.net/latestbuilds/$file\n";
+        print "[install] Fetching http://builds.hq.northscale.net/latestbuilds/$file to $opts{'s'}\n";
 	$command .= " rm -f $file ; wget -q http://builds.hq.northscale.net/latestbuilds/$file &&";
 }
 
 if ($os =~ /rhel_5.4/) {
-	$command .= " rpm -i $file";
+	$command .= " rpm -i $file ;";
 } elsif ($os =~ /ubuntu_10.04/ || $os =~ /ubuntu_9.04/ || $os =~ /ubuntu_9.10/) {
-	$command .= " dpkg -i $file";
+	$command .= " dpkg -i $file ;";
 }
+$command .= "sleep 5 ; /etc/init.d/membase-server restart";
 `ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;
 `curl -d "port=SAME&initStatus=done&username=Administrator&password=password" "$opts{'s'}:8080/settings/web" &> /dev/null`;
