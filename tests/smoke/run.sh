@@ -28,12 +28,11 @@ if [ -z "$SERVER" ]; then
 	done
 fi
 
-echo "[$TESTNAME] $SERVER"
-
 ret=0
 
 for S in $(echo $SERVER) ; do
     V=$(ssh -i $KEYFILE $S cat /opt/membase/*/VERSION.txt 2> /dev/null)
+    echo "[$TESTNAME] $S"
     echo "[$TESTNAME] Version: $V"
     if [[ -z $V ]] ; then
 	echo "[$TESTNAME] failed to get version"
