@@ -32,7 +32,7 @@ ret=0
 
 for S in $(echo $SERVER) ; do
     echo "[$TESTNAME] $S"
-    memcapable -h $S -p 11211 2>&1 | grep FAIL
+    memcapable -h $S -p 11211 2>&1 | grep -v -e setq -e flushq -e addq -e replaceq -e deleteq | grep FAIL
     if [[ $? -eq 0 ]] ; then
         ret=1
     fi
