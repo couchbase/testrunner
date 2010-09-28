@@ -96,6 +96,7 @@ if ($os =~ /rhel_5.4/) {
 } elsif ($os =~ /ubuntu_10.04/ || $os =~ /ubuntu_9.04/ || $os =~ /ubuntu_9.10/) {
 	$command .= " dpkg -i $file ;";
 }
-$command .= "sleep 5 ; /etc/init.d/membase-server restart";
+
+$command .= "sleep 5 ; /etc/init.d/membase-server restart ; sleep 5";
 `ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;
-`curl -d "port=SAME&initStatus=done&username=Administrator&password=password" "$opts{'s'}:8080/settings/web" &> /dev/null`;
+`curl -d "port=SAME&initStatus=done&username=Administrator&password=password" "$opts{'s'}:8091/settings/web" &> /dev/null`;
