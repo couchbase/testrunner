@@ -74,9 +74,9 @@ $md5sum =~ s/ .*$//;
 
 # first, remove any old installs and misc directories
 if ($os =~ /rhel_5.4/) {
-	`ssh -i $sshkey root\@$opts{'s'} "rpm -e membase-server; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
+	`ssh -i $sshkey root\@$opts{'s'} "rpm -e membase-server ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 } elsif ($os =~ /ubuntu_10.04/ || $os =~ /ubuntu_9.04/ || $os =~ /ubuntu_9.10/) {
-	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server; rm -rf /var/opt/membas /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
+	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 }
 
 # now, get the md5sum of a file if it exists
@@ -97,6 +97,7 @@ if ($os =~ /rhel_5.4/) {
 	$command .= " dpkg -i $file ;";
 }
 
-$command .= "sleep 5 ; /etc/init.d/membase-server restart ; sleep 5";
+$command .= "sleep 5 ; /etc/init.d/membase-server restart ; sleep 5 ; ";
+$command .= "if ! ps -ef | grep memcached | grep -v grep &> /dev/null ; then sleep 10 ; /etc/init.d/membase-server restart ; sleep 5 ; fi";
 `ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;
 `curl -d "port=SAME&initStatus=done&username=Administrator&password=password" "$opts{'s'}:8091/settings/web" &> /dev/null`;
