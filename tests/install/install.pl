@@ -79,12 +79,12 @@ if ($os =~ /rhel_5.4/) {
 	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 }
 
+my $command = "cd /tmp;" ;
+
 # now, get the md5sum of a file if it exists
 my $r_md5sum = `ssh -i $sshkey root\@$opts{'s'} "md5sum /tmp/$file 2>/dev/null"`;
 chomp $r_md5sum;
 $r_md5sum =~ s/ .*$//;
-
-my $command = "cd /tmp;" ;
 
 if ($md5sum ne $r_md5sum) {
         print "[install] Fetching http://builds.hq.northscale.net/latestbuilds/$file to $opts{'s'}\n";
@@ -98,6 +98,16 @@ if ($os =~ /rhel_5.4/) {
 }
 
 $command .= "sleep 5 ; /etc/init.d/membase-server restart ; sleep 5 ; ";
-$command .= "if ! ps -ef | grep memcached | grep -v grep &> /dev/null ; then sleep 10 ; /etc/init.d/membase-server restart ; sleep 5 ; fi";
+$command .= "\
+for i in 1 2 3 4 5 6 7 8 9 ; do
+ if [[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid 2> /dev/null) &> /dev/null ; then
+  break
+ else
+  echo \"$opts{'s'}: memcached not started, restarting membase\"
+  /etc/init.d/membase-server restart
+  sleep 5
+ fi
+done
+";
 `ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;
 `curl -d "port=SAME&initStatus=done&username=Administrator&password=password" "$opts{'s'}:8091/settings/web" &> /dev/null`;

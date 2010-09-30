@@ -64,17 +64,15 @@ RETCODE=0
 if [ -z "$SERVER" ]; then
 	for entry in `cat $SERVERFILE`; do
 		# just checking the init script should be the same. of course, this only works on linux.
-		ssh -i $KEYFILE root@$entry "/etc/init.d/membase-server status" > /tmp/install.state 2> /dev/null
-		# bash will return 127 if a file isn't found. let's just check for anything other than 0.
+                ssh -i $KEYFILE root@$entry "[[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid) &> /dev/null"
 		RET=$?
 		if [ "$RET" -ne "0" ]; then
-			echo "[$TESTNAME] server not running on $entry: "`cat /tmp/install.state`
+			echo "[$TESTNAME] server not running on $entry"
 			RETCODE=1
 		fi
-		rm /tmp/install.state
 	done
 else
-	ssh -i $KEYFILE root@$SERVER "/etc/init.d/membase-server status" > /dev/null 2> /dev/null
+        ssh -i $KEYFILE root@$SERVER "[[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid) &> /dev/null"
 	RET=$?
 	if [ "$RET" -ne "0" ]; then
 		echo "[$TESTNAME] server not running on $SERVER"
