@@ -74,9 +74,9 @@ $md5sum =~ s/ .*$//;
 
 # first, remove any old installs and misc directories
 if ($os =~ /rhel_5.4/) {
-	`ssh -i $sshkey root\@$opts{'s'} "rpm -e membase-server ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
+	`ssh -i $sshkey root\@$opts{'s'} "rpm -e membase-server ; killall beam ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 } elsif ($os =~ /ubuntu_10.04/ || $os =~ /ubuntu_9.04/ || $os =~ /ubuntu_9.10/) {
-	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
+	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server ; killall beam ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 }
 
 my $command = "cd /tmp;" ;
@@ -105,7 +105,7 @@ for i in 1 2 3 4 5 6 7 8 9 ; do
  else
   echo \"$opts{'s'}: memcached not started, restarting membase\"
   /etc/init.d/membase-server restart
-  sleep 5
+  sleep \$((5+i))
  fi
 done
 ";
