@@ -57,7 +57,7 @@ if [ -n "$SERVERFILE" ] && [ -s "$SERVER" ]; then
 fi
 
 if [ "$VERSION" == "latest" ] ; then
-    VERSION=$(curl -s http://builds.hq.northscale.net/latestbuilds/ | grep -e membase-server_x86_64 -e rpm | cut -f 2 -d "\"" | sort -t "-" -k 3 -n | tail -n1 | sed s'/^membase-server_x86_64_\(.*\).rpm$/\1/')
+    VERSION=$(curl -s http://builds.hq.northscale.net/latestbuilds/ | grep membase-server_x86_64 | grep rpm | cut -f 2 -d "\"" | sort -t "-" -k 3 -n | tail -n1 | sed s'/^membase-server_x86_64_\(.*\).rpm$/\1/')
 fi
 
 
