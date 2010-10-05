@@ -16,7 +16,7 @@ if [ -z "$SERVER" ]; then
 		echo "[$TESTNAME] Uninstalling $entry"
 		ssh -i $KEYFILE root@$entry "rpm -e membase-server || dpkg -r membase-server" 2>/dev/null >/dev/null
                 # right now we don't remove /var/opt diretories
-		OUTPUT=`ssh -i $KEYFILE root@$entry "find /etc/opt/membase /opt/membase -type f 2>/dev/null" | grep -v default | grep -v rpmsave | grep -v ns_1 | grep -v pyc` 
+		OUTPUT=`ssh -i $KEYFILE root@$entry "find /etc/opt/membase /opt/membase -type f 2>/dev/null" | grep -v -e default -e rpmsave -e ns_1 -e pyc -e erl_crash.dump` 
 
 		if [ -n "$OUTPUT" ]; then
 			echo "[$TESTNAME] $OUTPUT"
@@ -28,7 +28,7 @@ else
 	echo "[$TESTNAME] Uninstalling $entry"
 	ssh -i $KEYFILE root@$SERVER "rpm -e membase-server || dpkg -r membase-server" 2>/dev/null >/dev/null
         # right now we don't remove /var/opt diretories
-	OUTPUT=`ssh -i $KEYFILE root@$SERVER "find /etc/opt/membase /opt/membase -type f 2>/dev/null| grep -v default | grep -v rpmsave| grep -v ns_1 | grep -v pyc"`
+	OUTPUT=`ssh -i $KEYFILE root@$SERVER "find /etc/opt/membase /opt/membase -type f 2>/dev/null" | grep -v -e default -e rpmsave -e ns_1 -e pyc -e erl_crash.dump` 
 
 	if [ -n "$OUTPUT" ]; then
 		echo "[$TESTNAME] $OUTPUT"
