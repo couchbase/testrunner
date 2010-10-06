@@ -11,7 +11,7 @@ my $sshkey = $ENV{'KEYFILE'};
 my $version = $ENV{'VERSION'};
 
 # figure out what OS we're using
-my $output = `ssh -i $sshkey root\@$opts{'s'} "cat /etc/redhat-release 2>/dev/null"`;
+my $output = `ssh -i $sshkey root\@$opts{'s'} "cat /etc/redhat-release 2>/dev/null" 2>/dev/null`;
 chomp($output);
 
 # It'd be prettier if we just ||'ed this, but we might someday have
@@ -82,7 +82,7 @@ if ($os =~ /rhel_5.4/) {
 my $command = "cd /tmp;" ;
 
 # now, get the md5sum of a file if it exists
-my $r_md5sum = `ssh -i $sshkey root\@$opts{'s'} "md5sum /tmp/$file 2>/dev/null"`;
+my $r_md5sum = `ssh -i $sshkey root\@$opts{'s'} "md5sum /tmp/$file 2>/dev/null" 2>/devnull`;
 chomp $r_md5sum;
 $r_md5sum =~ s/ .*$//;
 
@@ -111,3 +111,5 @@ done
 ";
 `ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;
 `curl -d "port=SAME&initStatus=done&username=Administrator&password=password" "$opts{'s'}:8091/settings/web" &> /dev/null`;
+$command = "sleep 2 ; /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password=\"\" --bucket-ramsize=300 --bucket-replica=1 ; sleep 5";
+`ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;

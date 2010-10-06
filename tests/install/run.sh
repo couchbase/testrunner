@@ -64,7 +64,7 @@ RETCODE=0
 if [ -z "$SERVER" ]; then
 	for entry in `cat $SERVERFILE`; do
 		# just checking the init script should be the same. of course, this only works on linux.
-                ssh -i $KEYFILE root@$entry "[[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid) &> /dev/null"
+                ssh -i $KEYFILE root@$entry "[[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid) &> /dev/null" 2> /dev/null
 		RET=$?
 		if [ "$RET" -ne "0" ]; then
 			echo "[$TESTNAME] server not running on $entry"
@@ -72,7 +72,7 @@ if [ -z "$SERVER" ]; then
 		fi
 	done
 else
-        ssh -i $KEYFILE root@$SERVER "[[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid) &> /dev/null"
+        ssh -i $KEYFILE root@$SERVER "[[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid) &> /dev/null" 2> /dev/null
 	RET=$?
 	if [ "$RET" -ne "0" ]; then
 		echo "[$TESTNAME] server not running on $SERVER"
