@@ -66,7 +66,7 @@ if ($output =~ /^x86_64$/) {
 }
 
 
-my $file = "membase-server_".$arch."_".$version.".".$ext;
+my $file = "membase-server-enterprise_".$arch."_".$version.".".$ext;
 
 my $md5sum = `curl -s http://builds.hq.northscale.net/latestbuilds/$file.md5`;
 chomp $md5sum;

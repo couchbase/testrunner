@@ -57,9 +57,8 @@ if [ -n "$SERVERFILE" ] && [ -s "$SERVER" ]; then
 fi
 
 if [ "$VERSION" == "latest" ] ; then
-    VERSION=$(curl -s http://builds.hq.northscale.net/latestbuilds/ | grep membase-server_x86_64 | grep rpm | cut -f 2 -d "\"" | sort -t "-" -k 3 -n | tail -n1 | sed s'/^membase-server_x86_64_\(.*\).rpm$/\1/')
+    VERSION=$(curl -s http://builds.hq.northscale.net/latestbuilds/ | grep membase-server-enterprise_x86_64 | grep rpm | cut -f 2 -d "\"" | sort -t "-" -k 4 -n | tail -n1 | sed s'/^membase-server-enterprise_x86_64_\(.*\).rpm$/\1/')
 fi
-
 
 # figure out our log file name
 LOGFILE=logs/`date "+%Y%m%d%H%M%S"`.log
