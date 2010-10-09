@@ -38,7 +38,7 @@ for S in $(echo $SERVER) ; do
 	echo "[$TESTNAME] failed to get version"
 	ret=1
     fi
-    if ! echo $V | grep $VERSION &> /dev/null ; then
+    if ! echo $V | grep "$VERSION-" &> /dev/null ; then
 	echo "[$TESTNAME] version mismatch"
 	ret=0
     fi
