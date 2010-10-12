@@ -25,6 +25,7 @@ if [ -z "$SERVER" ]; then
 		echo "[$TESTNAME] Running install.pl -s $entry"
 		tests/$TESTNAME/install.pl -s $entry &
 	done
+        wait
 	SERVER=""
 else
 	echo "[$TESTNAME] Running install.pl -s $SERVER"
@@ -34,30 +35,10 @@ fi
 # zzzzzz
 sleep 10 
 
-# We sent install.pl to background because it can take forever, and this is a
-# pain when installing to lots of servers. However, we don't want the script
-# to exit early if installs are still going on. This is where it gets fun.
-
-if [ -z "$SERVER" ]; then
-	for entry in `cat $SERVERFILE`; do
-		ps|grep ssh|grep $entry|grep $VERSION > /dev/null
-		RUNNING=$?
-		while [ "$RUNNING" -eq "0" ]; do
-			sleep 5
-			ps|grep ssh|grep $entry|grep $VERSION > /dev/null
-			RUNNING=$?
-		done
-	done
-fi
-
 # So now we've verified that there are no more ssh processes running for any
 # of our installations. This isn't a guarentee that everything is installed
 # properly, so we should ssh into each server and verify it's installed
 # and running.
-
-# These tests were sometimes failing for no apparent reason, and I think it's
-# because they needed more time to start up. 
-sleep 15
 
 RETCODE=0
 
