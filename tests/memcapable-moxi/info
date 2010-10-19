@@ -1,0 +1,2 @@
+Memcapable run against moxi
+Runs memcapable against moxi on each server listed, skips setq, flushq, addq, replaceq, deleteq

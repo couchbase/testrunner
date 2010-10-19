@@ -1,0 +1,2 @@
+Rebalance on 2 nodes
+Performs a server-add, rebalance, server-remove, rebalance against the first two servers listed

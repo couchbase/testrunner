@@ -103,8 +103,9 @@ for i in 1 2 3 4 5 6 7 8 9 ; do
  if [[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid 2> /dev/null) &> /dev/null ; then
   break
  else
-  echo \"$opts{'s'}: memcached not started, restarting membase\"
-  /etc/init.d/membase-server restart
+   echo \"$opts{'s'}: memcached not started, waiting...\"
+#  echo \"$opts{'s'}: memcached not started, restarting membase\"
+#  /etc/init.d/membase-server restart
   sleep \$((5+i))
  fi
 done

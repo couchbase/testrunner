@@ -1,0 +1,273 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import time
+import getopt
+import subprocess
+import re
+import httplib
+import StringIO
+import smtplib
+
+try:    
+    from email.MIMEText import MIMEText
+except:    
+    from email.mime import text as MIMEText
+
+class Testcase(object):
+    def __init__(self,name):
+        self.name = name
+        try:
+            self.description = file("tests/" + name + "/info").next().strip()
+        except:
+            self.description = name
+        self.path = "tests/" + name + "/run.sh"
+        self.status_text = "NOTRUN"
+        self.status = -1
+        self.log = ""
+        self.time = 0
+    def run(self):
+        os.environ["TESTNAME"] = self.name
+        start_time = time.time()
+        process = subprocess.Popen(self.path,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        stdoutdata,stderrdata=process.communicate(None)
+        self.log += stdoutdata + stderrdata
+        self.time = time.time() - start_time
+        if process.returncode == 0:
+            self.status = 0
+            self.status_text = "PASS"
+        else:
+            self.status = 1
+            self.status_text = "FAIL"
+    def report(self):
+        return "Starting test: " + self.description + "\n" + self.log
+    def result(self):
+        return "%s : %s" % (self.status_text, self.description)
+    def __str__(self):
+        return self.result()
+    def __repr__(self):
+        return self.result()
+
+# store quick report
+# store extended report
+# allow logging to a file
+class Report(object):
+    pass
+
+def usage(err=None):
+    if err:
+        print "Error: %s\n" % (err)
+        r = 1
+    else:
+        r = 0
+
+    print """\
+Syntax: testrunner [options]
+
+Options:
+ -c <file>        Config file name (located in the conf subdirectory)
+ -f <file>        Path to file containing server list
+ -s <server>      Hostname of server (multiple -s options add more servers)
+ -t <test>        Test name (multiple -t options add more tests)
+ -v <version>     Version to install (if installing)
+                  Should resemble "1.6.0beta3a-19-g81e14cc
+ -m <email>       Comma seperated list of email addresses to send report to
+ -o               Only send a report if the tests fail
+ -p <smtp server> SMTP server, defaults to localhost
+"""
+    sys.exit(r)
+
+def get_latest_version():
+    h=httplib.HTTPConnection('builds.hq.northscale.net')
+    h.request("GET","/latestbuilds/")
+    r=h.getresponse()
+    html=r.read()
+    h.close()
+    m = re.search('membase-server-enterprise_x86_([-.a-zA-Z0-9]*?)\.rpm',html)
+    return m.group(1)
+
+def get_server_info(server):
+    info = StringIO.StringIO(ssh(server, "cat /etc/lsb-release /etc/redhat-release 2> /dev/null | grep -i -e centos -e 'red hat' -e DISTRIB_DESCRIPTION ; uname -m"))
+
+    os_string = info.next().strip()
+    arch_string = info.next().strip()
+
+    m = re.search('(CentOS|Red Hat|Ubuntu).*?([0-9]+\.[0-9]+)',os_string)
+    os = m.group(1)
+    version = m.group(2)
+    
+    if os == "Ubuntu":
+        ext = "deb"
+    else:
+        ext = "rpm"
+
+    if arch_string == "x86_64":
+        arch = "x86_64"
+    else:
+        arch = "x86"
+
+    return (os,version,arch,ext)
+
+
+# ssh into each host in hosts array and execute cmd in parallel on each
+# TODO: add -i option to ssh
+def ssh(hosts,cmd):
+    if len(hosts[0]) == 1:
+        hosts=[hosts]
+    processes=[]
+    rtn=""
+    for host in hosts:
+        process = subprocess.Popen("ssh -i %s %s \"%s\"" % (config.keyfile,host,cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        processes.append(process)
+    for process in processes:
+        stdoutdata,stderrdata=process.communicate(None)
+        rtn += stdoutdata
+    return rtn
+
+class Config(object):
+    def __init__(self):
+        self.test_group = "quick"
+        self.version = ""
+        self.servers = []
+        self.tests = []
+        self.emails = []
+        self.email_only_on_fail = False
+        self.smtp = "localhost"
+
+def parse_args(argv):
+    config = Config()
+
+    try:
+        (opts, args) = getopt.getopt(argv[1:],
+                                     'hc:f:s:t:v:m:p:o', [])
+    except IndexError:
+        usage()
+    except getopt.GetoptError, err:
+        usage(err)
+
+    for o, a in opts:
+        if o == "-h":
+            usage()
+        elif o == "-c":
+            for line in file("conf/" + a):
+                config.tests.append(Testcase(line.strip()))
+            config.test_group = a.replace(".conf","")
+        elif o == "-f":
+            for line in file(a):
+                config.servers.append(line.strip())
+        elif o == "-s":
+            config.servers.append(a)
+        elif o == "-t":
+            config.tests.append(Testcase(a))
+        elif o == "-v":
+            if a == "latest":
+                config.version = get_latest_version()
+            else:
+                config.version = a
+        elif o == "-m":
+            config.emails = filter(None, " ".join(a.split(",")).split(" "))
+        elif o == "-p":
+            config.smtp = a
+        elif o == "-o":
+            config.email_only_on_fail = True
+        else:
+            assert False, "unhandled option"
+
+    if not config.servers:
+        usage("no servers specified")
+    if not config.tests:
+        usage("no tests specified")
+
+    return config
+
+
+if __name__ == "__main__":
+    config = parse_args(sys.argv)
+    return_code = 0
+
+    os.environ["SERVERS"] = " ".join(config.servers)
+    os.environ["VERSION"] = config.version
+    if not os.environ.has_key("KEYFILE"):
+        os.environ["KEYFILE"] = "~/.ssh/ustest20090719.pem"
+        config.keyfile = "~/.ssh/ustest20090719.pem"
+    else:
+        config.keyfile = os.environ["KEYFILE"]
+    if not os.environ.has_key("PYTHONPATH"):
+        os.environ["PYTHONPATH"] = "lib"
+    else:
+        os.environ["PYTHONPATH"] += os.pathsep + "lib"
+
+    for test in config.tests:
+        test.run()
+
+    report=""
+
+    if config.version != "":
+        packages = {}
+        for server in config.servers:
+            os,version,arch,ext = get_server_info(server)
+            packages["http://builds.hq.northscale.net/latestbuilds/membase-server-enterprise_%s_%s.%s" % (arch,config.version,ext)] = 1
+        for package in packages:
+            print package
+            report += package + "\n"
+        print
+        report += "\n"
+
+    for server in config.servers:
+        os,version,arch,ext = get_server_info(server)
+        print server + " : " + "%s %s %s" % (os,version,arch)
+        report += server + " : " + "%s %s %s" % (os,version,arch) + "\n"
+    print
+    report += "\n"
+
+    print "---- quick report ----"
+    report += "---- quick report ----\n"
+    num_passed = 0
+    num_run = 0
+    for test in config.tests:
+        num_run += 1
+        if test.status == 0:
+            num_passed += 1
+        print test.result()
+        report += test.result() + "\n"
+    if num_run == num_passed:
+        status_text = "PASS"
+    else:
+        status_text = "FAIL"
+        return_code = 1
+    print "%d / %d passed" % (num_passed,num_run)
+    report += "%d / %d passed" % (num_passed,num_run)
+    print
+    report += "\n"
+
+    print
+    report += "\n"
+    print "---- extended report ----"
+    report += "---- extended report ----" + "\n"
+    for test in config.tests:
+        print test.report(),
+        report += test.report()
+        print "Elapsed time (s): " + `int(test.time + .5)`
+        report += "Elapsed time (s): " + `int(test.time + .5)` + "\n"
+        print test.result()
+        report += test.result() + "\n"
+        print
+        report += "\n"
+
+    if config.emails:
+        if (config.email_only_on_fail and return_code == 1) or config.email_only_on_fail == False:
+            msg = MIMEText(report)
+            msg['Subject'] = status_text + " " + config.test_group + " " + config.version
+            msg['From'] = "qa@membase.com"
+            msg['To'] = ", ".join(config.emails)
+            try:
+                s = smtplib.SMTP()
+                s.connect(config.smtp)
+                s.sendmail("qa@membase.com", config.emails, msg.as_string())
+                s.quit()
+            except:
+                print "ERROR: Unable to send email"
+
+    sys.exit(return_code)
+    

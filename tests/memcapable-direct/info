@@ -1,0 +1,2 @@
+Memcapable run against memcached, binary only
+Runs memcapable against memcached on each server listed, skips ascii commands
