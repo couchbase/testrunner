@@ -1,2 +1,3 @@
 Replication on 3 nodes, 2 replica
+Keith Batten
 Performs a replication test that verifies vbucket counts as well as data on disk against the first three servers listed

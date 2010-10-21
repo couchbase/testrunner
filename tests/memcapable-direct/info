@@ -1,2 +1,3 @@
 Memcapable run against memcached, binary only
+Keith Batten
 Runs memcapable against memcached on each server listed, skips ascii commands

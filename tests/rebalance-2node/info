@@ -1,2 +1,3 @@
 Rebalance on 2 nodes
+Keith Batten
 Performs a server-add, rebalance, server-remove, rebalance against the first two servers listed
