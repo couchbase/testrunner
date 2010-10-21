@@ -64,7 +64,7 @@ elif op == 'incr':
 	print(lc[0])
 
 elif op == 'decr':
-	lc = mc.decr(key, value)
+	lc = mc.decr(key, int(value))
 	print(lc[0])
 
 elif op == 'flush':
