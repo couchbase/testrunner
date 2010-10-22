@@ -74,9 +74,9 @@ $md5sum =~ s/ .*$//;
 
 # first, remove any old installs and misc directories
 if ($os =~ /rhel_5.4/) {
-	`ssh -i $sshkey root\@$opts{'s'} "rpm -e membase-server ; killall beam ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
+	`ssh -i $sshkey root\@$opts{'s'} "rpm -e membase-server ; killall beam ;killall -9 memcached ; killall -9 vbucketmigrator; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 } elsif ($os =~ /ubuntu_10.04/ || $os =~ /ubuntu_9.04/ || $os =~ /ubuntu_9.10/) {
-	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server ; killall beam ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
+	`ssh -i $sshkey root\@$opts{'s'} "dpkg -r membase-server ; killall beam ;killall -9 memcached ; killall -9 vbucketmigrator; rm -rf /var/opt/membase /opt/membase /etc/opt/membase; cd /tmp;" 2>/dev/null`;
 }
 
 my $command = "cd /tmp;" ;
