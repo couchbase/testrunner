@@ -56,6 +56,11 @@ if op == 'get':
 	lc = mc.get(key)
 	print(lc[2])
 
+if op == 'gets':
+	lc = mc.get(key)
+	print(lc[1])
+	print(lc[2])
+
 elif op == 'set':
 	mc.set(key, 0, 0, value)
 
