@@ -245,6 +245,10 @@ if __name__ == "__main__":
         os.environ["PYTHONPATH"] = "lib"
     else:
         os.environ["PYTHONPATH"] += os.pathsep + "lib"
+    if not os.environ.has_key("PATH"):
+        os.environ["PATH"] = "bin"
+    else:
+        os.environ["PATH"] += os.pathsep + "bin"
 
     for test in config.tests:
         test.run()
