@@ -87,6 +87,31 @@ def get_latest_version():
     m = re.search('membase-server-enterprise_x86_([-.a-zA-Z0-9]*?)\.rpm',html)
     return m.group(1)
 
+def get_changes(version):
+    h=httplib.HTTPConnection('builds.hq.northscale.net')
+    h.request("GET","/latestbuilds/CHANGES_" + version + ".txt")
+    r=h.getresponse()
+    if r.status == 200:
+        html = r.read()
+        changes = {}
+        index = None
+        for line in filter(None,html.split("\n")):
+            if line[0] != "#":
+                if line[0] == "-":
+                    index = line.split(" ",2)[1]
+                    changes[index] = []
+                else:
+                    changes[index].append(line)
+        text = ""
+        for section in [(k,v) for (k,v) in changes.items() if v]:
+            text += "* " + section[0] + "\n"
+            for line in section[1]:
+                text += line + "\n"
+    else:
+        text = "unable to fetch CHANGES file"
+    h.close()
+    return text
+
 def get_server_info(server):
     info = StringIO.StringIO(ssh(server, "cat /etc/lsb-release /etc/redhat-release 2> /dev/null | grep -i -e centos -e 'red hat' -e DISTRIB_DESCRIPTION ; uname -m"))
 
@@ -240,6 +265,18 @@ if __name__ == "__main__":
     report += "%d / %d passed" % (num_passed,num_run)
     print
     report += "\n"
+
+
+    if config.version != "":
+        changes = get_changes(config.version)
+        print
+        report += "\n"
+        print "---- changes ----"
+        report += "---- changes ----" + "\n"
+        print "http://builds.hq.northscale.net/latestbuilds/CHANGES_" + config.version + ".txt"
+        report += "http://builds.hq.northscale.net/latestbuilds/CHANGES_" + config.version + ".txt" + "\n"
+        print changes
+        report += changes
 
     print
     report += "\n"
