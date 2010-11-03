@@ -114,7 +114,7 @@ def get_changes(version):
     h.request("GET","/latestbuilds/CHANGES_" + version + ".txt")
     r=h.getresponse()
     if r.status == 200:
-        html = r.read()
+        html = r.read().replace("\r","\n")
         changes = {}
         index = None
         for line in filter(None,html.split("\n")):
@@ -123,6 +123,7 @@ def get_changes(version):
                     index = line.split(" ",2)[1]
                     changes[index] = []
                 else:
+                    print "adding change to " + index + ":" + line
                     changes[index].append(line)
         text = ""
         for section in [(k,v) for (k,v) in changes.items() if v]:
