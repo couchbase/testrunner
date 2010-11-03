@@ -8,7 +8,7 @@
 
 ret=0
 datasize=40000
-sleeptime=60
+sleeptime=120
 
 if [[ ! -a bin/mc-loader ]] ; then
     echo "[$TESTNAME] WARNING, missing bin/mc-loader"
