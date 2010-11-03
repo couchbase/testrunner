@@ -78,14 +78,36 @@ Options:
 """
     sys.exit(r)
 
+def sort_latest_version(version):
+# 1.6.2-8-g2e335d0
+# 1.6.2
+# 1.6.1rc3 - ignore
+# 1.6.1pre - ignore
+# 1.6.0.4
+# a.b.c.d-e
+    try:
+        vx = version.split("-")
+        vy = (vx[0]+".0.0.0.0").split(".")
+        a = int(vy[0])
+        b = int(vy[1])
+        c = int(vy[2])
+        d = int(vy[3])
+        e = int(vx[1])
+        # aabbccdddeeee
+        value = -int("%02d%02d%02d%03d%04d" % (a,b,c,d,e))
+    except:
+        value = 0
+    return value
+
+#curl -s http://builds.hq.northscale.net/latestbuilds/ | grep membase-server-enterprise_x86_64 | grep rpm | cut -f 2 -d "\"" | sort -t "-" -k 4 -n | tail -n1 | sed s'/^membase-server-enterprise_x86_64_\(.*\).rpm$/\1/'
 def get_latest_version():
     h=httplib.HTTPConnection('builds.hq.northscale.net')
     h.request("GET","/latestbuilds/")
     r=h.getresponse()
     html=r.read()
     h.close()
-    m = re.search('membase-server-enterprise_x86_([-.a-zA-Z0-9]*?)\.rpm',html)
-    return m.group(1)
+    m = re.findall('membase-server-enterprise_x86_64_([-.a-zA-Z0-9]*?)\.rpm',html)
+    return sorted(m,key=sort_latest_version)[0]
 
 def get_changes(version):
     h=httplib.HTTPConnection('builds.hq.northscale.net')
