@@ -1,16 +1,22 @@
 #!/bin/bash
 
 if [[ -z $1 ]] ; then
-    echo "$0 <testconf> [email list]"
+    echo "$0 <testconf> [email list] [only email on fail, default is off]"
+    echo
+    echo " $0 smoke staff_d@membase.com on"
     exit
 fi
 
 testconf=$1
 
-if [[ $2 ]] ; then
+if [[ -n $2 ]] ; then
     emails="$2"
 else
     emails=""
+fi
+
+if [[ -n $3 ]] ; then
+    trparams="-o"
 fi
 
 latest=$(curl -s http://builds.hq.northscale.net/latestbuilds/ | grep membase-server-enterprise_x86_64 | grep rpm | cut -f 2 -d "\"" | sort -t "-" -k 4 -n | tail -n1 | sed s'/^membase-server-enterprise_x86_64_\(.*\).rpm$/\1/')
@@ -30,7 +36,7 @@ echo "Starting $testconf test against $latest"
 
 mkdir auto &> /dev/null
 s=$(date +%s)
-./testrunner -c $testconf.conf -f servers_smoke -v $latest -m "$emails" &> auto/$latest.$testconf.log
+./testrunner -c $testconf.conf -f servers_smoke -v $latest -m "$emails" $trparams &> auto/$latest.$testconf.log
 e=$(date +%s)
 
 echo "Finished $testconf : elapsed: $((e-s)) seconds"
