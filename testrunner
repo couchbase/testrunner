@@ -123,7 +123,6 @@ def get_changes(version):
                     index = line.split(" ",2)[1]
                     changes[index] = []
                 else:
-                    print "adding change to " + index + ":" + line
                     changes[index].append(line)
         text = ""
         for section in [(k,v) for (k,v) in changes.items() if v]:
