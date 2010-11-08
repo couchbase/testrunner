@@ -1,0 +1,35 @@
+Testrunner
+
+Syntax: testrunner [options]
+
+Options:
+ -c <file>        Config file name (located in the conf subdirectory)
+ -f <file>        Path to file containing server list
+ -s <server>      Hostname of server (multiple -s options add more servers)
+ -t <test>        Test name (multiple -t options add more tests)
+ -v <version>     Version to install (if installing)
+                  Should resemble "1.6.1-14-ga74f38b
+ -n <directory>   Directory that ns_server is at, used in localhost tests
+ -k <keyfile>     Location of ssh private key
+ -m <email>       Comma seperated list of email addresses to send report to
+ -o               Only send a report if the tests fail
+ -p <smtp server> SMTP server, defaults to localhost
+
+
+The config file is located in ./conf and is simply a list of tests. A test is defined by its path relative to ./tests/ and can be nested.
+Testrunner will execute each test in sequence. It will run ./tests/<testname>/run.sh
+
+
+Environment variables available to tests:
+SERVERS
+- space delimited list of servers
+- format is host:rest_port:moxi_port1,moxi_port2,...:memcache_port
+- defaults if no ports are given are host:8091:11211:11210
+VERSION
+- if specified it is the version of the software to be used (for example in install)
+- format is like 1.6.2-14-ga74f38b
+KEYFILE
+- path to ssh private key used in passwordless logins
+NSDIR
+- path to ns_server
+- used for local access to membase-cli and data files
