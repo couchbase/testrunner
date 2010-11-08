@@ -1,0 +1,3 @@
+Reset membase back to defaults
+Keith Batten
+Removes the database files and restarts membase on each server listed
