@@ -136,6 +136,8 @@ def get_changes(version):
 
 def get_server_info(server):
     info = StringIO.StringIO(ssh(server, "cat /etc/lsb-release /etc/redhat-release 2> /dev/null | grep -i -e centos -e 'red hat' -e DISTRIB_DESCRIPTION ; uname -m"))
+    if not info.getvalue():
+        return ("unknown","unknown","unknown","unknown")
 
     os_string = info.next().strip()
     arch_string = info.next().strip()
