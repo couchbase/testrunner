@@ -72,6 +72,7 @@ Options:
  -t <test>        Test name (multiple -t options add more tests)
  -v <version>     Version to install (if installing)
                   Should resemble "1.6.0beta3a-19-g81e14cc
+ -k <keyfile>     Location of ssh private key
  -m <email>       Comma seperated list of email addresses to send report to
  -o               Only send a report if the tests fail
  -p <smtp server> SMTP server, defaults to localhost
@@ -167,7 +168,7 @@ def ssh(hosts,cmd):
     processes=[]
     rtn=""
     for host in hosts:
-        process = subprocess.Popen("ssh -i %s %s \"%s\"" % (config.keyfile,host,cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        process = subprocess.Popen("ssh -i %s root@%s \"%s\"" % (config.keyfile,host,cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         processes.append(process)
     for process in processes:
         stdoutdata,stderrdata=process.communicate(None)
@@ -183,13 +184,14 @@ class Config(object):
         self.emails = []
         self.email_only_on_fail = False
         self.smtp = "localhost"
+        self.keyfile = "~/.ssh/ustest20090719.pem"
 
 def parse_args(argv):
     config = Config()
 
     try:
         (opts, args) = getopt.getopt(argv[1:],
-                                     'hc:f:s:t:v:m:p:o', [])
+                                     'hc:f:s:t:v:m:p:ok:', [])
     except IndexError:
         usage()
     except getopt.GetoptError, err:
@@ -220,6 +222,8 @@ def parse_args(argv):
             config.smtp = a
         elif o == "-o":
             config.email_only_on_fail = True
+        elif o == "-k":
+            config.keyfile = a
         else:
             assert False, "unhandled option"
 
@@ -237,11 +241,7 @@ if __name__ == "__main__":
 
     os.environ["SERVERS"] = " ".join(config.servers)
     os.environ["VERSION"] = config.version
-    if not os.environ.has_key("KEYFILE"):
-        os.environ["KEYFILE"] = "~/.ssh/ustest20090719.pem"
-        config.keyfile = "~/.ssh/ustest20090719.pem"
-    else:
-        config.keyfile = os.environ["KEYFILE"]
+    os.environ["KEYFILE"] = config.keyfile
     if not os.environ.has_key("PYTHONPATH"):
         os.environ["PYTHONPATH"] = "lib"
     else:
