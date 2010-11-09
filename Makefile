@@ -5,7 +5,7 @@ TESTRUNNER_DIST=${DIST_DIR}/testrunner
 
 testrunner:
 	mkdir -p ${TESTRUNNER_DIST}
-	tar cvf ${TESTRUNNER_DIST}/testrunner.tar --exclude='*.pyc' conf tests testrunner
+	tar cvf ${TESTRUNNER_DIST}/testrunner.tar --exclude='*.pyc' conf tests testrunner README
 	tar cvfh ${TESTRUNNER_DIST}/testrunner_libbin.tar --exclude='*.pyc' lib bin
 	tar xvf ${TESTRUNNER_DIST}/testrunner.tar -C ${TESTRUNNER_DIST}
 	tar xvf ${TESTRUNNER_DIST}/testrunner_libbin.tar -C ${TESTRUNNER_DIST}
