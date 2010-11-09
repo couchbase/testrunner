@@ -72,7 +72,7 @@ Options:
  -t <test>        Test name (multiple -t options add more tests)
  -v <version>     Version to install (if installing)
                   Should resemble "1.6.1-14-ga74f38b
- -n <directory>   Directory that ns_server is at, used in localhost tests
+ -b <directory>   Directory where membase is at, used in localhost tests
  -k <keyfile>     Location of ssh private key
  -m <email>       Comma seperated list of email addresses to send report to
  -o               Only send a report if the tests fail
@@ -137,39 +137,52 @@ def get_changes(version):
     return text
 
 def get_server_info(server):
-    info = StringIO.StringIO(ssh(server, "cat /etc/lsb-release /etc/redhat-release 2> /dev/null | grep -i -e centos -e 'red hat' -e DISTRIB_DESCRIPTION ; uname -m"))
+    os = "unknown"
+    version = "unknown"
+    arch = "unknown"
+    ext = "unknown"
+
+    info = StringIO.StringIO(ssh(server, "cat /etc/lsb-release /etc/redhat-release 2> /dev/null | grep -i -e centos -e 'red hat' -e DISTRIB_DESCRIPTION ;"
+                                 "sw_vers | awk '/ProductName:/{printf \"%s%s%s \",$2,$3,$4}/ProductVersion:/{print $2}' 2> /dev/null ;"
+                                 "uname -m"))
     if not info.getvalue():
-        return ("unknown","unknown","unknown","unknown")
+        return (os,version,arch,ext)
 
     os_string = info.next().strip()
     arch_string = info.next().strip()
 
-    m = re.search('(CentOS|Red Hat|Ubuntu).*?([0-9]+\.[0-9]+)',os_string)
+    m = re.search('(CentOS|Red Hat|Ubuntu|MacOSX).*?([0-9]+\.[0-9]+)',os_string)
     os = m.group(1)
     version = m.group(2)
     
     if os == "Ubuntu":
         ext = "deb"
-    else:
+    elif os == "CentOS":
+        ext = "rpm"
+    elif os == "Red Hat":
         ext = "rpm"
 
     if arch_string == "x86_64":
         arch = "x86_64"
-    else:
+    elif arch_string == "i686":
+        arch = "x86"
+    elif arch_string == "i386":
         arch = "x86"
 
     return (os,version,arch,ext)
 
-
 # ssh into each host in hosts array and execute cmd in parallel on each
-# TODO: add -i option to ssh
+# if system is localhost, just run the command
 def ssh(hosts,cmd):
     if len(hosts[0]) == 1:
         hosts=[hosts]
     processes=[]
     rtn=""
     for host in hosts:
-        process = subprocess.Popen("ssh -i %s root@%s \"%s\"" % (config.keyfile,host.split(":")[0],cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        if host.split(":")[0] in ("localhost","127.0.0.1"):
+            process = subprocess.Popen("%s" % (cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        else:
+            process = subprocess.Popen("ssh -i %s root@%s \"%s\"" % (config.keyfile,host.split(":")[0],cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         processes.append(process)
     for process in processes:
         stdoutdata,stderrdata=process.communicate(None)
@@ -186,14 +199,17 @@ class Config(object):
         self.email_only_on_fail = False
         self.smtp = "localhost"
         self.keyfile = "~/.ssh/ustest20090719.pem"
-        self.nsdir = ""
+        self.mbdir = ""
+        self.membase_cli = ""
+        self.user = "Administrator"
+        self.password = "password"
 
 def parse_args(argv):
     config = Config()
 
     try:
         (opts, args) = getopt.getopt(argv[1:],
-                                     'hc:f:s:t:v:m:p:ok:', [])
+                                     'hc:f:s:t:v:m:p:ok:b:', [])
     except IndexError:
         usage()
     except getopt.GetoptError, err:
@@ -226,8 +242,9 @@ def parse_args(argv):
             config.email_only_on_fail = True
         elif o == "-k":
             config.keyfile = a
-        elif o == "-n":
-            config.nsdir = a
+        elif o == "-b":
+            config.mbdir = a
+            config.membase_cli = a + "/membase-cli/membase"
         else:
             assert False, "unhandled option"
 
@@ -235,6 +252,9 @@ def parse_args(argv):
         usage("no servers specified")
     if not config.tests:
         usage("no tests specified")
+
+    if not config.membase_cli:
+        config.membase_cli = "ssh -i " + config.keyfile + " root@" + config.servers[0] + " /opt/membase/bin/cli/membase"
 
     return config
 
@@ -246,7 +266,10 @@ if __name__ == "__main__":
     os.environ["SERVERS"] = " ".join(config.servers)
     os.environ["VERSION"] = config.version
     os.environ["KEYFILE"] = config.keyfile
-    os.environ["NSDIR"] = config.nsdir
+    os.environ["MEMBASE_DIR"] = config.mbdir
+    os.environ["MEMBASE_CLI"] = config.membase_cli
+    os.environ["REST_USER"] = config.user
+    os.environ["REST_PASSWORD"] = config.password
     if not os.environ.has_key("PYTHONPATH"):
         os.environ["PYTHONPATH"] = "lib"
     else:

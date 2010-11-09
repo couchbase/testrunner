@@ -9,7 +9,7 @@ Options:
  -t <test>        Test name (multiple -t options add more tests)
  -v <version>     Version to install (if installing)
                   Should resemble "1.6.1-14-ga74f38b
- -n <directory>   Directory that ns_server is at, used in localhost tests
+ -b <directory>   Directory where membase is at, used in localhost tests
  -k <keyfile>     Location of ssh private key
  -m <email>       Comma seperated list of email addresses to send report to
  -o               Only send a report if the tests fail
@@ -21,6 +21,7 @@ Testrunner will execute each test in sequence. It will run ./tests/<testname>/ru
 
 
 Environment variables available to tests:
+
 SERVERS
 - space delimited list of servers
 - format is host:rest_port:moxi_port1,moxi_port2,...:memcache_port
@@ -30,6 +31,16 @@ VERSION
 - format is like 1.6.2-14-ga74f38b
 KEYFILE
 - path to ssh private key used in passwordless logins
-NSDIR
-- path to ns_server
+MEMBASE_DIR
+- path to membase
 - used for local access to membase-cli and data files
+- this is the parent directory to ns_server
+REST_USER
+- username that should be used (Administrator)
+REST_PASSWORD
+- password that should be used (password)
+MEMBASE_CLI
+- location of membase cli commands, either on localhost or remote server
+- usage: ${MEMBASE_CLI} rebalance -u ${REST_USER} -p ${REST_PASSWORD}
+  - ${MEMBASE_DIR}/membase/cli/membase rebalance -c ${SERVER}:${REST_PORT} -u ${REST_USER} -p ${REST_PASSWORD}
+  - ssh $SERVERS[0] /opt/membase/bin/cli/membase rebalance -c ${SERVER}:${REST_PORT} -u ${REST_USER} -p ${REST_PASSWORD}
