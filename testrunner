@@ -101,7 +101,6 @@ def sort_latest_version(version):
         value = 0
     return value
 
-#curl -s http://builds.hq.northscale.net/latestbuilds/ | grep membase-server-enterprise_x86_64 | grep rpm | cut -f 2 -d "\"" | sort -t "-" -k 4 -n | tail -n1 | sed s'/^membase-server-enterprise_x86_64_\(.*\).rpm$/\1/'
 def get_latest_version():
     h=httplib.HTTPConnection('builds.hq.northscale.net')
     h.request("GET","/latestbuilds/")
@@ -161,6 +160,8 @@ def get_server_info(server):
         ext = "rpm"
     elif os == "Red Hat":
         ext = "rpm"
+    elif os == "MacOSX":
+        ext = ""
 
     if arch_string == "x86_64":
         arch = "x86_64"
@@ -224,9 +225,29 @@ def parse_args(argv):
             config.test_group = a.replace(".conf","")
         elif o == "-f":
             for line in file(a):
-                config.servers.append(line.strip())
+                server = (line.strip()+"::::").split(":",4)
+                del server[4]
+                if server[0] == "localhost":
+                    server[0] = "127.0.0.1"
+                if not server[1]:
+                    server[1] = "8091"
+                if not server[2]:
+                    server[2] = "11211"
+                if not server[3]:
+                    server[3] = "11210"
+                config.servers.append(":".join(server))
         elif o == "-s":
-            config.servers.append(a)
+            server = (a+"::::").split(":",4)
+            del server[4]
+            if server[0] == "localhost":
+                server[0] = "127.0.0.1"
+            if not server[1]:
+                server[1] = "8091"
+            if not server[2]:
+                server[2] = "11211"
+            if not server[3]:
+                server[3] = "11210"
+            config.servers.append(":".join(server))
         elif o == "-t":
             config.tests.append(Testcase(a))
         elif o == "-v":
@@ -254,7 +275,7 @@ def parse_args(argv):
         usage("no tests specified")
 
     if not config.membase_cli:
-        config.membase_cli = "ssh -i " + config.keyfile + " root@" + config.servers[0] + " /opt/membase/bin/cli/membase"
+        config.membase_cli = "ssh -i " + config.keyfile + " root@" + config.servers[0].split(":")[0] + " /opt/membase/bin/cli/membase"
 
     return config
 
