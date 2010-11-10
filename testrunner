@@ -155,21 +155,8 @@ def get_server_info(server):
     os = m.group(1)
     version = m.group(2)
 
-    if os == "Ubuntu":
-        ext = "deb"
-    elif os == "CentOS":
-        ext = "rpm"
-    elif os == "Red Hat":
-        ext = "rpm"
-    elif os == "MacOSX":
-        ext = ""
-
-    if arch_string == "x86_64":
-        arch = "x86_64"
-    elif arch_string == "i686":
-        arch = "x86"
-    elif arch_string == "i386":
-        arch = "x86"
+    ext = {'Ubuntu': 'deb', 'CentOS': 'rpm', 'Red Hat': 'rpm'}.get(os, '')
+    arch = {'i686': 'x86', 'i386': 'x86'}.get(arch_string, arch_string)
 
     return (os, version, arch, ext)
 
