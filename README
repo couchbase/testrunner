@@ -13,7 +13,7 @@ Options:
  -k <keyfile>     Location of ssh private key
  -m <email>       Comma seperated list of email addresses to send report to
  -o               Only send a report if the tests fail
- -p <smtp server> SMTP server, defaults to localhost
+ -p <smtp server> SMTP server, defaults to qamail.hq.northscale.net
 
 
 The config file is located in ./conf and is simply a list of tests. A test is defined by its path relative to ./tests/ and can be nested.

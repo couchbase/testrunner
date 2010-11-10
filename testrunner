@@ -77,7 +77,7 @@ Options:
  -k <keyfile>     Location of ssh private key
  -m <email>       Comma seperated list of email addresses to send report to
  -o               Only send a report if the tests fail
- -p <smtp server> SMTP server, defaults to localhost
+ -p <smtp server> SMTP server, defaults to qamail.hq.northscale.net
 """
     sys.exit(r)
 
@@ -204,7 +204,7 @@ class Config(object):
         self.tests = []
         self.emails = []
         self.email_only_on_fail = False
-        self.smtp = "localhost"
+        self.smtp = "qamail.hq.northscale.net"
         self.keyfile = "~/.ssh/ustest20090719.pem"
         self.mbdir = ""
         self.membase_cli = ""
