@@ -1,1 +1,0 @@
-../../../../src/py/vbucket_check/vbucket_check.py

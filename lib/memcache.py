@@ -1,1 +1,0 @@
-../../../../deps/mc-check/deps/python-memcached/memcache.py
