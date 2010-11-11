@@ -1,0 +1,3 @@
+Replication validation on 4 nodes, 2 replica
+Chiyoung Seo
+Performs a replication validation that verifies vbucket counts, stats, and replication data against the four servers listed
