@@ -172,7 +172,7 @@ if __name__ == "__main__":
 
         # start up server
         print "Installing new software on " + config.server
-        cmd = "cd /tmp ;sleep 3 ; "+package_install+filename+"; /etc/init.d/membase-server start;wget -qO- --post-date 'port=SAME&initStatus=done&username=Administrator&password=password "+config.server+":"+config.server_rest+"/settings/web' &> /dev/null ; sleep 5 ; /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1 ; sleep 5"
+        cmd = "cd /tmp ;sleep 3 ; "+package_install+filename+"; /etc/init.d/membase-server start; sleep 2 ; /opt/membase/bin/cli/membase cluster-init -c localhost -u Administrator -p password --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port=8091 ; sleep 3 ; /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1 ; sleep 10"
         ssh(config.server, cmd)
 
     sys.exit(return_code)
