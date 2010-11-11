@@ -8,19 +8,14 @@
 
 # If VERSION isn't set, bail.
 
-if [ -z "$KEYFILE" ]; then
-    echo "[$TESTNAME] KEYFILE is not set."
-    exit 1
-fi
-
-if [ -z "$VERSION" ]; then
-    echo "[$TESTNAME] VERSION is not set."
+if [[ -z "$VERSION" && -z "$MEMBASE_DIR" ]]; then
+    echo "[$TESTNAME] VERSION or MEMBASE_DIR is not set."
     exit 1
 fi
 
 for SERVER in $SERVERS ; do
-    echo "[$TESTNAME] Running install.pl -s $SERVER"
-    tests/$TESTNAME/install.pl -s $SERVER &
+    echo "[$TESTNAME] Running install -s $SERVER"
+    tests/$TESTNAME/install -s $SERVER -v "$VERSION" -b "$MEMBASE_DIR" -k "$KEYFILE" &
 done
 wait
 
@@ -32,10 +27,13 @@ wait
 RETCODE=0
 
 for SERVER in $SERVERS ; do
-    ssh -i $KEYFILE root@$SERVER "[[ -f /var/run/membase-server.pid ]] && ps -p \$(cat /var/run/membase-server.pid) &> /dev/null" 2> /dev/null
+    SERVER_IP=$(echo $SERVER | cut -f 1 -d ":")
+    MOXI_IP=$(echo $SERVER | cut -f 3 -d ":")
+
+    echo "stats" | nc $SERVER_IP $MOXI_IP | grep uptime &> /dev/null
+
     if [[ $? -ne 0 ]] ; then
         echo "[$TESTNAME] server not running on $SERVER"
-        echo "[$TESTNAME] $SERVER: $(echo "stats" | nc $SERVER 11211 | grep uptime)"
         RETCODE=1
     fi
 done

@@ -9,15 +9,17 @@
 
 ret=0
 
-for S in $SERVERS ; do
+for SERVER in $SERVERS ; do
+    SERVER_IP=$(echo $SERVER | cut -f 1 -d ":")
+    SERVER_MOXI=$(echo $SERVER | cut -f 3 -d ":")
     echo "[$TESTNAME] Checking set/get $S"
 
-    echo -e "set key_$$ 0 0 1\na\r" | nc $S 11211 | tr -d '\015' | grep STORED &> /dev/null
+    echo -e "set key_$$ 0 0 1\na\r" | nc $SERVER_IP $SERVER_MOXI | tr -d '\015' | grep STORED &> /dev/null
     if [[ $? -ne 0 ]] ; then
         echo "[$TESTNAME] failed to set key key_$$"
         ret=1
     fi
-    echo -e "get key_$$\r" | nc $S 11211 | grep VALUE &> /dev/null
+    echo -e "get key_$$\r" | nc $SERVER_IP $SERVER_MOXI | grep VALUE &> /dev/null
     if [[ $? -ne 0 ]] ; then
         echo "[$TESTNAME] failed to get key key_$$"
         ret=1

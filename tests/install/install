@@ -1,0 +1,178 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import time
+import getopt
+import subprocess
+import re
+import httplib
+import StringIO
+
+def get_server_info(server):
+    os = "unknown"
+    version = "unknown"
+    arch = "unknown"
+    ext = "unknown"
+
+    info = StringIO.StringIO(ssh(server, "cat /etc/lsb-release /etc/redhat-release 2> /dev/null | grep -i -e centos -e 'red hat' -e DISTRIB_DESCRIPTION ;"
+                                 "sw_vers | awk '/ProductName:/{printf \"%s%s%s \",$2,$3,$4}/ProductVersion:/{print $2}' 2> /dev/null ;"
+                                 "uname -m"))
+    if not info.getvalue():
+        return (os, version, arch, ext)
+
+    os_string = info.next().strip()
+    arch_string = info.next().strip()
+
+    m = re.search('(CentOS|Red Hat|Ubuntu|MacOSX).*?([0-9]+\.[0-9]+)', os_string)
+    os = m.group(1)
+    version = m.group(2)
+
+    ext = {'Ubuntu': 'deb', 'CentOS': 'rpm', 'Red Hat': 'rpm'}.get(os, '')
+    arch = {'i686': 'x86', 'i386': 'x86'}.get(arch_string, arch_string)
+
+    return (os, version, arch, ext)
+
+# ssh into each host in hosts array and execute cmd in parallel on each
+# if system is localhost, just run the command
+def ssh(hosts, cmd):
+    if len(hosts[0]) == 1:
+        hosts=[hosts]
+    processes = []
+    rtn = ""
+    for host in hosts:
+        if host.split(":")[0] in ("localhost","127.0.0.1"):
+            process = subprocess.Popen("%s" % (cmd), shell=True,
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE)
+        else:
+            process = subprocess.Popen("ssh -i %s root@%s \"%s\"" % (
+                    config.keyfile, host.split(":")[0], cmd),
+                                       shell=True, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE)
+        processes.append(process)
+    for process in processes:
+        stdoutdata, stderrdata = process.communicate(None)
+        rtn += stdoutdata
+    return rtn
+
+
+def usage(err=None):
+    if err:
+        print "Error: %s\n" % (err)
+        r = 1
+    else:
+        r = 0
+
+    print """\
+Syntax: install [options]
+
+On centos, rhel and ubuntu this will install the deb or rpm and create the default bucket.
+On OSX this will start up a local instance and create the default bucket (requires -b param)
+
+Options:
+ -s <server>      Hostname of server
+ -v <version>     Version to install
+                  Should resemble "1.6.1-14-ga74f38b
+ -b <directory>   Directory where membase is at, used in localhost tests
+ -k <keyfile>     Location of ssh private key
+"""
+    sys.exit(r)
+
+class Config(object):
+    def __init__(self):
+        self.version = ""
+        self.server = ""
+        self.server_rest = ""
+        self.keyfile = "~/.ssh/ustest20090719.pem"
+        self.mbdir = ""
+        self.membase_cli = ""
+        self.user = "Administrator"
+        self.password = "password"
+
+def parse_args(argv):
+    config = Config()
+
+    try:
+        (opts, args) = getopt.getopt(argv[1:],
+                                     'hs:v:b:k:', [])
+    except IndexError:
+        usage()
+    except getopt.GetoptError, err:
+        usage(err)
+
+    for o, a in opts:
+        if o == "-h":
+            usage()
+        elif o == "-s":
+            server = (a+"::::").split(":", 4)
+            del server[4]
+            if server[0] == "localhost":
+                server[0] = "127.0.0.1"
+            if not server[1]:
+                server[1] = "8091"
+            if not server[2]:
+                server[2] = "11211"
+            if not server[3]:
+                server[3] = "11210"
+            config.server = server[0]
+            config.server_rest = server[1]
+        elif o == "-v":
+            config.version = a
+        elif o == "-k":
+            config.keyfile = a
+        elif o == "-b":
+            config.mbdir = a
+            config.membase_cli = a + "/membase-cli/membase"
+        else:
+            assert False, "unhandled option"
+
+    if not config.server:
+        usage("no server specified")
+
+    if not config.membase_cli:
+        config.membase_cli = "/opt/membase/bin/cli/membase"
+
+    return config
+
+
+if __name__ == "__main__":
+    config = parse_args(sys.argv)
+    return_code = 0
+
+    os, version, arch, ext = get_server_info(config.server)
+
+    if os == "MacOSX":
+        print "MacOSX not fully supported, start the servers using ns_server scripts"
+        # echo stats | nc localhost 12001 | awk '/ep_dbname/{print $3}' | cut -f 1-3 -d "/"
+        cmd = config.membase_cli + " cluster-init -c "+config.server+":"+config.server_rest+" -u Administrator -p password --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port="+config.server_rest+" ; sleep 1;"
+        cmd += config.membase_cli + " bucket-delete -c "+config.server+":"+config.server_rest+" -u Administrator -p password --bucket=default; sleep 1;"
+        cmd += config.membase_cli + " bucket-create -c "+config.server+":"+config.server_rest+" -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1 ;"
+        cmd += "sleep 2 ; killall moxi ; sleep 8"
+        ssh(config.server,cmd)
+    else:
+        filename = "membase-server-enterprise_"+arch+"_"+config.version+"."+ext
+
+        # remove any currently running server
+        print "Uninstalling old software on " + config.server
+        if os == "Ubuntu":
+            package_remove = "dpkg -r "
+            package_install = "dpkg -i "
+        elif os in ("CentOS", "Red Hat"):
+            package_remove = "rpm -e "
+            package_install = "rpm -i "
+        cmd = package_remove + "membase-server ; killall beam ; killall -9 memcached ; killall -9 vbucketmigrator ; rm -rf /var/opt/membase /opt/membase /etc/opt/membase"
+        ssh(config.server, cmd)
+
+        # download package if needed
+        cmd = "cd /tmp ; [[ \\\"\$(wget -qO- http://builds.hq.northscale.net/latestbuilds/"+filename+".md5 2> /dev/null)\\\" == \\\"\$(md5sum "+filename+" 2> /dev/null)\\\" ]] || (echo 'Downloading http://builds.hq.northscale.net/latestbuilds/"+filename+" to "+config.server+":"+config.server_rest + "';rm -f "+filename+";wget -q http://builds.hq.northscale.net/latestbuilds/"+filename+" &> /dev/null)"
+        res = ssh(config.server, cmd)
+        if res:
+            print res,
+
+        # start up server
+        print "Installing new software on " + config.server
+        cmd = "cd /tmp ;sleep 3 ; "+package_install+filename+"; /etc/init.d/membase-server start;wget -qO- --post-date 'port=SAME&initStatus=done&username=Administrator&password=password "+config.server+":"+config.server_rest+"/settings/web' &> /dev/null ; sleep 5 ; /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1 ; sleep 5"
+        ssh(config.server, cmd)
+
+    sys.exit(return_code)
