@@ -18,52 +18,10 @@
 
 # PYTHONPATH needs to be set up to point to mc_bin_client
 
-import ctypes
-import os
-import sys
-import time
-import getopt
-import subprocess
-import re
-import mc_bin_client
-import random
-import socket
-import zlib
 import json
+import mc_bin_client
+from testrunner_common import *
 
-
-class Server(object):
-    def __init__(self,host_port):
-        hp = host_port.split(":")
-        self.host = hp[0]
-        self.http_port = 8091
-        self.moxi_port = 11211
-        self.port = 11210
-    def rest_str(self):
-        return "%s:%d" % (self.host,self.http_port)
-    def __str__(self):
-        return "%s:%d" % (self.host,self.port)
-    def __repr__(self):
-        return "%s:%d" % (self.host,self.port)
-
-
-class Config(object):
-    def __init__(self):
-        self.servers = []
-        self.create = False
-        self.replicas = 1
-        self.vbuckets = 1024
-        self.username = "Administrator"
-        self.password = "password"
-        self.verbose = False
-        self.items = 100
-
-        self.payload_size = 1024
-        self.payload_pattern = '\0deadbeef\r\n\0\0cafebabe\n\r\0'
-        self.server_version = "1.6.0beta4"
-        self.rpm = "membase-server_x86_1.6.0beta4-25-g5bc3b72.rpm"
-
-        self.return_code = 0
 
 def usage(err=None):
     if err:
@@ -85,60 +43,6 @@ vbmap_vbmigrator_validation.py
 """
 
     sys.exit(r)
-
-
-# ssh into each host in hosts array and execute cmd in parallel on each
-def ssh(hosts,cmd):
-    if len(hosts[0]) == 1:
-        hosts=[hosts]
-    processes=[]
-    rtn=""
-    for host in hosts:
-        process = subprocess.Popen("ssh %s \"%s\"" % (host,cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        processes.append(process)
-    for process in processes:
-        stdoutdata,stderrdata=process.communicate(None)
-        rtn += stdoutdata
-    return rtn
-
-
-# run rebalance on the cluster, sending command to the first server
-def rebalance():
-    cmd="/opt/membase/bin/cli/membase rebalance -c localhost:%d -u %s -p %s" % (config.servers[0].http_port,config.username, config.password)
-    rtn = ssh(config.servers[0].host,cmd)
-    for i in range(1000):
-        time.sleep(1)
-        cmd="/opt/membase/bin/cli/membase rebalance-status -c localhost:%d -u %s -p %s" % (config.servers[0].http_port,config.username, config.password)
-        rtn = ssh(config.servers[0].host,cmd)
-        if rtn == "none\n":
-            break
-
-
-# add a server to the cluster, sending command to the first server
-def server_add(server):
-    cmd="/opt/membase/bin/cli/membase server-add -c localhost:%d -u %s -p %s --server-add=%s:%d --server-add-username=%s --server-add-password=%s" % (config.servers[0].http_port,config.username, config.password, server.host, server.http_port,config.username,config.password)
-    rtn = ssh(config.servers[0].host,cmd)
-
-
-# On a given node, return the list of vbuckets that are replicated to each of destination hosts
-def server_to_replica_vb_map(server):
-    cmd="ps aux | grep vbucketmigrator 2>&1"
-    output = ssh(server, cmd)
-    dest_server_to_vbucket_map = []
-    for line in output.split("\n"):
-        tokens = line.split()
-        prev_token = ""
-        host = ""
-        vbucket_list = []
-        for token in tokens:
-            if prev_token == "-b":
-                vbucket_list.append(token)
-            elif prev_token == "-d":
-                host = token
-            prev_token = token
-        if host != "" and len(vbucket_list) > 0:
-            dest_server_to_vbucket_map.append((host, vbucket_list))
-    return dest_server_to_vbucket_map
 
 
 def parse_args(argv):
@@ -228,14 +132,7 @@ echo '%% Installation-time configuration overrides go in this file.
 {isasl, [{path, \\"/etc/opt/membase/%s/isasl.pw\\"}]}.' > /etc/opt/membase/%s/config""" % (config.server_version,config.vbuckets,config.replicas,config.server_version, config.server_version,config.server_version))
 
     # restart membase on all the servers
-    for server in config.servers:
-        ssh(server.host,"service membase-server restart")
-        if server == config.servers[0]:
-            time.sleep(20)
-            process = subprocess.Popen("curl -d \"port=SAME&initStatus=done&username=%s&password=%s\" \"%s:%d/settings/web\" &> /dev/null" % (config.username,config.password,config.servers[0].host,config.servers[0].http_port),shell=True)
-            process.wait()
-            time.sleep(20)
-    time.sleep(20)
+    restart_servers(config)
 
     # create the cluster
     for server in config.servers:
@@ -243,10 +140,10 @@ echo '%% Installation-time configuration overrides go in this file.
             print "Adding %s to the cluster" % server
         else:
             print "Adding %s to the cluster" % server
-            server_add(server)
+            server_add(server, config)
     time.sleep(20)
     rs = time.time()
-    rebalance()
+    rebalance(config)
     re = time.time()
     print "Rebalance took %d seconds" % (re-rs)
     time.sleep(20)
