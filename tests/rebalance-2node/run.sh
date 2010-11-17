@@ -7,6 +7,10 @@
 NODECOUNT=2
 TIMEOUT=120
 
+if which mc-loader &> /dev/null ; then
+    HAS_MCLOADER=1
+fi
+
 MASTER=$(echo $SERVERS | cut -d " " -f 1)
 SLAVE=$(echo $SERVERS | cut -d " " -f 2)
 
@@ -22,13 +26,19 @@ SLAVE_MEMCACHED=$(echo $SLAVE | cut -d ":" -f 4)
 
 echo "[$TESTNAME] Running Add/remove rebalance on \"$MASTER $SLAVE\""
 
-echo "[$TESTNAME] Setting 100 keys"
-for i in {0..99} ; do
-    echo -e "set $i 0 0 1\n1\r" | nc $MASTER_IP $MASTER_MOXI &> /dev/null
-done
+if [[ -n $HAS_MCLOADER ]] ; then
+    echo "[$TESTNAME] Setting 100,000 keys"
+    for i in {0..99999} ; do echo "key_$i 0" ; done | mc-loader $MASTER_IP:$MASTER_MOXI -
+else
+    echo "[$TESTNAME] Setting 100 keys"
+    for i in {0..99} ; do
+        echo -e "set $i 0 0 1\n1\r" | nc $MASTER_IP $MASTER_MOXI &> /dev/null
+    done
+fi
 
 ret=0
 echo "[$TESTNAME] Adding server $SLAVE to $MASTER"
+echo "$MEMBASE_CLI rebalance -c $MASTER_IP:$MASTER_REST --server-add=$SLAVE_IP:$SLAVE_REST -u $REST_USER -p $REST_PASSWORD --server-add-username=$REST_USER --server-add-password=$REST_PASSWORD &> /dev/null"
 $MEMBASE_CLI rebalance -c $MASTER_IP:$MASTER_REST --server-add=$SLAVE_IP:$SLAVE_REST -u $REST_USER -p $REST_PASSWORD --server-add-username=$REST_USER --server-add-password=$REST_PASSWORD &> /dev/null
 count=$($MEMBASE_CLI server-list -c $MASTER_IP:$MASTER_REST -u $REST_USER -p $REST_PASSWORD 2> /dev/null | grep "healthy active" | wc -l)
 if [[ $count -ne 2 ]] ; then
