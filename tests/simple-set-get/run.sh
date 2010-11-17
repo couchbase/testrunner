@@ -14,7 +14,7 @@ for SERVER in $SERVERS ; do
     SERVER_MOXI=$(echo $SERVER | cut -f 3 -d ":")
     echo "[$TESTNAME] Checking set/get key_$$"
 
-    echo -e "set key_$$ 123 0 1\na\r" | nc $SERVER_IP $SERVER_MOXI | tr -d '\015' | grep STORED &> /dev/null
+    echo -e "set key_$$ 123 0 1\r\na\r" | nc $SERVER_IP $SERVER_MOXI | tr -d '\015' | grep STORED &> /dev/null
     if [[ $? -ne 0 ]] ; then
         echo "[$TESTNAME] failed to set key key_$$"
         ret=1
