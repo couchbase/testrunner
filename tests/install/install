@@ -7,6 +7,7 @@ import getopt
 import subprocess
 import re
 import httplib
+import mc_bin_client
 import StringIO
 
 def get_server_info(server):
@@ -83,7 +84,9 @@ class Config(object):
     def __init__(self):
         self.version = ""
         self.server = ""
-        self.server_rest = ""
+        self.port_rest = ""
+        self.port_moxi = ""
+        self.port_memcached = ""
         self.keyfile = "~/.ssh/ustest20090719.pem"
         self.mbdir = ""
         self.membase_cli = ""
@@ -116,7 +119,9 @@ def parse_args(argv):
             if not server[3]:
                 server[3] = "11210"
             config.server = server[0]
-            config.server_rest = server[1]
+            config.port_rest = server[1]
+            config.port_moxi = server[2]
+            config.port_memcached = server[3]
         elif o == "-v":
             config.version = a
         elif o == "-k":
@@ -144,10 +149,9 @@ if __name__ == "__main__":
 
     if os == "MacOSX":
         print "MacOSX not fully supported, start the servers using ns_server scripts"
-        # echo stats | nc localhost 12001 | awk '/ep_dbname/{print $3}' | cut -f 1-3 -d "/"
-        cmd = config.membase_cli + " cluster-init -c "+config.server+":"+config.server_rest+" -u Administrator -p password --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port="+config.server_rest+" ; sleep 1;"
-        cmd += config.membase_cli + " bucket-delete -c "+config.server+":"+config.server_rest+" -u Administrator -p password --bucket=default; sleep 1;"
-        cmd += config.membase_cli + " bucket-create -c "+config.server+":"+config.server_rest+" -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1 ;"
+        cmd = config.membase_cli + " cluster-init -c "+config.server+":"+config.port_rest+" -u Administrator -p password --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port="+config.port_rest+" ; sleep 1;"
+        cmd += config.membase_cli + " bucket-delete -c "+config.server+":"+config.port_rest+" -u Administrator -p password --bucket=default; sleep 1;"
+        cmd += config.membase_cli + " bucket-create -c "+config.server+":"+config.port_rest+" -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1 ;"
         cmd += "sleep 2 ; killall moxi ; sleep 8"
         ssh(config.server,cmd)
     else:
@@ -165,14 +169,25 @@ if __name__ == "__main__":
         ssh(config.server, cmd)
 
         # download package if needed
-        cmd = "cd /tmp ; [[ \\\"\$(wget -qO- http://builds.hq.northscale.net/latestbuilds/"+filename+".md5 2> /dev/null)\\\" == \\\"\$(md5sum "+filename+" 2> /dev/null)\\\" ]] || (echo 'Downloading http://builds.hq.northscale.net/latestbuilds/"+filename+" to "+config.server+":"+config.server_rest + "';rm -f "+filename+";wget -q http://builds.hq.northscale.net/latestbuilds/"+filename+" &> /dev/null)"
+        cmd = "cd /tmp ; [[ \\\"\$(wget -qO- http://builds.hq.northscale.net/latestbuilds/"+filename+".md5 2> /dev/null)\\\" == \\\"\$(md5sum "+filename+" 2> /dev/null)\\\" ]] || (echo 'Downloading http://builds.hq.northscale.net/latestbuilds/"+filename+" to "+config.server+":"+config.port_rest + "';rm -f "+filename+";wget -q http://builds.hq.northscale.net/latestbuilds/"+filename+" &> /dev/null)"
         res = ssh(config.server, cmd)
         if res:
             print res,
 
         # start up server
         print "Installing new software on " + config.server
-        cmd = "cd /tmp ;sleep 3 ; "+package_install+filename+"; /etc/init.d/membase-server start; sleep 2 ; /opt/membase/bin/cli/membase cluster-init -c localhost -u Administrator -p password --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port=8091 ; sleep 3 ; /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1 ; sleep 10"
+        cmd = "cd /tmp ; "+package_install+filename+"; /etc/init.d/membase-server start; sleep 2 ; /opt/membase/bin/cli/membase cluster-init -c localhost -u Administrator -p password --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port="+config.port_rest+" ; /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1"
         ssh(config.server, cmd)
+        client = mc_bin_client.MemcachedClient(config.server, int(config.port_moxi))
+        for x in range(20):
+            time.sleep(1)
+            try:
+                uptime = client.stats()["uptime"]
+            except:
+                uptime = 0
+            if uptime > 0:
+                break
+        else:
+            return_code = 1
 
     sys.exit(return_code)
