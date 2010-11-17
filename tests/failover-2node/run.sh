@@ -15,8 +15,8 @@ if [[ ! -a bin/mc-loader ]] ; then
     exit 0
 fi
 
-MASTER=$(echo $SERVERS | cut -d " " -f 1)
-SLAVE=$(echo $SERVERS | cut -d " " -f 2)
+MASTER=$(echo $SERVERS | cut -d " " -f 1 | cut -f 1 -d ":")
+SLAVE=$(echo $SERVERS | cut -d " " -f 2 | cut -f 1 -d ":")
 
 ssh $MASTER /opt/membase/bin/cli/membase bucket-edit -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=100 &> /dev/null
 ssh $MASTER /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=mb1 --bucket-type=membase --bucket-password='' --bucket-ramsize=100 --bucket-replica=1 &> /dev/null
