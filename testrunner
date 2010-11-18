@@ -22,11 +22,16 @@ class Testcase(object):
             self.description = file("tests/" + name + "/info").next().strip()
         except:
             self.description = name
-        self.path = "tests/" + name + "/run.sh"
+        self.path = os.path.join('tests', name, 'run')
+        if not os.path.exists(self.path):
+            self.path += '.sh'
+        if not os.path.exists(self.path):
+            raise exceptions.Exception(self.path)
         self.status_text = "NOTRUN"
         self.status = -1
         self.log = ""
         self.time = 0
+
     def run(self):
         os.environ["TESTNAME"] = self.name
         start_time = time.time()
