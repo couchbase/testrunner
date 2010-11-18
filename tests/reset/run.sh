@@ -27,7 +27,7 @@ sleep 2
 for SERVER in $SERVERS ; do
     SERVER_IP=$(echo $SERVER | cut -f 1 -d ":")
     echo "[$TESTNAME] creating default bucket on $SERVER"
-    ssh -i $KEYFILE root@$SERVER /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password="" --bucket-ramsize=300 --bucket-replica=1 &> /dev/null &
+    ssh -i $KEYFILE root@$SERVER_IP /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password="" --bucket-ramsize=300 --bucket-replica=1 &> /dev/null &
 done
 wait
 sleep 10
