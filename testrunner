@@ -87,22 +87,17 @@ Options:
     sys.exit(r)
 
 def sort_latest_version(version):
-# 1.6.2-8-g2e335d0
-# 1.6.2
-# 1.6.1rc3 - ignore
-# 1.6.1pre - ignore
-# 1.6.0.4
-# a.b.c.d-e
+# 1.6.3r-8-g2e335d0
+# a.b.c-d
     try:
         vx = version.split("-")
-        vy = (vx[0]+".0.0.0.0").split(".")
+        vy = (vx[0]+".0.0.0").split(".")
         a = int(vy[0])
         b = int(vy[1])
-        c = int(vy[2])
-        d = int(vy[3])
-        e = int(vx[1])
-        # aabbccdddeeee
-        value = -int("%02d%02d%02d%03d%04d" % (a, b, c, d, e))
+        c = int(vy[2].replace("r",""))
+        d = int(vx[1])
+        # aabbccdddd
+        value = -int("%02d%02d%02d%04d" % (a, b, c, d))
     except:
         value = 0
     return value
@@ -137,7 +132,7 @@ def get_changes(version):
             for line in section[1]:
                 text += line + "\n"
     else:
-        text = "unable to fetch CHANGES file"
+        text = "unable to fetch CHANGES file\n"
     h.close()
     return text
 
