@@ -1,0 +1,3 @@
+Test expiration operations.
+Dustin Sallings
+Run a few things that exercise expiry. Make sure they do what we want.
