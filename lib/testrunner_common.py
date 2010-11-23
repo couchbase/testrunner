@@ -29,6 +29,7 @@ import mc_bin_client
 import random
 import socket
 import zlib
+import json
 
 
 class Server(object):
@@ -86,10 +87,24 @@ def wait_on_warmup(server):
     client.close()
 
 
-def wait_on_replication(server):
-    client = mc_bin_client.MemcachedClient(server.host, server.moxi_port)
-    wait_on_state(client,'ep_tap_total_queue', '0', 'tap')
-    client.close()
+def wait_on_replication(config):
+    while True:
+        result = ""
+        f = os.popen("curl -u %s:%s http://%s:%d/nodeStatuses" % (config.username, config.password, config.servers[0].host, config.servers[0].http_port))
+        for line in f.readlines():
+            result = result + line
+        decoded = json.loads(result)
+
+        reached = True
+        for server in config.servers:
+            server_info = server.host + ":" + str(server.http_port)
+            replication_status= decoded[server_info]['replication']
+            if replication_status != 1.0:
+                reached = False
+                break
+        if reached == True:
+            break
+        time.sleep(1.0)
 
 
 def wait_on_persistence(server):

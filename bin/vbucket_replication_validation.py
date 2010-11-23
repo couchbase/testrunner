@@ -181,7 +181,7 @@ echo '%% Installation-time configuration overrides go in this file.
     for vbucket in range(config.vbuckets):
         set_items(config.servers[0], vbucket, config.items)
     wait_on_persistence(config.servers[0])
-    wait_on_replication(config.servers[0])
+    wait_on_replication(config)
 
     print "Checking replication"
 
