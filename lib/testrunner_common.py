@@ -179,6 +179,33 @@ def restart_servers(config):
     time.sleep(20)
 
 
+# Kill -9 a given server
+def kill_server(server):
+    cmd = "ps aux | grep beam.smp 2>&1"
+    output = ssh(server.host, cmd)
+    for line in output.split("\n"):
+        tokens = line.split()
+        if tokens[0] == "membase":
+            cmd = "kill -9 %s" % tokens[1]
+            ssh(server.host, cmd)
+            break
+    time.sleep(5)
+
+
+# Shutdown a given server softly
+def shutdown_server(server):
+    cmd = "service membase-server stop"
+    ssh(server.host, cmd)
+    time.sleep(5)
+
+
+# start a given server
+def start_server(server):
+    cmd = "service membase-server start"
+    ssh(server.host, cmd)
+    time.sleep(5)
+
+
 # return a list of all the vbuckets with their status (active, replica, pending)
 def vbucket_list(server):
     cmd="/opt/membase/bin/ep_engine/management/vbucketctl localhost:%d list 2>&1" % (server.port)
@@ -228,6 +255,15 @@ def validate_items(server, vbucket, num_of_items):
         except (mc_bin_client.MemcachedError):
             continue
     return count
+
+
+def evict_items(server, vbucket, num_of_items):
+    client = mc_bin_client.MemcachedClient(server.host, server.moxi_port)
+    client.vbucketId = vbucket
+    for i in range(num_of_items):
+        key = "key_" + `vbucket` + "_" + `i`
+        client.evict_key(key)
+    client.close()
 
 
 # On a given node, return the list of vbuckets that are replicated to each of destination hosts
