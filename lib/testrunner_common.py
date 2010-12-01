@@ -34,11 +34,12 @@ import json
 
 class Server(object):
     def __init__(self,host_port):
-        hp = host_port.split(":")
+        # host:rest_port:moxi_port:memcached_port
+        hp = (host_port + ':::::::') .split(":")
         self.host = hp[0]
-        self.http_port = 8091
-        self.moxi_port = 11211
-        self.port = 11210
+        self.http_port = int(hp[1] or '8091')
+        self.moxi_port = int(hp[2] or '11211')
+        self.port = int(hp[3] or '11210')
     def rest_str(self):
         return "%s:%d" % (self.host,self.http_port)
     def __str__(self):
