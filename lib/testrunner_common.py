@@ -162,7 +162,7 @@ def server_add(server, config):
 
 # Fail over a server in the cluster
 def failover(server, config):
-    cmd = "/opt/membase/bin/cli/membase failover -c localhost:%d -u %s -p %s --server-failover %s" % (config.servers[0].http_port, config.username, config.password, server)
+    cmd = "/opt/membase/bin/cli/membase failover -c localhost:%d -u %s -p %s --server-failover %s" % (config.servers[0].http_port, config.username, config.password, server.host)
     rtn = ssh(config.servers[0].host, cmd)
     time.sleep(5)
 
@@ -249,3 +249,63 @@ def server_to_replica_vb_map(server):
         if host != "" and len(vbucket_list) > 0:
             dest_server_to_vbucket_map.append((host, vbucket_list))
     return dest_server_to_vbucket_map
+
+
+# Initialize the membase cluster
+def initialize_membase_cluster(config):
+    servers=[]
+    for server in config.servers:
+        servers.append(server.host)
+
+    if config.create == True:
+        # if we are creating, then uninstall, clean up and reinstall the rpm on all the nodes
+        ssh(servers,
+            "rpm -e membase-server ; sleep 2 ; \
+             killall epmd ; \
+             killall beam ; \
+             killall -9 memcached ; \
+             killall -9 vbucketmigrator ; \
+             rm -rf /etc/opt/membase ; \
+             rm -rf /var/opt/membase ; \
+             rm -rf /opt/membase ; \
+             rpm -i %s ; \
+             service membase-server stop" % config.rpm)
+
+    # write our custom config to the "master" node
+    ssh(config.servers[0].host, """
+rm -f /etc/opt/membase/%s/ns_1/config.dat;
+echo '%% Installation-time configuration overrides go in this file.
+{buckets, [{configs,
+            [{\\"default\\",
+              [{type,membase},
+               {num_vbuckets,%d},
+               {num_replicas,%d},
+               {ram_quota,559895808},
+               {auth_type,sasl},
+               {sasl_password,[]},
+               {ht_size,3079},
+               {ht_locks,5},
+               {servers,[]},
+               {map, undefined}]
+             }]
+}]}.
+{directory, \\"/etc/opt/membase/%s\\"}.
+{isasl, [{path, \\"/etc/opt/membase/%s/isasl.pw\\"}]}.' > /etc/opt/membase/%s/config
+""" % (config.server_version, config.vbuckets, config.replicas, config.server_version, config.server_version, config.server_version))
+
+    # restart membase on all the servers
+    restart_servers(config)
+
+    # create the cluster
+    for server in config.servers:
+        if server == config.servers[0]:
+            print "Adding %s to the cluster" % server
+        else:
+            print "Adding %s to the cluster" % server
+            server_add(server, config)
+    time.sleep(20)
+    rs = time.time()
+    rebalance(config)
+    re = time.time()
+    print "Rebalance took %d seconds" % (re-rs)
+    time.sleep(10)
