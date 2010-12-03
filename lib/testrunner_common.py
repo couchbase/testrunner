@@ -220,6 +220,19 @@ def vbucket_list(server):
     return vbuckets
 
 
+# Delete a given vbucket
+def delete_vbucket(server, vbucket):
+    client = mc_bin_client.MemcachedClient(server.host, server.moxi_port)
+    client.set_vbucket_state(vbucket, 'dead')
+    client.delete_vbucket(vbucket)
+
+
+# Activate a given vbucket
+def activate_vbucket(server, vbucket):
+    client = mc_bin_client.MemcachedClient(server.host, server.moxi_port)
+    client.set_vbucket_state(vbucket, 'active')
+
+
 # set all items to the given server through moxi
 def set_items(server, vbucket, num_of_items):
     client = mc_bin_client.MemcachedClient(server.host, server.moxi_port)
