@@ -111,6 +111,8 @@ if __name__ == "__main__":
     for vbucket in range(config.vbuckets):
         set_items(config.servers[0], vbucket, config.items)
 
+    wait_on_persistence(config.servers[0]);
+
     print "Restarting the servers again"
     restart_servers(config)
     for server in config.servers:
