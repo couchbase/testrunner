@@ -22,7 +22,9 @@ if sys.argv[1] == "vbucket":
 else:
 	vbucketId = 0
 
-server_port = sys.argv[1].split(":")
+server_port_arr = sys.argv[1].split(',')
+
+server_port = server_port_arr[0].split(":")
 server = server_port[0]
 if len(server_port) > 1:
 	port = int(server_port[1])
@@ -53,8 +55,44 @@ if len(user) + len(password) > 0:
 	mc.sasl_auth_plain(user,password)
 
 if op == 'get':
-	lc = mc.get(key)
-	print(lc[2])
+        lc = mc.get(key)
+        print(lc[2])
+
+if op == 'exists':
+        try:
+                lc = mc.get(key)
+                print "EXISTS", key, vbucketId
+        except:
+                print "MISSING", key, vbucketId
+
+if op == 'missing':
+    sps = list(server_port.split(":") for server_port in server_port_arr)
+    mcs = list(mc_bin_client.MemcachedClient(sp[0], int(sp[1])) for sp in sps)
+
+    while True:
+        reset = False
+        found = 0
+        excep = []
+
+        for mc in mcs:
+            mc.vbucketId = vbucketId
+            try:
+                mc.get(key)
+                found = found + 1
+            except Exception as ex:
+                excep.append([mc.host, mc.port, ex])
+                reset = True
+
+        if found < 1:
+            print "MISSING", key, "vbucket", vbucketId, found, excep
+
+        if found > 1:
+            print "OVER FOUND", key, "vbucket", vbucketId, found, excep
+
+        if reset:
+            for mc in mcs:
+                mc.close()
+            mcs = list(mc_bin_client.MemcachedClient(sp[0], int(sp[1])) for sp in sps)
 
 if op == 'gets':
 	lc = mc.get(key)
