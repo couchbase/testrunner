@@ -82,7 +82,9 @@ Options:
  -k <keyfile>     Location of ssh private key
  -m <email>       Comma seperated list of email addresses to send report to
  -o               Only send a report if the tests fail
- -p <smtp server> SMTP server, defaults to qamail.hq.northscale.net
+ -p <smtp server> SMTP server, defaults to itweb01.hq.northscale.net
+ -l <path>        Path to build (default is latestbuilds)
+ -x <server>      Server where build is located (default is builds.hq.northscale.net)
 """
     sys.exit(r)
 
@@ -103,8 +105,8 @@ def sort_latest_version(version):
     return value
 
 def get_latest_version():
-    h = httplib.HTTPConnection('builds.hq.northscale.net')
-    h.request("GET","/latestbuilds/")
+    h = httplib.HTTPConnection(config.build_server)
+    h.request("GET","/"+config.build_path+"/index.html")
     r = h.getresponse()
     html = r.read()
     h.close()
@@ -112,8 +114,8 @@ def get_latest_version():
     return sorted(m, key=sort_latest_version)[0]
 
 def get_changes(version):
-    h = httplib.HTTPConnection('builds.hq.northscale.net')
-    h.request("GET","/latestbuilds/CHANGES_" + version + ".txt")
+    h = httplib.HTTPConnection(config.build_server)
+    h.request("GET","/"+config.build_path+"/CHANGES_" + version + ".txt")
     r = h.getresponse()
     if r.status == 200:
         html = r.read().replace("\r","\n")
@@ -191,19 +193,21 @@ class Config(object):
         self.tests = []
         self.emails = []
         self.email_only_on_fail = False
-        self.smtp = "qamail.hq.northscale.net"
+        self.smtp = "itweb01.hq.northscale.net"
         self.keyfile = "~/.ssh/ustest20090719.pem"
         self.mbdir = ""
         self.membase_cli = ""
         self.user = "Administrator"
         self.password = "password"
+        self.build_path = "latestbuilds"
+        self.build_server = "builds.hq.northscale.net"
 
 def parse_args(argv):
     config = Config()
 
     try:
         (opts, args) = getopt.getopt(argv[1:],
-                                     'hc:f:s:t:v:m:p:ok:b:', [])
+                                     'hc:f:s:t:v:m:p:ok:b:l:x:', [])
     except IndexError:
         usage()
     except getopt.GetoptError, err:
@@ -244,10 +248,7 @@ def parse_args(argv):
         elif o == "-t":
             config.tests.append(Testcase(a))
         elif o == "-v":
-            if a == "latest":
-                config.version = get_latest_version()
-            else:
-                config.version = a
+            config.version = a
         elif o == "-m":
             config.emails = filter(None, " ".join(a.split(",")).split(" "))
         elif o == "-p":
@@ -259,6 +260,10 @@ def parse_args(argv):
         elif o == "-b":
             config.mbdir = a
             config.membase_cli = a + "/membase-cli/membase"
+        elif o == "-l":
+            config.build_path = a
+        elif o == "-x":
+            config.build_server = a
         else:
             assert False, "unhandled option"
 
@@ -276,10 +281,14 @@ def parse_args(argv):
 if __name__ == "__main__":
     config = parse_args(sys.argv)
     return_code = 0
+    if config.version == "latest":
+        config.version = get_latest_version()
 
     os.environ["SERVERS"] = " ".join(config.servers)
     os.environ["VERSION"] = config.version
     os.environ["KEYFILE"] = config.keyfile
+    os.environ["BUILDPATH"] = config.build_path
+    os.environ["BUILDSERVER"] = config.build_server
     os.environ["MEMBASE_DIR"] = config.mbdir
     os.environ["MEMBASE_CLI"] = config.membase_cli
     os.environ["REST_USER"] = config.user
@@ -302,7 +311,7 @@ if __name__ == "__main__":
         packages = {}
         for server in config.servers:
             os, version, arch, ext = get_server_info(server)
-            packages["http://builds.hq.northscale.net/latestbuilds/membase-server-enterprise_%s_%s.%s" % (
+            packages["http://"+config.build_server+"/"+config.build_path+"/membase-server-enterprise_%s_%s.%s" % (
                     arch, config.version, ext)] = 1
         for package in packages:
             print package
@@ -344,8 +353,8 @@ if __name__ == "__main__":
         report += "\n"
         print "---- changes ----"
         report += "---- changes ----" + "\n"
-        print "http://builds.hq.northscale.net/latestbuilds/CHANGES_" + config.version + ".txt"
-        report += "http://builds.hq.northscale.net/latestbuilds/CHANGES_" + config.version + ".txt" + "\n"
+        print "http://"+config.build_server+"/"+config.build_path+"/CHANGES_" + config.version + ".txt"
+        report += "http://"+config.build_server+"/"+config.build_path+"/CHANGES_" + config.version + ".txt" + "\n"
         print changes
         report += changes
 

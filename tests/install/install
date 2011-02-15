@@ -90,6 +90,8 @@ class Config(object):
         self.keyfile = "~/.ssh/ustest20090719.pem"
         self.mbdir = ""
         self.membase_cli = ""
+        self.build_path = "latestbuilds"
+        self.build_server = "builds.hq.northscale.net"
         self.user = "Administrator"
         self.password = "password"
 
@@ -98,7 +100,7 @@ def parse_args(argv):
 
     try:
         (opts, args) = getopt.getopt(argv[1:],
-                                     'hs:v:b:k:', [])
+                                     'hs:v:b:k:l:x:', [])
     except IndexError:
         usage()
     except getopt.GetoptError, err:
@@ -129,6 +131,10 @@ def parse_args(argv):
         elif o == "-b":
             config.mbdir = a
             config.membase_cli = a + "/membase-cli/membase"
+        elif o == "-l":
+            config.build_path = a
+        elif o == "-x":
+            config.build_server = a
         else:
             assert False, "unhandled option"
 
@@ -169,7 +175,7 @@ if __name__ == "__main__":
         ssh(config.server, cmd)
 
         # download package if needed
-        cmd = "cd /tmp ; [[ \\\"\$(wget -qO- http://builds.hq.northscale.net/latestbuilds/"+filename+".md5 2> /dev/null)\\\" == \\\"\$(md5sum "+filename+" 2> /dev/null)\\\" ]] || (echo 'Downloading http://builds.hq.northscale.net/latestbuilds/"+filename+" to "+config.server+":"+config.port_rest + "';rm -f "+filename+";wget -q http://builds.hq.northscale.net/latestbuilds/"+filename+" &> /dev/null)"
+        cmd = "cd /tmp ; [[ \\\"\$(wget -qO- http://"+config.build_server+"/"+config.build_path+"/"+filename+".md5 2> /dev/null)\\\" == \\\"\$(md5sum "+filename+" 2> /dev/null)\\\" ]] || (echo 'Downloading http://"+config.build_server+"/"+config.build_path+"/"+filename+" to "+config.server+":"+config.port_rest + "';rm -f "+filename+";wget -q http://"+config.build_server+"/"+config.build_path+"/"+filename+" &> /dev/null)"
         res = ssh(config.server, cmd)
         if res:
             print res,

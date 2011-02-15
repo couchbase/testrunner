@@ -15,7 +15,7 @@ fi
 
 for SERVER in $SERVERS ; do
     echo "[$TESTNAME] Running install -s $SERVER"
-    tests/$TESTNAME/install -s $SERVER -v "$VERSION" -b "$MEMBASE_DIR" -k "$KEYFILE" &
+    tests/$TESTNAME/install -s $SERVER -v "$VERSION" -b "$MEMBASE_DIR" -k "$KEYFILE" -l "$BUILDPATH" -x "$BUILDSERVER" &
 done
 wait
 
