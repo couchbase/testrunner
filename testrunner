@@ -15,6 +15,8 @@ try:
 except:
     from email.mime import text as MIMEText
 
+sys.path.append("lib")
+
 class Testcase(object):
     def __init__(self, name):
         self.name = name
@@ -306,6 +308,13 @@ if __name__ == "__main__":
         test.run()
 
     report = ""
+    try:
+        from xunit import XUnitTestSuite
+        xunit = XUnitTestSuite()
+        xunit.name = "testrunner-suite"
+        xunit_loaded = True
+    except:
+        xunit_loaded = False
 
     if config.version != "":
         packages = {}
@@ -334,6 +343,11 @@ if __name__ == "__main__":
         num_run += 1
         if test.status == 0:
             num_passed += 1
+            if xunit_loaded:
+                xunit.add_test(name=test.name,status = 'pass',time = test.time)
+        else:
+            if xunit_loaded:
+                xunit.add_test(name=test.name,status = 'fail',time = test.time,errorType = 'membase.error', errorMessage = '')
         print test.result()
         report += test.result() + "\n"
     if num_run == num_passed:
@@ -386,5 +400,8 @@ if __name__ == "__main__":
             except:
                 print "ERROR: Unable to send email"
 
+    if xunit_loaded:
+        report_xml_file = open('report.xml', 'w')
+        report_xml_file.write(xunit.to_xml())
+        report_xml_file.close()
     sys.exit(return_code)
-
