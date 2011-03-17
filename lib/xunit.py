@@ -87,11 +87,13 @@ class XUnitTestSuite(object):
             testcase = doc.createElement('testcase')
             testcase.setAttribute('name',testobject.name)
             testcase.setAttribute('time',str(self.time))
-            if testobject.error != None:
+            if testobject.error:
                 error = doc.createElement('error')
                 error.setAttribute('type', testobject.error.type)
+                if testobject.error.message:
+                    message = doc.createTextNode(testobject.error.message)
+                    error.appendChild(message)
                 testcase.appendChild(error)
-
             testsuite.appendChild(testcase)
         doc.appendChild(testsuite)
         return doc.toprettyxml()

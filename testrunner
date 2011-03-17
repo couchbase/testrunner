@@ -347,7 +347,8 @@ if __name__ == "__main__":
                 xunit.add_test(name=test.name,status = 'pass',time = test.time)
         else:
             if xunit_loaded:
-                xunit.add_test(name=test.name,status = 'fail',time = test.time,errorType = 'membase.error', errorMessage = '')
+                xunit.add_test(name=test.name,status = 'fail',time = test.time,
+                               errorType = 'membase.error', errorMessage = test.log)
         print test.result()
         report += test.result() + "\n"
     if num_run == num_passed:
