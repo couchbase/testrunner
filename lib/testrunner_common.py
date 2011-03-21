@@ -29,7 +29,10 @@ import mc_bin_client
 import random
 import socket
 import zlib
-import json
+try:
+    import json
+except ImportError:
+    import simplejson as json
 
 
 class Server(object):

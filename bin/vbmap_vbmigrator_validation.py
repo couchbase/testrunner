@@ -18,7 +18,10 @@
 
 # PYTHONPATH needs to be set up to point to mc_bin_client
 
-import json
+try:
+    import json
+except ImportError:
+    import simplejson as json
 import mc_bin_client
 from testrunner_common import *
 
