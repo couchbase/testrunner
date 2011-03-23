@@ -86,7 +86,7 @@ class XUnitTestSuite(object):
         for testobject in self.tests:
             testcase = doc.createElement('testcase')
             testcase.setAttribute('name',testobject.name)
-            testcase.setAttribute('time',str(self.time))
+            testcase.setAttribute('time',str(testobject.time))
             if testobject.error:
                 error = doc.createElement('error')
                 error.setAttribute('type', testobject.error.type)
