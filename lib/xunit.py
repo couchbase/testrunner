@@ -41,7 +41,7 @@ class XUnitTestSuite(object):
     def __init__(self):
         self.name = ""
         self.time = 0
-        self.tests = list()
+        self.tests = []
         self.errors = 0
         self.failures = 0
         self.skips = 0
