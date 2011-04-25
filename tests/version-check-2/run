@@ -5,11 +5,15 @@ import unittest
 sys.path.append("pytests")
 sys.path.append("lib")
 
-from management.version_check import VerifyVersionTest
-
 if __name__ == '__main__':
+    import logger
+    logger.Logger.start_logger('VerifyVersionTest')
+    from management.version_check import VerifyVersionTest
     suite = unittest.TestLoader().loadTestsFromTestCase(VerifyVersionTest)
-    result = unittest.TextTestRunner(verbosity=0).run(suite)
+    from TestInput import TestInputParser,TestInputSingleton
+    TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    logger.Logger.stop_logger()
     if result.failures or result.errors:
         sys.exit(-1)
     sys.exit(0)

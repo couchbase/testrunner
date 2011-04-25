@@ -112,5 +112,5 @@ done
 ";
 `ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;
 `curl -d "port=SAME&initStatus=done&username=Administrator&password=password" "$opts{'s'}:8091/settings/web" &> /dev/null`;
-$command = "sleep 2 ; /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password=\"\" --bucket-ramsize=300 --bucket-replica=1 ; sleep 5";
+$command = "sleep 2 ; /opt/membase/bin/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password=\"\" --bucket-ramsize=300 --bucket-replica=1 ; sleep 5";
 `ssh -i $sshkey root\@$opts{'s'} "$command" 2>&1 >/dev/null`;

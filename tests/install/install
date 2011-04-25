@@ -142,7 +142,7 @@ def parse_args(argv):
         usage("no server specified")
 
     if not config.membase_cli:
-        config.membase_cli = "/opt/membase/bin/cli/membase"
+        config.membase_cli = "/opt/membase/bin/membase"
 
     return config
 
@@ -182,7 +182,7 @@ if __name__ == "__main__":
 
         # start up server
         print "Installing new software on " + config.server
-        cmd = "cd /tmp ; "+package_install+filename+"; /etc/init.d/membase-server start; sleep 2 ; /opt/membase/bin/cli/membase cluster-init -c localhost -u Administrator -p password --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port="+config.port_rest+" ; /opt/membase/bin/cli/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1"
+        cmd = "cd /tmp ; "+package_install+filename+"; /etc/init.d/membase-server start; sleep 2 ; /opt/membase/bin/membase cluster-init -c localhost -u Administrator -p password --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port="+config.port_rest+" ; /opt/membase/bin/membase bucket-create -c localhost -u Administrator -p password --bucket=default --bucket-type=membase --bucket-password='' --bucket-ramsize=300 --bucket-replica=1"
         ssh(config.server, cmd)
         client = mc_bin_client.MemcachedClient(config.server, int(config.port_moxi))
         for x in range(20):
