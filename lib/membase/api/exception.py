@@ -4,6 +4,8 @@ class MembaseHttpExceptionTypes(object):
     UNAUTHORIZED = 1000
     NOT_REACHABLE = 1001
     NODE_ALREADY_JOINED = 1002
+    NODE_CANT_ADD_TO_ITSELF=1003
+    BUCKET_CREATION_ERROR = 1004
 
 #base exception class for membase apis
 class MembaseHttpException(Exception):
@@ -35,6 +37,14 @@ class UnauthorizedException(MembaseHttpException):
         self.parameters['password'] = password
         self.type = MembaseHttpExceptionTypes.UNAUTHORIZED
 
+class BucketCreationException(MembaseHttpException):
+    def __init__(self,ip = '',bucket_name = ''):
+        self.parameters = dict()
+        self.parameters['host'] = ip
+        self.parameters['bucket'] = bucket_name
+        self.type = MembaseHttpExceptionTypes.BUCKET_CREATION_ERROR
+        self._message = 'unable to create bucket {0} on the host @ {1}'\
+            .format(bucket_name,ip)
 
 class ServerUnavailableException(MembaseHttpException):
     def __init__(self,ip = ''):
@@ -48,6 +58,15 @@ class InvalidArgumentException(MembaseHttpException):
         self.api = api
         self._message = '{0} failed when invoked with parameters: {1}'\
             .format(self.api,self.parameters)
+
+class ServerJoinException(MembaseHttpException):
+    def __init__(self,nodeIp='',remoteIp=''):
+        self._message = 'node: {0} already added to this cluster:{1}'.format(remoteIp,
+                                                              nodeIp)
+        self.parameters = dict()
+        self.parameters['nodeIp'] = nodeIp
+        self.parameters['remoteIp'] = remoteIp
+        self.type = MembaseHttpExceptionTypes.NODE_CANT_ADD_TO_ITSELF
 
 class ServerAlreadyJoinedException(MembaseHttpException):
     def __init__(self,nodeIp='',remoteIp=''):
