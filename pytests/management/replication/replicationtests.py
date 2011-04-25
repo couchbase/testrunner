@@ -254,9 +254,10 @@ class ReplicationTests(unittest.TestCase):
             index += 1
             #rebalance
         #let's kill all memcached
-        otpNodeIds = ['ns_1@' + master.ip]
-        for otpNode in otpNodes:
-            otpNodeIds.append(otpNode.id)
+        nodes = rest.node_statuses()
+        otpNodeIds = []
+        for node in nodes:
+            otpNodeIds.append(node.id)
         rebalanceStarted = rest.rebalance(otpNodeIds,[])
         self.assertTrue(rebalanceStarted,
                         "unable to start rebalance on master node {0}".format(master.ip))
