@@ -1,29 +1,23 @@
 #!/usr/bin/env python
+import exceptions
 
 import os
 import sys
 import time
 import getopt
 import subprocess
-import re
-import httplib
-import StringIO
-import smtplib
 import fcntl
-
-try:
-    from email.MIMEText import MIMEText
-except:
-    from email.mime import text as MIMEText
-
+import urllib2
 sys.path.append("lib")
+from TestInput import TestInputParser
+from builds.build_query import BuildQuery
 
 class Testcase(object):
     def __init__(self, name):
         self.name = name
         try:
             self.description = file("tests/" + name + "/info").next().strip()
-        except:
+        except Exception:
             self.description = name
         self.path = os.path.join('tests', name, 'run')
         if not os.path.exists(self.path):
@@ -35,32 +29,34 @@ class Testcase(object):
         self.log = ""
         self.time = 0
 
-    def run(self):
+    def run(self,argv):
         os.environ["TESTNAME"] = self.name
+        string = ''
+        for x in argv[1:]:
+            string += '{0} '.format(x)
         start_time = time.time()
-        process = subprocess.Popen(self.path, shell=True,
+        process = subprocess.Popen('%s %s'%(self.path,string), shell=True,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
         fcntl.fcntl(process.stderr.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
-        while process.poll() == None:
-            time.sleep(5)
+        while process.poll() is None:
             try:
                 stdoutdata = process.stdout.read()
-            except:
+            except Exception:
                 stdoutdata = ""
             try:
                 stderrdata = process.stderr.read()
-            except:
+            except Exception:
                 stderrdata = ""
             if stdoutdata:
-                sys.stdout.write(stdoutdata)
+                print stdoutdata
                 self.log += stdoutdata
             if stderrdata:
-                sys.stdout.write(stderrdata)
+                print stderrdata
                 self.log += stderrdata
-        self.log += stdoutdata + stderrdata
         self.time = time.time() - start_time
-        if process.returncode == 0:
+        time.sleep(0.5)
+        if not process.returncode:
             self.status = 0
             self.status_text = "PASS"
         else:
@@ -83,7 +79,7 @@ class Report(object):
 
 def usage(err=None):
     if err:
-        print "Error: %s\n" % (err)
+        print "Error: %s\n" % err
         r = 1
     else:
         r = 0
@@ -93,141 +89,56 @@ Syntax: testrunner [options]
 
 Options:
  -c <file>        Config file name (located in the conf subdirectory)
- -f <file>        Path to file containing server list
+ -i <file>        Path to .ini file containing server information
  -s <server>      Hostname of server (multiple -s options add more servers)
  -t <test>        Test name (multiple -t options add more tests)
- -v <version>     Version to install (if installing)
-                  Should resemble "1.6.1-14-ga74f38b
- -b <directory>   Directory where membase is at, used in localhost tests
- -k <keyfile>     Location of ssh private key
- -m <email>       Comma seperated list of email addresses to send report to
- -o               Only send a report if the tests fail
- -p <smtp server> SMTP server, defaults to itweb01.hq.northscale.net
- -l <path>        Path to build (default is latestbuilds)
- -x <server>      Server where build is located (default is builds.hq.northscale.net)
 """
     sys.exit(r)
 
-def sort_latest_version(version):
-# 1.6.3r-8-g2e335d0
-# a.b.c-d
-    try:
-        vx = version.split("-")
-        vy = (vx[0]+".0.0.0").split(".")
-        a = int(vy[0])
-        b = int(vy[1])
-        c = int(vy[2].replace("r",""))
-        d = int(vx[1])
-        # aabbccdddd
-        value = -int("%02d%02d%02d%04d" % (a, b, c, d))
-    except:
-        value = 0
-    return value
-
-def get_latest_version():
-    h = httplib.HTTPConnection(config.build_server)
-    h.request("GET","/"+config.build_path+"/index.html")
-    r = h.getresponse()
-    html = r.read()
-    h.close()
-    m = re.findall('membase-server-enterprise_x86_64_([-.a-zA-Z0-9]*?)\.rpm', html)
-    return sorted(m, key=sort_latest_version)[0]
-
-def get_changes(version):
-    h = httplib.HTTPConnection(config.build_server)
-    h.request("GET","/"+config.build_path+"/CHANGES_" + version + ".txt")
-    r = h.getresponse()
-    if r.status == 200:
-        html = r.read().replace("\r","\n")
-        changes = {}
-        index = None
-        for line in filter(None, html.split("\n")):
-            if line[0] != "#":
-                if line[0] == "-":
-                    index = line.split(" ", 2)[1]
-                    changes[index] = []
-                else:
-                    changes[index].append(line)
-        text = ""
-        for section in [(k, v) for (k, v) in changes.items() if v]:
-            text += "* " + section[0] + "\n"
-            for line in section[1]:
-                text += line + "\n"
+def get_latest_builds():
+    #parametrize the product name
+    query = BuildQuery()
+    builds,changes = query.get_all_builds()
+    if config.version == "" or config.version == "latest":
+        return query.sort_builds_by_version(builds)
     else:
-        text = "unable to fetch CHANGES file\n"
-    h.close()
+        return [query.find_membase_build_with_version(builds,config.version)]
+
+def get_changes(url):
+    page = urllib2.urlopen(url)
+    html = page.read()
+    page.close()
+    html = html.replace("\r","\n")
+    changes = {}
+    index = None
+    for line in filter(None, html.split("\n")):
+        if line[0] != "#":
+            if line[0] == "-":
+                index = line.split(" ", 2)[1]
+                changes[index] = []
+            else:
+                changes[index].append(line)
+    text = ""
+    for section in [(k, v) for (k, v) in changes.items() if v]:
+        text += "* " + section[0] + "\n"
+        for line in section[1]:
+            text += line + "\n"
+#    else:
+#        text = "unable to fetch CHANGES file\n"
     return text
 
-def get_server_info(server):
-    os = "unknown"
-    version = "unknown"
-    arch = "unknown"
-    ext = "unknown"
-
-    info = StringIO.StringIO(ssh(server, "cat /etc/lsb-release /etc/redhat-release 2> /dev/null | grep -i -e centos -e 'red hat' -e DISTRIB_DESCRIPTION ;"
-                                 "sw_vers | awk '/ProductName:/{printf \"%s%s%s \",$2,$3,$4}/ProductVersion:/{print $2}' 2> /dev/null ;"
-                                 "uname -m"))
-    if not info.getvalue():
-        return (os, version, arch, ext)
-
-    os_string = info.next().strip()
-    arch_string = info.next().strip()
-
-    m = re.search('(CentOS|Red Hat|Ubuntu|MacOSX).*?([0-9]+\.[0-9]+)', os_string)
-    os = m.group(1)
-    version = m.group(2)
-
-    ext = {'Ubuntu': 'deb', 'CentOS': 'rpm', 'Red Hat': 'rpm'}.get(os, '')
-    arch = {'i686': 'x86', 'i386': 'x86'}.get(arch_string, arch_string)
-
-    return (os, version, arch, ext)
-
-# ssh into each host in hosts array and execute cmd in parallel on each
-# if system is localhost, just run the command
-def ssh(hosts, cmd):
-    if len(hosts[0]) == 1:
-        hosts=[hosts]
-    processes = []
-    rtn = ""
-    for host in hosts:
-        if host.split(":")[0] in ("localhost","127.0.0.1"):
-            process = subprocess.Popen("%s" % (cmd), shell=True,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE)
-        else:
-            process = subprocess.Popen("ssh -i %s root@%s \"%s\"" % (
-                    config.keyfile, host.split(":")[0], cmd),
-                                       shell=True, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE)
-        processes.append(process)
-    for process in processes:
-        stdoutdata, stderrdata = process.communicate(None)
-        rtn += stdoutdata
-    return rtn
 
 class Config(object):
     def __init__(self):
         self.test_group = "quick"
-        self.version = ""
-        self.servers = []
         self.tests = []
-        self.emails = []
-        self.email_only_on_fail = False
-        self.smtp = "itweb01.hq.northscale.net"
-        self.keyfile = "~/.ssh/ustest20090719.pem"
-        self.mbdir = ""
-        self.membase_cli = ""
-        self.user = "Administrator"
-        self.password = "password"
-        self.build_path = "latestbuilds"
-        self.build_server = "builds.hq.northscale.net"
 
 def parse_args(argv):
     config = Config()
 
     try:
         (opts, args) = getopt.getopt(argv[1:],
-                                     'hc:f:s:t:v:m:p:ok:b:l:x:', [])
+                                     'h:t:c:v:s:i:p:', [])
     except IndexError:
         usage()
     except getopt.GetoptError, err:
@@ -240,126 +151,35 @@ def parse_args(argv):
             for line in file("conf/" + a):
                 config.tests.append(Testcase(line.strip()))
             config.test_group = a.replace(".conf","")
-        elif o == "-f":
-            for line in file(a):
-                server = (line.strip()+"::::").split(":", 4)
-                del server[4]
-                if server[0] == "localhost":
-                    server[0] = "127.0.0.1"
-                if not server[1]:
-                    server[1] = "8091"
-                if not server[2]:
-                    server[2] = "11211"
-                if not server[3]:
-                    server[3] = "11210"
-                config.servers.append(":".join(server))
-        elif o == "-s":
-            server = (a+"::::").split(":", 4)
-            del server[4]
-            if server[0] == "localhost":
-                server[0] = "127.0.0.1"
-            if not server[1]:
-                server[1] = "8091"
-            if not server[2]:
-                server[2] = "11211"
-            if not server[3]:
-                server[3] = "11210"
-            config.servers.append(":".join(server))
         elif o == "-t":
             config.tests.append(Testcase(a))
-        elif o == "-v":
-            config.version = a
-        elif o == "-m":
-            config.emails = filter(None, " ".join(a.split(",")).split(" "))
-        elif o == "-p":
-            config.smtp = a
-        elif o == "-o":
-            config.email_only_on_fail = True
-        elif o == "-k":
-            config.keyfile = a
-        elif o == "-b":
-            config.mbdir = a
-            config.membase_cli = a + "/membase-cli/membase"
-        elif o == "-l":
-            config.build_path = a
-        elif o == "-x":
-            config.build_server = a
-        else:
-            assert False, "unhandled option"
-
-    if not config.servers:
+    test_input = TestInputParser.get_test_input(argv)
+    if not test_input.servers:
         usage("no servers specified")
     if not config.tests:
         usage("no tests specified")
-
-    if not config.membase_cli:
-        config.membase_cli = "ssh -i " + config.keyfile + " root@" + config.servers[0].split(":")[0] + " /opt/membase/bin/cli/membase"
-
-    return config
+    return config,test_input
 
 
 if __name__ == "__main__":
-    config = parse_args(sys.argv)
-    return_code = 0
-    if config.version == "latest":
-        config.version = get_latest_version()
-
-    os.environ["SERVERS"] = " ".join(config.servers)
-    os.environ["VERSION"] = config.version
-    os.environ["KEYFILE"] = config.keyfile
-    os.environ["BUILDPATH"] = config.build_path
-    os.environ["BUILDSERVER"] = config.build_server
-    os.environ["MEMBASE_DIR"] = config.mbdir
-    os.environ["MEMBASE_CLI"] = config.membase_cli
-    os.environ["REST_USER"] = config.user
-    os.environ["REST_PASSWORD"] = config.password
-    if not os.environ.has_key("PYTHONPATH"):
-        os.environ["PYTHONPATH"] = "lib"
-    else:
-        os.environ["PYTHONPATH"] += os.pathsep + "lib"
-    if not os.environ.has_key("PATH"):
-        os.environ["PATH"] = "bin"
-    else:
-        os.environ["PATH"] += os.pathsep + "bin"
+    config,test_input = parse_args(sys.argv)
 
     for test in config.tests:
-        test.run()
+        test.run(sys.argv)
 
-    report = ""
-    try:
-        from xunit import XUnitTestSuite
-        xunit = XUnitTestSuite()
-        xunit.name = "testrunner-suite"
-        xunit_loaded = True
-    except:
-        xunit_loaded = False
-
-    if config.version != "":
-        packages = {}
-        for server in config.servers:
-            os, version, arch, ext = get_server_info(server)
-            packages["http://"+config.build_server+"/"+config.build_path+"/membase-server-enterprise_%s_%s.%s" % (
-                    arch, config.version, ext)] = 1
-        for package in packages:
-            print package
-            report += package + "\n"
-        print
-        report += "\n"
-
-    for server in config.servers:
-        os, version, arch, ext = get_server_info(server)
-        print server + " : " + "%s %s %s" % (os, version, arch)
-        report += server + " : " + "%s %s %s" % (os, version, arch) + "\n"
-    print
-    report += "\n"
+    from xunit import XUnitTestSuite
+    xunit = XUnitTestSuite()
+    xunit.name = "testrunner-suite"
+    xunit_loaded = True
 
     print "---- quick report ----"
+    report = ""
     report += "---- quick report ----\n"
     num_passed = 0
     num_run = 0
     for test in config.tests:
         num_run += 1
-        if test.status == 0:
+        if not test.status:
             num_passed += 1
             if xunit_loaded:
                 xunit.add_test(name=test.name,status = 'pass',time = test.time)
@@ -369,58 +189,6 @@ if __name__ == "__main__":
                                errorType = 'membase.error', errorMessage = test.log)
         print test.result()
         report += test.result() + "\n"
-    if num_run == num_passed:
-        status_text = "PASS"
-    else:
-        status_text = "FAIL"
-        return_code = 1
-    print "%d / %d passed" % (num_passed, num_run)
-    report += "%d / %d passed" % (num_passed, num_run)
-    print
-    report += "\n"
-
-
-    if config.version != "":
-        changes = get_changes(config.version)
-        print
-        report += "\n"
-        print "---- changes ----"
-        report += "---- changes ----" + "\n"
-        print "http://"+config.build_server+"/"+config.build_path+"/CHANGES_" + config.version + ".txt"
-        report += "http://"+config.build_server+"/"+config.build_path+"/CHANGES_" + config.version + ".txt" + "\n"
-        print changes
-        report += changes
-
-    print
-    report += "\n"
-    print "---- extended report ----"
-    report += "---- extended report ----" + "\n"
-    for test in config.tests:
-        print test.report(),
-        report += test.report()
-        print "Elapsed time (s): " + `int(test.time + .5)`
-        report += "Elapsed time (s): " + `int(test.time + .5)` + "\n"
-        print test.result()
-        report += test.result() + "\n"
-        print
-        report += "\n"
-
-    if config.emails:
-        if (config.email_only_on_fail and return_code == 1) or config.email_only_on_fail == False:
-            msg = MIMEText(report)
-            msg['Subject'] = status_text + " " + config.test_group + " " + config.version
-            msg['From'] = "qa@membase.com"
-            msg['To'] = ", ".join(config.emails)
-            try:
-                s = smtplib.SMTP()
-                s.connect(config.smtp)
-                s.sendmail("qa@membase.com", config.emails, msg.as_string())
-                s.quit()
-            except:
-                print "ERROR: Unable to send email"
-
-    if xunit_loaded:
-        report_xml_file = open('report.xml', 'w')
-        report_xml_file.write(xunit.to_xml())
-        report_xml_file.close()
-    sys.exit(return_code)
+    report_xml_file = open('report.xml', 'w')
+    report_xml_file.write(xunit.to_xml())
+    report_xml_file.close()
