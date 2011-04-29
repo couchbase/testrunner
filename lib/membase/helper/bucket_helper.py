@@ -82,7 +82,6 @@ class BucketOperationHelper():
             memcached_ready = False
             #bucket port
             while time.time() <= (start_time + (5 * 60)):
-                log.info("bucket port : {0}".format(bucket_port))
                 client = mc_bin_client.MemcachedClient(serverInfo.ip, bucket_port)
                 key = '{0}'.format(uuid.uuid4())
                 vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
