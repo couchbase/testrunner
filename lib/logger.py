@@ -29,7 +29,7 @@ class Logger:
         consoleHandler.setLevel(logging.DEBUG)
 
         # create formatter
-        formatter = logging.Formatter("[%(asctime)s] - [%(module)s] [%(threadName)s] - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("[%(asctime)s] - [%(module)s] [%(thread)d] - %(levelname)s - %(message)s")
 
         fileHandler = RotatingFileHandler('{0}.log'.format(name), backupCount=0)
 
