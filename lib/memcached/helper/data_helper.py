@@ -140,7 +140,9 @@ class WorkerThread(threading.Thread):
                 self.rejected_keys.append(key)
 
         client.close()
-        self.log.error("unable to push {0} keys".format(len(self.rejected_keys)))
+        if len(self.rejected_keys) > 0:
+            self.log.error("unable to push {0} keys".format(len(self.rejected_keys)))
+
 #        self.log.info("inserted keys count : {0} , rejected keys count : {1}".format(
 #            len(self.inserted_keys), len(self.rejected_keys)))
 

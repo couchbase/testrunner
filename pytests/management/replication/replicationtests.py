@@ -121,8 +121,11 @@ class ReplicationTests(unittest.TestCase):
     #update keys
     def _update_keys(self, version):
         client = MemcachedClient(self.servers[0].ip, 11220)
+        #quit after updating max 100,000 keys
         self.updated_keys = []
         for key in self.keys:
+            if len(self.updated_keys) > 100000:
+                break
             vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
             client.vbucketId = vbucketId
             value = '{0}'.format(version)
@@ -170,26 +173,25 @@ class ReplicationTests(unittest.TestCase):
         index = 0
         all_verified = True
         keys_failed = []
-        for key in self.keys:
-            if key in self.updated_keys:
-                try:
-                    index += 1
-                    vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-                    client.vbucketId = vbucketId
-                    flag, keyx, value = client.get(key=key)
-                    self.assertTrue(value.endswith(version),
-                                    msg='values do not match . key value should endwith {0}'.format(version))
-                    #                self.log.info("verified key #{0} : {1} value : {2}".format(index,key,value))
-                except MemcachedError as error:
-                    self.log.error(error)
-                    self.log.error(
-                        "memcachedError : {0} - unable to get a pre-inserted key : {0}".format(error.status, key))
-                    keys_failed.append(key)
-                    all_verified = False
-                    #            except :
-                    #                self.log.error("unknown errors unable to get a pre-inserted key : {0}".format(key))
-                    #                keys_failed.append(key)
-                    #                all_verified = False
+        for key in self.updated_keys:
+            try:
+                index += 1
+                vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+                client.vbucketId = vbucketId
+                flag, keyx, value = client.get(key=key)
+                self.assertTrue(value.endswith(version),
+                                msg='values do not match . key value should endwith {0}'.format(version))
+                #                self.log.info("verified key #{0} : {1} value : {2}".format(index,key,value))
+            except MemcachedError as error:
+                self.log.error(error)
+                self.log.error(
+                    "memcachedError : {0} - unable to get a pre-inserted key : {0}".format(error.status, key))
+                keys_failed.append(key)
+                all_verified = False
+                #            except :
+                #                self.log.error("unknown errors unable to get a pre-inserted key : {0}".format(key))
+                #                keys_failed.append(key)
+                #                all_verified = False
 
         client.close()
         self.assertTrue(all_verified,
@@ -235,7 +237,7 @@ class ReplicationTests(unittest.TestCase):
         self._create_bucket(number_of_replicas)
         self.log.info('created the bucket')
         #let's use data_helper
-        distribution = {10: 0.2, 20: 0.5, 10 * 1024: 0.25, 30: 0.05}
+        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         MemcachedClientHelper.load_bucket(master,
                                           self.bucket_name,
                                           11220,
@@ -271,7 +273,7 @@ class ReplicationTests(unittest.TestCase):
         self._create_bucket(number_of_replicas)
         self.log.info('created the bucket')
         # tiny amount of data in the bucket
-        distribution = {10: 0.2, 20: 0.5, 10 * 1024: 0.25, 30: 0.05}
+        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         MemcachedClientHelper.load_bucket(self.servers[0],
                                           self.bucket_name,
                                           11220,
@@ -280,7 +282,7 @@ class ReplicationTests(unittest.TestCase):
                                           40)
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
-        distribution = {100: 0.2, 1024: 0.5, 10 * 1024: 0.25, 500 * 1024: 0.05}
+        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         inserted_keys, rejected_keys =\
         MemcachedClientHelper.load_bucket(self.servers[0],
                                           self.bucket_name,
