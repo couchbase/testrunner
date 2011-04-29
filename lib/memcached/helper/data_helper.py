@@ -38,19 +38,24 @@ class MemcachedClientHelper(object):
         space_to_fill = (int((emptySpace * ram_load_ratio) / 100.0))
 
         log.info('space_to_fill : {0}, emptySpace : {1}'.format(space_to_fill,emptySpace))
+        #every key also uses 32 bytes + and some overhead per key?
 
         # dict : value_size -> ( 'porbability':0.33,'how_many':1000,'value':'***'
         list = []
         for size, probability in value_size_distribution.items():
+            #let's assume overhead per key is 64 bytes ?
+            how_many = int(space_to_fill / (size + 64) * probability)
             list.append({'size': size,
                          'value': MemcachedClientHelper.create_value('*', size),
-                         'how_many': int((space_to_fill / size) * probability)})
+                         'how_many': how_many})
 
         #divide between threads
         for item in list:
             if item['how_many'] > number_of_threads:
                 item['how_many'] /= number_of_threads
-            log.info(item['how_many'])
+            else:
+                item['how_many'] = 1
+            log.info("each thread will send {0} items with value of size : {1}".format(item['how_many'], item['size']))
 
         #let's divide this load in 10 threads
         threads = []
@@ -130,10 +135,14 @@ class WorkerThread(threading.Thread):
                 client.set(key, 0, 0, selected['value'])
                 self.inserted_keys.append(key)
             except MemcachedError as error:
-                self.log.error(
-                    "unable to push key : {0} to bucket : {1},error {2}".format(key, client.vbucketId, error))
+#                self.log.error(
+#                    "unable to push key : {0} to bucket : {1},error {2}".format(key, client.vbucketId, error))
                 self.rejected_keys.append(key)
+
         client.close()
+        if len(self.rejected_keys) > 0:
+            self.log.error("unable to push {0} keys".format(len(self.rejected_keys)))
+
 #        self.log.info("inserted keys count : {0} , rejected keys count : {1}".format(
 #            len(self.inserted_keys), len(self.rejected_keys)))
 
