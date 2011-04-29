@@ -190,9 +190,6 @@ class TestInputParser():
 
         input = TestInput()
 
-        log = logger.Logger.get_logger()
-        log.info("reading arguments from the command line")
-
         try:
             # -f : won't be parse here anynore
             # -s will have comma separated list of servers
@@ -264,6 +261,7 @@ class TestInputParser():
             input.membase_settings = membase_setting
             return input
         except Exception:
+            log = logger.Logger.get_logger()
             log.error("unable to parse input arguments")
             raise
 
