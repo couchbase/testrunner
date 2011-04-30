@@ -252,16 +252,16 @@ class RemoteMachineShellConnection:
             #call installed
             cleanup_cmd = 'rm -rf /var/opt/membase /opt/membase /etc/opt/membase /var/membase/data/* /opt/membase/var/lib/membase/*'
             uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};'.format('membase-server','membase-server')
-            log.info('running {0}'.format(uninstall_cmd))
-            self._ssh_client.exec_command(uninstall_cmd)
+            output, error = self.execute_command(uninstall_cmd)
+            self.log_command_output(output, error)
             log.info('running kill commands to force kill membase processes')
             self.terminate_process(info, 'beam')
             self.terminate_process(info, 'memcached')
             self.terminate_process(info, 'moxi')
             self.terminate_process(info, 'vbucketmigrator')
             log.info('running rm command to remove /etc/membase and /etc/opt/membase')
-            log.info('running {0}'.format(cleanup_cmd))
-            self._ssh_client.exec_command(cleanup_cmd)
+            output, error = self.execute_command(cleanup_cmd)
+            self.log_command_output(output, error)
         elif info.distribution_type.lower() == 'red hat':
             #first remove the package
             #then install membase
@@ -270,14 +270,16 @@ class RemoteMachineShellConnection:
             cleanup_cmd = 'rm -rf /var/opt/membase /opt/membase /etc/opt/membase /var/membase/data/* /opt/membase/var/lib/membase/*'
             uninstall_cmd = 'rpm -e {0}'.format('membase-server')
             log.info('running rpm -e to remove membase-server')
-            self._ssh_client.exec_command(uninstall_cmd)
+            output, error = self.execute_command(uninstall_cmd)
+            self.log_command_output(output, error)
             log.info('running kill commands to force kill membase processes')
             self.terminate_process(info, 'beam')
             self.terminate_process(info, 'memcached')
             self.terminate_process(info, 'moxi')
             self.terminate_process(info, 'vbucketmigrator')
             log.info('running rm command to remove /etc/membase and /etc/opt/membase')
-            self._ssh_client.exec_command(cleanup_cmd)
+            output, error = self.execute_command(cleanup_cmd)
+            self.log_command_output(output, error)
         elif info.distribution_type.lower() == 'centos':
             #first remove the package
             #then install membase
