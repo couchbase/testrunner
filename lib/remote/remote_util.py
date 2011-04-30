@@ -251,7 +251,7 @@ class RemoteMachineShellConnection:
             #check if its installed
             #call installed
             cleanup_cmd = 'rm -rf /var/opt/membase /opt/membase /etc/opt/membase /var/membase/data/* /opt/membase/var/lib/membase/*'
-            uninstall_cmd = 'dpkg -r {0}'.format('membase-server')
+            uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};'.format('membase-server','membase-server')
             log.info('running {0}'.format(uninstall_cmd))
             self._ssh_client.exec_command(uninstall_cmd)
             log.info('running kill commands to force kill membase processes')
