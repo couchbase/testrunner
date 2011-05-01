@@ -37,7 +37,7 @@ class MemcachedClientHelper(object):
         emptySpace = info.stats.ram - info.stats.memUsed
         space_to_fill = (int((emptySpace * ram_load_ratio) / 100.0))
 
-        log.info('space_to_fill : {0}, emptySpace : {1}'.format(space_to_fill,emptySpace))
+        log.info('space_to_fill : {0}, emptySpace : {1}'.format(space_to_fill, emptySpace))
         #every key also uses 32 bytes + and some overhead per key?
 
         # dict : value_size -> ( 'porbability':0.33,'how_many':1000,'value':'***'
@@ -60,7 +60,8 @@ class MemcachedClientHelper(object):
         #let's divide this load in 10 threads
         threads = []
         for i in range(0, number_of_threads):
-            thread = WorkerThread(serverInfo, name, port, 'password', list)
+            #ignore should be relative to the number of keys to be inserted ?
+            thread = WorkerThread(serverInfo, name, port, 'password', list, ignore_how_many_errors=5000)
             thread.start()
             threads.append(thread)
 
@@ -69,7 +70,6 @@ class MemcachedClientHelper(object):
         log.info("waiting for all worker thread to finish their work...")
         [thread.join() for thread in threads]
         log.info("worker threads are done...")
-
 
         for thread in threads:
             inserted_keys.extend(thread.inserted_keys)
@@ -105,8 +105,9 @@ class MemcachedClientHelper(object):
 
 
 class WorkerThread(threading.Thread):
-
-    def __init__(self, serverInfo, name, port, password, values_list):
+    #too flags : stop after x errors
+    #slow down after every seeing y errors
+    def __init__(self, serverInfo, name, port, password, values_list, ignore_how_many_errors=5000):
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
@@ -117,6 +118,7 @@ class WorkerThread(threading.Thread):
         self.values_list.extend(copy.deepcopy(values_list))
         self.inserted_keys = []
         self.rejected_keys = []
+        self.ignore_how_many_errors = ignore_how_many_errors
 
     def run(self):
         client = MemcachedClientHelper.create_memcached_client(self.serverInfo.ip,
@@ -134,15 +136,14 @@ class WorkerThread(threading.Thread):
             try:
                 client.set(key, 0, 0, selected['value'])
                 self.inserted_keys.append(key)
-            except MemcachedError as error:
-#                self.log.error(
-#                    "unable to push key : {0} to bucket : {1},error {2}".format(key, client.vbucketId, error))
+            except MemcachedError:
+                #if its 130 , then
+                #slow down until the ram usage goes under water mark?
+                #or quit after errors
                 self.rejected_keys.append(key)
+                if len(self.rejected_keys) > self.ignore_how_many_errors:
+                    break
 
         client.close()
         if len(self.rejected_keys) > 0:
             self.log.error("unable to push {0} keys".format(len(self.rejected_keys)))
-
-#        self.log.info("inserted keys count : {0} , rejected keys count : {1}".format(
-#            len(self.inserted_keys), len(self.rejected_keys)))
-
