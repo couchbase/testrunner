@@ -121,6 +121,7 @@ class ReplicationTests(unittest.TestCase):
     #update keys
     def _update_keys(self, version):
         client = MemcachedClient(self.servers[0].ip, 11220)
+        rejected_keys = []
         #quit after updating max 100,000 keys
         self.updated_keys = []
         for key in self.keys:
@@ -132,10 +133,13 @@ class ReplicationTests(unittest.TestCase):
             try:
                 client.append(key, value)
                 self.updated_keys.append(key)
-            except MemcachedError as error:
-                self.log.error(error)
-                self.log.error("unable to update key : {0} to bucket : {1}".format(key, client.vbucketId))
+            except MemcachedError:
+#                self.log.error(error)
+#                self.log.error("unable to update key : {0} to bucket : {1}".format(key, client.vbucketId))
+                rejected_keys.append(key)
         client.close()
+        if len(rejected_keys) > 0:
+            self.log.error("unable to update {0} keys".format(rejected_keys))
 
 
     #verify
