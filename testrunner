@@ -7,10 +7,8 @@ import time
 import getopt
 import subprocess
 import fcntl
-import urllib2
 sys.path.append("lib")
 from TestInput import TestInputParser
-from builds.build_query import BuildQuery
 
 class Testcase(object):
     def __init__(self, name):
@@ -95,37 +93,6 @@ Options:
 """
     sys.exit(r)
 
-def get_latest_builds():
-    #parametrize the product name
-    query = BuildQuery()
-    builds,changes = query.get_all_builds()
-    if config.version == "" or config.version == "latest":
-        return query.sort_builds_by_version(builds)
-    else:
-        return [query.find_membase_build_with_version(builds,config.version)]
-
-def get_changes(url):
-    page = urllib2.urlopen(url)
-    html = page.read()
-    page.close()
-    html = html.replace("\r","\n")
-    changes = {}
-    index = None
-    for line in filter(None, html.split("\n")):
-        if line[0] != "#":
-            if line[0] == "-":
-                index = line.split(" ", 2)[1]
-                changes[index] = []
-            else:
-                changes[index].append(line)
-    text = ""
-    for section in [(k, v) for (k, v) in changes.items() if v]:
-        text += "* " + section[0] + "\n"
-        for line in section[1]:
-            text += line + "\n"
-#    else:
-#        text = "unable to fetch CHANGES file\n"
-    return text
 
 
 class Config(object):
