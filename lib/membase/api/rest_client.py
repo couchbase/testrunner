@@ -396,6 +396,21 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
+    def get_pools_info(self):
+        api = self.baseUrl + 'pools'
+        try:
+            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            if response['status'] == '400':
+                    log.error('get_pools error {0}'.format(content))
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+                return parsed
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+
     def get_pools(self):
         version = None
         api = self.baseUrl + 'pools'
