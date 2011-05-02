@@ -7,6 +7,7 @@ import crc32
 import socket
 import ctypes
 from membase.api.rest_client import RestConnection, RestHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 
 
 class BucketOperationHelper():
@@ -153,6 +154,30 @@ class BucketOperationHelper():
                 log.error("expected memcachedError : {0} - unable to get a pre-inserted key : {1}".format(error.status, key))
         client.close()
         return True
+
+    @staticmethod
+    def keys_exist_or_assert(keys,ip,name,port,password,test):
+        log = logger.Logger.get_logger()
+        #verify all the keys
+        client = MemcachedClientHelper.create_memcached_client(ip,
+                                                               name,
+                                                               port,
+                                                               password)
+        #populate key
+        for key in keys:
+            try:
+                vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+                client.vbucketId = vbucketId
+                client.get(key=key)
+            except mc_bin_client.MemcachedError as error:
+                log.error(error)
+                if test:
+                    test.fail("key {0} does not exist".format(key))
+                else:
+                    log.error("key {0} does not exist".format(key))
+        client.close()
+        return True
+
 
     @staticmethod
     def load_data_or_assert(serverInfo,
