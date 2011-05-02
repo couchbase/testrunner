@@ -68,6 +68,7 @@ class AddRebalanceNodesTest(unittest.TestCase):
         self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
                                                       servers=self.servers,
                                                       bucket=self.bucket_name,
+                                                      replica_factor=1,
                                                       timeout_in_seconds=300),
                         msg="replication was completed but sum(curr_items) dont match the curr_items_total")
         knownNodes, ejectedNodes =\

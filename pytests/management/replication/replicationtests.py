@@ -269,6 +269,7 @@ class ReplicationTests(unittest.TestCase):
         self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
                                                                       servers=self.servers,
                                                                       bucket=self.bucket_name,
+                                                                      replica_factor=number_of_replicas,
                                                                       timeout_in_seconds=300),
                         msg="replication was completed but sum(curr_items) dont match the curr_items_total")
         self.log.info('updating all keys by appending _30 to each value')
@@ -318,6 +319,7 @@ class ReplicationTests(unittest.TestCase):
         self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=self.servers[0],
                                                                       servers=self.servers,
                                                                       bucket=self.bucket_name,
+                                                                      replica_factor=number_of_replicas,
                                                                       timeout_in_seconds=300),
                         msg="replication was completed but sum(curr_items) dont match the curr_items_total")
         #only remove one of the nodes

@@ -439,7 +439,6 @@ class RestConnection(object):
             return None
         api = "{0}{1}{2}{3}{4}{5}".format(self.baseUrl, 'pools/default/buckets/',
                                              bucket, "/nodes/", node_ip, ":8091/stats")
-        print api
         try:
             response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
             if response['status'] == '400':

@@ -11,11 +11,12 @@ class RebalanceHelper():
     def wait_till_total_numbers_match(master,
                                       servers,
                                       bucket,
+                                      replica_factor,
                                       timeout_in_seconds=120):
         log.info('waiting for sum_of_curr_items == total_items....')
         start = time.time()
         while (time.time() - start) <= timeout_in_seconds:
-            if RebalanceHelper.verify_items_count(master,servers,bucket):
+            if RebalanceHelper.verify_items_count(master,servers,bucket,replica_factor):
                 return True
             else:
                 time.sleep(2)
@@ -23,7 +24,7 @@ class RebalanceHelper():
 
 
     @staticmethod
-    def verify_items_count(master,servers,bucket):
+    def verify_items_count(master,servers,bucket,replica_factor):
         rest = RestConnection(master)
         master_stats = rest.get_bucket_stats(bucket)
         all_server_stats = []
@@ -36,7 +37,7 @@ class RebalanceHelper():
             sum += single_stats["curr_items"]
         log.info('sum : {0}'.format(sum))
         log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
-        return sum == master_stats["curr_items_tot"]
+        return (sum * (replica_factor + 1)) == master_stats["curr_items_tot"]
 
 
     @staticmethod
