@@ -433,6 +433,57 @@ class RestConnection(object):
             raise ServerUnavailableException(ip=self.ip)
         return buckets
 
+    def get_bucket_stats_for_node(self,bucket='default',node_ip=None):
+        if not Node:
+            log.error('node_ip not specified')
+            return None
+        api = "{0}{1}{2}{3}{4}{5}".format(self.baseUrl, 'pools/default/buckets/',
+                                             bucket, "/nodes/", node_ip, ":8091/stats")
+        print api
+        try:
+            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            if response['status'] == '400':
+                log.error('get_bucket error {0}'.format(content))
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+                #let's just return the samples
+                #we can also go through the list
+                #and for each item remove all items except the first one ?
+                op = parsed["op"]
+                samples = op["samples"]
+                stats = {}
+                #for each sample
+                for stat_name in samples:
+                    stats[stat_name] = samples[stat_name][0]
+                return stats
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def get_bucket_stats(self,bucket='default'):
+        api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
+        try:
+            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            if response['status'] == '400':
+                log.error('get_bucket error {0}'.format(content))
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+                #let's just return the samples
+                #we can also go through the list
+                #and for each item remove all items except the first one ?
+                op = parsed["op"]
+                samples = op["samples"]
+                stats = {}
+                #for each sample
+                for stat_name in samples:
+                    stats[stat_name] = samples[stat_name][0]
+                return stats
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
     def get_bucket(self, bucket='default'):
         bucketInfo = None
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)

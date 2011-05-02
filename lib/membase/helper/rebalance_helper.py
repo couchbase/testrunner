@@ -1,15 +1,47 @@
 import time
 import logger
-from membase.api.rest_client import RestConnection, RestHelper, vBucket
+from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.bucket_helper import BucketOperationHelper
 
 log = logger.Logger.get_logger()
 
 class RebalanceHelper():
 
     @staticmethod
+    def wait_till_total_numbers_match(master,
+                                      servers,
+                                      bucket,
+                                      timeout_in_seconds=120):
+        log.info('waiting for sum_of_curr_items == total_items....')
+        start = time.time()
+        while (time.time() - start) <= timeout_in_seconds:
+            if RebalanceHelper.verify_items_count(master,servers,bucket):
+                return True
+            else:
+                time.sleep(2)
+        return False
+
+
+    @staticmethod
+    def verify_items_count(master,servers,bucket):
+        rest = RestConnection(master)
+        master_stats = rest.get_bucket_stats(bucket)
+        all_server_stats = []
+        for server in servers:
+            #get the stats
+            server_stats = rest.get_bucket_stats_for_node(bucket, server.ip)
+            all_server_stats.append(server_stats)
+        sum = 0
+        for single_stats in all_server_stats:
+            sum += single_stats["curr_items"]
+        log.info('sum : {0}'.format(sum))
+        log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
+        return sum == master_stats["curr_items_tot"]
+
+
+    @staticmethod
     def verify_maps(vbucket_map_before,vbucket_map_after):
         #for each bucket check the replicas
-        vbucket = vBucket()
         for i in range(0,len(vbucket_map_before)):
             if not vbucket_map_before[i].master == vbucket_map_after[i].master:
                 log.error(
@@ -65,3 +97,17 @@ class RebalanceHelper():
             else:
                 time.sleep(2)
         return False
+
+    # in this method
+#    @staticmethod
+#    def add_node_and_rebalance(rest,node_ip):
+#        pass
+        #read the current nodes
+        # if the node_ip already added then just
+        #silently return
+        #if its not added then let try to add this and then rebalance
+        #we should alo try to get the bucket information from
+        #rest api instead of passing it to the fucntions
+        
+        
+        

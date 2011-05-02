@@ -65,6 +65,11 @@ class AddRebalanceNodesTest(unittest.TestCase):
         self.assertTrue(helper.is_cluster_rebalanced(), "cluster is not balanced")
         self.assertTrue(helper.wait_for_replication(180),
                         msg="replication did not complete")
+        self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                      servers=self.servers,
+                                                      bucket=self.bucket_name,
+                                                      timeout_in_seconds=300),
+                        msg="replication was completed but sum(curr_items) dont match the curr_items_total")
         knownNodes, ejectedNodes =\
         ClusterHelper.rebalance_params_for_declustering(master=master,all_nodes=nodes)
         helper.remove_nodes(knownNodes, ejectedNodes)
