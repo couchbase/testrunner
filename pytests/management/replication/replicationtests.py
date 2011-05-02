@@ -7,6 +7,7 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 
 log = logger.Logger.get_logger()
@@ -265,6 +266,11 @@ class ReplicationTests(unittest.TestCase):
         rest = RestConnection(self.servers[0])
         self.assertTrue(RestHelper(rest).wait_for_replication(180),
                         msg="replication did not complete")
+        self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                                      servers=self.servers,
+                                                                      bucket=self.bucket_name,
+                                                                      timeout_in_seconds=300),
+                        msg="replication was completed but sum(curr_items) dont match the curr_items_total")
         self.log.info('updating all keys by appending _30 to each value')
         self._update_keys('30')
         self.log.info('verifying keys now...._20')
@@ -309,6 +315,11 @@ class ReplicationTests(unittest.TestCase):
         self._verify_data('30')
         self.assertTrue(RestHelper(rest).wait_for_replication(180),
                         msg="replication did not complete")
+        self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=self.servers[0],
+                                                                      servers=self.servers,
+                                                                      bucket=self.bucket_name,
+                                                                      timeout_in_seconds=300),
+                        msg="replication was completed but sum(curr_items) dont match the curr_items_total")
         #only remove one of the nodes
         second_node = self.servers[1]
         self.log.info('failing over node : {0} from the cluster'.format(second_node.ip))
