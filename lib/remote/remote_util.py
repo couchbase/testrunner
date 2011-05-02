@@ -126,7 +126,10 @@ class RemoteMachineShellConnection:
         #look for installation folder
         #or use rpm -? to figure out if its installed
 
-    def download_binary(self,build):
+    def download_build(self,build):
+        return self.download_binary(build.url,build.deliverable_type,build.name)
+
+    def download_binary(self,url,deliverable_type,filename):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
             self.execute_command('taskkill /F /T /IM msiexec32.exe')
@@ -137,7 +140,7 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T /IM WerFault.*')
             output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
             self.log_command_output(output, error)
-            output, error = self.execute_command("cd /cygdrive/c/automation;cmd /c 'c:\\automation\\GnuWin32\\bin\\wget.exe -q {0} -O setup.exe';ls;".format(build.url))
+            output, error = self.execute_command("cd /cygdrive/c/automation;cmd /c 'c:\\automation\\GnuWin32\\bin\\wget.exe -q {0} -O setup.exe';ls;".format(url))
             self.log_command_output(output, error)
             return self.file_exists('/cygdrive/c/automation/','setup.exe')
         else:
@@ -147,12 +150,12 @@ class RemoteMachineShellConnection:
         #first remove the previous file if it exist ?
         #fix this :
             log.info('removing previous binaries')
-            output, error = self.execute_command('rm -rf /tmp/*.{0}'.format(build.deliverable_type))
+            output, error = self.execute_command('rm -rf /tmp/*.{0}'.format(deliverable_type))
             self.log_command_output(output, error)
-            output, error = self.execute_command('cd /tmp;wget -q {0};'.format(build.url))
+            output, error = self.execute_command('cd /tmp;wget -q {0};'.format(url))
             self.log_command_output(output, error)
         #check if the file exists there now ?
-            return self.file_exists('/tmp',build.name)
+            return self.file_exists('/tmp',filename)
         #for linux environment we can just
         #figure out what version , check if /tmp/ has the
         #binary and then return True if binary is installed
@@ -171,6 +174,23 @@ class RemoteMachineShellConnection:
             return False
         except IOError:
             return False
+
+    def membase_upgrade(self,build):
+        #install membase server ?
+        #run the right command
+        info = self.extract_remote_info()
+        log.info('deliverable_type : {0}'.format(info.deliverable_type))
+        info = self.extract_remote_info()
+        if info.type.lower() == 'windows':
+            log.error('automation does not support windows upgrade yet!')
+        elif info.deliverable_type == 'rpm':
+            #run rpm -i to install
+            log.info('/tmp/{0} or /tmp/{1}'.format(build.name,build.product))
+            output,error = self.execute_command('rpm -U /tmp/{0}'.format(build.name))
+            self.log_command_output(output, error)
+        elif info.deliverable_type == 'deb':
+            output,error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
+            self.log_command_output(output, error)
 
     def membase_install(self,build):
         #install membase server ?
@@ -194,8 +214,6 @@ class RemoteMachineShellConnection:
         elif info.deliverable_type == 'deb':
             output,error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
             self.log_command_output(output, error)
-            #run dpkg -?
-        #else if its windows then run the remote installer
 
     def wait_till_file_deleted(self,remotepath,filename,timeout_in_seconds=180):
         end_time = time.time() + float(timeout_in_seconds)

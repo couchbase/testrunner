@@ -49,7 +49,7 @@ class InstallTest(unittest.TestCase):
             print 'for machine : ', info.architecture_type , info.distribution_type , 'relevant build : ' , build
             remote_client = RemoteMachineShellConnection(serverInfo)
             remote_client.membase_uninstall()
-            downloaded = remote_client.download_binary(build)
+            downloaded = remote_client.download_build(build)
             self.assertTrue(downloaded,'unable to download binaries :'.format(build.url))
             remote_client.membase_install(build)
             #TODO: we should poll the 8091 port until it is up and running
