@@ -99,12 +99,11 @@ class SimpleSetGetTestBase(object):
                 flag = socket.htonl(ctypes.c_uint32(zlib.adler32(payload)).value)
                 try:
                     self.clients[serverInfo.ip].set(key, 0, flag, payload)
-#                    self.log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
+                    self.log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
                 except mc_bin_client.MemcachedError as error:
                     self.log.info('memcachedError : {0}'.format(error.status))
                     self.test.fail("unable to push key : {0} to bucket : {1}".format(key, self.clients[serverInfo.ip].vbucketId))
 
-            self.log.info('inserted {0} keys '.format(len(inserted_keys)))
             for key in self.keys:
                 try:
                     vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
