@@ -138,8 +138,4 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   initialize_cluster=False,
                                   insert_data=False,
                                   create_buckets=False)
-        #TODO : expect a message like 'package membase-server-1.7~basestar-1.x86_64 is already installed"
-
-
-
-
+        #TODO : expect a message like 'package membase-server-1.7~basestar-1.x86_64 is already installed'

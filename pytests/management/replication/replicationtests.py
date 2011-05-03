@@ -152,8 +152,8 @@ class ReplicationTests(unittest.TestCase):
         self.assertTrue(len(self.servers) / (1 + number_of_replicas) >= 1,
                         "there are not enough number of nodes available")
 
-    def _create_bucket(self, number_of_replicas=1):
-        self.bucket_name = 'ReplicationTest-{0}'.format(uuid.uuid4())
+    def _create_bucket(self, number_of_replicas=1,bucket_name = 'default'):
+        self.bucket_name = bucket_name
         ip_rest = RestConnection(self.servers[0])
         self.log.info('creating bucket : {0}'.format(self.bucket_name))
         ip_rest.create_bucket(bucket=self.bucket_name,
@@ -239,7 +239,11 @@ class ReplicationTests(unittest.TestCase):
         self._verify_minimum_requirement(number_of_replicas)
         self._cleanup_cluster()
         self.log.info('cluster is setup')
-        self._create_bucket(number_of_replicas)
+        bucket_name = \
+        'replicationtests-replica-count-{0}-ram-ratio-{1}-{2}'.format(number_of_replicas,
+                                                                    fill_ram_percentage,
+                                                                    uuid.uuid4())
+        self._create_bucket(number_of_replicas=number_of_replicas,bucket_name=bucket_name)
         self.log.info('created the bucket')
         #let's use data_helper
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
@@ -281,7 +285,11 @@ class ReplicationTests(unittest.TestCase):
         self._verify_minimum_requirement(number_of_replicas)
         self._cleanup_cluster()
         self.log.info('cluster is setup')
-        self._create_bucket(number_of_replicas)
+        bucket_name = \
+        'failovertests-replica-count-{0}-ram-ratio-{1}-{2}'.format(number_of_replicas,
+                                                                    fill_ram_percentage,
+                                                                    uuid.uuid4())
+        self._create_bucket(number_of_replicas=number_of_replicas,bucket_name=bucket_name)
         self.log.info('created the bucket')
         # tiny amount of data in the bucket
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
