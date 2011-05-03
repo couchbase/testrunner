@@ -36,7 +36,13 @@ class BucketOperationHelper():
         log.info('deleting existing buckets on {0}'.format(servers))
         for serverInfo in servers:
             rest = RestConnection(serverInfo)
-            buckets = rest.get_buckets()
+            buckets = []
+            try:
+                buckets = rest.get_buckets()
+            except:
+                log.info('10 seconds sleep before calling get_buckets again...')
+                time.sleep(10)
+                buckets = rest.get_buckets()
             for bucket in buckets:
                 print bucket.name
                 rest.delete_bucket(bucket.name)
