@@ -95,7 +95,9 @@ if __name__ == "__main__":
         import logger
 
         start_time = time.time()
-        logger.Logger.start_logger(name)
+        dotnames = name.split('.')
+        log_name = dotnames[len(dotnames) - 1]
+        logger.Logger.start_logger(log_name)
 
         TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
         suite = unittest.TestLoader().loadTestsFromNames(names=[name])
