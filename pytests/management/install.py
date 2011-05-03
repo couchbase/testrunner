@@ -38,7 +38,7 @@ class InstallTest(unittest.TestCase):
         # find the right deliverable for this os?
         query = BuildQuery()
         version = self.input.test_params['version']
-        builds, changes = query.get_latest_builds()
+        builds, changes = query.get_all_builds()
         for serverInfo in self.servers:
             info = self.machine_infos[serverInfo.ip]
             build = query.find_membase_build(builds,
