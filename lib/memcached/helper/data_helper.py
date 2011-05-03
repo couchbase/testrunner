@@ -98,7 +98,7 @@ class MemcachedClientHelper(object):
     def create_memcached_client(ip, bucket='default', port=11211, password='password'):
         client = MemcachedClient(ip, port)
         if bucket != 'default' and port == 11211:
-            client.sasl_auth_start(bucket, password)
+            client.sasl_auth_plain(bucket, password)
         return client
 
         #let's divide this and each thread will take care of 1/10th of the load
