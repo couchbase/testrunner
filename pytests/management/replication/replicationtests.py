@@ -140,7 +140,7 @@ class ReplicationTests(unittest.TestCase):
                 rejected_keys.append(key)
         client.close()
         if len(rejected_keys) > 0:
-            self.log.error("unable to update {0} keys".format(rejected_keys))
+            self.log.error("unable to update {0} keys".format(len(rejected_keys)))
 
 
     #verify
