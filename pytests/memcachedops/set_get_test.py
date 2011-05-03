@@ -11,6 +11,7 @@ import time
 import crc32
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 class SimpleSetGetTestBase(object):
@@ -54,6 +55,13 @@ class SimpleSetGetTestBase(object):
                                    proxyPort=self.bucket_port,
                                    authType='sasl',
                                    saslPassword='password')
+                msg = 'create_bucket succeeded but bucket "default" does not exist'
+                self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
+                BucketOperationHelper.wait_till_memcached_is_ready_or_assert(self.servers,
+                                                                             self.bucket_port,
+                                                                             test=unittest,
+                                                                             bucket_name=self.bucket_name,
+                                                                             bucket_password='password')
             else:
                 rest.create_bucket(bucket=bucket_name,
                                    bucketType=bucket_type,
@@ -62,10 +70,14 @@ class SimpleSetGetTestBase(object):
                                    proxyPort=self.bucket_port)
             msg = 'create_bucket succeeded but bucket "default" does not exist'
             self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
+            BucketOperationHelper.wait_till_memcached_is_ready_or_assert(self.servers,
+                                                                         self.bucket_port,
+                                                                         test=unittest,
+                                                                         bucket_name=self.bucket_name)
 
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(self.servers,self.bucket_port,test=unittest)
+        #if its a sasl enabled bucket then wait_till should know about it
+
         self.log.info('10 seconds sleep...')
-        time.sleep(10)
         self.clients = self.create_mc_bin_clients_for_servers(self.servers)
         #populate key
         testuuid = uuid.uuid4()
@@ -87,11 +99,12 @@ class SimpleSetGetTestBase(object):
                 flag = socket.htonl(ctypes.c_uint32(zlib.adler32(payload)).value)
                 try:
                     self.clients[serverInfo.ip].set(key, 0, flag, payload)
-                    self.log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
+#                    self.log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
                 except mc_bin_client.MemcachedError as error:
                     self.log.info('memcachedError : {0}'.format(error.status))
                     self.test.fail("unable to push key : {0} to bucket : {1}".format(key, self.clients[serverInfo.ip].vbucketId))
 
+            self.log.info('inserted {0} keys '.format(len(inserted_keys)))
             for key in self.keys:
                 try:
                     vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
@@ -128,7 +141,7 @@ class SimpleSetGetTestBase(object):
                 flag = socket.htonl(ctypes.c_uint32(zlib.adler32(payload)).value)
                 try:
                     self.clients[serverInfo.ip].set(key, 0, flag, payload)
-                    self.log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
+#                    self.log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
                     inserted_keys.append(key)
                 except mc_bin_client.MemcachedError as error:
                     self.log.info('memcachedError : {0}'.format(error.status))
@@ -136,6 +149,7 @@ class SimpleSetGetTestBase(object):
                     self.log.error("unable to push key : {0} to bucket : {1}".format(key, self.clients[serverInfo.ip].vbucketId))
 
             #fail if we were not able to insert even 1 key
+            self.log.info('inserted {0} keys '.format(len(inserted_keys)))
             if error_codes:
                 self.log.info('printing error codes seen during key insertions')
                 for code in error_codes:
@@ -173,12 +187,10 @@ class SimpleSetGetTestBase(object):
     def create_mc_bin_clients_for_servers(self, servers):
         clients = {}
         for serverInfo in servers:
-            #let's try to login with sasl
-            clients[serverInfo.ip] = mc_bin_client.MemcachedClient(serverInfo.ip, self.bucket_port)
-            if self.bucket_name != 'default' and self.bucket_port == 11211:
-                #auth
-                clients[serverInfo.ip].sasl_auth_start(self.bucket_name,'password')
-                #its a password
+            clients[serverInfo.ip] = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
+                                                                                   self.bucket_name,
+                                                                                   self.bucket_port,
+                                                                                   'password')
         return clients
 
 
