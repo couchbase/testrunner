@@ -82,18 +82,22 @@ class BucketOperationHelper():
         return False
 
     @staticmethod
-    def wait_till_memcached_is_ready_or_assert(servers, bucket_port, test):
+    def wait_till_memcached_is_ready_or_assert(servers, bucket_port, test,bucket_name = 'default',bucket_password='password'):
         log = logger.Logger.get_logger()
         for serverInfo in servers:
             start_time = time.time()
             memcached_ready = False
             #bucket port
             while time.time() <= (start_time + (5 * 60)):
-                client = mc_bin_client.MemcachedClient(serverInfo.ip, bucket_port)
                 key = '{0}'.format(uuid.uuid4())
                 vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-                client.vbucketId = vbucketId
+                client = None
                 try:
+                    client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
+                                                                           bucket_name,
+                                                                           bucket_port,
+                                                                           bucket_password)
+                    client.vbucketId = vbucketId
                     client.set(key, 0, 0, key)
                     log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
                     memcached_ready = True
@@ -101,11 +105,13 @@ class BucketOperationHelper():
                 except mc_bin_client.MemcachedError as error:
                     log.error(
                         "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to bucket : {2}".format(
-                            error.status, key, client.vbucketId))
+                            error.status, key, vbucketId))
                 except:
-                    log.error("memcached not ready yet .. unable to push key : {0} to bucket : {1}".format(key,
-                                                                                                           client.vbucketId))
-                client.close()
+                    log.error(
+                        "memcached not ready yet .. unable to push key : {0} to bucket : {1}".format(key, vbucketId))
+
+                if client:
+                    client.close()
                 time.sleep(1)
             if not memcached_ready:
                 test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
