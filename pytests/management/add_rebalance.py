@@ -41,7 +41,11 @@ class AddRebalanceNodesTest(unittest.TestCase):
         master = self.servers[0]
         #size distribution ?
         distribution = {1024: 0.4, 10 * 1024: 0.4, 40 * 1024: 0.2}
-        MemcachedHelper.load_bucket(master, self.bucket_name, 11211, ram_load_ratio, distribution)
+        MemcachedHelper.load_bucket(serverInfo=master,
+                                    name=self.bucket_name,
+                                    port=11211,
+                                    ram_load_ratio=ram_load_ratio,
+                                    value_size_distribution=distribution)
         rest = RestConnection(master)
         ClusterHelper.add_all_nodes_or_assert(master, self.servers,
                                               self.input.membase_settings, self)
@@ -106,7 +110,9 @@ class AddRebalanceNodesTest(unittest.TestCase):
         master = self.servers[0]
         #size distribution ?
         distribution = {1024: 0.4, 10 * 1024: 0.4, 40 * 1024: 0.2}
-        MemcachedHelper.load_bucket(master, self.bucket_name, 11211, ram_load_ratio, distribution)
+        MemcachedHelper.load_bucket(serverInfo=master, name=self.bucket_name,
+                                    port=11211, ram_load_ratio=ram_load_ratio,
+                                    value_size_distribution=distribution)
         rest = RestConnection(master)
         helper = RestHelper(rest)
         if len(self.servers) > 1:

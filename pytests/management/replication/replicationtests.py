@@ -126,7 +126,7 @@ class ReplicationTests(unittest.TestCase):
         #quit after updating max 100,000 keys
         self.updated_keys = []
         for key in self.keys:
-            if len(self.updated_keys) > 100000:
+            if len(self.updated_keys) > 10000:
                 break
             vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
             client.vbucketId = vbucketId
@@ -247,21 +247,21 @@ class ReplicationTests(unittest.TestCase):
         self.log.info('created the bucket')
         #let's use data_helper
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
-        MemcachedClientHelper.load_bucket(master,
-                                          self.bucket_name,
-                                          11220,
-                                          0.1,
-                                          distribution,
-                                          40)
+        MemcachedClientHelper.load_bucket(serverInfo=master,
+                                          name=self.bucket_name,
+                                          port=11220,
+                                          ram_load_ratio=0.1,
+                                          value_size_distribution=distribution,
+                                          number_of_threads=40)
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
         inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket(master,
-                                          self.bucket_name,
-                                          11220,
-                                          fill_ram_percentage,
-                                          distribution,
-                                          40)
+        MemcachedClientHelper.load_bucket(serverInfo=master,
+                                          name=self.bucket_name,
+                                          port=11220,
+                                          ram_load_ratio=fill_ram_percentage,
+                                          value_size_distribution=distribution,
+                                          number_of_threads=40)
         self.keys = inserted_keys
         self.log.info('updating all keys by appending _20 to each value')
         self._update_keys('20')
@@ -293,22 +293,23 @@ class ReplicationTests(unittest.TestCase):
         self.log.info('created the bucket')
         # tiny amount of data in the bucket
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
-        MemcachedClientHelper.load_bucket(self.servers[0],
-                                          self.bucket_name,
-                                          11220,
-                                          0.1,
-                                          distribution,
-                                          40)
+        MemcachedClientHelper.load_bucket(serverInfo=self.servers[0],
+                                          name=self.bucket_name,
+                                          port=11220,
+                                          ram_load_ratio=0.1,
+                                          value_size_distribution=distribution,
+                                          number_of_threads=40)
+
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket(self.servers[0],
-                                          self.bucket_name,
-                                          11220,
-                                          fill_ram_percentage,
-                                          distribution,
-                                          40)
+        MemcachedClientHelper.load_bucket(serverInfo=self.servers[0],
+                                          name=self.bucket_name,
+                                          port=11220,
+                                          ram_load_ratio=fill_ram_percentage,
+                                          value_size_distribution=distribution,
+                                          number_of_threads=40)
 
         self.keys = inserted_keys
         self.log.info('updating all keys by appending _20 to each value')
