@@ -6,6 +6,7 @@ import logger
 import crc32
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 
 class SimpleSetGetTestBase(object):
@@ -26,6 +27,7 @@ class SimpleSetGetTestBase(object):
         self.servers = self.input.servers
         self.bucket_port = port
         self.bucket_name = bucket_name
+        ClusterOperationHelper.cleanup_cluster(self.servers)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self.test)
 
         for serverInfo in self.servers:

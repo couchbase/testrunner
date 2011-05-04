@@ -566,7 +566,7 @@ class RestConnection(object):
                                        'bucketType': bucketType})
 
         try:
-            log.info(params)
+            log.info("{0} with param: {1}".format(api,params))
             response, content = httplib2.Http().request(api, 'POST', params,
                                                         headers=self._create_headers())
             log.info(content)

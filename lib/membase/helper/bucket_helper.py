@@ -106,7 +106,8 @@ class BucketOperationHelper():
                     log.error(
                         "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to bucket : {2}".format(
                             error.status, key, vbucketId))
-                except:
+                except Exception as ex:
+                    log.error(ex)
                     log.error(
                         "memcached not ready yet .. unable to push key : {0} to bucket : {1}".format(key, vbucketId))
 
