@@ -94,7 +94,7 @@ class BucketOperationHelper():
             log.info(msg.format(serverInfo.ip, bucket_name, bucket_port))
             start_time = time.time()
             memcached_ready = False
-            while time.time() <= (start_time + (5 * 60)):
+            while time.time() <= (start_time + 90):
                 key = '{0}'.format(uuid.uuid4())
                 vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
                 client = None
