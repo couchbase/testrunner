@@ -240,7 +240,7 @@ class ReplicationTests(unittest.TestCase):
         self._cleanup_cluster()
         self.log.info('cluster is setup')
         bucket_name = \
-        'replicationtests-replica-count-{0}-ram-ratio-{1}-{2}'.format(number_of_replicas,
+        'replica-{0}-ram-{1}-{2}'.format(number_of_replicas,
                                                                     fill_ram_percentage,
                                                                     uuid.uuid4())
         self._create_bucket(number_of_replicas=number_of_replicas,bucket_name=bucket_name)
@@ -286,7 +286,7 @@ class ReplicationTests(unittest.TestCase):
         self._cleanup_cluster()
         self.log.info('cluster is setup')
         bucket_name = \
-        'failovertests-replica-count-{0}-ram-ratio-{1}-{2}'.format(number_of_replicas,
+        'failover-replica-count-{0}-ram-{1}-{2}'.format(number_of_replicas,
                                                                     fill_ram_percentage,
                                                                     uuid.uuid4())
         self._create_bucket(number_of_replicas=number_of_replicas,bucket_name=bucket_name)
