@@ -34,6 +34,8 @@ class SimpleSetGetTestBase(object):
             rest = RestConnection(serverInfo)
             info = rest.get_nodes_self()
             self.log.info(info.mcdMemoryReserved)
+            rest.init_cluster(username = serverInfo.rest_username,
+                              password = serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
             bucket_ram = info.mcdMemoryReserved * 2 / 3
             self.log.info(bucket_ram)
@@ -47,7 +49,7 @@ class SimpleSetGetTestBase(object):
                                    saslPassword='password')
                 msg = 'create_bucket succeeded but bucket "default" does not exist'
                 self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
-                BucketOperationHelper.wait_till_memcached_is_ready_or_assert(self.servers,
+                BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],
                                                                              self.bucket_port,
                                                                              test=unittest,
                                                                              bucket_name=self.bucket_name,
@@ -58,12 +60,12 @@ class SimpleSetGetTestBase(object):
                                    ramQuotaMB=bucket_ram,
                                    replicaNumber=1,
                                    proxyPort=self.bucket_port)
-            msg = 'create_bucket succeeded but bucket "default" does not exist'
-            self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert(self.servers,
-                                                                         self.bucket_port,
-                                                                         test=unittest,
-                                                                         bucket_name=self.bucket_name)
+                msg = 'create_bucket succeeded but bucket "default" does not exist'
+                self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
+                BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],
+                                                                             self.bucket_port,
+                                                                             test=unittest,
+                                                                             bucket_name=self.bucket_name)
 
     #distribution = {10: 0.4, 20: 0.4, 100: 0.2}
     def set_get_test(self,value_size_distribution,number_of_items):

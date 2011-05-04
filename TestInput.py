@@ -33,6 +33,17 @@ class TestInputServer(object):
         self.port = ''
         self.cli_path = ''
 
+    def __str__(self):
+        ip_str = "ip:{0}".format(self.ip)
+        ssh_username_str = "ssh_username:{0}".format(self.ssh_username)
+        return "{0} {1}".format(ip_str, ssh_username_str)
+
+    def __repr__(self):
+        ip_str = "ip:{0}".format(self.ip)
+        ssh_username_str = "ssh_username:{0}".format(self.ssh_username)
+        return "{0} {1}".format(ip_str, ssh_username_str)
+
+
 class TestInputMembaseSetting(object):
 
     def __init__(self):

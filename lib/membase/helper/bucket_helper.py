@@ -82,12 +82,18 @@ class BucketOperationHelper():
         return False
 
     @staticmethod
-    def wait_till_memcached_is_ready_or_assert(servers, bucket_port, test,bucket_name = 'default',bucket_password='password'):
+    def wait_till_memcached_is_ready_or_assert(servers,
+                                               bucket_port,
+                                               test,
+                                               bucket_name = 'default',
+                                               bucket_password='password'):
         log = logger.Logger.get_logger()
+
         for serverInfo in servers:
+            msg = "waiting for memcached to accept commands in {0} for bucket {1}:{2}"
+            log.info(msg.format(serverInfo.ip, bucket_name, bucket_port))
             start_time = time.time()
             memcached_ready = False
-            #bucket port
             while time.time() <= (start_time + (5 * 60)):
                 key = '{0}'.format(uuid.uuid4())
                 vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
