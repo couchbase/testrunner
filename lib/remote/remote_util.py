@@ -180,6 +180,21 @@ class RemoteMachineShellConnection:
 
     #check if this file exists in the remote
     #machine or not
+    def file_starts_with(self, remotepath, pattern):
+        sftp = self._ssh_client.open_sftp()
+        files_matched = []
+        try:
+            file_names = sftp.listdir(remotepath)
+            for name in file_names:
+                if name.startswith(pattern):
+                    files_matched.append("{0}/{1}".format(remotepath,name))
+        except IOError:
+            #ignore this error
+            pass
+        sftp.close()
+        log.info("found these files : {0}".format(files_matched))
+        return files_matched
+
     def file_exists(self, remotepath, filename):
         sftp = self._ssh_client.open_sftp()
         try:
@@ -210,6 +225,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
             self.log_command_output(output, error)
 
+
     def membase_install(self, build):
         #install membase server ?
         #run the right command
@@ -230,8 +246,12 @@ class RemoteMachineShellConnection:
             log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
             output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
             self.log_command_output(output, error)
+            output, error = self.execute_command('/opt/membase/bin/mbenable_core_dumps.sh  /tmp')
+            self.log_command_output(output, error)
         elif info.deliverable_type == 'deb':
             output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
+            self.log_command_output(output, error)
+            output, error = self.execute_command('/opt/membase/bin/mbenable_core_dumps.sh  /tmp')
             self.log_command_output(output, error)
 
     def wait_till_file_deleted(self, remotepath, filename, timeout_in_seconds=180):
