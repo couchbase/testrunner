@@ -262,7 +262,7 @@ class RemoteMachineShellConnection:
             output,error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
             self.wait_till_file_deleted("/cygdrive/c/Program Files/Membase/Server/",'VERSION.txt',timeout_in_seconds=120)
-            time.sleep(20)
+            time.sleep(60)
         if info.distribution_type.lower() == 'ubuntu':
             #first remove the package
             #then install membase
