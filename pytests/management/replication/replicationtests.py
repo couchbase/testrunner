@@ -155,9 +155,11 @@ class ReplicationTests(unittest.TestCase):
     def _create_bucket(self, number_of_replicas=1,bucket_name = 'default'):
         self.bucket_name = bucket_name
         ip_rest = RestConnection(self.servers[0])
+        info = ip_rest.get_nodes_self()
+        bucket_ram = info.mcdMemoryReserved * 2 / 3
         self.log.info('creating bucket : {0}'.format(self.bucket_name))
         ip_rest.create_bucket(bucket=self.bucket_name,
-                              ramQuotaMB=256,
+                              ramQuotaMB=bucket_ram,
                               replicaNumber=number_of_replicas,
                               proxyPort=11220)
         msg = 'create_bucket succeeded but bucket {0} does not exist'.format(self.bucket_name)
@@ -280,6 +282,8 @@ class ReplicationTests(unittest.TestCase):
         self._update_keys('30')
         self.log.info('verifying keys now...._20')
         self._verify_data('30')
+        #flushing the node before cleaup
+        MemcachedClientHelper.flush_bucket(self.servers[0].ip, self.bucket_name, 11220)
 
     def _test_failover_body(self, fill_ram_percentage=1, number_of_replicas=1):
         self._verify_minimum_requirement(number_of_replicas)
@@ -335,11 +339,9 @@ class ReplicationTests(unittest.TestCase):
         second_node = self.servers[1]
         self.log.info('failing over node : {0} from the cluster'.format(second_node.ip))
         rest.fail_over('ns_1@{0}'.format(second_node.ip))
-        nodes = rest.node_statuses()
-        allNodes = [node.id for node in nodes]
-        RestHelper(rest).remove_nodes(knownNodes=allNodes, ejectedNodes=[])
-        self.log.info('verifying keys now...._30')
         self._verify_data('30')
+        #flushing the node before cleaup
+        MemcachedClientHelper.flush_bucket(self.servers[0].ip, self.bucket_name, 11220)
 
     def tearDown(self):
         self._cleanup_cluster()

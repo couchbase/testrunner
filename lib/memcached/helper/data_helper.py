@@ -46,7 +46,7 @@ class MemcachedClientHelper(object):
             log.info('space_to_fill : {0}, emptySpace : {1}'.format(space_to_fill, emptySpace))
             for size, probability in value_size_distribution.items():
                 #let's assume overhead per key is 64 bytes ?
-                how_many = int(space_to_fill / (size + 64) * probability)
+                how_many = int(space_to_fill / (size + 250) * probability)
                 payload = MemcachedClientHelper.create_value('*', size)
                 list.append({'size': size, 'value': payload, 'how_many': how_many})
         else:
@@ -106,6 +106,13 @@ class MemcachedClientHelper(object):
 
         #let's divide this and each thread will take care of 1/10th of the load
 
+    @staticmethod
+    def flush_bucket(ip, bucket='default', port=11211, password='password'):
+        client = MemcachedClient(ip, port)
+        if bucket != 'default' and port == 11211:
+            client.sasl_auth_plain(bucket, password)
+        client.flush()
+        return client
 
 class WorkerThread(threading.Thread):
     #too flags : stop after x errors
