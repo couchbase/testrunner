@@ -42,7 +42,7 @@ class RestHelper(object):
 
     def wait_for_replication(self, timeout_in_seconds=120):
         end_time = time.time() + timeout_in_seconds
-        while time.time() <= end_time :
+        while time.time() <= end_time:
             if self.all_nodes_replicated():
                 break
             time.sleep(1)
@@ -55,7 +55,6 @@ class RestHelper(object):
             if node.replication != 1.0:
                 return False
         return True
-
 
 
 class RestConnection(object):
@@ -73,7 +72,6 @@ class RestConnection(object):
         self.username = serverInfo.rest_username
         self.password = serverInfo.rest_password
         self.baseUrl = "http://{0}:8091/".format(self.ip)
-
 
 
     #authorization mut be a base64 string of username:password
@@ -156,7 +154,7 @@ class RestConnection(object):
         try:
             response, content = httplib2.Http().request(api, 'POST', params,
                                                         headers=self._create_headers())
-            log.info('add_node response : {0} content : {1}'.format(response,content))
+            log.info('add_node response : {0} content : {1}'.format(response, content))
             if response['status'] == '400':
                 log.error('error occured while adding remote node: {0}'.format(remoteIp))
                 if content.find('Prepare join failed. Node is already part of cluster') >= 0:
@@ -169,7 +167,7 @@ class RestConnection(object):
                     #todo: raise an exception here
                     log.error('get_pools error : {0}'.format(content))
             elif response['status'] == '200':
-                log.info('added node {0} : response {1}'.format(remoteIp,content))
+                log.info('added node {0} : response {1}'.format(remoteIp, content))
                 dict = json.loads(content)
                 otpNodeId = dict['otpNode']
                 otpNode = OtpNode(otpNodeId)
@@ -336,10 +334,10 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
-    def log_client_error(self,post):
+    def log_client_error(self, post):
         api = self.baseUrl + 'logClientError'
         try:
-            response, content = httplib2.Http().request(api, 'POST',body=post, headers=self._create_headers())
+            response, content = httplib2.Http().request(api, 'POST', body=post, headers=self._create_headers())
             #if status is 200 then it was a success otherwise it was a failure
             if response['status'] == '400':
                 #extract the error
@@ -401,7 +399,7 @@ class RestConnection(object):
         try:
             response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
             if response['status'] == '400':
-                    log.error('get_pools error {0}'.format(content))
+                log.error('get_pools error {0}'.format(content))
             elif response['status'] == '200':
                 parsed = json.loads(content)
                 return parsed
@@ -417,7 +415,7 @@ class RestConnection(object):
         try:
             response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
             if response['status'] == '400':
-                    log.error('get_pools error {0}'.format(content))
+                log.error('get_pools error {0}'.format(content))
             elif response['status'] == '200':
                 parsed = json.loads(content)
                 version = MembaseServerVersion(parsed['implementationVersion'], parsed['componentsVersion'])
@@ -448,12 +446,12 @@ class RestConnection(object):
             raise ServerUnavailableException(ip=self.ip)
         return buckets
 
-    def get_bucket_stats_for_node(self,bucket='default',node_ip=None):
+    def get_bucket_stats_for_node(self, bucket='default', node_ip=None):
         if not Node:
             log.error('node_ip not specified')
             return None
         api = "{0}{1}{2}{3}{4}{5}".format(self.baseUrl, 'pools/default/buckets/',
-                                             bucket, "/nodes/", node_ip, ":8091/stats")
+                                          bucket, "/nodes/", node_ip, ":8091/stats")
         try:
             response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
             if response['status'] == '400':
@@ -475,7 +473,7 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
-    def get_bucket_stats(self,bucket='default'):
+    def get_bucket_stats(self, bucket='default'):
         api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
         try:
             response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
@@ -491,7 +489,9 @@ class RestConnection(object):
                 stats = {}
                 #for each sample
                 for stat_name in samples:
-                    stats[stat_name] = samples[stat_name][0]
+                    #pick the last item ?
+                    last_sample = len(samples[stat_name]) - 1
+                    stats[stat_name] = samples[stat_name][last_sample]
                 return stats
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
@@ -507,7 +507,7 @@ class RestConnection(object):
                 log.error('get_bucket error {0}'.format(content))
             elif response['status'] == '200':
                 bucketInfo = RestParser().parse_get_bucket_response(content)
-#                log.debug('set stats to {0}'.format(bucketInfo.stats.ram))
+            #                log.debug('set stats to {0}'.format(bucketInfo.stats.ram))
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
         except httplib2.ServerNotFoundError:
@@ -566,7 +566,7 @@ class RestConnection(object):
                                        'bucketType': bucketType})
 
         try:
-            log.info("{0} with param: {1}".format(api,params))
+            log.info("{0} with param: {1}".format(api, params))
             response, content = httplib2.Http().request(api, 'POST', params,
                                                         headers=self._create_headers())
             log.info(content)
@@ -747,7 +747,7 @@ class RestParser(object):
                     vbucketInfo = vBucket()
                     vbucketInfo.master = serverList[vbucket[0]]
                     if vbucket:
-                        for i in range(1,len(vbucket)):
+                        for i in range(1, len(vbucket)):
                             if vbucket[i] != -1:
                                 vbucketInfo.replica.append(serverList[vbucket[i]])
                     bucket.forward_map.append(vbucketInfo)
@@ -757,12 +757,12 @@ class RestParser(object):
                 vbucketInfo = vBucket()
                 vbucketInfo.master = serverList[vbucket[0]]
                 if vbucket:
-                    for i in range(1,len(vbucket)):
+                    for i in range(1, len(vbucket)):
                         if vbucket[i] != -1:
                             vbucketInfo.replica.append(serverList[vbucket[i]])
                 bucket.vbuckets.append(vbucketInfo)
-            #now go through each vbucket and populate the info
-        #who is master , who is replica
+                #now go through each vbucket and populate the info
+            #who is master , who is replica
         # get the 'storageTotals'
         log.debug('read {0} vbuckets'.format(len(bucket.vbuckets)))
         stats = parsed['basicStats']
