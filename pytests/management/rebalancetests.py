@@ -68,6 +68,9 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         for server in self._servers[1:]:
             nodes = rest.node_statuses()
             otpNodeIds = [node.id for node in nodes]
+            if 'ns_1@127.0.0.1' in otpNodeIds:
+                otpNodeIds.remove('ns_1@127.0.0.1')
+                otpNodeIds.append('ns_1@{0}'.format(master.ip))
             self.log.info("current nodes : {0}".format(otpNodeIds))
             self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
             otpNode = rest.add_node(creds.rest_username,
