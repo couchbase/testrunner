@@ -30,7 +30,7 @@ if __name__ == "__main__":
                     if remote.get_file(remotepath="/tmp", filename=core_file_name, todir=destination):
                         print 'downloaded core file : {0}'.format(destination)
                     i += 1
-                    remote.execute_command('mkdir -p /tmp/backup;mv -f /tmp/core* /tmp/backup/')
+                remote.execute_command('mkdir -p /tmp/backup;mv -f /tmp/core* /tmp/backup/')
         except Exception as ex:
             print ex
             #ignoring all exceptions
