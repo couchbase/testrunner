@@ -107,6 +107,7 @@ class BucketOperationHelper():
                     client.set(key, 0, 0, key)
                     log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
                     memcached_ready = True
+                    client.flush()
                     break
                 except mc_bin_client.MemcachedError as error:
                     log.error(
