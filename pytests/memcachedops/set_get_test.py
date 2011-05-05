@@ -33,12 +33,10 @@ class SimpleSetGetTestBase(object):
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
             info = rest.get_nodes_self()
-            self.log.info(info.mcdMemoryReserved)
             rest.init_cluster(username = serverInfo.rest_username,
                               password = serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
             bucket_ram = info.mcdMemoryReserved * 2 / 3
-            self.log.info(bucket_ram)
             if bucket_name != 'default' and self.bucket_port == 11211:
                 rest.create_bucket(bucket=bucket_name,
                                    bucketType=bucket_type,
