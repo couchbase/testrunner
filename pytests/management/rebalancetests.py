@@ -83,6 +83,8 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                                               number_of_threads=20)
             self.log.info('inserted {0} keys'.format(len(inserted_keys)))
             rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node {0}".format(server.ip))
             items_inserted_count += len(inserted_keys)
             final_replication_state = RestHelper(rest).wait_for_replication(120)
             msg = "replication state after waiting for up to 2 minutes : {0}"
