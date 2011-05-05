@@ -142,7 +142,9 @@ class WorkerThread(threading.Thread):
             selected['how_many'] -= 1
             if selected['how_many'] < 1:
                 self.values_list.remove(selected)
-            key = "{0}".format(uuid.uuid4())
+            key = "{0}-{1}-{2}".format(uuid.uuid4(),
+                                       selected['size'],
+                                       selected['how_many'])
             vId = crc32.crc32_hash(key) & 1023
             client.vbucketId = vId
             try:
