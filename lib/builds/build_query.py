@@ -8,7 +8,6 @@ import BeautifulSoup
 
 
 class MembaseBuild(object):
-
     def __init__(self):
         self.url = ''
         self.name = ''
@@ -31,20 +30,19 @@ class MembaseBuild(object):
         os = 'os : {0}'.format(self.os)
         deliverable_type = 'deliverable_type : {0}'.format(self.deliverable_type)
         architecture_type = 'architecture_type : {0}'.format(self.architecture_type)
-        return '{0} {1} {2} {3} {4} {5} {6}'.format(url, name, product, product_version, os, deliverable_type, architecture_type)
-
+        return '{0} {1} {2} {3} {4} {5} {6}'.format(url, name, product, product_version, os, deliverable_type,
+                                                    architecture_type)
 
 
 class MembaseChange(object):
-
     def __init__(self):
         self.url = ''
         self.name = ''
         self.time = ''
         self.build_number = ''
 
-class BuildQuery(object):
 
+class BuildQuery(object):
     def __init__(self):
         pass
 
@@ -54,27 +52,28 @@ class BuildQuery(object):
         #parse build page and create build object
         pass
 
-    def find_membase_build(self,builds,product,deliverable_type,os_architecture,build_version):
+    def find_membase_build(self, builds, product, deliverable_type, os_architecture, build_version):
         for build in builds:
-            if build.product_version == build_version and product == build.product \
-            and build.architecture_type == os_architecture and deliverable_type == build.deliverable_type:
+            if build.product_version == build_version and product == build.product\
+               and build.architecture_type == os_architecture and deliverable_type == build.deliverable_type:
                 return build
         return None
-    def find_membase_build_with_version(self,builds,build_version):
+
+    def find_membase_build_with_version(self, builds, build_version):
         for build in builds:
             if build.product_version == build_version or build.product_version.find(build_version) != -1:
                 #or if it starts with that version ?
                 return build
         return None
 
-    def sort_builds_by_version(self,builds):
+    def sort_builds_by_version(self, builds):
         membase_builds = list()
         for build in builds:
             if build.product == 'membase-server-enterprise':
                 membase_builds.append(build)
 
         return sorted(membase_builds,
-                      key=lambda membase_build: membase_build.build_number,reverse=True)
+                      key=lambda membase_build: membase_build.build_number, reverse=True)
 
     def get_latest_builds(self):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds')
@@ -83,34 +82,33 @@ class BuildQuery(object):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining/')
 
     def get_all_builds(self):
-        latestbuilds, latestchanges = \
-            self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds')
-        sustaining_builds, sustaining_changes = \
-            self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining/')
+        latestbuilds, latestchanges =\
+        self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds')
+        sustaining_builds, sustaining_changes =\
+        self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining/')
         latestbuilds.extend(sustaining_builds)
         latestchanges.extend(sustaining_changes)
         return latestbuilds, latestchanges
 
 
     #baseurl = 'http://builds.hq.northscale.net/latestbuilds/'
-    def _get_and_parse_builds(self,build_page):
+    def _get_and_parse_builds(self, build_page):
         builds = []
         changes = []
         page = None
         soup = None
         #try this five times
-        for i in range(0,5):
+        for i in range(0, 5):
             try:
                 page = urllib2.urlopen(build_page)
                 soup = BeautifulSoup.BeautifulSoup(page)
                 break
-            except :
+            except:
                 time.sleep(1)
         if not page:
             raise Exception('unable to connect to builds.hq')
         query = BuildQuery()
         for incident in soup('li'):
-            build = MembaseBuild()
             contents = incident.contents
             build_id = ''
             build_description = ''
@@ -118,31 +116,31 @@ class BuildQuery(object):
                 if BeautifulSoup.isString(content):
                     build_description = content.string
                 elif content.name == 'a':
-                    build_id =  content.string.string
+                    build_id = content.string.string
             if build_id.lower().startswith('changes'):
-                change = query.create_change_info(build_id,build_description)
-                change.url = '%s/%s' % (build_page,build_id)
+                change = query.create_change_info(build_id, build_description)
+                change.url = '%s/%s' % (build_page, build_id)
                 changes.append(change)
             else:
-                build = query.create_build_info(build_id,build_description)
-                build.url = '%s/%s' % (build_page,build_id)
+                build = query.create_build_info(build_id, build_description)
+                build.url = '%s/%s' % (build_page, build_id)
                 builds.append(build)
-            #now let's reconcile the builds and changes?
+                #now let's reconcile the builds and changes?
 
         for build in builds:
             for change in changes:
                 if change.build_number == build.product_version:
                     build.change = change
-#                    print 'change : ', change.url,change.build_number
+                    #                    print 'change : ', change.url,change.build_number
                     break
-        #let's filter those builds with version that starts with 'v'
+            #let's filter those builds with version that starts with 'v'
         filtered_builds = []
         for build in builds:
-#            if not '{0}'.format(build.product_version).startswith('v'):
+        #            if not '{0}'.format(build.product_version).startswith('v'):
             filtered_builds.append(build)
-        return  filtered_builds,changes
+        return  filtered_builds, changes
 
-    def create_build_info(self,build_id,build_decription):
+    def create_build_info(self, build_id, build_decription):
         build = MembaseBuild()
         build.deliverable_type = self._product_deliverable_type(build_id)
         build.time = self._product_time(build_decription)
@@ -154,7 +152,7 @@ class BuildQuery(object):
         build.build_number = self._build_number(build)
         return build
 
-    def create_change_info(self,build_id,build_decription):
+    def create_change_info(self, build_id, build_decription):
         change = MembaseChange()
         change.name = build_id.strip()
         change.build_number = self._change_build_number(build_id)
@@ -162,14 +160,15 @@ class BuildQuery(object):
         return change
 
 
-    def _product_name(self,build_id):
+    def _product_name(self, build_id):
         list = build_id.split('_')
         return list[0]
-    #the first one is the product
 
-    def _product_arch_type(self,build_id):
+        #the first one is the product
+
+    def _product_arch_type(self, build_id):
         list = build_id.split('_')
-        is_x86 = 'x86' in list
+        is_x86 = 'toy-x86' in list or 'x86' in list
         is_64 = '64' in list
         if is_x86 and is_64:
             return 'x86_64'
@@ -178,20 +177,20 @@ class BuildQuery(object):
         return ''
 
 
-    def _change_time(self,build_description):
+    def _change_time(self, build_description):
         list = build_description.split('/')
         timestamp = list[1].strip()
         timestamp = timestamp[:timestamp.index(')')]
-        return datetime.strptime(timestamp,'%a %b %d %H:%M:%S %Y')
+        return datetime.strptime(timestamp, '%a %b %d %H:%M:%S %Y')
 
-    def _change_build_number(self,build_id):
+    def _change_build_number(self, build_id):
         list = build_id.split('_')
         #get list[1] . get rid of .txt
         build_number = list[1].strip()
         build_number = build_number[:build_number.index('.txt')]
         return build_number
 
-    def _build_number(self,build):
+    def _build_number(self, build):
         #get the first - and then the first - after that
         first_dash = build.product_version.find('-')
         if first_dash != -1:
@@ -203,11 +202,11 @@ class BuildQuery(object):
                     return -1
         return -1
 
-    def _product_version(self,build_id):
+    def _product_version(self, build_id):
         list = build_id.split('_')
         version_item = ''
         for item in list:
-            if item.endswith('.setup.exe') or item.endswith('rpm') or \
+            if item.endswith('.setup.exe') or item.endswith('rpm') or\
                item.endswith('deb') or item.endswith('tar.gz'):
                 version_item = item
                 break
@@ -222,11 +221,11 @@ class BuildQuery(object):
                 return version_item[:version_item.index('.rpm')]
         return ''
 
-    def _product_deliverable_type(self,build_id = ''):
+    def _product_deliverable_type(self, build_id=''):
         list = build_id.split('_')
         version_item = ''
         for item in list:
-            if item.endswith('.setup.exe') or item.endswith('rpm') or \
+            if item.endswith('.setup.exe') or item.endswith('rpm') or\
                item.endswith('deb') or item.endswith('tar.gz'):
                 version_item = item
                 break
@@ -241,13 +240,13 @@ class BuildQuery(object):
                 return 'rpm'
         return ''
 
-    def _product_time(self,build_description):
+    def _product_time(self, build_description):
         list = build_description.split('/')
         timestamp = list[1].strip()
         timestamp = timestamp[:timestamp.index(')')]
-        return datetime.strptime(timestamp,'%a %b %d %H:%M:%S %Y')
+        return datetime.strptime(timestamp, '%a %b %d %H:%M:%S %Y')
 
-    def _product_size(self,build_description):
+    def _product_size(self, build_description):
         list = build_description.split('/')
         filesize = list[0]
         filesize = filesize[filesize.index('(') + 1:]
