@@ -51,6 +51,8 @@ class BucketOperationHelper():
                 test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200)
                                      , msg=msg)
 
+    #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
+    # BUCKET DELETION IS A SYNC CALL W.R.T MEMCACHED
     @staticmethod
     def wait_for_bucket_deletion(bucket,
                                  rest,
@@ -81,6 +83,7 @@ class BucketOperationHelper():
                 time.sleep(2)
         return False
 
+    #try to insert key in all vbuckets before returning from this function
     @staticmethod
     def wait_till_memcached_is_ready_or_assert(servers,
                                                bucket_port,
@@ -94,7 +97,7 @@ class BucketOperationHelper():
             log.info(msg.format(serverInfo.ip, bucket_name, bucket_port))
             start_time = time.time()
             memcached_ready = False
-            while time.time() <= (start_time + 90):
+            while time.time() <= (start_time + 120):
                 key = '{0}'.format(uuid.uuid4())
                 vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
                 client = None
@@ -120,7 +123,7 @@ class BucketOperationHelper():
 
                 if client:
                     client.close()
-                time.sleep(1)
+                time.sleep(3)
             if not memcached_ready:
                 test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
 

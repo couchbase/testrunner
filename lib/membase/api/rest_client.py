@@ -14,6 +14,19 @@ class RestHelper(object):
     def __init__(self, rest_connection):
         self.rest = rest_connection
 
+    def is_ns_server_running(self, timeout_in_seconds=40):
+        end_time = time.time() + timeout_in_seconds
+        while time.time() <= end_time:
+            try:
+                if self.is_cluster_healthy():
+                    return True
+            except ServerUnavailableException:
+                time.sleep(1)
+        msg = 'unable to connect to the node {0} even after waiting {1} seconds'
+        log.info(msg.format(self.rest.ip,))
+        return False
+
+
     def is_cluster_healthy(self):
         #get the nodes and verify that all the nodes.status are healthy
         nodes = self.rest.node_statuses()

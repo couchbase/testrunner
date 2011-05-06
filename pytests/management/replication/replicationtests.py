@@ -172,6 +172,7 @@ class ReplicationTests(unittest.TestCase):
     def _cleanup_cluster(self):
         BucketOperationHelper.delete_all_buckets_or_assert([self.servers[0]],test_case=self)
         ClusterOperationHelper.cleanup_cluster(self.servers)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers,testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
 
     def _verify_data(self, version):
@@ -346,3 +347,4 @@ class ReplicationTests(unittest.TestCase):
 
     def tearDown(self):
         self._cleanup_cluster()
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers,testcase)

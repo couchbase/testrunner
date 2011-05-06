@@ -13,6 +13,7 @@ class RebalanceBaseTest(unittest.TestCase):
         log = logger.Logger.get_logger()
         servers = input.servers
         ClusterHelper.cleanup_cluster(servers)
+        ClusterHelper.wait_for_ns_servers_or_assert(servers,testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         serverInfo = servers[0]
         log.info('picking server : {0} as the master'.format(serverInfo))
@@ -31,8 +32,8 @@ class RebalanceBaseTest(unittest.TestCase):
     def common_tearDown(servers, testcase):
         #let's just clean up the buckets in the master node
         ClusterOperationHelper.cleanup_cluster(servers)
+        ClusterHelper.wait_for_ns_servers_or_assert(servers,testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
-
 
         #load data . add all node . load more data . rebalance
 
@@ -115,4 +116,11 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 #disk greater than memory
 #class IncrementalRebalanceInAndOutTests(unittest.TestCase):
 #    pass
+
+#this test case will add all the nodes and then start removing them one by one
+#
+class IncrementalRebalanceOut(object):
+    pass
+
+
 

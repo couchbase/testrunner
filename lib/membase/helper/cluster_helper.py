@@ -32,6 +32,13 @@ class ClusterOperationHelper(object):
         return otpNodes
 
     @staticmethod
+    def wait_for_ns_servers_or_assert(servers,testcase):
+        for server in servers:
+            rest = RestConnection(server)
+            testcase.assertTrue(RestHelper(rest).is_ns_server_running(),
+                            "ns_server is not running in {0}".format(server.ip))
+
+    @staticmethod
     def cleanup_cluster(servers):
         log = logger.Logger.get_logger()
         master = servers[0]
