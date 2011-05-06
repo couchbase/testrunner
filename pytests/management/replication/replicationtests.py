@@ -170,6 +170,7 @@ class ReplicationTests(unittest.TestCase):
                                                                      test=self)
 
     def _cleanup_cluster(self):
+        BucketOperationHelper.delete_all_buckets_or_assert([self.servers[0]],test_case=self)
         ClusterOperationHelper.cleanup_cluster(self.servers)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
 
