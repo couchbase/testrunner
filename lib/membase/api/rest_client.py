@@ -14,7 +14,7 @@ class RestHelper(object):
     def __init__(self, rest_connection):
         self.rest = rest_connection
 
-    def is_ns_server_running(self, timeout_in_seconds=40):
+    def is_ns_server_running(self, timeout_in_seconds=360):
         end_time = time.time() + timeout_in_seconds
         while time.time() <= end_time:
             try:
