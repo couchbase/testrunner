@@ -40,8 +40,8 @@ class BucketOperationHelper():
             try:
                 buckets = rest.get_buckets()
             except:
-                log.info('10 seconds sleep before calling get_buckets again...')
-                time.sleep(10)
+                log.info('15 seconds sleep before calling get_buckets again...')
+                time.sleep(15)
                 buckets = rest.get_buckets()
             for bucket in buckets:
                 print bucket.name
@@ -50,6 +50,8 @@ class BucketOperationHelper():
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
                 test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200)
                                      , msg=msg)
+        log.info('sleeping for 10 seconds because we want to :)')
+        time.sleep(10)
 
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
     # BUCKET DELETION IS A SYNC CALL W.R.T MEMCACHED
