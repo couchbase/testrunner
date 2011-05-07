@@ -100,10 +100,10 @@ class BucketOperationHelper():
             inserted_keys = []
             start_time = time.time()
             warmed_up_vBuckets = []
+            client = None
             while time.time() <= (start_time + 120):
                 key = '{0}'.format(uuid.uuid4())
                 vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-                client = None
                 try:
                     client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
                                                                            bucket_name,
@@ -115,7 +115,6 @@ class BucketOperationHelper():
                     if not vBucketId in warmed_up_vBuckets:
                         warmed_up_vBuckets.append(vBucketId)
                     if len(warmed_up_vBuckets) == 1024:
-                        log.info("inserted {0} keys to all 1024 vBuckets".format(len(inserted_keys)))
                         break
                 except mc_bin_client.MemcachedError as error:
                     msg = "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to bucket : {2}"
@@ -124,14 +123,14 @@ class BucketOperationHelper():
                 except Exception as ex:
                     log.error("general error : {0} while setting key ".format(ex))
                     time.sleep(3)
-
-                if client:
-                    if len(warmed_up_vBuckets) > 0:
-                        log.info("inserted {0} keys to all {1} vBuckets".format(len(inserted_keys),len(warmed_up_vBuckets)))
-                        client.flush()
-                    client.close()
+            if client:
+                client.flush()
+                client.close()
             if len(warmed_up_vBuckets) < 1:
                 test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+            else:
+                log.info("inserted {0} keys to all {1} vBuckets".format(len(inserted_keys),len(warmed_up_vBuckets)))
+
 
     @staticmethod
     def verify_data(ip, keys, value_equal_to_key,verify_flags, port, test):
