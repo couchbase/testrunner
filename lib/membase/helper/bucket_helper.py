@@ -95,38 +95,41 @@ class BucketOperationHelper():
         log = logger.Logger.get_logger()
 
         for serverInfo in servers:
-            msg = "waiting for memcached to accept commands in {0} for bucket {1}:{2}"
-            log.info(msg.format(serverInfo.ip, bucket_name, bucket_port))
+            msg = "waiting for memcached bucket : {0} in {1}:{2} to accept set ops"
+            log.info(msg.format(bucket_name, serverInfo.ip, bucket_port))
+            inserted_keys = []
             start_time = time.time()
-            memcached_ready = False
+            warmed_up_vBuckets = []
             while time.time() <= (start_time + 120):
                 key = '{0}'.format(uuid.uuid4())
-                vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+                vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
                 client = None
                 try:
                     client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
                                                                            bucket_name,
                                                                            bucket_port,
                                                                            bucket_password)
-                    client.vbucketId = vbucketId
+                    client.vbucketId = vBucketId
                     client.set(key, 0, 0, key)
-                    log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
-                    memcached_ready = True
-                    client.flush()
-                    break
+                    inserted_keys.append(key)
+                    if not vBucketId in warmed_up_vBuckets:
+                        warmed_up_vBuckets.append(vBucketId)
+                    if len(warmed_up_vBuckets) == 1024:
+                        log.info("inserted {0} keys to all 1024 vBuckets".format(len(inserted_keys)))
+                        break
                 except mc_bin_client.MemcachedError as error:
-                    log.error(
-                        "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to bucket : {2}".format(
-                            error.status, key, vbucketId))
+                    msg = "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to bucket : {2}"
+                    log.error(msg.format(error.status, key, vBucketId))
+                    time.sleep(3)
                 except Exception as ex:
-                    log.error(ex)
-                    log.error(
-                        "memcached not ready yet .. unable to push key : {0} to bucket : {1}".format(key, vbucketId))
+                    log.error("general error : {0} while setting key ".format(ex))
+                    time.sleep(3)
 
                 if client:
+                    if len(warmed_up_vBuckets) > 0:
+                        client.flush()
                     client.close()
-                time.sleep(3)
-            if not memcached_ready:
+            if len(warmed_up_vBuckets) < 1:
                 test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
 
     @staticmethod
