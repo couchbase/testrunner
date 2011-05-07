@@ -127,6 +127,7 @@ class BucketOperationHelper():
 
                 if client:
                     if len(warmed_up_vBuckets) > 0:
+                        log.info("inserted {0} keys to all {1} vBuckets".format(len(inserted_keys),len(warmed_up_vBuckets)))
                         client.flush()
                     client.close()
             if len(warmed_up_vBuckets) < 1:
