@@ -192,7 +192,8 @@ class RemoteMachineShellConnection:
             #ignore this error
             pass
         sftp.close()
-        log.info("found these files : {0}".format(files_matched))
+        if len(files_matched) > 0:
+            log.info("found these files : {0}".format(files_matched))
         return files_matched
 
     def file_exists(self, remotepath, filename):

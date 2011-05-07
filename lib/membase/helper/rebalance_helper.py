@@ -2,6 +2,7 @@ import time
 import logger
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 
 log = logger.Logger.get_logger()
 
@@ -11,6 +12,7 @@ class RebalanceHelper():
     def wait_till_total_numbers_match(master,
                                       servers,
                                       bucket,
+                                      port,
                                       replica_factor,
                                       timeout_in_seconds=120):
         log.info('waiting for sum_of_curr_items == total_items....')
@@ -20,6 +22,15 @@ class RebalanceHelper():
                 return True
             else:
                 time.sleep(2)
+        rest = RestConnection(master)
+        nodes_for_stats = rest.node_statuses()
+        for node in nodes_for_stats:
+            client = MemcachedClientHelper.create_memcached_client(node.ip, bucket, port)
+            log.info("getting tap stats.. for {0}".format(node.ip))
+            tap_stats = client.stats('tap')
+            for name in tap_stats:
+                log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
+            client.close()
         return False
 
 
