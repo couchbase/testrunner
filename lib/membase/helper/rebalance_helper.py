@@ -17,9 +17,11 @@ class RebalanceHelper():
                                       timeout_in_seconds=120):
         log.info('waiting for sum_of_curr_items == total_items....')
         start = time.time()
+        verified = False
         while (time.time() - start) <= timeout_in_seconds:
-            if RebalanceHelper.verify_items_count(master,servers,bucket,replica_factor):
-                return True
+            if RebalanceHelper.verify_items_count(master, servers, bucket, replica_factor):
+                verified = True
+                break
             else:
                 time.sleep(2)
         rest = RestConnection(master)
@@ -31,7 +33,7 @@ class RebalanceHelper():
             for name in tap_stats:
                 log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
             client.close()
-        return False
+        return verified
 
 
     @staticmethod
