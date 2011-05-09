@@ -146,12 +146,12 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
 
         self.log.info("inserting some items in the master before adding any nodes")
         distribution = {10: 0.5, 20: 0.5}
-        inserted_keys, rejected_keys =\
+        inserted_count, rejected_count =\
         MemcachedClientHelper.load_bucket(serverInfo=master,
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
-        items_inserted_count += len(inserted_keys)
+        items_inserted_count += inserted_count
 
         for server in self._servers[1:]:
             nodes = rest.node_statuses()
@@ -169,13 +169,12 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
             otpNodeIds.append(otpNode.id)
             #let's just start the load thread
             #better if we do sth like . start rebalance after 20 percent of the data is set
-            threads = MemcachedClientHelper.load_bucket(serverInfo=master,
+            threads = MemcachedClientHelper.create_threads_for_load_bucket(serverInfo=master,
                                               ram_load_ratio=load_ratio,
                                               value_size_distribution=distribution,
                                               number_of_threads=20)
             for thread in threads:
                 thread.start()
-            time.sleep(10)
 
             rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
@@ -183,8 +182,8 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
 
             for thread in threads:
                 thread.join()
+                items_inserted_count += thread.inserted_keys_count()
 
-            items_inserted_count += len(inserted_keys)
             final_replication_state = RestHelper(rest).wait_for_replication(120)
             msg = "replication state after waiting for up to 2 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
@@ -213,7 +212,7 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         MemcachedClientHelper.flush_bucket(master.ip, 'default', 11211)
 
     def test_small_load(self):
-        self._common_test_body(0.1)
+        self._common_test_body(1.0)
 
     def test_medium_load(self):
         self._common_test_body(10.0)
