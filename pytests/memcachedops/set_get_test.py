@@ -72,7 +72,8 @@ class SimpleSetGetTestBase(object):
                                                                    bucket=self.bucket_name,
                                                                    port=self.bucket_port,
                                                                    password='password')
-            inserted, rejected = MemcachedClientHelper.load_bucket(serverInfo=serverInfo,
+            inserted, rejected = \
+            MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=serverInfo,
                                                                    name=self.bucket_name,
                                                                    port=self.bucket_port,
                                                                    number_of_items=number_of_items,

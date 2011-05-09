@@ -260,12 +260,12 @@ class ReplicationTests(unittest.TestCase):
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
         inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
-                                          name=self.bucket_name,
-                                          port=11220,
-                                          ram_load_ratio=fill_ram_percentage,
-                                          value_size_distribution=distribution,
-                                          number_of_threads=40)
+        MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=master,
+                                                              name=self.bucket_name,
+                                                              port=11220,
+                                                              ram_load_ratio=fill_ram_percentage,
+                                                              value_size_distribution=distribution,
+                                                              number_of_threads=40)
         self.keys = inserted_keys
         self.log.info('updating all keys by appending _20 to each value')
         self._update_keys('20')
@@ -311,12 +311,12 @@ class ReplicationTests(unittest.TestCase):
         self.log.info('loading more data into the bucket')
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket(serverInfo=self.servers[0],
-                                          name=self.bucket_name,
-                                          port=11220,
-                                          ram_load_ratio=fill_ram_percentage,
-                                          value_size_distribution=distribution,
-                                          number_of_threads=40)
+        MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=self.servers[0],
+                                                              name=self.bucket_name,
+                                                              port=11220,
+                                                              ram_load_ratio=fill_ram_percentage,
+                                                              value_size_distribution=distribution,
+                                                              number_of_threads=40)
 
         self.keys = inserted_keys
         self.log.info('updating all keys by appending _20 to each value')

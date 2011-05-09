@@ -59,6 +59,93 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
         self.log.info("inserting some items in the master before adding any nodes")
         distribution = {10: 0.5, 20: 0.5}
+        inserted_count, rejected_count =\
+        MemcachedClientHelper.load_bucket(serverInfo=master,
+                                          ram_load_ratio=0.1,
+                                          value_size_distribution=distribution,
+                                          number_of_threads=20)
+        items_inserted_count += inserted_count
+
+        for server in self._servers[1:]:
+            nodes = rest.node_statuses()
+            otpNodeIds = [node.id for node in nodes]
+            if 'ns_1@127.0.0.1' in otpNodeIds:
+                otpNodeIds.remove('ns_1@127.0.0.1')
+                otpNodeIds.append('ns_1@{0}'.format(master.ip))
+            self.log.info("current nodes : {0}".format(otpNodeIds))
+            self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
+            otpNode = rest.add_node(creds.rest_username,
+                                    creds.rest_password,
+                                    server.ip)
+            msg = "unable to add node {0} to the cluster"
+            self.assertTrue(otpNode, msg.format(server.ip))
+            otpNodeIds.append(otpNode.id)
+            inserted_count, rejected_count =\
+            MemcachedClientHelper.load_bucket(serverInfo=master,
+                                              ram_load_ratio=load_ratio,
+                                              value_size_distribution=distribution,
+                                              number_of_threads=20)
+            self.log.info('inserted {0} keys'.format(inserted_count))
+            rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node {0}".format(server.ip))
+            items_inserted_count += inserted_count
+            final_replication_state = RestHelper(rest).wait_for_replication(120)
+            msg = "replication state after waiting for up to 2 minutes : {0}"
+            self.log.info(msg.format(final_replication_state))
+            start_time = time.time()
+            stats = rest.get_bucket_stats()
+            while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
+                self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
+                time.sleep(5)
+                stats = rest.get_bucket_stats()
+            nodes_for_stats = rest.node_statuses()
+            for node in nodes_for_stats:
+                client = MemcachedClientHelper.create_memcached_client(node.ip, 'default', 11211)
+                self.log.info("getting tap stats.. for {0}".format(node.ip))
+                tap_stats = client.stats('tap')
+                for name in tap_stats:
+                    self.log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
+                client.close()
+            self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
+            stats = rest.get_bucket_stats()
+            msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
+            self.assertEquals(stats["curr_items"], items_inserted_count,
+                              msg=msg.format(stats["curr_items"], items_inserted_count))
+        MemcachedClientHelper.flush_bucket(master.ip, 'default', 11211)
+
+    def test_small_load(self):
+        self._common_test_body(0.1)
+
+    def test_medium_load(self):
+        self._common_test_body(10.0)
+
+    def test_heavy_load(self):
+        self._common_test_body(20.0)
+
+#disk greater than memory
+#class IncrementalRebalanceInAndOutTests(unittest.TestCase):
+#    pass
+class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
+
+    def setUp(self):
+        self._input = TestInputSingleton.input
+        self._servers = self._input.servers
+        self.log = logger.Logger().get_logger()
+        RebalanceBaseTest.common_setup(self._input, 'default', self)
+
+    def tearDown(self):
+        RebalanceBaseTest.common_tearDown(self._servers, self)
+
+    #load data add one node , rebalance add another node rebalance
+    def _common_test_body(self, load_ratio):
+        master = self._servers[0]
+        rest = RestConnection(master)
+        creds = self._input.membase_settings
+        items_inserted_count = 0
+
+        self.log.info("inserting some items in the master before adding any nodes")
+        distribution = {10: 0.5, 20: 0.5}
         inserted_keys, rejected_keys =\
         MemcachedClientHelper.load_bucket(serverInfo=master,
                                           ram_load_ratio=0.1,
@@ -80,15 +167,23 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
             otpNodeIds.append(otpNode.id)
-            inserted_keys, rejected_keys =\
-            MemcachedClientHelper.load_bucket(serverInfo=master,
+            #let's just start the load thread
+            #better if we do sth like . start rebalance after 20 percent of the data is set
+            threads = MemcachedClientHelper.load_bucket(serverInfo=master,
                                               ram_load_ratio=load_ratio,
                                               value_size_distribution=distribution,
                                               number_of_threads=20)
-            self.log.info('inserted {0} keys'.format(len(inserted_keys)))
+            for thread in threads:
+                thread.start()
+            time.sleep(10)
+
             rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
+
+            for thread in threads:
+                thread.join()
+
             items_inserted_count += len(inserted_keys)
             final_replication_state = RestHelper(rest).wait_for_replication(120)
             msg = "replication state after waiting for up to 2 minutes : {0}"
@@ -101,13 +196,17 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                 stats = rest.get_bucket_stats()
             nodes_for_stats = rest.node_statuses()
             for node in nodes_for_stats:
-                client = MemcachedClientHelper.create_memcached_client(node.ip, 'default', 11211)
-                self.log.info("getting tap stats.. for {0}".format(node.ip))
-                tap_stats = client.stats('tap')
-                for name in tap_stats:
-                    self.log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
-                client.close()
+                try:
+                    client = MemcachedClientHelper.create_memcached_client(node.ip, 'default', 11211)
+                    self.log.info("getting tap stats.. for {0}".format(node.ip))
+                    tap_stats = client.stats('tap')
+                    for name in tap_stats:
+                        self.log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
+                    client.close()
+                except Exception as ex:
+                    self.log.error("error {0} while getting stats...".format(ex))
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
+            stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
@@ -120,11 +219,8 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         self._common_test_body(10.0)
 
     def test_heavy_load(self):
-        self._common_test_body(80.0)
+        self._common_test_body(20.0)
 
-#disk greater than memory
-#class IncrementalRebalanceInAndOutTests(unittest.TestCase):
-#    pass
 
 #this test case will add all the nodes and then start removing them one by one
 #
@@ -153,13 +249,13 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
         self.log.info("inserting some items in the master before adding any nodes")
         distribution = {10: 0.5, 20: 0.5}
-        inserted_keys, rejected_keys =\
+        inserted_count, rejected_count =\
         MemcachedClientHelper.load_bucket(serverInfo=master,
                                           ram_load_ratio=ram_ratio,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
-        self.log.info('inserted {0} keys'.format(len(inserted_keys)))
-        items_inserted_count += len(inserted_keys)
+        self.log.info('inserted {0} keys'.format(inserted_count))
+        items_inserted_count += inserted_count
 
         ClusterHelper.add_all_nodes_or_assert(master, self._servers, creds, self)
         #remove nodes one by one and rebalance , add some item and
@@ -171,27 +267,27 @@ class IncrementalRebalanceOut(unittest.TestCase):
         while len(nodes) > 1:
             #pick a node that is not the master node
             toBeEjectedNode = None
-            for node in nodes:
-                if node.id.find('127.0.0.1') == -1 and node.id.find(master.ip) == -1:
-                    toBeEjectedNode = node
+            for node_for_stat in nodes:
+                if node_for_stat.id.find('127.0.0.1') == -1 and node_for_stat.id.find(master.ip) == -1:
+                    toBeEjectedNode = node_for_stat
                     break
 
             if not toBeEjectedNode:
                 break
-            inserted_keys, rejected_keys =\
+            inserted_keys_count, rejected_keys_count =\
             MemcachedClientHelper.load_bucket(serverInfo=master,
                                               ram_load_ratio=ram_ratio,
                                               value_size_distribution=distribution,
                                               number_of_threads=20)
-            self.log.info('inserted {0} keys'.format(len(inserted_keys)))
-            items_inserted_count += len(inserted_keys)
+            self.log.info('inserted {0} keys'.format(inserted_keys_count))
+            items_inserted_count += inserted_keys_count
             nodes = rest.node_statuses()
             otpNodeIds = [node.id for node in nodes]
             self.log.info("current nodes : {0}".format(otpNodeIds))
-            self.log.info("removing node {0} and rebalance afterwards".format(node.id))
-            rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[node.id])
+            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+            rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[toBeEjectedNode.id])
             self.assertTrue(rest.monitorRebalance(),
-                            msg="rebalance operation failed after adding node {0}".format(node.id))
+                            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
             final_replication_state = RestHelper(rest).wait_for_replication(240)
             msg = "replication state after waiting for up to 4 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
@@ -205,18 +301,19 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
             #visit all nodes ?
             nodes_for_stats = rest.node_statuses()
-            for node in nodes_for_stats:
-                client = MemcachedClientHelper.create_memcached_client(node.ip, 'default', 11211)
-                self.log.info("getting tap stats.. for {0}".format(node.ip))
-                tap_stats = client.stats('tap')
-                for name in tap_stats:
-                    self.log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
-                client.close()
-
+            for node_for_stat in nodes_for_stats:
+                try:
+                    client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11211)
+                    self.log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
+                    tap_stats = client.stats('tap')
+                    for name in tap_stats:
+                        self.log.info("TAP {0} :{1}   {2}".format(node_for_stat.id, name, tap_stats[name]))
+                    client.close()
+                except Exception as ex:
+                    self.log.error("error {0} while getting stats...".format(ex))
+            stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             #print
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
             nodes = rest.node_statuses()
-
-

@@ -53,11 +53,12 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                 if insert_data:
                     #let's insert some data
                     distribution={10:0.5,20:0.5}
-                    inserted_keys,rejected_keys = MemcachedClientHelper.load_bucket(serverInfo=server,
-                                                      name='default',
-                                                      port=11211,
-                                                      ram_load_ratio=0.1,
-                                                      value_size_distribution=distribution)
+                    inserted_keys,rejected_keys =\
+                    MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=server,
+                                                                          name='default',
+                                                                          port=11211,
+                                                                          ram_load_ratio=0.1,
+                                                                          value_size_distribution=distribution)
         filtered_builds = []
         for build in builds:
             if build.deliverable_type == info.deliverable_type and \
