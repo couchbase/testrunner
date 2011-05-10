@@ -421,6 +421,10 @@ class RemoteMachineShellConnection:
                     os_distro = 'Ubuntu'
                     os_version = etc_issue
                     is_linux_distro = True
+                elif etc_issue.lower().find('amazon linux ami') != -1:
+                    os_distro = 'CentOS'
+                    os_version = etc_issue
+                    is_linux_distro = True
                 elif etc_issue.lower().find('centos') != -1:
                     os_distro = 'CentOS'
                     os_version = etc_issue
