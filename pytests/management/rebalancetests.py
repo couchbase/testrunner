@@ -39,6 +39,14 @@ class RebalanceBaseTest(unittest.TestCase):
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
 
+    @staticmethod
+    def log_interesting_taps(node,tap_stats,logger):
+        interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
+                             'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno']
+        for name in tap_stats:
+            for interesting_stat in interesting_stats:
+                if name.find(interesting_stat) != -1:
+                    logger.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
         #load data . add all node . load more data . rebalance
 
 #load data. add one node rebalance , rebalance out
@@ -104,24 +112,11 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                 time.sleep(5)
                 stats = rest.get_bucket_stats()
             nodes_for_stats = rest.node_statuses()
-            for node in nodes_for_stats:
-                client = MemcachedClientHelper.create_memcached_client(node.ip, 'default', 11211)
-                self.log.info("getting tap stats.. for {0}".format(node.ip))
+            for node_for_stat in nodes_for_stats:
+                client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11210)
+                self.log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
                 tap_stats = client.stats('tap')
-#                ack_seqno
-#                ack_window_full
-#                has_item
-#                has_queued_item
-#                idle
-#                paused
-#                pending_backfill
-#                pending_disk_backfill
-#                recv_ack_seqno
-                interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
-                                     'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno']
-                for name in tap_stats:
-                    if name in interesting_stats:
-                        self.log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
+                RebalanceBaseTest.log_interesting_taps(node_for_stat,tap_stats,self.log)
                 client.close()
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
@@ -210,16 +205,12 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
                 time.sleep(5)
                 stats = rest.get_bucket_stats()
             nodes_for_stats = rest.node_statuses()
-            for node in nodes_for_stats:
+            for node_for_stat in nodes_for_stats:
                 try:
-                    client = MemcachedClientHelper.create_memcached_client(node.ip, 'default', 11211)
-                    self.log.info("getting tap stats.. for {0}".format(node.ip))
+                    client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11210)
+                    self.log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
                     tap_stats = client.stats('tap')
-                    interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
-                                         'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno']
-                    for name in tap_stats:
-                        if name in interesting_stats:
-                            self.log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
+                    RebalanceBaseTest.log_interesting_taps(node_for_stat,tap_stats,self.log)
                     client.close()
                 except Exception as ex:
                     self.log.error("error {0} while getting stats...".format(ex))
@@ -320,14 +311,10 @@ class IncrementalRebalanceOut(unittest.TestCase):
             nodes_for_stats = rest.node_statuses()
             for node_for_stat in nodes_for_stats:
                 try:
-                    client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11211)
+                    client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11210)
                     self.log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
                     tap_stats = client.stats('tap')
-                    interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
-                                         'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno']
-                    for name in tap_stats:
-                        if name in interesting_stats:
-                            self.log.info("TAP {0} :{1}   {2}".format(node_for_stat.id, name, tap_stats[name]))
+                    RebalanceBaseTest.log_interesting_taps(node_for_stat,tap_stats,self.log)
                     client.close()
                 except Exception as ex:
                     self.log.error("error {0} while getting stats...".format(ex))
