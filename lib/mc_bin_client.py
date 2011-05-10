@@ -16,6 +16,7 @@ import exceptions
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
+from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT
 import memcacheConstants
 
 class MemcachedError(exceptions.Exception):
@@ -51,13 +52,18 @@ class MemcachedClient(object):
         self.close()
 
     def _sendCmd(self, cmd, key, val, opaque, extraHeader='', cas=0):
-        dtype=0
-        msg=struct.pack(REQ_PKT_FMT, REQ_MAGIC_BYTE,
-            cmd, len(key), len(extraHeader), dtype, self.vbucketId,
+        self._sendMsg(cmd, key, val, opaque, extraHeader=extraHeader, cas=cas,
+                      vbucketId=self.vbucketId)
+
+    def _sendMsg(self, cmd, key, val, opaque, extraHeader='', cas=0,
+                 dtype=0, vbucketId=0,
+                 fmt=REQ_PKT_FMT, magic=REQ_MAGIC_BYTE):
+        msg=struct.pack(fmt, magic,
+            cmd, len(key), len(extraHeader), dtype, vbucketId,
                 len(key) + len(extraHeader) + len(val), opaque, cas)
         self.s.send(msg + extraHeader + key + val)
 
-    def _handleKeyedResponse(self, myopaque):
+    def _recvMsg(self):
         response = ""
         while len(response) < MIN_RECV_PACKET:
             data = self.s.recv(MIN_RECV_PACKET - len(response))
@@ -77,6 +83,10 @@ class MemcachedClient(object):
             remaining -= len(data)
 
         assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE)), "Got magic: %d" % magic
+        return cmd, errcode, opaque, cas, keylen, extralen, rv
+
+    def _handleKeyedResponse(self, myopaque):
+        cmd, errcode, opaque, cas, keylen, extralen, rv = self._recvMsg()
         assert myopaque is None or opaque == myopaque, \
             "expected opaque %x, got %x" % (myopaque, opaque)
         if errcode != 0:
@@ -132,19 +142,35 @@ class MemcachedClient(object):
         return self._mutate(memcacheConstants.CMD_REPLACE, key, exp, flags, 0,
             val)
 
-    def __parseGet(self, data):
+    def __parseGet(self, data, klen=0):
         flags=struct.unpack(memcacheConstants.GET_RES_FMT, data[-1][:4])[0]
-        return flags, data[1], data[-1][4:]
+        return flags, data[1], data[-1][4 + klen:]
 
     def get(self, key):
         """Get the value for a given key within the memcached server."""
         parts=self._doCmd(memcacheConstants.CMD_GET, key, '')
         return self.__parseGet(parts)
 
+    def getl(self, key):
+        """Get the value for a given key within the memcached server."""
+        parts=self._doCmd(memcacheConstants.CMD_GET_LOCKED, key, '')
+        return self.__parseGet(parts, len(key))
+
     def cas(self, key, exp, flags, oldVal, val):
         """CAS in a new value for the given key and comparison value."""
         self._mutate(memcacheConstants.CMD_SET, key, exp, flags,
             oldVal, val)
+
+    def touch(self, key, exp):
+        """Touch a key in the memcached server."""
+        return self._doCmd(memcacheConstants.CMD_TOUCH, key, '',
+            struct.pack(memcacheConstants.TOUCH_PKT_FMT, exp))
+
+    def gat(self, key, exp):
+        """Get the value for a given key and touch it within the memcached server."""
+        parts=self._doCmd(memcacheConstants.CMD_GAT, key, '',
+            struct.pack(memcacheConstants.GAT_PKT_FMT, exp))
+        return self.__parseGet(parts)
 
     def version(self):
         """Get the value for a given key within the memcached server."""
@@ -192,20 +218,35 @@ class MemcachedClient(object):
     def start_replication(self):
         return self._doCmd(memcacheConstants.CMD_START_REPLICATION, '', '')
 
+    def start_onlineupdate(self):
+        return self._doCmd(memcacheConstants.CMD_START_ONLINEUPDATE, '', '')
+
+    def complete_onlineupdate(self):
+        return self._doCmd(memcacheConstants.CMD_COMPLETE_ONLINEUPDATE, '', '')
+
+    def revert_onlineupdate(self):
+        return self._doCmd(memcacheConstants.CMD_REVERT_ONLINEUPDATE, '', '')
+
     def set_tap_param(self, key, val):
         print "setting tap param:", key, val
         return self._doCmd(memcacheConstants.CMD_SET_TAP_PARAM, key, val)
 
-    def set_vbucket_state(self, vbucket, state):
-        return self._doCmd(memcacheConstants.CMD_SET_VBUCKET_STATE,
-                           str(vbucket), state)
+    def set_vbucket_state(self, vbucket, stateName):
+        assert isinstance(vbucket, int)
+        self.vbucketId = vbucket
+        state = struct.pack(memcacheConstants.VB_SET_PKT_FMT,
+                            memcacheConstants.VB_STATE_NAMES[stateName])
+        return self._doCmd(memcacheConstants.CMD_SET_VBUCKET_STATE, '',
+                           state)
 
     def get_vbucket_state(self, vbucket):
         return self._doCmd(memcacheConstants.CMD_GET_VBUCKET_STATE,
                            str(vbucket), '')
 
     def delete_vbucket(self, vbucket):
-        return self._doCmd(memcacheConstants.CMD_DELETE_VBUCKET, str(vbucket), '')
+        assert isinstance(vbucket, int)
+        self.vbucketId = vbucket
+        return self._doCmd(memcacheConstants.CMD_DELETE_VBUCKET, '', '')
 
     def evict_key(self, key):
         return self._doCmd(memcacheConstants.CMD_EVICT_KEY, key, '')
@@ -260,3 +301,107 @@ class MemcachedClient(object):
         """Flush all storage in a memcached instance."""
         return self._doCmd(memcacheConstants.CMD_FLUSH, '', '',
             struct.pack(memcacheConstants.FLUSH_PKT_FMT, timebomb))
+
+    def bucket_select(self, name):
+        return self._doCmd(memcacheConstants.CMD_SELECT_BUCKET, name, '')
+
+    def sync_persistence(self, keyspecs):
+        payload = self._build_sync_payload(0x8, keyspecs)
+
+        print "sending sync for persistence command for the following keyspecs:", keyspecs
+        (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
+        return (opaque, cas, self._parse_sync_response(data))
+
+    def sync_mutation(self, keyspecs):
+        payload = self._build_sync_payload(0x4, keyspecs)
+
+        print "sending sync for mutation command for the following keyspecs:", keyspecs
+        (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
+        return (opaque, cas, self._parse_sync_response(data))
+
+    def sync_replication(self, numReplicas, keyspecs):
+        payload = self._build_sync_payload((numReplicas & 0x0f) << 4, keyspecs)
+
+        print "sending sync for replication command for the following keyspecs:", keyspecs
+        (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
+        return (opaque, cas, self._parse_sync_response(data))
+
+    def sync_replication_or_persistence(self, numReplicas, keyspecs):
+        payload = self._build_sync_payload(((numReplicas & 0x0f) << 4) | 0x8, keyspecs)
+
+        print "sending sync for replication or persistence command for the " \
+            "following keyspecs:", keyspecs
+        (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
+        return (opaque, cas, self._parse_sync_response(data))
+
+    def sync_replication_and_persistence(self, numReplicas, keyspecs):
+        payload = self._build_sync_payload(((numReplicas & 0x0f) << 4) | 0xA, keyspecs)
+
+        print "sending sync for replication and persistence command for the " \
+            "following keyspecs:", keyspecs
+        (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
+        return (opaque, cas, self._parse_sync_response(data))
+
+    def _build_sync_payload(self, flags, keyspecs):
+        payload = struct.pack(">I", flags)
+        payload += struct.pack(">H", len(keyspecs))
+
+        for spec in keyspecs:
+            if not isinstance(spec, dict):
+                raise TypeError("each keyspec must be a dict")
+            if not spec.has_key('vbucket'):
+                raise TypeError("missing vbucket property in keyspec")
+            if not spec.has_key('key'):
+                raise TypeError("missing key property in keyspec")
+
+            payload += struct.pack(">Q", spec.get('cas', 0))
+            payload += struct.pack(">H", spec['vbucket'])
+            payload += struct.pack(">H", len(spec['key']))
+            payload += spec['key']
+
+        return payload
+
+    def _parse_sync_response(self, data):
+        keyspecs = []
+        nkeys = struct.unpack(">H", data[0 : struct.calcsize("H")])[0]
+        offset = struct.calcsize("H")
+
+        for i in xrange(nkeys):
+            spec = {}
+            width = struct.calcsize("QHHB")
+            (spec['cas'], spec['vbucket'], keylen, eventid) = \
+                struct.unpack(">QHHB", data[offset : offset + width])
+            offset += width
+            spec['key'] = data[offset : offset + keylen]
+            offset += keylen
+
+            if eventid == memcacheConstants.CMD_SYNC_EVENT_PERSISTED:
+                spec['event'] = 'persisted'
+            elif eventid == memcacheConstants.CMD_SYNC_EVENT_MODIFED:
+                spec['event'] = 'modified'
+            elif eventid == memcacheConstants.CMD_SYNC_EVENT_DELETED:
+                spec['event'] = 'deleted'
+            elif eventid == memcacheConstants.CMD_SYNC_EVENT_REPLICATED:
+                spec['event'] = 'replicated'
+            elif eventid == memcacheConstants.CMD_SYNC_INVALID_KEY:
+                spec['event'] = 'invalid key'
+            elif spec['event'] == memcacheConstants.CMD_SYNC_INVALID_CAS:
+                spec['event'] = 'invalid cas'
+            else:
+                spec['event'] = eventid
+
+            keyspecs.append(spec)
+
+        return keyspecs
+
+    def restore_file(self, filename):
+        """Initiate restore of a given file."""
+        return self._doCmd(memcacheConstants.CMD_RESTORE_FILE, filename, '', '', 0)
+
+    def restore_complete(self):
+        """Notify the server that we're done restoring."""
+        return self._doCmd(memcacheConstants.CMD_RESTORE_COMPLETE, '', '', '', 0)
+
+    def deregister_tap_client(self, tap_name):
+        """Deregister the TAP client with a given name."""
+        return self._doCmd(memcacheConstants.CMD_DEREGISTER_TAP_CLIENT, tap_name, '', '', 0)
