@@ -104,8 +104,20 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                 client = MemcachedClientHelper.create_memcached_client(node.ip, 'default', 11211)
                 self.log.info("getting tap stats.. for {0}".format(node.ip))
                 tap_stats = client.stats('tap')
+#                ack_seqno
+#                ack_window_full
+#                has_item
+#                has_queued_item
+#                idle
+#                paused
+#                pending_backfill
+#                pending_disk_backfill
+#                recv_ack_seqno
+                interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
+                                     'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno']
                 for name in tap_stats:
-                    self.log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
+                    if name in interesting_stats:
+                        self.log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
                 client.close()
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
@@ -218,7 +230,7 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         self._common_test_body(10.0)
 
     def test_heavy_load(self):
-        self._common_test_body(20.0)
+        self._common_test_body(40.0)
 
 
 #this test case will add all the nodes and then start removing them one by one
