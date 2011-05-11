@@ -163,6 +163,11 @@ class MemcachedClientHelper(object):
     @staticmethod
     def create_memcached_client(ip, bucket='default', port=11211, password='password'):
         client = MemcachedClient(ip, port)
+        if port == 11210:
+            if bucket == 'default':
+                client.sasl_auth_plain(bucket, '')
+            else:
+                client.sasl_auth_plain(bucket, password)
         if bucket != 'default' and port == 11211:
             client.sasl_auth_plain(bucket, password)
         return client
@@ -171,11 +176,22 @@ class MemcachedClientHelper(object):
 
     @staticmethod
     def flush_bucket(ip, bucket='default', port=11211, password='password'):
+        #if memcached throws OOM error try again ?
         client = MemcachedClient(ip, port)
         if bucket != 'default' and port == 11211:
             client.sasl_auth_plain(bucket, password)
-        client.flush()
-        return client
+        retry_attempt = 5
+        while retry_attempt > 0:
+            try:
+                client.flush()
+                break
+            except MemcachedError:
+                retry_attempt -= 1
+                log = logger.Logger.get_logger()
+                log.info('flush raised memcached error trying again in 5 seconds...')
+                time.sleep(5)
+        client.close()
+        return
 
 
 class WorkerThread(threading.Thread):
@@ -278,4 +294,24 @@ class WorkerThread(threading.Thread):
                 self._rejected_keys.append(key)
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
                     break
+        #before closing the session let's try sending those items again
+        retry = 3
+        while retry > 0 and self._rejected_keys_count > 0:
+            rejected_after_retry = []
+            self._rejected_keys_count = 0
+            for key in self._rejected_keys:
+                vId = crc32.crc32_hash(key) & 1023
+                client.vbucketId = vId
+                try:
+                    if self.override_vBucketId >= 0:
+                        client.vbucketId = self.override_vBucketId
+                    client.set(key, 0, 0, key)
+                    self._inserted_keys_count += 1
+                except MemcachedError:
+                    self._rejected_keys_count += 1
+                    rejected_after_retry.append(key)
+                    if len(rejected_after_retry) > self.ignore_how_many_errors:
+                        break
+            self._rejected_keys = rejected_after_retry
+            retry =- 1
         client.close()
