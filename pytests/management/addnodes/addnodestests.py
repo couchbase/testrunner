@@ -2,7 +2,7 @@ import unittest
 from TestInput import TestInputSingleton
 import logger
 from membase.api.exception import ServerJoinException, MembaseHttpExceptionTypes, ServerAlreadyJoinedException
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 import time
@@ -41,6 +41,10 @@ class AddNodesTests(unittest.TestCase):
     def common_tearDown(self,with_buckets):
         if with_buckets:
             BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers,test_case=self)
+        #wait for all ns_servers
+        for server in self.servers:
+            self.assertTrue(RestHelper(RestConnection(server)).is_ns_server_running(timeout_in_seconds=360),
+                            msg="ns server is not running even after waiting for 6 minutes")
 
 
     #add nodes one by one
