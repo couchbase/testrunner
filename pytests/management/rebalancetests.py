@@ -42,7 +42,8 @@ class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
     def log_interesting_taps(node,tap_stats,logger):
         interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
-                             'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno']
+                             'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno',
+                             'ep_num_new_insertions']
         for name in tap_stats:
             for interesting_stat in interesting_stats:
                 if name.find(interesting_stat) != -1:
