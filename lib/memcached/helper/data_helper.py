@@ -193,7 +193,63 @@ class MemcachedClientHelper(object):
         client.close()
         return
 
+class MutationThread(threading.Thread):
 
+    def run(self):
+        client = MemcachedClientHelper.create_memcached_client(self.serverInfo.ip,
+                                                               self.name,
+                                                               self.port,
+                                                               self.password)
+        for key in self.keys:
+            #every two minutes print the status
+            vId = crc32.crc32_hash(key) & 1023
+            client.vbucketId = vId
+            try:
+                if self.op == "set":
+                    client.set(key, 0, 0, self.seed)
+                    self._mutated_count += 1
+            except MemcachedError:
+                self._rejected_count += 1
+                self._rejected_keys.append(key)
+                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
+            except Exception as e:
+                self.log.info(e)
+                self._rejected_count += 1
+                self._rejected_keys.append(key)
+                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
+                client.close()
+                client = MemcachedClientHelper.create_memcached_client(self.serverInfo.ip,
+                                                               self.name,
+                                                               self.port,
+                                                               self.password)
+
+        self.log.info("set failed {0} times".format(self._rejected_count))
+        client.close()
+
+
+    def __init__(self,serverInfo,
+                 keys,
+                 op,
+                 seed,
+                 name='default',
+                 port=11211,
+                 password='password'):
+        threading.Thread.__init__(self)
+        self.log = logger.Logger.get_logger()
+        self.serverInfo = serverInfo
+        self.name = name
+        self.port = port
+        self.password = password
+        self.keys = keys
+        self.op = op
+        self.seed = seed
+        self._mutated_count = 0
+        self._rejected_count = 0
+        self._rejected_keys = []
+
+
+#mutation ? let' do two cycles , first run and then try to mutate all those itesm
+#and return
 class WorkerThread(threading.Thread):
     #too flags : stop after x errors
     #slow down after every seeing y errors
@@ -239,7 +295,7 @@ class WorkerThread(threading.Thread):
         #TODO: hard limit , let's only populated up to 1 million keys
         inserted_keys = []
         for item in self._value_list_copy:
-            for i in range(0, (int(item['how_many']) - 1)):
+            for i in range(0, (int(item['how_many']))):
                 key = "{0}-{1}-{2}".format(self._base_uuid, item['size'], i)
                 if key not in self._rejected_keys:
                     inserted_keys.append(key)
