@@ -29,9 +29,10 @@ class RebalanceHelper():
         for node in nodes_for_stats:
             client = MemcachedClientHelper.create_memcached_client(node.ip, bucket, port)
             log.info("getting tap stats.. for {0}".format(node.ip))
-            tap_stats = client.stats('tap')
+            tap_stats = client.stats('all')
             interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
-                                 'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno']
+                                 'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno',
+                                 'ep_num_new_']
             for name in tap_stats:
                 if name in interesting_stats:
                     log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
