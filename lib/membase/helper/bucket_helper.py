@@ -1,3 +1,4 @@
+import copy
 import time
 import uuid
 import zlib
@@ -207,25 +208,44 @@ class BucketOperationHelper():
 
     @staticmethod
     def keys_exist_or_assert(keys,ip,name,port,password,test):
+        #we should try out at least three times
         log = logger.Logger.get_logger()
         #verify all the keys
-        client = MemcachedClientHelper.create_memcached_client(ip,
-                                                               name,
-                                                               port,
-                                                               password)
+        client = MemcachedClientHelper.create_memcached_client(ip,name,port,password)
         #populate key
-        for key in keys:
-            try:
-                vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-                client.vbucketId = vbucketId
-                client.get(key=key)
-            except mc_bin_client.MemcachedError as error:
-                log.error(error)
-                if test:
-                    test.fail("key {0} does not exist".format(key))
-                else:
-                    log.error("key {0} does not exist".format(key))
+        retry = 1
+
+        keys_left_to_verify = []
+        keys_left_to_verify.extend(copy.deepcopy(keys))
+        log_count = 0
+        while retry < 6 and len(keys_left_to_verify) > 0:
+            msg = "trying to verify {0} keys - attempt #1 : {1} - {2} keys left to verify"
+            log.info(msg.format(len(keys), retry, len(keys_left_to_verify)))
+            keys_not_verified = []
+            for key in keys_left_to_verify:
+                try:
+                    client.get(key=key)
+                except mc_bin_client.MemcachedError as error:
+                    keys_not_verified.append(key)
+                    if log_count < 10000:
+                        log.error("key {0} does not exist because {1}".format(key, error))
+                        log_count += 1
+            retry -= 1
+            keys_left_to_verify = keys_not_verified
         client.close()
+        if len(keys_left_to_verify) > 0:
+            log_count = 0
+            for key in keys_left_to_verify:
+                log.error("key {0} not found".format(key))
+                log_count += 1
+                if log_count > 10000:
+                    break
+            msg = "unable to verify {0} keys".format(len(keys_left_to_verify))
+            log.error(msg)
+            if test:
+                test.fail(msg=msg)
+            return False
+        log.info("verified that {0} keys exist".format(len(keys)))
         return True
 
 
