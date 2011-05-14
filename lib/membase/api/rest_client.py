@@ -124,7 +124,7 @@ class RestConnection(object):
         log.info('settings/web params : {0}'.format(params))
 
         try:
-            response, content = httplib2.Http().request(api, 'GET', params, headers=self._create_headers())
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
             log.info("settings/web response {0} ,content {1}".format(response, content))
             if response['status'] == '400':
                 log.error('init_cluster_port error {0}'.format(content))
