@@ -211,19 +211,20 @@ class MutationThread(threading.Thread):
             except MemcachedError:
                 self._rejected_count += 1
                 self._rejected_keys.append(key)
-                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
+#                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
             except Exception as e:
                 self.log.info(e)
                 self._rejected_count += 1
                 self._rejected_keys.append(key)
-                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
+#                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
                 client.close()
                 client = MemcachedClientHelper.create_memcached_client(self.serverInfo.ip,
                                                                self.name,
                                                                self.port,
                                                                self.password)
 
-        self.log.info("set failed {0} times".format(self._rejected_count))
+        self.log.info("mutation failed {0} times".format(self._rejected_count))
+        #print some of those rejected keys...
         client.close()
 
 
