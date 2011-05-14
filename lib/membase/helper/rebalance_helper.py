@@ -29,15 +29,41 @@ class RebalanceHelper():
         for node in nodes_for_stats:
             client = MemcachedClientHelper.create_memcached_client(node.ip, bucket, port)
             log.info("getting tap stats.. for {0}".format(node.ip))
-            tap_stats = client.stats('all')
-            interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
-                                 'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno',
-                                 'ep_num_new_']
-            for name in tap_stats:
-                if name in interesting_stats:
-                    log.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
+            tap_stats = client.stats()
+            RebalanceHelper.log_interesting_taps(node, tap_stats, log)
+            tap_stats = client.stats('tap')
+            RebalanceHelper.log_interesting_taps(node, tap_stats, log)
             client.close()
         return verified
+
+    @staticmethod
+    #TODO: add password
+    def print_taps_from_all_nodes(rest, bucket='default'):
+        log = logger.Logger.get_logger()
+        nodes_for_stats = rest.node_statuses()
+        for node_for_stat in nodes_for_stats:
+            try:
+                client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, bucket, 11210)
+                log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
+                tap_stats = client.stats('tap')
+                RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
+                tap_stats = client.stats()
+                RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
+                client.close()
+            except Exception as ex:
+                log.error("error {0} while getting stats...".format(ex))
+
+
+    @staticmethod
+    def log_interesting_taps(node, tap_stats, logger):
+        interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
+                             'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno',
+                             'ep_num_new_']
+        for name in tap_stats:
+            for interesting_stat in interesting_stats:
+                if name.find(interesting_stat) != -1:
+                    logger.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
+                    break
 
 
     @staticmethod

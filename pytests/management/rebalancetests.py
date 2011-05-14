@@ -6,6 +6,7 @@ import logger
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread
 
 class RebalanceBaseTest(unittest.TestCase):
@@ -39,17 +40,6 @@ class RebalanceBaseTest(unittest.TestCase):
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
-
-    @staticmethod
-    def log_interesting_taps(node, tap_stats, logger):
-        interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
-                             'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno',
-                             'ep_num_new_']
-        for name in tap_stats:
-            for interesting_stat in interesting_stats:
-                if name.find(interesting_stat) != -1:
-                    logger.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
-                    #load data . add all node . load more data . rebalance
 
 #load data. add one node rebalance , rebalance out
 class IncrementalRebalanceInTests(unittest.TestCase):
@@ -113,15 +103,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                 self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
                 time.sleep(5)
                 stats = rest.get_bucket_stats()
-            nodes_for_stats = rest.node_statuses()
-            for node_for_stat in nodes_for_stats:
-                client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11210)
-                self.log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
-                tap_stats = client.stats('tap')
-                RebalanceBaseTest.log_interesting_taps(node_for_stat, tap_stats, self.log)
-                tap_stats = client.stats()
-                RebalanceBaseTest.log_interesting_taps(node_for_stat, tap_stats, self.log)
-                client.close()
+            RebalanceHelper.print_taps_from_all_nodes(rest,'default')
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
@@ -207,18 +189,7 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
                 self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
                 time.sleep(5)
                 stats = rest.get_bucket_stats()
-            nodes_for_stats = rest.node_statuses()
-            for node_for_stat in nodes_for_stats:
-                try:
-                    client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11210)
-                    self.log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
-                    tap_stats = client.stats('tap')
-                    RebalanceBaseTest.log_interesting_taps(node_for_stat, tap_stats, self.log)
-                    tap_stats = client.stats()
-                    RebalanceBaseTest.log_interesting_taps(node_for_stat, tap_stats, self.log)
-                    client.close()
-                except Exception as ex:
-                    self.log.error("error {0} while getting stats...".format(ex))
+            RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
@@ -313,18 +284,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
 
             #visit all nodes ?
-            nodes_for_stats = rest.node_statuses()
-            for node_for_stat in nodes_for_stats:
-                try:
-                    client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11210)
-                    self.log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
-                    tap_stats = client.stats('tap')
-                    RebalanceBaseTest.log_interesting_taps(node_for_stat, tap_stats, self.log)
-                    tap_stats = client.stats()
-                    RebalanceBaseTest.log_interesting_taps(node_for_stat, tap_stats, self.log)
-                    client.close()
-                except Exception as ex:
-                    self.log.error("error {0} while getting stats...".format(ex))
+            RebalanceHelper.print_taps_from_all_nodes(rest,'default')
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             #print
@@ -392,7 +352,8 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
 
             rejected = thread._rejected_keys
             client = MemcachedClientHelper.create_memcached_client(master.ip)
-
+            self.log.info("printing tap stats before verifying mutations...")
+            RebalanceHelper.print_taps_from_all_nodes(rest,'default')
             did_not_mutate_keys = []
             for key in inserted_keys:
                 if key not in rejected:
@@ -420,19 +381,7 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
                 stats = rest.get_bucket_stats()
                 #loop over all keys and verify
 
-
-            nodes_for_stats = rest.node_statuses()
-            for node_for_stat in nodes_for_stats:
-                try:
-                    client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, 'default', 11210)
-                    self.log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
-                    tap_stats = client.stats('tap')
-                    RebalanceBaseTest.log_interesting_taps(node_for_stat, tap_stats, self.log)
-                    tap_stats = client.stats()
-                    RebalanceBaseTest.log_interesting_taps(node_for_stat, tap_stats, self.log)
-                    client.close()
-                except Exception as ex:
-                    self.log.error("error {0} while getting stats...".format(ex))
+            RebalanceHelper.print_taps_from_all_nodes(rest,'default')
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
