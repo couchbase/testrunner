@@ -99,9 +99,11 @@ class RestConnection(object):
         params = urllib.urlencode({'port': '8091',
                                    'username': username,
                                    'password': password})
+        log.info('settings/web params : {0}'.format(params))
 
         try:
             response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/web response {0} ,content {1}".format(response, content))
             if response['status'] == '400':
                 log.error('init_cluster error {0}'.format(content))
                 return False
@@ -113,13 +115,17 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
-    def init_cluster_port(self):
+    def init_cluster_port(self, username='Administrator', password='password'):
         api = self.baseUrl + 'settings/web'
         params = urllib.urlencode({'port': '8091',
-                                   'username': 'Administrator',
-                                   'password': 'password'})
+                                   'username': username,
+                                   'password': password})
+
+        log.info('settings/web params : {0}'.format(params))
+
         try:
             response, content = httplib2.Http().request(api, 'GET', params, headers=self._create_headers())
+            log.info("settings/web response {0} ,content {1}".format(response, content))
             if response['status'] == '400':
                 log.error('init_cluster_port error {0}'.format(content))
                 return False
@@ -269,7 +275,6 @@ class RestConnection(object):
                                                         headers=self._create_headers())
             #if status is 200 then it was a success otherwise it was a failure
             log.info('rebalance: {0}'.format(response))
-            log.info('rebalance: {0}'.format(content))
             if response['status'] == '400':
                 #extract the error
                 raise InvalidArgumentException('controller/rebalance',
