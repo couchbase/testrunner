@@ -29,6 +29,26 @@ class BucketOperationHelper():
                 if assert_on_test:
                     assert_on_test.fail(msg=msg)
 
+    @staticmethod
+    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1):
+        log = logger.Logger.get_logger()
+        rest = RestConnection(serverInfo)
+        if bucket_ram < 0:
+            info = rest.get_nodes_self()
+            bucket_ram = info.mcdMemoryReserved * 2 / 3
+
+        rest.create_bucket(bucket=name,
+                           ramQuotaMB=bucket_ram,
+                           replicaNumber=replica,
+                           proxyPort=port)
+        msg = 'create_bucket succeeded but bucket "default" does not exist'
+        bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
+        if not bucket_created:
+            log.error(msg)
+            if test_case:
+                test_case.fail(msg=msg)
+        return bucket_created
+
 
     @staticmethod
     def delete_all_buckets_or_assert(servers, test_case):
@@ -125,6 +145,8 @@ class BucketOperationHelper():
                     time.sleep(3)
             if client:
                 client.flush()
+                time.sleep(10)
+                client.stats('reset')
                 client.close()
             if len(warmed_up_vBuckets) < 1:
                 test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
