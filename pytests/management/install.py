@@ -33,6 +33,15 @@ class InstallTest(unittest.TestCase):
             self.log.info('IP : {0} Distribution : {1} Arch: {2} Version : {3}'
             .format(info.ip, info.distribution_type, info.architecture_type, info.distribution_version))
 
+    def test_reset(self):
+        for serverInfo in self.servers:
+            remote_client = RemoteMachineShellConnection(serverInfo)
+            remote_client.execute_command("killall -9 memcached;killall -9 moxi;")
+            time.sleep(5)
+            info = remote_client.extract_remote_info()
+            self.machine_infos[serverInfo.ip] = info
+            remote_client.disconnect()
+
     def test_install(self):
         # find the right deliverable for this os?
         query = BuildQuery()
