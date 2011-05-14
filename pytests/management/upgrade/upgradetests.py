@@ -1,7 +1,7 @@
 import unittest
 from TestInput import TestInputSingleton
 from builds.build_query import BuildQuery
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -19,6 +19,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         inserted_keys = []
         log = logger.Logger.get_logger()
         input = TestInputSingleton.input
+        rest_settings = input.membase_settings
         servers = input.servers
         server = servers[0]
         remote = RemoteMachineShellConnection(server)
@@ -35,8 +36,10 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         remote.download_build(build_1_6_5_3_1)
         #now let's install ?
         remote.membase_install(build_1_6_5_3_1)
+        RestHelper(rest).is_ns_server_running(120)
         log.info("sleep for 10 seconds to wait for membase-server to start...")
-        time.sleep(10)
+        rest.init_cluster_port(rest_settings.rest_username,rest_settings.rest_password)
+
         if initialize_cluster:
             rest.init_cluster_memoryQuota()
             if create_buckets:
@@ -59,6 +62,8 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                           port=11211,
                                                                           ram_load_ratio=0.1,
                                                                           value_size_distribution=distribution)
+                    log.info("wait until data is completely persisted on the disk")
+                    time.sleep(30)
         filtered_builds = []
         for build in builds:
             if build.deliverable_type == info.deliverable_type and \
@@ -74,13 +79,15 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                             os_architecture=info.architecture_type)
         remote.download_build(appropriate_build)
         remote.membase_upgrade(appropriate_build)
-        log.info("sleep for 10 seconds to wait for membase-server to start...")
-        time.sleep(10)
-        info = rest.get_pools_info()
+        RestHelper(rest).is_ns_server_running(120)
 
+        pools_info = rest.get_pools_info()
+
+        rest.init_cluster_port(rest_settings.rest_username,rest_settings.rest_password)
+        time.sleep(10)
         #verify admin_creds still set
 
-        self.assertTrue(info['implementationVersion'], appropriate_build.product_version)
+        self.assertTrue(pools_info['implementationVersion'], appropriate_build.product_version)
         if initialize_cluster:
             #TODO: how can i verify that the cluster init config is preserved
             if create_buckets:
