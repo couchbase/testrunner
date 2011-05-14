@@ -84,7 +84,9 @@ class SimpleSetGetTestBase(object):
                     client.vbucketId = crc32.crc32_hash(key) & 1023
                     #value should have only stars ?
                     flag, keyx, value = client.get(key=key)
-                    self.test.assertTrue(value.find('*') != -1, 'value mismatch')
+                    #value could be all * or == key
+                    if value != key and value.find("*") == -1:
+                        self.test.assertTrue(value.find('*') != -1, 'value mismatch')
                 except mc_bin_client.MemcachedError as error:
                     self.log.info('memcachedError : {0}'.format(error.status))
                     self.test.fail("unable to get a pre-inserted key : {0}".format(key))
