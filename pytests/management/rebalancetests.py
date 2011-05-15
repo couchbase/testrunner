@@ -32,11 +32,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(servers, testcase):
-        #let's just clean up the buckets in the master node
-        try:
-            MemcachedClientHelper.flush_bucket(servers[0], 'default', 11211)
-        except Exception:
-            pass
+        BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
@@ -109,7 +105,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
-        MemcachedClientHelper.flush_bucket(master.ip, 'default', 11211)
+            BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
         self._common_test_body(0.1)
@@ -195,7 +191,7 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
-        MemcachedClientHelper.flush_bucket(master.ip, 'default', 11211)
+        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
         self._common_test_body(1.0)
@@ -291,7 +287,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
             nodes = rest.node_statuses()
-        MemcachedClientHelper.flush_bucket(master.ip, 'default', 11211)
+        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
 
 class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
@@ -387,7 +383,7 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
-        MemcachedClientHelper.flush_bucket(master.ip, 'default', 11211)
+        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
         self._common_test_body(1.0)
