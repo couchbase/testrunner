@@ -105,7 +105,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
-            BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
+        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
         self._common_test_body(0.1)
