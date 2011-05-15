@@ -25,19 +25,11 @@ class RebalanceHelper():
             else:
                 time.sleep(2)
         rest = RestConnection(master)
-        nodes_for_stats = rest.node_statuses()
-        for node in nodes_for_stats:
-            client = MemcachedClientHelper.create_memcached_client(node.ip, bucket, port)
-            log.info("getting tap stats.. for {0}".format(node.ip))
-            tap_stats = client.stats()
-            RebalanceHelper.log_interesting_taps(node, tap_stats, log)
-            tap_stats = client.stats('tap')
-            RebalanceHelper.log_interesting_taps(node, tap_stats, log)
-            client.close()
+        RebalanceHelper.print_taps_from_all_nodes(rest,bucket)
         return verified
 
     @staticmethod
-    #TODO: add password
+    #TODO: add password and port
     def print_taps_from_all_nodes(rest, bucket='default'):
         log = logger.Logger.get_logger()
         nodes_for_stats = rest.node_statuses()
@@ -46,9 +38,11 @@ class RebalanceHelper():
                 client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, bucket, 11210)
                 log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
                 tap_stats = client.stats('tap')
-                RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
+                if tap_stats:
+                    RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
                 tap_stats = client.stats()
-                RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
+                if tap_stats:
+                    RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
                 client.close()
             except Exception as ex:
                 log.error("error {0} while getting stats...".format(ex))
