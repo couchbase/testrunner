@@ -1,0 +1,4 @@
+#! /bin/sh
+ulimit -n 10240
+NOW=$(date +"%H-%M-%m-%d-%Y")
+/usr/local/bin/valgrind --leak-check=full --log-file=/tmp/valgrind.$NOW.log /opt/membase/bin/memcached.original "$@"
