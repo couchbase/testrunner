@@ -250,7 +250,12 @@ class ReplicationTests(unittest.TestCase):
         self._create_bucket(number_of_replicas=number_of_replicas,bucket_name=bucket_name)
         self.log.info('created the bucket')
         #let's use data_helper
-        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+        if fill_ram_percentage == 50:
+            distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
+        elif fill_ram_percentage > 90:
+            distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
+        else:
+            distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         MemcachedClientHelper.load_bucket(serverInfo=master,
                                           name=self.bucket_name,
                                           port=11220,
@@ -340,6 +345,7 @@ class ReplicationTests(unittest.TestCase):
                                                                       timeout_in_seconds=300),
                         msg="replication was completed but sum(curr_items) dont match the curr_items_total")
         #only remove one of the nodes
+        
         second_node = self.servers[1]
         self.log.info('failing over node : {0} from the cluster'.format(second_node.ip))
         rest.fail_over('ns_1@{0}'.format(second_node.ip))
