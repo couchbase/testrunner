@@ -177,6 +177,7 @@ class MemcachedClientHelper(object):
     @staticmethod
     def flush_bucket(ip, bucket='default', port=11211, password='password'):
         #if memcached throws OOM error try again ?
+        log = logger.Logger.get_logger()
         client = MemcachedClient(ip, port)
         if bucket != 'default' and port == 11211:
             client.sasl_auth_plain(bucket, password)
@@ -184,6 +185,7 @@ class MemcachedClientHelper(object):
         while retry_attempt > 0:
             try:
                 client.flush()
+                log.info('flushed bucket {0}...'.format(bucket))
                 break
             except MemcachedError:
                 retry_attempt -= 1
@@ -346,7 +348,10 @@ class WorkerThread(threading.Thread):
                     client.vbucketId = self.override_vBucketId
                 client.set(key, 0, 0, selected['value'])
                 self._inserted_keys_count += 1
-            except MemcachedError:
+            except MemcachedError as error:
+                if error.status == 134:
+                    self.log.info("received error # 134. backing off for 1 sec")
+                    time.sleep(1.0)
                 self._rejected_keys_count += 1
                 self._rejected_keys.append(key)
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
