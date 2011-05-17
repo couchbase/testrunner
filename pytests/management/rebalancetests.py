@@ -80,12 +80,12 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
             otpNodeIds.append(otpNode.id)
-            if load_ratio == 50:
+            distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+            if load_ratio == 10:
                 distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-            elif load_ratio > 90:
+            elif load_ratio > 10:
                 distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
-            else:
-                distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+
             inserted_count, rejected_count =\
             MemcachedClientHelper.load_bucket(serverInfo=master,
                                               ram_load_ratio=load_ratio,
@@ -167,12 +167,11 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
             otpNodeIds.append(otpNode.id)
             #let's just start the load thread
             #better if we do sth like . start rebalance after 20 percent of the data is set
-            if load_ratio == 50:
+            distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+            if load_ratio == 10:
                 distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-            elif load_ratio > 90:
+            elif load_ratio > 10:
                 distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
-            else:
-                distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
             threads = MemcachedClientHelper.create_threads_for_load_bucket(serverInfo=master,
                                                                            ram_load_ratio=load_ratio,
                                                                            value_size_distribution=distribution,
@@ -240,12 +239,11 @@ class IncrementalRebalanceOut(unittest.TestCase):
         items_inserted_count = 0
 
         self.log.info("inserting some items in the master before adding any nodes")
-        if ram_ratio == 50:
+        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+        if ram_ratio == 10:
             distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-        elif ram_ratio > 90:
+        elif ram_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
-        else:
-            distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         inserted_count, rejected_count =\
         MemcachedClientHelper.load_bucket(serverInfo=master,
                                           ram_load_ratio=ram_ratio,
@@ -271,12 +269,11 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
             if not toBeEjectedNode:
                 break
-            if ram_ratio == 50:
+            distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+            if ram_ratio == 10:
                 distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-            elif ram_ratio > 90:
+            elif ram_ratio > 10:
                 distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
-            else:
-                distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
             inserted_keys_count, rejected_keys_count =\
             MemcachedClientHelper.load_bucket(serverInfo=master,
                                               ram_load_ratio=ram_ratio,
@@ -332,12 +329,11 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
         items_inserted_count = 0
 
         self.log.info("inserting some items in the master before adding any nodes")
-        if load_ratio == 50:
+        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+        if load_ratio == 10:
             distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-        elif load_ratio > 90:
+        elif load_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
-        else:
-            distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         inserted_keys, rejected_keys =\
         MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=master,
                                                               ram_load_ratio=load_ratio,
