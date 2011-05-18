@@ -91,22 +91,22 @@ class FailoverTests(unittest.TestCase):
         self.common_test_body(3, 'normal', 1)
 
     def test_failover_normal_1_replica_10_percent(self):
-        self.common_test_body(1, 'normal', 1)
+        self.common_test_body(1, 'normal', 10)
 
     def test_failover_normal_2_replica_10_percent(self):
-        self.common_test_body(2, 'normal', 1)
+        self.common_test_body(2, 'normal', 10)
 
     def test_failover_normal_3_replica_10_percent(self):
-        self.common_test_body(3, 'normal', 1)
+        self.common_test_body(3, 'normal', 10)
 
     def test_failover_normal_1_replica_30_percent(self):
-        self.common_test_body(1, 'normal', 1)
+        self.common_test_body(1, 'normal', 30)
 
     def test_failover_normal_2_replica_30_percent(self):
-        self.common_test_body(2, 'normal', 1)
+        self.common_test_body(2, 'normal', 30)
 
     def test_failover_normal_3_replica_30_percent(self):
-        self.common_test_body(3, 'normal', 1)
+        self.common_test_body(3, 'normal', 30)
 
 
     def test_failover_stop_membase_1_replica_1_percent(self):
@@ -119,22 +119,22 @@ class FailoverTests(unittest.TestCase):
         self.common_test_body(3, 'stop_membase', 1)
 
     def test_failover_stop_membase_1_replica_10_percent(self):
-        self.common_test_body(1, 'stop_membase', 1)
+        self.common_test_body(1, 'stop_membase', 10)
 
     def test_failover_stop_membase_2_replica_10_percent(self):
-        self.common_test_body(2, 'stop_membase', 1)
+        self.common_test_body(2, 'stop_membase', 10)
 
     def test_failover_stop_membase_3_replica_10_percent(self):
-        self.common_test_body(3, 'stop_membase', 1)
+        self.common_test_body(3, 'stop_membase', 10)
 
     def test_failover_stop_membase_1_replica_30_percent(self):
-        self.common_test_body(1, 'stop_membase', 1)
+        self.common_test_body(1, 'stop_membase', 30)
 
     def test_failover_stop_membase_2_replica_30_percent(self):
-        self.common_test_body(2, 'stop_membase', 1)
+        self.common_test_body(2, 'stop_membase', 30)
 
     def test_failover_stop_membase_3_replica_30_percent(self):
-        self.common_test_body(3, 'stop_membase', 1)
+        self.common_test_body(3, 'stop_membase', 30)
 
 
     def common_test_body(self, replica, failover_reason, load_ratio):
