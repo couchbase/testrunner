@@ -112,6 +112,23 @@ class RemoteMachineShellConnection:
                     processes.append(process)
         return processes
 
+    def stop_membase(self):
+        info = self.extract_remote_info()
+        if info.type.lower() == 'windows':
+            pass
+        if info.type.lower() == "linux":
+            o, r = self.execute_command("/etc/init.d/membase-server stop")
+            self.log_command_output(o, r)
+
+    def start_membase(self):
+        info = self.extract_remote_info()
+        if info.type.lower() == 'windows':
+            pass
+        if info.type.lower() == "linux":
+            o, r = self.execute_command("/etc/init.d/membase-server start")
+            self.log_command_output(o, r)
+
+
     def is_membase_installed(self):
         sftp = self._ssh_client.open_sftp()
         filenames = sftp.listdir('/opt/membase')
@@ -120,7 +137,7 @@ class RemoteMachineShellConnection:
             installed_files = sftp.listdir('/opt/membase{0}'.format(name))
             #check for maybe bin folder or sth
             for file in installed_files:
-                print file
+                log.info(file)
         return True
         #depending on the os_info
         #look for installation folder
@@ -177,6 +194,29 @@ class RemoteMachineShellConnection:
             except IOError:
                 return False
 
+    def remove_directory(self,remote_path):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            log.info("removing {0} directory...".format(remote_path))
+            sftp.rmdir(remote_path)
+            sftp.close()
+        except IOError:
+            return False
+        return True
+
+    def list_files(self,remote_path):
+        sftp = self._ssh_client.open_sftp()
+        files = []
+        try:
+            print remote_path
+            file_names = sftp.listdir(remote_path)
+            print files
+            for name in file_names:
+                files.append({'path': remote_path, 'file': name})
+            sftp.close()
+        except IOError:
+            return False
+        return files
 
     #check if this file exists in the remote
     #machine or not
