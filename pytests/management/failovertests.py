@@ -17,24 +17,11 @@ class FailoverBaseTest(unittest.TestCase):
     # verify we did not lose items
 
     @staticmethod
-    def common_setup(input, bucket, testcase):
-        log = logger.Logger.get_logger()
+    def common_setup(input, testcase):
         servers = input.servers
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
-        serverInfo = servers[0]
-        log.info('picking server : {0} as the master'.format(serverInfo))
-        rest = RestConnection(serverInfo)
-        info = rest.get_nodes_self()
-        rest.init_cluster(username=serverInfo.rest_username,
-                          password=serverInfo.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
-        bucket_ram = info.mcdMemoryReserved * 2 / 3
-        rest.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram, replicaNumber=1, proxyPort=11211)
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[serverInfo],
-                                                                     bucket_port=11211,
-                                                                     test=testcase)
 
     @staticmethod
     def common_tearDown(servers, testcase):
@@ -76,7 +63,7 @@ class FailoverTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        FailoverBaseTest.common_setup(self._input, 'default', self)
+        FailoverBaseTest.common_setup(self._input, self)
 
     def tearDown(self):
         FailoverBaseTest.common_tearDown(self._servers, self)
@@ -143,8 +130,22 @@ class FailoverTests(unittest.TestCase):
         log.info("failover_reason : {0}".format(failover_reason))
         log.info("load_ratio : {0}".format(load_ratio))
         master = self._servers[0]
-        credentials = self._input.membase_settings
+        log.info('picking server : {0} as the master'.format(master))
         rest = RestConnection(master)
+        info = rest.get_nodes_self()
+        rest.init_cluster(username=master.rest_username,
+                          password=master.rest_password)
+        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
+        bucket_ram = info.mcdMemoryReserved * 2 / 3
+        rest.create_bucket(bucket='default',
+                           ramQuotaMB=bucket_ram,
+                           replicaNumber=replica,
+                           proxyPort=11211)
+        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[master],
+                                                                     bucket_port=11211,
+                                                                     test=self)
+
+        credentials = self._input.membase_settings
 
         log.info("inserting some items in the master before adding any nodes")
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
