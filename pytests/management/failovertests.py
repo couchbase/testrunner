@@ -155,8 +155,7 @@ class FailoverTests(unittest.TestCase):
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
         inserted_count, rejected_count =\
         MemcachedClientHelper.load_bucket(serverInfo=master,
-#                                          ram_load_ratio=ram_ratio,
-                                          number_of_items=10,
+                                          ram_load_ratio=ram_ratio,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
         log.info('inserted {0} keys'.format(inserted_count))
