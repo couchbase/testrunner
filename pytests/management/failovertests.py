@@ -142,20 +142,19 @@ class FailoverTests(unittest.TestCase):
         log.info("replica : {0}".format(replica))
         log.info("failover_reason : {0}".format(failover_reason))
         log.info("load_ratio : {0}".format(load_ratio))
-        ram_ratio = (load_ratio / (len(self._servers)))
         master = self._servers[0]
         credentials = self._input.membase_settings
         rest = RestConnection(master)
 
         log.info("inserting some items in the master before adding any nodes")
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
-        if ram_ratio == 10:
+        if load_ratio == 10:
             distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-        elif ram_ratio > 10:
+        elif load_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
         inserted_count, rejected_count =\
         MemcachedClientHelper.load_bucket(serverInfo=master,
-                                          ram_load_ratio=ram_ratio,
+                                          ram_load_ratio=load_ratio,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
         log.info('inserted {0} keys'.format(inserted_count))
