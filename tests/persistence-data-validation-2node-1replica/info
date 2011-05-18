@@ -1,3 +1,0 @@
-Persistence data validation on item eviction and server crash
-Chiyoung Seo
-Performs the data validation after (1) evicting all the items from memory and (2) killing -9 one of the servers and restaring it.

@@ -1,3 +1,0 @@
-Install standalone memcached
-Keith Batten
-Removes and installs the OS/arch appropriate package on each server listed, then sets up the cluster to run without erlang control

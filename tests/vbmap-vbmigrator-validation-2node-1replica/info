@@ -1,3 +1,0 @@
-VBucket map and VBucket migrator validation on 2 nodes, 1 replica
-Chiyoung Seo
-Verify that (1) the vbucket map has the appropriate number of replicas and that there are no loops or duplicates and (2) vbucketmigrator processes running on each node are correctly configured based on the vbucket map
