@@ -73,6 +73,7 @@ class InstallTest(unittest.TestCase):
                 build.url = build.url.replace("http://builds.hq.northscale.net/latestbuilds/",
                                               "http://packages.northscale.com/latestbuilds/")
                 build.url = build.url.replace("enterprise", "community")
+                build.name = build.name.replace("enterprise", "community")
             downloaded = remote_client.download_build(build)
             self.assertTrue(downloaded, 'unable to download binaries :'.format(build.url))
             remote_client.membase_install(build)
