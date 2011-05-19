@@ -349,6 +349,7 @@ class WorkerThread(threading.Thread):
                 client.set(key, 0, 0, selected['value'])
                 self._inserted_keys_count += 1
             except MemcachedError as error:
+                self.log.info(error.status)
                 if error.status == 134:
                     self.log.info("received error # 134. backing off for 1 sec")
                     time.sleep(1.0)
