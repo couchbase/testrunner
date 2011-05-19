@@ -71,7 +71,8 @@ class InstallTest(unittest.TestCase):
             remote_client.membase_uninstall()
             if 'amazon' in self.input.test_params:
                 build.url = build.url.replace("http://builds.hq.northscale.net/latestbuilds/",
-                                              "http://packages.northscale.com/toybuilds/")
+                                              "http://packages.northscale.com/latestbuilds/")
+                build.url = build.url.replace("enterprise", "community")
             downloaded = remote_client.download_build(build)
             self.assertTrue(downloaded, 'unable to download binaries :'.format(build.url))
             remote_client.membase_install(build)
