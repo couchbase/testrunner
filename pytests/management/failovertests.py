@@ -168,7 +168,7 @@ class FailoverTests(unittest.TestCase):
 
         nodes = rest.node_statuses()
         #while len(node) > replica * 2
-        while (len(nodes) - replica) > replica:
+        while (len(nodes) - replica) >= replica:
             chosen = FailoverBaseTest.choose_nodes(master, nodes, replica)
             for node in chosen:
                 #let's do op
