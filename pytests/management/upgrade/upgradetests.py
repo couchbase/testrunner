@@ -102,26 +102,111 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                            test=self)
 
 
-    def single_node_upgrade_s1(self):
+    def single_node_upgrade_s1_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=False,
                                   insert_data=False,
                                   create_buckets=False)
 
-    def single_node_upgrade_s2(self):
+    def single_node_upgrade_s1_1_6_5_2(self):
+        self._install_and_upgrade(initial_version='1.6.5.2',
+                                  initialize_cluster=False,
+                                  insert_data=False,
+                                  create_buckets=False)
+
+    def single_node_upgrade_s1_1_6_5_1(self):
+        self._install_and_upgrade(initial_version='1.6.5.1',
+                                  initialize_cluster=False,
+                                  insert_data=False,
+                                  create_buckets=False)
+
+
+    def single_node_upgrade_s1_1_6_5(self):
+        self._install_and_upgrade(initial_version='1.6.5',
+                                  initialize_cluster=False,
+                                  insert_data=False,
+                                  create_buckets=False)
+
+
+
+    def single_node_upgrade_s2_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=False)
 
-    def single_node_upgrade_s3(self):
+    def single_node_upgrade_s2_1_6_5_2(self):
+        self._install_and_upgrade(initial_version='1.6.5.2',
+                                  initialize_cluster=True,
+                                  insert_data=False,
+                                  create_buckets=False)
+
+    def single_node_upgrade_s2_1_6_5_1(self):
+        self._install_and_upgrade(initial_version='1.6.5.1',
+                                  initialize_cluster=True,
+                                  insert_data=False,
+                                  create_buckets=False)
+
+    def single_node_upgrade_s2_1_6_5(self):
+        self._install_and_upgrade(initial_version='1.6.5',
+                                  initialize_cluster=True,
+                                  insert_data=False,
+                                  create_buckets=False)
+
+
+
+    def single_node_upgrade_s3_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4(self):
+    def single_node_upgrade_s3_1_6_5_2(self):
+        self._install_and_upgrade(initial_version='1.6.5.2',
+                                  initialize_cluster=True,
+                                  insert_data=False,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s3_1_6_5_1(self):
+        self._install_and_upgrade(initial_version='1.6.5.1',
+                                  initialize_cluster=True,
+                                  insert_data=False,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s3_1_6_5(self):
+        self._install_and_upgrade(initial_version='1.6.5',
+                                  initialize_cluster=True,
+                                  insert_data=False,
+                                  create_buckets=True)
+
+
+
+    def single_node_upgrade_s4_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s5(self):
+        self._install_and_upgrade(initial_version='1.6.5.2',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s4_1_6_5_2(self):
+        self._install_and_upgrade(initial_version='1.6.5.2',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s4_1_6_5_1(self):
+        self._install_and_upgrade(initial_version='1.6.5.1',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s4_1_6_5(self):
+        self._install_and_upgrade(initial_version='1.6.5',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
@@ -161,17 +246,22 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def multiple_node_upgrade_m2(self):
         input = TestInputSingleton.input
         servers = input.servers
-        self._install_and_upgrade('1.6.5.3', True, False, True, len(servers))
+        self._install_and_upgrade('1.6.5.3', True, False, len(servers))
 
 
         #in a 3 node cluster with default bucket with some keys shut down all the
         # nodes update all nodes one by one and then restart node(1),node(2) and node(3)
 
     def multiple_node_upgrade_m3(self):
-        self._install_and_upgrade('1.6.5.3', True, True, True, 1)
+        self._install_and_upgrade('1.6.5.3', True, True, 1)
+
+    #m3 with 50% ram full ?
+    def multiple_node_upgrade_m6(self):
+        self._install_and_upgrade('1.6.5.3', True, True, 1, True, 50)
+
 
     def multiple_node_upgrade_m5(self):
-        self._install_and_upgrade('1.6.5.3', True, False, True, 1,False)
+        self._install_and_upgrade('1.6.5.3', True, False, 1, False)
 
 
 
@@ -188,8 +278,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def _install_and_upgrade(self, initial_version='1.6.5.3',
                              create_buckets=False,
                              insert_data=False,
-                             join_nodes=False,
-                             upgrade_how_many=1, start_upgraded_first=True ):
+                             upgrade_how_many=1, start_upgraded_first=True,
+                             load_ratio=-1):
         node_upgrade_status = {}
         #then start them in whatever order you want
         inserted_keys = []
@@ -235,29 +325,31 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                                                          test=self)
             if insert_data:
                 #let's insert some data
+                if load_ratio == -1:
+                    #let's load 0.1 data
+                    load_ratio = 0.1
                 distribution = {10: 0.5, 20: 0.5}
                 inserted_keys, rejected_keys =\
                 MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=master,
                                                                       name='default',
                                                                       port=11211,
-                                                                      ram_load_ratio=0.1,
+                                                                      ram_load_ratio=load_ratio,
                                                                       value_size_distribution=distribution)
                 log.info("wait until data is completely persisted on the disk")
 
-        if join_nodes:
-            ClusterOperationHelper.add_all_nodes_or_assert(master, servers, rest_settings, self)
-            rest = RestConnection(master)
-            nodes = rest.node_statuses()
-            otpNodeIds = []
-            for node in nodes:
-                otpNodeIds.append(node.id)
-            rebalanceStarted = rest.rebalance(otpNodeIds, [])
-            self.assertTrue(rebalanceStarted,
-                            "unable to start rebalance on master node {0}".format(master.ip))
-            log.info('started rebalance operation on master node {0}'.format(master.ip))
-            rebalanceSucceeded = rest.monitorRebalance()
-            self.assertTrue(rebalanceSucceeded,
-                            "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
+        ClusterOperationHelper.add_all_nodes_or_assert(master, servers, rest_settings, self)
+        rest = RestConnection(master)
+        nodes = rest.node_statuses()
+        otpNodeIds = []
+        for node in nodes:
+            otpNodeIds.append(node.id)
+        rebalanceStarted = rest.rebalance(otpNodeIds, [])
+        self.assertTrue(rebalanceStarted,
+                        "unable to start rebalance on master node {0}".format(master.ip))
+        log.info('started rebalance operation on master node {0}'.format(master.ip))
+        rebalanceSucceeded = rest.monitorRebalance()
+        self.assertTrue(rebalanceSucceeded,
+                        "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
 
         filtered_builds = []
         for build in builds:
@@ -288,8 +380,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
             pools_info = RestConnection(server).get_pools_info()
 
-            if not join_nodes:
-                RestConnection(server).init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
             node_upgrade_status[server] = "upgraded"
             if upgrade_how_many == count:
                 break
