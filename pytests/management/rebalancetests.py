@@ -122,6 +122,13 @@ class IncrementalRebalanceInTests(unittest.TestCase):
     def test_heavy_load(self):
         self._common_test_body(20.0)
 
+    def test_dgm_150(self):
+        self._common_test_body(150.0)
+
+    def test_dgm_300(self):
+        self._common_test_body(300.0)
+
+
 #disk greater than memory
 #class IncrementalRebalanceInAndOutTests(unittest.TestCase):
 #    pass
@@ -212,6 +219,12 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
 
     def test_heavy_load(self):
         self._common_test_body(40.0)
+
+    def test_dgm_150(self):
+        self._common_test_body(150.0)
+
+    def test_dgm_300(self):
+        self._common_test_body(300.0)
 
 
 #this test case will add all the nodes and then start removing them one by one
