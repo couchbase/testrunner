@@ -1,6 +1,5 @@
 import sys
 import os
-import base64
 
 
 sys.path.append('.')
@@ -17,8 +16,11 @@ if __name__ == "__main__":
             info = remote.extract_remote_info()
             if info.type.lower() != 'windows':
                 core_files = []
+                print "looking for erl_crash files under /opt/membase/var/lib/membase/"
                 core_files.extend(remote.file_starts_with("/opt/membase/var/lib/membase/", "erl_crash"))
+                print "looking for core* files under /opt/membase/var/lib/membase/"
                 core_files.extend(remote.file_starts_with("/opt/membase/var/lib/membase/", "core"))
+                print "looking for core* files under /tmp/"
                 core_files.extend(remote.file_starts_with("/tmp/", "core"))
                 i = 0
                 for core_file in core_files:
