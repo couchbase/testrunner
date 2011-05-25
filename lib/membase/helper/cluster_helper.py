@@ -1,7 +1,5 @@
 from membase.api.rest_client import RestConnection, RestHelper
-from remote.remote_util import RemoteMachineShellConnection
 import logger
-import os
 
 class ClusterOperationHelper(object):
     #the first ip is taken as the master ip
@@ -43,6 +41,7 @@ class ClusterOperationHelper(object):
         log = logger.Logger.get_logger()
         for master in servers:
             rest = RestConnection(master)
+            RestHelper(rest).is_ns_server_running(timeout_in_seconds=120)
             nodes = rest.node_statuses()
             allNodes = []
             toBeEjectedNodes = []

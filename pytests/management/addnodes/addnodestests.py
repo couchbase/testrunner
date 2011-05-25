@@ -38,13 +38,14 @@ class AddNodesTests(unittest.TestCase):
                                                          assert_on_test=self)
 
 
-    def common_tearDown(self,with_buckets):
-        if with_buckets:
-            BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers,test_case=self)
+    def tearDown(self):
+        BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers,test_case=self)
         #wait for all ns_servers
         for server in self.servers:
             self.assertTrue(RestHelper(RestConnection(server)).is_ns_server_running(timeout_in_seconds=360),
                             msg="ns server is not running even after waiting for 6 minutes")
+        self.log.info("sleep for 10 seconds to give enough time for other nodes to restart")
+        time.sleep(10)
 
 
     #add nodes one by one
