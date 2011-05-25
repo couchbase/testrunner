@@ -321,6 +321,7 @@ class WorkerThread(threading.Thread):
 
         start_time = time.time()
         last_reported = start_time
+        backoff_count = 0
         while len(self.values_list) > 0:
             selected = MemcachedClientHelper.random_pick(self.values_list)
             selected['how_many'] -= 1
@@ -348,11 +349,18 @@ class WorkerThread(threading.Thread):
                     client.vbucketId = self.override_vBucketId
                 client.set(key, 0, 0, selected['value'])
                 self._inserted_keys_count += 1
+                backoff_count = 0
             except MemcachedError as error:
                 self.log.info(error.status)
                 if error.status == 134:
-                    self.log.info("received error # 134. backing off for 1 sec")
-                    time.sleep(1.0)
+                    backoff_count += 1
+                    if backoff_count < 5:
+                        backoff_seconds = 15 * backoff_count
+                    else:
+                        backoff_seconds = 2 * backoff_count
+                    self.log.info("received error # 134. backing off for {0} sec".format(backoff_seconds))
+                    time.sleep(backoff_seconds)
+
                 self._rejected_keys_count += 1
                 self._rejected_keys.append(key)
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
