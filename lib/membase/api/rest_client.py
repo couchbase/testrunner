@@ -300,6 +300,8 @@ class RestConnection(object):
         else:
             duration = time.time() - start
             log.info('rebalance progress took {0} seconds '.format(duration))
+            log.info("sleep for 10 seconds to give enough time for ejection to remove nodes")
+            time.sleep(10)
             return True
 
     def _rebalance_progress(self):
