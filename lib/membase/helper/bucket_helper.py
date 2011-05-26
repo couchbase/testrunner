@@ -74,6 +74,22 @@ class BucketOperationHelper():
         log.info('sleeping for 10 seconds because we want to :)')
         time.sleep(10)
 
+    @staticmethod
+    def delete_bucket_or_assert(serverInfo, bucket = 'default', test_case = None):
+        log = logger.Logger.get_logger()
+        log.info('deleting existing buckets on {0}'.format(serverInfo))
+
+        rest = RestConnection(serverInfo)
+        rest.delete_bucket(bucket)
+
+        log.info('deleted bucket : {0} from {1}'.format(bucket,serverInfo.ip))
+        msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket)
+        if test_case:
+            test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200), msg=msg)
+
+        log.info('sleeping for 10 seconds because we want to :)')
+        time.sleep(10)
+
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
     # BUCKET DELETION IS A SYNC CALL W.R.T MEMCACHED
     @staticmethod
