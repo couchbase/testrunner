@@ -39,24 +39,25 @@ class ClusterOperationHelper(object):
     @staticmethod
     def cleanup_cluster(servers):
         log = logger.Logger.get_logger()
-        for master in servers:
-            rest = RestConnection(master)
-            RestHelper(rest).is_ns_server_running(timeout_in_seconds=120)
-            nodes = rest.node_statuses()
-            allNodes = []
-            toBeEjectedNodes = []
-            for node in nodes:
-                allNodes.append(node.id)
-                if node.id.find(master.ip) < 0 and node.id.find('127.0.0.1') < 0:
-                    toBeEjectedNodes.append(node.id)
-                #let's rebalance to remove all the nodes from the master
-                    #this is not the master , let's remove it
-                    #now load data into the main bucket
-            if len(allNodes) > len(toBeEjectedNodes) and toBeEjectedNodes:
-                log.info("rebalancing all nodes in order to remove nodes")
-                helper = RestHelper(rest)
-                removed = helper.remove_nodes(knownNodes=allNodes,ejectedNodes=toBeEjectedNodes)
-                log.info("removed all the nodes from cluster associated with {0} ? {1}".format(master.ip, removed))
+        master = servers[0]
+#        for master in servers:
+        rest = RestConnection(master)
+        RestHelper(rest).is_ns_server_running(timeout_in_seconds=120)
+        nodes = rest.node_statuses()
+        allNodes = []
+        toBeEjectedNodes = []
+        for node in nodes:
+            allNodes.append(node.id)
+            if node.id.find(master.ip) < 0 and node.id.find('127.0.0.1') < 0:
+                toBeEjectedNodes.append(node.id)
+            #let's rebalance to remove all the nodes from the master
+                #this is not the master , let's remove it
+                #now load data into the main bucket
+        if len(allNodes) > len(toBeEjectedNodes) and toBeEjectedNodes:
+            log.info("rebalancing all nodes in order to remove nodes")
+            helper = RestHelper(rest)
+            removed = helper.remove_nodes(knownNodes=allNodes,ejectedNodes=toBeEjectedNodes)
+            log.info("removed all the nodes from cluster associated with {0} ? {1}".format(master.ip, removed))
 
     @staticmethod
     def rebalance_params_for_declustering(master,all_nodes):
