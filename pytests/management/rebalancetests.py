@@ -479,12 +479,11 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, dgm_ratio):
+    def _common_test_body(self, dgm_ratio, distribution):
         master = self._servers[0]
         rest = RestConnection(master)
         items_inserted_count = 0
         self.log.info("inserting some items in the master before adding any nodes")
-        distribution = {10: 0.5, 20: 0.5}
         inserted_count, rejected_count =\
         MemcachedClientHelper.load_bucket(serverInfo=master,
                                           ram_load_ratio=0.1,
@@ -496,7 +495,6 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         while len(nodes) < len(self._servers):
             self.assertTrue(RebalanceBaseTest.rebalance_in(self._servers, 1),
                             msg="unable to add and rebalance another node")
-            distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
             inserted_count, rejected_count =\
             MemcachedClientHelper.load_bucket(serverInfo=master,
                                               ram_load_ratio=dgm_ratio * 100,
@@ -522,16 +520,24 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_1_5x(self):
-        self._common_test_body(1.5)
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(1.5, distribution)
+
+    def test_1_5x_large_values(self):
+        distribution = {1 * 512: 0.4, 50 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(1.5, distribution)
 
     def test_2_x(self):
-        self._common_test_body(2)
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(2, distribution)
 
     def test_3_x(self):
-        self._common_test_body(3)
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(3, distribution)
 
     def test_5_x(self):
-        self._common_test_body(5)
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(5, distribution)
 
 
 class RebalanceSwapTests(unittest.TestCase):
