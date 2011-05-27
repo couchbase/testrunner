@@ -1,3 +1,4 @@
+import time
 import unittest
 import uuid
 from TestInput import TestInputSingleton
@@ -39,7 +40,7 @@ class BackupAndRestoreTests(unittest.TestCase):
         self.shell.start_membase()
 
     #add nodes one by one
-    def _test_backup_add_restore_bucket_body(self, bucket="default", port_no = 11211, startup_flag = True):
+    def _test_backup_add_restore_bucket_body(self, bucket="default", port_no = 11211, delay_after_data_load=0, startup_flag = True):
 
         self.remote_tmp_folder = "/tmp/{0}-{1}".format("mbbackuptestdefaultbucket", uuid.uuid4())
         master = self.servers[0]
@@ -51,6 +52,9 @@ class BackupAndRestoreTests(unittest.TestCase):
 
         if not startup_flag:
             self.shell.stop_membase()
+        else:
+            self.log.info("Sleep {0} seconds after data load".format(delay_after_data_load))
+            time.sleep(delay_after_data_load)
 
         #let's create a unique folder in the remote location
         output, error = self.shell.execute_command("mkdir -p {0}".format(self.remote_tmp_folder))
@@ -81,7 +85,7 @@ class BackupAndRestoreTests(unittest.TestCase):
 
     def test_backup_add_restore_non_default_bucket_started_server(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body("test_bucket")
+        self._test_backup_add_restore_bucket_body(bucket="test_bucket", port_no=11220)
 
     def test_backup_add_restore_default_bucket_non_started_server(self):
         self.common_setUp()
@@ -89,7 +93,11 @@ class BackupAndRestoreTests(unittest.TestCase):
 
     def test_backup_add_restore_non_default_bucket_non_started_server(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body("test_bucket", startup_flag = False)
+        self._test_backup_add_restore_bucket_body(bucket="test_bucket", port_no=11220, startup_flag = False)
+
+    def test_backup_add_restore_when_ide(self):
+        self.common_setUp()
+        self._test_backup_add_restore_bucket_body(delay_after_data_load=120)
 
 class BackupHelper(object):
 
@@ -114,14 +122,13 @@ class BackupHelper(object):
 
         files = self.test.shell.list_files(backup_location)
         for file in files:
-            command += " "
-            command += file['path'] + "/" + file['file']
+            command += " " + file['path'] + "/" + file['file']
 
         self.log.info(command)
 
         #node = RestConnection(self.server).get_nodes_self()
         #data_directory = "{0}/{1}-{2}/{3}".format(node.storage[0].path,bucket,"data",bucket)
-        output, error = self.test.shell.execute_command(command.format(command))
+        output, error = self.test.shell.execute_command(command)
         self.test.shell.log_command_output(output, error)
 
 #    def load_sqlite(self,files):
