@@ -37,10 +37,7 @@ class InstallTest(unittest.TestCase):
     def test_reset(self):
         for serverInfo in self.servers:
             remote_client = RemoteMachineShellConnection(serverInfo)
-            remote_client.execute_command("killall -9 memcached;killall -9 moxi;")
-            time.sleep(5)
-            info = remote_client.extract_remote_info()
-            self.machine_infos[serverInfo.ip] = info
+            remote_client.start_membase()
             remote_client.disconnect()
 
     def _test_install(self,serverInfo,version,builds):
