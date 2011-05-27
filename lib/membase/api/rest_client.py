@@ -44,14 +44,34 @@ class RestHelper(object):
         return self.rest.monitorRebalance()
 
     def bucket_exists(self, bucket):
-        buckets = self.rest.get_buckets()
-        names = [item.name for item in buckets]
-        log.info("existing buckets : {0}".format(names))
-        for item in buckets:
-            if item.name == bucket:
-                log.info("found bucket {0}".format(bucket))
-                return True
-        return False
+        try:
+            buckets = self.rest.get_buckets()
+            names = [item.name for item in buckets]
+            log.info("existing buckets : {0}".format(names))
+            for item in buckets:
+                if item.name == bucket:
+                    log.info("found bucket {0}".format(bucket))
+                    return True
+            return False
+        except Exception:
+            return False
+
+    def wait_for_node_status(self, node, expected_status, timeout_in_seconds):
+        status_reached = False
+        end_time = time.time() + timeout_in_seconds
+        while time.time() <= end_time and not status_reached:
+            nodes = self.rest.node_statuses()
+            for n in nodes:
+                if node.id == n.id:
+                    log.info('node {0} status : {1}'.format(node.id, n.status))
+                    if n.status.lower() == expected_status.lower():
+                        status_reached = True
+                    break
+            if not status_reached:
+                log.info("sleep for 5 seconds before reading the node.status again")
+                time.sleep(5)
+        log.info('node {0} status_reached : {1}'.format(node.id, status_reached))
+        return status_reached
 
     def wait_for_replication(self, timeout_in_seconds=120):
         end_time = time.time() + timeout_in_seconds
@@ -313,7 +333,9 @@ class RestConnection(object):
             #if status is 200 then it was a success otherwise it was a failure
             if response['status'] == '400':
                 #extract the error , how ?
-                log.info('unable to obtain rebalance progress ?')
+                log.error('unable to obtain rebalance progress ?')
+                log.error(content)
+                log.error(response)
             elif response['status'] == '200':
                 parsed = json.loads(content)
                 if parsed.has_key('status'):
