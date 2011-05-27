@@ -73,7 +73,7 @@ class BackupAndRestoreTests(unittest.TestCase):
         if not startup_flag:
             self.shell.start_membase()
 
-        BucketOperationHelper.verify_data(master.ip, keys, False, False, port, self)
+        BucketOperationHelper.verify_data(master.ip, keys, False, False, port_no, self)
 
     def test_backup_add_restore_default_bucket_started_server(self):
         self.common_setUp()
@@ -124,12 +124,11 @@ class BackupHelper(object):
         output, error = self.test.shell.execute_command(command.format(command))
         self.test.shell.log_command_output(output, error)
 
-    def load_sqlite(self,files):
-        #for each file , load the sqllite file
-        #for each kv_x get the count and add up the numbers
-        total_count = 0
-        for file in data_files:
-            import sqlite3
-            connect = sqlite3.connect("{0}/{1}".format(file['path'],file['file']))
-            connect.execute("select name from sqlite_master where name like 'kv%'")
-        pass
+#    def load_sqlite(self,files):
+#        #for each file , load the sqllite file
+#        #for each kv_x get the count and add up the numbers
+#        for file in data_files:
+#            import sqlite3
+#            connect = sqlite3.connect("{0}/{1}".format(file['path'],file['file']))
+#            connect.execute("select name from sqlite_master where name like 'kv%'")
+#        pass
