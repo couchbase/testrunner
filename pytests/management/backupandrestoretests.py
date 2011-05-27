@@ -30,24 +30,23 @@ class BackupAndRestoreTests(unittest.TestCase):
 
     #we dont necessarily care about the test case
     def common_setUp(self):
-        self.shell.start_membase()
         ClusterOperationHelper.cleanup_cluster(self.servers)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers,self)
 
     def tearDown(self):
         self.log.info("delete remote folder @ {0}".format(self.remote_tmp_folder))
         self.shell.remove_directory(self.remote_tmp_folder)
-        self.shell.stop_membase()
+        self.shell.start_membase()
 
     #add nodes one by one
-    def _test_backup_add_restore_bucket_body(self, bucket="default", port = 11211, startup_flag = True):
+    def _test_backup_add_restore_bucket_body(self, bucket="default", port_no = 11211, startup_flag = True):
 
         self.remote_tmp_folder = "/tmp/{0}-{1}".format("mbbackuptestdefaultbucket", uuid.uuid4())
         master = self.servers[0]
 
         node = RestConnection(master).get_nodes_self()
         BucketOperationHelper.delete_bucket_or_assert(master, bucket, self)
-        BucketOperationHelper.create_bucket(master, bucket, port, test_case=self)
+        BucketOperationHelper.create_bucket(serverInfo=master, name=bucket, replica=1, port=port_no, test_case=self)
         keys = BucketOperationHelper.load_data_or_assert(master, bucket_name=bucket, test = self)
 
         if not startup_flag:
@@ -64,7 +63,7 @@ class BackupAndRestoreTests(unittest.TestCase):
             self.shell.start_membase()
 
         BucketOperationHelper.delete_bucket_or_assert(master, bucket, self)
-        BucketOperationHelper.create_bucket(master, bucket, port, test_case = self)
+        BucketOperationHelper.create_bucket(serverInfo=master, name=bucket, replica=1, port=port_no, test_case=self)
 
         if not startup_flag:
             self.shell.stop_membase()
@@ -108,10 +107,7 @@ class BackupHelper(object):
                                        data_directory,
                                        backup_location)
         output, error = self.test.shell.execute_command(command.format(command))
-        if output:
-            self.log.info(output)
-        if error:
-            self.log.info(error)
+        self.test.shell.log_command_output(output, error)
 
     def restore(self, backup_location):
         command = "{0}/mbrestore -a".format(self.server.cli_path)
@@ -126,10 +122,7 @@ class BackupHelper(object):
         #node = RestConnection(self.server).get_nodes_self()
         #data_directory = "{0}/{1}-{2}/{3}".format(node.storage[0].path,bucket,"data",bucket)
         output, error = self.test.shell.execute_command(command.format(command))
-        if output:
-            self.log.info(output)
-        if error:
-            self.log.info(error)
+        self.test.shell.log_command_output(output, error)
 
     def load_sqlite(self,files):
         #for each file , load the sqllite file
