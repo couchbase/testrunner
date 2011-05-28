@@ -35,6 +35,10 @@ class LoadThread(threading.Thread):
         self.mutation_max = 0
         self.value_failures = 0
 
+        # cache info
+        self.cache_data = load_info['operation_info'].get('cache_data', False)
+        self.data_cache = {}
+
         # server info
         self.server_ip = load_info['server_info'][server_index].ip
         self.server_port = int(load_info['memcached_info'].get('bucket_port', 11211))
@@ -160,11 +164,15 @@ class LoadThread(threading.Thread):
     # mutation_index -> mutation_data : based on create/nocreate
     def get_data(self, index=None):
         if index == None:
-            index = self.mutation_index
+                index = self.mutation_index
 
         valuesize = self.valuesize_sequence[index % len(self.valuesize_sequence)]
-        return (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
-
+        if self.cache_data:
+            if not valuesize in self.data_cache:
+                self.data_cache[valuesize] = (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
+            return `index` + self.data_cache[valuesize]
+        else:
+            return (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
 
 
 class LoadRunner(object):
