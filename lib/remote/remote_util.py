@@ -156,6 +156,7 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T IM setup.exe')
             self.execute_command('taskkill /F /T /IM ISBEW64.*')
             self.execute_command('taskkill /F /T /IM firefox.*')
+            self.execute_command('taskkill /F /T /IM iexplore.*')
             self.execute_command('taskkill /F /T /IM WerFault.*')
             output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
             self.log_command_output(output, error)
