@@ -115,7 +115,8 @@ class RemoteMachineShellConnection:
     def stop_membase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            pass
+            o, r = self.execute_command("net stop membaseserver")
+            self.log_command_output(o, r)
         if info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/membase-server stop")
             self.log_command_output(o, r)
@@ -123,7 +124,8 @@ class RemoteMachineShellConnection:
     def start_membase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            pass
+            o, r = self.execute_command("net start membaseserver")
+            self.log_command_output(o, r)
         if info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/membase-server start")
             self.log_command_output(o, r)
@@ -154,6 +156,7 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T IM setup.exe')
             self.execute_command('taskkill /F /T /IM ISBEW64.*')
             self.execute_command('taskkill /F /T /IM firefox.*')
+            self.execute_command('taskkill /F /T /IM iexplore.*')
             self.execute_command('taskkill /F /T /IM WerFault.*')
             output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
             self.log_command_output(output, error)

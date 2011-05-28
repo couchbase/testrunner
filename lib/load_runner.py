@@ -33,21 +33,17 @@ class LoadThread(threading.Thread):
         self.mutation_index = 0
         self.get_index = 0
         self.mutation_max = 0
+        self.value_failures = 0
+
+        # cache info
+        self.cache_data = load_info['operation_info'].get('cache_data', False)
+        self.data_cache = {}
 
         # server info
         self.server_ip = load_info['server_info'][server_index].ip
-        if load_info['memcached_info']['bucket_port']:
-            self.server_port = int(load_info['memcached_info']['bucket_port'])
-        else:
-            self.server_port = 11211
-        if load_info['memcached_info']['bucket_name']:
-            self.bucket_name = load_info['memcached_info']['bucket_name']
-        else:
-            self.bucket_name = ""
-        if load_info['memcached_info']['bucket_password']:
-            self.bucket_name = load_info['memcached_info']['bucket_password']
-        else:
-            self.bucket_password = ""
+        self.server_port = int(load_info['memcached_info'].get('bucket_port', 11211))
+        self.bucket_name = load_info['memcached_info'].get('bucket_name', '')
+        self.bucket_password = load_info['memcached_info'].get('bucket_password', '')
 
         # operation info
         self.create = load_info['operation_info']['create_percent'] / fractions.gcd(load_info['operation_info']['create_percent'], 100 - load_info['operation_info']['create_percent'])
@@ -94,27 +90,38 @@ class LoadThread(threading.Thread):
                     # temporary error
                     if e.status == 134:
                         time.sleep(1)
+                    else:
+                        print 'set',
+                        print e
+                        time.sleep(1)
             elif operation == 'get':
                 key = self.name + '_' + `self.get_get_key()`
-                vdata = self.server.get(key)
-                data = vdata[2]
                 try:
-                    data_expected = self.get_data(max(self.get_mutation_indexes(self.get_get_key())))
-                    if data != data_expected:
-                        raise
-                except:
-#                    print self.server.db
-                    print "create: " + `self.create`
-                    print "nocreate: " + `self.nocreate`
-                    print "get_index: " + `self.get_index`
-                    print "get_key: " + `self.get_get_key()`
-                    print "mutation_max: " + `self.mutation_max`
-                    print "mutation_indexes: " + `self.get_mutation_indexes(self.get_get_key())`
-                    print "getting data for mutation index: " + `max(self.get_mutation_indexes(self.get_get_key()))`
-                    print "got:      \'" + data + "\'"
-                    print "expected: \'" + data_expected + "\'"
-                    raise ValueError
-                self.get_index += 1
+                    vdata = self.server.get(key)
+                    data = vdata[2]
+                    try:
+                        data_expected = self.get_data(max(self.get_mutation_indexes(self.get_get_key())))
+                        if data != data_expected:
+                            self.value_failures += 1
+                            raise
+                    except:
+                        print e
+#                        print self.server.db
+#                        print "create: " + `self.create`
+#                        print "nocreate: " + `self.nocreate`
+#                        print "get_index: " + `self.get_index`
+#                        print "get_key: " + `self.get_get_key()`
+#                        print "mutation_max: " + `self.mutation_max`
+#                        print "mutation_indexes: " + `self.get_mutation_indexes(self.get_get_key())`
+#                        print "getting data for mutation index: " + `max(self.get_mutation_indexes(self.get_get_key()))`
+#                        print "got:      \'" + data + "\'"
+#                        print "expected: \'" + data_expected + "\'"
+#                        raise ValueError
+                    self.get_index += 1
+                except mc_bin_client.MemcachedError as e:
+                    print 'get',
+                    print e
+                    time.sleep(1)
 
 
     # get the current operation based on the get and mutation indexes
@@ -157,11 +164,15 @@ class LoadThread(threading.Thread):
     # mutation_index -> mutation_data : based on create/nocreate
     def get_data(self, index=None):
         if index == None:
-            index = self.mutation_index
+                index = self.mutation_index
 
         valuesize = self.valuesize_sequence[index % len(self.valuesize_sequence)]
-        return (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
-
+        if self.cache_data:
+            if not valuesize in self.data_cache:
+                self.data_cache[valuesize] = (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
+            return `index` + self.data_cache[valuesize]
+        else:
+            return (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
 
 
 class LoadRunner(object):
@@ -211,6 +222,7 @@ class LoadRunner(object):
 
     # get the current state (num ops, percent complete, time elapsed)
     # also get the number of failed ops and failed add/set (failed adds due to item existing don't count)
+    # return total ops, op breakdown (gets, sets, etc), total ops/s and ops/s breakdown (gets/s, sets/s, etc)
     def query(self):
         for t in self.threads:
             t.join(0)
