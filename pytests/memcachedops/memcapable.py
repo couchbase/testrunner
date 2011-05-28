@@ -21,7 +21,6 @@ class MemcapableTestBase(object):
     bucket_name = None
 
     def setUp_bucket(self, bucket_name, port, bucket_type, unittest):
-
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         unittest.assertTrue(self.input, msg="input parameters missing...")
@@ -68,6 +67,24 @@ class MemcapableTestBase(object):
                                                                              test=unittest,
                                                                              bucket_name=self.bucket_name)
 
+    def set_test(self, key, exp, flags, values):
+        for serverInfo in self.servers:
+            client = mc_bin_client.MemcachedClient(host=serverInfo.ip,
+                                                   port=self.bucket_port)
+#            self.log.info('Waitting 15 seconds for memcached started')
+#            time.sleep(15)
+            for v in values:
+                for f in flags:
+                    client.set(key, exp, f, v)
+                    flags_v, cas_v, get_v = client.get(key)
+                    if get_v == v:
+                        if flags_v == f:
+                            self.log.info('Flags is set to {0}; and when run get {1}'.format(f, flags_v))
+                        else:
+                            self.test.fail('FAILED.  Flags is set to {0};  and when run get {1}'.format(f, flags_v))
+                        self.log.info('Value is set {0};  and when run get {1}'.format(v, get_v))
+                    else:
+                        self.test.fail('FAILED.  Value is set to {0};  and when run get {1}'.format(v, get_v))
 
 #    def tearDown_bucket(self):
 #        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self.test)
@@ -78,14 +95,9 @@ class MemcapableTestBase(object):
     def incr_test(self, key, exp, flags, value, incr_amt, decr_amt, incr_time):
         for serverInfo in self.servers:
             client = mc_bin_client.MemcachedClient(host=serverInfo.ip,
-                                                          port=self.bucket_port)
+                                                   port=self.bucket_port)
 #            self.log.info('Waitting 15 seconds for memcached started')
 #            time.sleep(15)
-#            BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],
-#                                                              self.bucket_port,
-#                                                              test=unittest,
-#                                                              bucket_name=self.bucket_name,
-#                                                              bucket_password='password')
             if key != 'no_key':
                 client.set(key, exp , flags, value)
             if exp != 0:
@@ -109,14 +121,9 @@ class MemcapableTestBase(object):
     def decr_test(self, key, exp, flags, value, incr_amt, decr_amt, decr_time):
         for serverInfo in self.servers:
             client = mc_bin_client.MemcachedClient(host=serverInfo.ip,
-                                                          port=self.bucket_port)
+                                                   port=self.bucket_port)
 #            self.log.info('Waitting 15 seconds for memcached started')
 #            time.sleep(15)
-#            BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],
-#                                                              self.bucket_port,
-#                                                              test=unittest,
-#                                                              bucket_name=self.bucket_name,
-#                                                              bucket_password='password')
             if key != 'no_key':
                 client.set(key, exp , flags, value)
             if exp != 0:
@@ -132,7 +139,44 @@ class MemcapableTestBase(object):
             self.log.info('decr {0} times with value {1}'.format(decr_time, decr_amt))
         return update_value
 
+
+class SimpleSetMembaseBucketDefaultPort(unittest.TestCase):
+    memcapableTestBase = None
+    log = logger.Logger.get_logger()
     
+    def setUp(self):
+        self.memcapableTestBase = MemcapableTestBase()
+        self.memcapableTestBase.setUp_bucket('default', 11211, 'membase', self)
+
+    def test_set_pos_int_value_pos_flag_key_never_expired(self):
+        key_test = 'has_key'
+        valuesList = ['0', '000', '4', '678', '6560987', '32456754', '0000000000', '00001000']
+        exp_time = 0
+        flagsList = [0, 0000, 00001, 34532, 453456, 0001000, 1100111100, 4294967295]
+        self.memcapableTestBase.set_test(key_test, exp_time, flagsList, valuesList)
+
+    def test_set_neg_int_value_pos_flag_key_never_expired(self):
+        key_test = 'has_key'
+        valuesList = ['-0', '-000', '-4', '-678', '-6560987', '-32456754', '-0000000000', '-00001000']
+        exp_time = 0
+        flagsList = [0, 0000, 00001, 34532, 453456, 0001000, 1100111100, 4294967295]
+        self.memcapableTestBase.set_test(key_test, exp_time, flagsList, valuesList)
+
+    def test_set_pos_float_value_pos_flag_key_never_expired(self):
+        key_test = 'has_key'
+        valuesList = ['0.00', '000.0', '4.6545', '678.87967', '6560987.0', '32456754.090987', '0000000000.0000001', '00001000.008']
+        exp_time = 0
+        flagsList = [0, 0000, 00001, 34532, 453456, 0001000, 1100111100, 4294967295]
+        self.memcapableTestBase.set_test(key_test, exp_time, flagsList, valuesList)
+
+    def test_set_neg_float_value_pos_flag_key_never_expired(self):
+        key_test = 'has_key'
+        valuesList = ['-0.00', '-000.0', '-4.6545', '-678.87967', '-6560987.0', '-32456754.090987', '-0000000000.0000001', '-00001000.008']
+        exp_time = 0
+        flagsList = [0, 0000, 00001, 34532, 453456, 0001000, 1100111100, 4294967295]
+        self.memcapableTestBase.set_test(key_test, exp_time, flagsList, valuesList)
+
+
 class SimpleIncrMembaseBucketDefaultPort(unittest.TestCase):
     memcapableTestBase = None
     log = logger.Logger.get_logger()
@@ -177,7 +221,7 @@ class SimpleIncrMembaseBucketDefaultPort(unittest.TestCase):
         incr_time = 10
         update_v = self.memcapableTestBase.incr_test(key_test, exp_time, 0, value, incr_amt, decr_amt, incr_time)
         if update_v == incr_amt*(incr_time - 1):
-            self.log.info('Value update correctly.  Expected value{0}.  Tested value {1}' \
+            self.log.info('Value update correctly.  Expected value {0}.  Tested value {1}' \
                            .format(incr_amt*(incr_time - 1), update_v))                  
         else:
             self.test.fail("FAILED test_incr_with_exist_key_and_expired")
