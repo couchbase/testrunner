@@ -49,5 +49,7 @@ if __name__ == "__main__":
                     remote.execute_command('mkdir -p /tmp/backup;mv -f /tmp/core* /tmp/backup/;')
                     remote.execute_command('mv -f /opt/membase/var/lib/membase/erl_crash.dump /tmp/backup')
                     remote.disconnect()
+                if remote:
+                    remote.disconnect()
         except Exception as ex:
             print ex
