@@ -341,21 +341,22 @@ class ReaderThread(threading.Thread):
 
 
     def run(self):
-        client = MemcachedClientHelper.create_memcached_client(self.info['ip'],
-                                                               self.info['name'],
-                                                               self.info['port'],
-                                                               self.info['password'])
         queue_drained = False
         while not queue_drained and not self.aborted:
             try:
                 key = self.queue.get(timeout=10)
                 try:
+                    client = MemcachedClientHelper.create_memcached_client(self.info['ip'],
+                                                                           self.info['name'],
+                                                                           self.info['port'],
+                                                                           self.info['password'])
+
                     client.send_get(key)
+                    client.close()
                 except Exception:
                     self._saw_error(key)
             except Empty:
                 queue_drained = True
-        client.close()
 
 #mutation ? let' do two cycles , first run and then try to mutate all those itesm
 #and return
