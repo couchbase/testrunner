@@ -57,7 +57,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                     #let's insert some data
                     distribution = {10: 0.5, 20: 0.5}
                     inserted_keys, rejected_keys =\
-                    MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=server,
+                    MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
                                                                           name='default',
                                                                           port=11211,
                                                                           ram_load_ratio=0.1,
@@ -263,6 +263,10 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def multiple_node_upgrade_m5(self):
         self._install_and_upgrade('1.6.5.3', True, False, 1, False)
 
+    def multiple_node_rolling_upgrade(self):
+        self._install_and_upgrade('1.6.5.3', True, False, 1, False, -1, 1)
+
+
 
 
         #for
@@ -278,8 +282,10 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def _install_and_upgrade(self, initial_version='1.6.5.3',
                              create_buckets=False,
                              insert_data=False,
-                             upgrade_how_many=1, start_upgraded_first=True,
-                             load_ratio=-1):
+                             upgrade_how_many=1,
+                             start_upgraded_first=True,
+                             load_ratio=-1,
+                             how_many_roll_upgrade=0):
         node_upgrade_status = {}
         #then start them in whatever order you want
         inserted_keys = []
@@ -289,7 +295,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         servers = input.servers
         builds, changes = BuildQuery().get_all_builds()
 
-        for server in servers:
+        for server in servers[:len(servers) - how_many_roll_upgrade]:
             remote = RemoteMachineShellConnection(server)
             rest = RestConnection(server)
             info = remote.extract_remote_info()
@@ -330,7 +336,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     load_ratio = 0.1
                 distribution = {10: 0.5, 20: 0.5}
                 inserted_keys, rejected_keys =\
-                MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=master,
+                MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
                                                                       name='default',
                                                                       port=11211,
                                                                       ram_load_ratio=load_ratio,
@@ -364,58 +370,85 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                                             build_version=latest_version,
                                                             deliverable_type=info.deliverable_type,
                                                             os_architecture=info.architecture_type)
-
-        for server in servers:
-            remote = RemoteMachineShellConnection(server)
-            remote.stop_membase()
+        #if we dont want to do roll_upgrade ?
+        if len(how_many_roll_upgrade) < 1:
+            for server in servers:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_membase()
 
         time.sleep(30)
 
-        count = 0
-        for server in servers:
-            remote = RemoteMachineShellConnection(server)
-            remote.download_build(appropriate_build)
-            remote.membase_upgrade(appropriate_build)
-            RestHelper(RestConnection(server)).is_ns_server_running(120)
+        if len(how_many_roll_upgrade) > 0:
+            #install 1.7.0 on the last nodes
+            for server in servers[len(servers) - how_many_roll_upgrade:]:
+                remote = RemoteMachineShellConnection(server)
+                remote.download_build(appropriate_build)
+                remote.membase_upgrade(appropriate_build)
+                RestHelper(RestConnection(server)).is_ns_server_running(120)
+                #now add these nodes to the cluster
 
-            pools_info = RestConnection(server).get_pools_info()
+            for server in servers[len(servers) - how_many_roll_upgrade:]:
+                #add this to the cluster
+                ClusterOperationHelper.add_all_nodes_or_assert(master, [server], rest_settings, self)
+                nodes = rest.node_statuses()
+                otpNodeIds = []
+                for node in nodes:
+                    otpNodeIds.append(node.id)
+                rebalanceStarted = rest.rebalance(otpNodeIds, [])
+                self.assertTrue(rebalanceStarted,
+                                "unable to start rebalance on master node {0}".format(master.ip))
+                log.info('started rebalance operation on master node {0}'.format(master.ip))
+                rebalanceSucceeded = rest.monitorRebalance()
+                self.assertTrue(rebalanceSucceeded,
+                                "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
 
-            node_upgrade_status[server] = "upgraded"
-            if upgrade_how_many == count:
-                break
-
-            #verify admin_creds still set
-
-            self.assertTrue(pools_info['implementationVersion'], appropriate_build.product_version)
-
-        if start_upgraded_first:
-            for server in node_upgrade_status:
-                if node_upgrade_status[server] == "upgraded":
-                    remote = RemoteMachineShellConnection(server)
-                    remote.start_membase()
         else:
-            for server in node_upgrade_status:
-                if node_upgrade_status[server] == "installed":
-                    remote = RemoteMachineShellConnection(server)
-                    remote.start_membase()
+            count = 0
+            for server in servers:
+                remote = RemoteMachineShellConnection(server)
+                remote.download_build(appropriate_build)
+                remote.membase_upgrade(appropriate_build)
+                RestHelper(RestConnection(server)).is_ns_server_running(120)
 
-        for server in servers:
-            remote = RemoteMachineShellConnection(server)
-            remote.start_membase()
+                pools_info = RestConnection(server).get_pools_info()
+
+                node_upgrade_status[server] = "upgraded"
+                count +=1
+                if upgrade_how_many == count:
+                    break
+
+                #verify admin_creds still set
+
+                self.assertTrue(pools_info['implementationVersion'], appropriate_build.product_version)
+
+            if start_upgraded_first:
+                for server in node_upgrade_status:
+                    if node_upgrade_status[server] == "upgraded":
+                        remote = RemoteMachineShellConnection(server)
+                        remote.start_membase()
+            else:
+                for server in node_upgrade_status:
+                    if node_upgrade_status[server] == "installed":
+                        remote = RemoteMachineShellConnection(server)
+                        remote.start_membase()
+
+            for server in servers:
+                remote = RemoteMachineShellConnection(server)
+                remote.start_membase()
 
 
 
-        #TODO: how can i verify that the cluster init config is preserved
-        if create_buckets:
-            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('default', RestConnection(master)),
-                            msg="bucket 'default' does not exist..")
-        if insert_data:
-            BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys,
-                                                       ip=master.ip,
-                                                       port=11211,
-                                                       name='default',
-                                                       password='',
-                                                       test=self)
+            #TODO: how can i verify that the cluster init config is preserved
+            if create_buckets:
+                self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('default', RestConnection(master)),
+                                msg="bucket 'default' does not exist..")
+            if insert_data:
+                BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys,
+                                                           ip=master.ip,
+                                                           port=11211,
+                                                           name='default',
+                                                           password='',
+                                                           test=self)
 
         return node_upgrade_status
 
