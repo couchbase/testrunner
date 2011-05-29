@@ -328,7 +328,10 @@ class ReaderThread(threading.Thread):
         self.info = info
         self.log = logger.Logger.get_logger()
         self.error_seen = 0
+        self.aborted = False
 
+    def abort(self):
+        self.aborted = True
 
     def _saw_error(self, key):
         error_msg = "unable to get key {0}"
@@ -343,7 +346,7 @@ class ReaderThread(threading.Thread):
                                                                self.info['port'],
                                                                self.info['password'])
         queue_drained = False
-        while not queue_drained:
+        while not queue_drained and not self.aborted:
             try:
                 key = self.queue.get(timeout=10)
                 try:
@@ -503,4 +506,5 @@ class WorkerThread(threading.Thread):
             retry =- 1
         client.close()
         if not self.write_only:
+            self.reader.abort()
             self.reader.join()
