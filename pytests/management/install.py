@@ -47,19 +47,19 @@ class InstallTest(unittest.TestCase):
                                          'membase-server-enterprise',
                                          info.deliverable_type,
                                          info.architecture_type,
-                                         version)
+                                         version.strip())
         if not build:
             self.log.info('find community edition build')
             build = query.find_membase_build(builds,
                                              'membase-server-community',
                                              info.deliverable_type,
                                              info.architecture_type,
-                                             version)
+                                             version.strip())
             #try community ?
         if not build:
             self.fail('unable to find any {0} build for {1} for arch : {2} '.format(info.distribution_type,
                                                                                     info.architecture_type,
-                                                                                    version))
+                                                                                    version.strip()))
         print 'for machine : ', info.architecture_type, info.distribution_type, 'relevant build : ', build
         remote_client = RemoteMachineShellConnection(serverInfo)
         remote_client.membase_uninstall()
