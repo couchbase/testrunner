@@ -79,6 +79,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                             os_architecture=info.architecture_type)
         remote.download_build(appropriate_build)
         remote.membase_upgrade(appropriate_build)
+        remote.disconnect()
         RestHelper(rest).is_ns_server_running(120)
 
         pools_info = rest.get_pools_info()
@@ -179,7 +180,11 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   insert_data=False,
                                   create_buckets=True)
 
-
+    def single_node_upgrade_s5(self):
+        self._install_and_upgrade(initial_version='1.6.5.2',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
 
     def single_node_upgrade_s4_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
@@ -187,17 +192,25 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s5(self):
-        self._install_and_upgrade(initial_version='1.6.5.2',
+    def single_node_upgrade_s4_1_6_5_3_1(self):
+        self._install_and_upgrade(initial_version='1.6.5.3.1',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_5_2(self):
-        self._install_and_upgrade(initial_version='1.6.5.2',
+
+    def single_node_upgrade_s4_1_6_5_4(self):
+        self._install_and_upgrade(initial_version='1.6.5.4',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
+
+    def single_node_upgrade_s4_1_6_5_2_1(self):
+        self._install_and_upgrade(initial_version='1.6.5.2.1',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
 
     def single_node_upgrade_s4_1_6_5_1(self):
         self._install_and_upgrade(initial_version='1.6.5.1',
@@ -211,6 +224,53 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   insert_data=True,
                                   create_buckets=True)
 
+    def single_node_upgrade_s4_1_6_4_1(self):
+        self._install_and_upgrade(initial_version='1.6.4.1',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s4_1_6_4(self):
+        self._install_and_upgrade(initial_version='1.6.4',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s4_1_6_3(self):
+        self._install_and_upgrade(initial_version='1.6.3',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s4_1_6_1(self):
+        self._install_and_upgrade(initial_version='1.6.1',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+    def single_node_upgrade_s4_1_6_0(self):
+        self._install_and_upgrade(initial_version='1.6.0',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
+
+
+
+
+
+#1.6.0
+#1.6.1
+#1.6.3
+#1.6.4
+#1.6.4.1
+#1.6.5
+#1.6.5.1
+#1.6.5.2.1
+#1.6.5.3
+#1.6.5.3.1
+#1.6.5.4
+
     def single_node_upgrade_s5(self):
         #install the latest version and upgrade to itself
         input = TestInputSingleton.input
@@ -219,6 +279,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         builds, changes = BuildQuery().get_all_builds()
         remote = RemoteMachineShellConnection(server)
         info = remote.extract_remote_info()
+        remote.disconnect()
         filtered_builds = []
         for build in builds:
             if build.deliverable_type == info.deliverable_type and\
@@ -230,20 +291,21 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   initialize_cluster=False,
                                   insert_data=False,
                                   create_buckets=False)
+
         #TODO : expect a message like 'package membase-server-1.7~basestar-1.x86_64 is already installed'
 
 
 class MultipleNodeUpgradeTests(unittest.TestCase):
     #in a 3 node cluster with no buckets shut down all the nodes update all
     # nodes one by one and then restart node(1),node(2) and node(3)
-    def multiple_node_upgrade_m1(self):
+    def multiple_node_upgrade_m1_1_6_5_3(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.3', False, False, True, len(servers))
 
     #in a 3 node cluster with default bucket without any keys shut down all the nodes update
     # all nodes one by one and then restart node(1),node(2) and node(3)
-    def multiple_node_upgrade_m2(self):
+    def multiple_node_upgrade_m2_1_6_5_3(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.3', True, False, len(servers))
@@ -252,19 +314,27 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         #in a 3 node cluster with default bucket with some keys shut down all the
         # nodes update all nodes one by one and then restart node(1),node(2) and node(3)
 
-    def multiple_node_upgrade_m3(self):
+    def multiple_node_upgrade_m3_1_6_5_3(self):
         self._install_and_upgrade('1.6.5.3', True, True, 1)
 
     #m3 with 50% ram full ?
-    def multiple_node_upgrade_m6(self):
+    def multiple_node_upgrade_m6_1_6_5_3(self):
         self._install_and_upgrade('1.6.5.3', True, True, 1, True, 50)
 
 
-    def multiple_node_upgrade_m5(self):
+    def multiple_node_upgrade_m5_1_6_5_3(self):
         self._install_and_upgrade('1.6.5.3', True, False, 1, False)
 
-    def multiple_node_rolling_upgrade(self):
-        self._install_and_upgrade('1.6.5.3', True, False, 1, False, -1, 1)
+    def multiple_node_rolling_upgrade_1_6_5(self):
+        self._install_and_upgrade('1.6.5', True, True, 1, False, -1, 1)
+
+    def multiple_node_rolling_upgrade_1_6_5_1(self):
+        self._install_and_upgrade('1.6.5.1', True, True, 1, False, -1, 1)
+
+    def multiple_node_rolling_upgrade_1_6_5_2(self):
+        self._install_and_upgrade('1.6.5.2', True, True, 1, False, -1, 1)
+
+
 
 
 
@@ -290,6 +360,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         #then start them in whatever order you want
         inserted_keys = []
         log = logger.Logger.get_logger()
+        log.info("how_many_roll_upgrade : {0}".format(how_many_roll_upgrade))
         input = TestInputSingleton.input
         rest_settings = input.membase_settings
         servers = input.servers
@@ -315,6 +386,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
             rest.init_cluster_memoryQuota()
             node_upgrade_status[server] = "installed"
+            remote.disconnect()
 
         master = servers[0]
         if create_buckets:
@@ -343,7 +415,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                                                       value_size_distribution=distribution)
                 log.info("wait until data is completely persisted on the disk")
 
-        ClusterOperationHelper.add_all_nodes_or_assert(master, servers, rest_settings, self)
+        ClusterOperationHelper.add_all_nodes_or_assert(master,
+                                                       servers[:len(servers) - how_many_roll_upgrade],
+                                                       rest_settings, self)
         rest = RestConnection(master)
         nodes = rest.node_statuses()
         otpNodeIds = []
@@ -364,27 +438,35 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 filtered_builds.append(build)
         sorted_builds = BuildQuery().sort_builds_by_version(filtered_builds)
         latest_version = sorted_builds[0].product_version
-        #pick the first one in the list
-        appropriate_build = BuildQuery().find_membase_build(builds=filtered_builds,
-                                                            product='membase-server-enterprise',
-                                                            build_version=latest_version,
-                                                            deliverable_type=info.deliverable_type,
-                                                            os_architecture=info.architecture_type)
         #if we dont want to do roll_upgrade ?
-        if len(how_many_roll_upgrade) < 1:
+        if how_many_roll_upgrade < 1:
             for server in servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_membase()
+                remote.disconnect()
 
-        time.sleep(30)
-
-        if len(how_many_roll_upgrade) > 0:
+        if how_many_roll_upgrade > 0:
             #install 1.7.0 on the last nodes
             for server in servers[len(servers) - how_many_roll_upgrade:]:
+
                 remote = RemoteMachineShellConnection(server)
+                info = remote.extract_remote_info()
+                log.info("finding build {0} for machine {1}".format(latest_version, server))
+                appropriate_build = BuildQuery().find_membase_build(builds=builds,
+                                                                    product='membase-server-enterprise',
+                                                                    build_version=latest_version,
+                                                                    deliverable_type=info.deliverable_type,
+                                                                    os_architecture=info.architecture_type)
+                self.assertTrue(appropriate_build.url, msg="unable to find build for this machine {0}".format(server))
+                remote.membase_uninstall()
                 remote.download_build(appropriate_build)
-                remote.membase_upgrade(appropriate_build)
-                RestHelper(RestConnection(server)).is_ns_server_running(120)
+
+                remote.membase_install(appropriate_build)
+                RestHelper(rest).is_ns_server_running(120)
+                log.info("sleep for 10 seconds to wait for membase-server to start...")
+                rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+                rest    .init_cluster_memoryQuota()
+                remote.disconnect()
                 #now add these nodes to the cluster
 
             for server in servers[len(servers) - how_many_roll_upgrade:]:
@@ -406,6 +488,13 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             count = 0
             for server in servers:
                 remote = RemoteMachineShellConnection(server)
+                info = remote.extract_remote_info()
+                log.info("finding build {0} for machine {1}".format(latest_version, server))
+                appropriate_build = BuildQuery().find_membase_build(builds=builds,
+                                                                    product='membase-server-enterprise',
+                                                                    build_version=latest_version,
+                                                                    deliverable_type=info.deliverable_type,
+                                                                    os_architecture=info.architecture_type)
                 remote.download_build(appropriate_build)
                 remote.membase_upgrade(appropriate_build)
                 RestHelper(RestConnection(server)).is_ns_server_running(120)
@@ -416,6 +505,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 count +=1
                 if upgrade_how_many == count:
                     break
+                remote.disconnect()
 
                 #verify admin_creds still set
 
@@ -426,15 +516,18 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     if node_upgrade_status[server] == "upgraded":
                         remote = RemoteMachineShellConnection(server)
                         remote.start_membase()
+                        remote.disconnect()
             else:
                 for server in node_upgrade_status:
                     if node_upgrade_status[server] == "installed":
                         remote = RemoteMachineShellConnection(server)
                         remote.start_membase()
+                        remote.disconnect()
 
             for server in servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.start_membase()
+                remote.disconnect()
 
 
 
@@ -449,10 +542,4 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                                            name='default',
                                                            password='',
                                                            test=self)
-
         return node_upgrade_status
-
-
-
-        
-
