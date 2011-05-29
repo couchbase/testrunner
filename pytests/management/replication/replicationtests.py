@@ -250,9 +250,9 @@ class ReplicationTests(unittest.TestCase):
         self._create_bucket(number_of_replicas=number_of_replicas,bucket_name=bucket_name)
         self.log.info('created the bucket')
         #let's use data_helper
-        if fill_ram_percentage == 50:
+        if fill_ram_percentage == 10:
             distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-        elif fill_ram_percentage > 90:
+        elif fill_ram_percentage > 50:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
         else:
             distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
@@ -304,7 +304,12 @@ class ReplicationTests(unittest.TestCase):
         self._create_bucket(number_of_replicas=number_of_replicas,bucket_name=bucket_name)
         self.log.info('created the bucket')
         # tiny amount of data in the bucket
-        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+        if fill_ram_percentage == 10:
+            distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
+        elif fill_ram_percentage > 10:
+            distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
+        else:
+            distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         rebalanced_servers = [self.servers[0]]
         MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                           name=self.bucket_name,
