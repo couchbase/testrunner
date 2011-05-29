@@ -350,7 +350,7 @@ class ReaderThread(threading.Thread):
             try:
                 key = self.queue.get(timeout=10)
                 try:
-                    client.get(key)
+                    client.send_get(key)
                 except Exception:
                     self._saw_error(key)
             except Empty:
