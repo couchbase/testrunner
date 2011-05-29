@@ -93,8 +93,9 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
         self.log.info("inserting some items in the master before adding any nodes")
         distribution = {10: 0.5, 20: 0.5}
+        rebalanced_servers = [master]
         inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
+        MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
@@ -121,7 +122,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                 distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
 
             inserted_count, rejected_count =\
-            MemcachedClientHelper.load_bucket(serverInfo=master,
+            MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                               ram_load_ratio=load_ratio,
                                               value_size_distribution=distribution,
                                               number_of_threads=5)
@@ -129,6 +130,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
+            rebalanced_servers.append(server)
             items_inserted_count += inserted_count
             final_replication_state = RestHelper(rest).wait_for_replication(120)
             msg = "replication state after waiting for up to 2 minutes : {0}"
@@ -182,15 +184,17 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         rest = RestConnection(master)
         creds = self._input.membase_settings
         items_inserted_count = 0
+        rebalanced_servers = [master]
 
         self.log.info("inserting some items in the master before adding any nodes")
         distribution = {10: 0.5, 20: 0.5}
         inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
+        MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
         items_inserted_count += inserted_count
+        rebalanced_servers = [master]
 
         for server in self._servers[1:]:
             nodes = rest.node_statuses()
@@ -213,22 +217,23 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
                 distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
             elif load_ratio > 10:
                 distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
-            threads = MemcachedClientHelper.create_threads_for_load_bucket(serverInfo=master,
-                                                                           ram_load_ratio=load_ratio,
-                                                                           value_size_distribution=distribution,
-                                                                           number_of_threads=20)
+            threads = MemcachedClientHelper.create_threads(servers=rebalanced_servers,
+                                                           ram_load_ratio=load_ratio,
+                                                           value_size_distribution=distribution,
+                                                           number_of_threads=20)
             for thread in threads:
                 thread.start()
 
             rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
+            rebalanced_servers.append(server)
 
             for thread in threads:
                 thread.join()
                 items_inserted_count += thread.inserted_keys_count()
 
-            final_replication_state = RestHelper(rest).wait_for_replication(120)
+            final_replication_state = RestHelper(rest).wait_for_replication(300)
             msg = "replication state after waiting for up to 2 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
             start_time = time.time()
@@ -243,6 +248,7 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
+            rebalanced_servers.append(server)
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
@@ -292,7 +298,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
         elif ram_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
         inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
+        MemcachedClientHelper.load_bucket(servers=[master],
                                           ram_load_ratio=ram_ratio,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
@@ -322,7 +328,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
             elif ram_ratio > 10:
                 distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
             inserted_keys_count, rejected_keys_count =\
-            MemcachedClientHelper.load_bucket(serverInfo=master,
+            MemcachedClientHelper.load_bucket(servers=[master],
                                               ram_load_ratio=ram_ratio,
                                               value_size_distribution=distribution,
                                               number_of_threads=20)
@@ -381,8 +387,9 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
             distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
         elif load_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
+        rebalanced_servers = [master]
         inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=master,
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=rebalanced_servers,
                                                               ram_load_ratio=load_ratio,
                                                               number_of_items=-1,
                                                               value_size_distribution=distribution,
@@ -484,8 +491,9 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         rest = RestConnection(master)
         items_inserted_count = 0
         self.log.info("inserting some items in the master before adding any nodes")
+        rebalanced_servers = [master]
         inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
+        MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
@@ -496,7 +504,7 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
             self.assertTrue(RebalanceBaseTest.rebalance_in(self._servers, 1),
                             msg="unable to add and rebalance another node")
             inserted_count, rejected_count =\
-            MemcachedClientHelper.load_bucket(serverInfo=master,
+            MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                               ram_load_ratio=dgm_ratio * 100,
                                               value_size_distribution=distribution,
                                               number_of_threads=40)
@@ -597,7 +605,7 @@ class RebalanceSwapTests(unittest.TestCase):
         self.log.info("inserting some items in the master before adding any nodes")
         distribution = {10: 0.5, 20: 0.5}
         inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
+        MemcachedClientHelper.load_bucket(servers=[master],
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
                                           number_of_threads=20)

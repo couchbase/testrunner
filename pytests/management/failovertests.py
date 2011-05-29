@@ -169,19 +169,19 @@ class FailoverTests(unittest.TestCase):
             distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
         elif load_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
-        inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
-                                          ram_load_ratio=load_ratio,
-                                          value_size_distribution=distribution,
-                                          number_of_threads=20)
-        log.info('inserted {0} keys'.format(inserted_count))
+
         ClusterOperationHelper.add_all_nodes_or_assert(master, self._servers, credentials, self)
         nodes = rest.node_statuses()
         rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
         msg = "rebalance failed after adding these nodes {0}".format(nodes)
         self.assertTrue(rest.monitorRebalance(), msg=msg)
 
-
+        inserted_count, rejected_count =\
+        MemcachedClientHelper.load_bucket(servers=self._servers,
+                                          ram_load_ratio=load_ratio,
+                                          value_size_distribution=distribution,
+                                          number_of_threads=20)
+        log.info('inserted {0} keys'.format(inserted_count))
         nodes = rest.node_statuses()
         #while len(node) > replica * 2
         while (len(nodes) - replica) >= 1:

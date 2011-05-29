@@ -256,7 +256,7 @@ class ReplicationTests(unittest.TestCase):
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
         else:
             distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
-        MemcachedClientHelper.load_bucket(serverInfo=master,
+        MemcachedClientHelper.load_bucket(servers=[master],
                                           name=self.bucket_name,
                                           port=11220,
                                           ram_load_ratio=0.1,
@@ -265,7 +265,7 @@ class ReplicationTests(unittest.TestCase):
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
         inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=master,
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=self.servers,
                                                               name=self.bucket_name,
                                                               port=11220,
                                                               ram_load_ratio=fill_ram_percentage,
@@ -305,7 +305,8 @@ class ReplicationTests(unittest.TestCase):
         self.log.info('created the bucket')
         # tiny amount of data in the bucket
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
-        MemcachedClientHelper.load_bucket(serverInfo=self.servers[0],
+        rebalanced_servers = [self.servers[0]]
+        MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                           name=self.bucket_name,
                                           port=11220,
                                           ram_load_ratio=0.1,
@@ -315,8 +316,9 @@ class ReplicationTests(unittest.TestCase):
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+        rebalanced_servers.extend(self.servers)
         inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=self.servers[0],
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=rebalanced_servers,
                                                               name=self.bucket_name,
                                                               port=11220,
                                                               ram_load_ratio=fill_ram_percentage,

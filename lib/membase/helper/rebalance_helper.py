@@ -14,7 +14,8 @@ class RebalanceHelper():
                                       bucket,
                                       port,
                                       replica_factor,
-                                      timeout_in_seconds=120):
+                                      timeout_in_seconds=120,
+                                      password = 'password'):
         log.info('waiting for sum_of_curr_items == total_items....')
         start = time.time()
         verified = False
@@ -25,17 +26,17 @@ class RebalanceHelper():
             else:
                 time.sleep(2)
         rest = RestConnection(master)
-        RebalanceHelper.print_taps_from_all_nodes(rest,bucket)
+        RebalanceHelper.print_taps_from_all_nodes(rest,bucket,port,password)
         return verified
 
     @staticmethod
     #TODO: add password and port
-    def print_taps_from_all_nodes(rest, bucket='default'):
+    def print_taps_from_all_nodes(rest, bucket='default', port=11210, password='password'):
         log = logger.Logger.get_logger()
         nodes_for_stats = rest.node_statuses()
         for node_for_stat in nodes_for_stats:
             try:
-                client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, bucket, 11210)
+                client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, bucket, port,password)
                 log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
                 tap_stats = client.stats('tap')
                 if tap_stats:

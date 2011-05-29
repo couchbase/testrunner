@@ -73,7 +73,7 @@ class SimpleSetGetTestBase(object):
                                                                    port=self.bucket_port,
                                                                    password='password')
             inserted, rejected = \
-            MemcachedClientHelper.load_bucket_and_return_the_keys(serverInfo=serverInfo,
+            MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[serverInfo],
                                                                    name=self.bucket_name,
                                                                    port=self.bucket_port,
                                                                    number_of_items=number_of_items,
@@ -94,24 +94,6 @@ class SimpleSetGetTestBase(object):
 
     def tearDown_bucket(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self.test)
-
-
-class SimpleSetGetMembaseBucketDefaultPort11211(unittest.TestCase):
-    simpleSetGetTestBase = None
-
-    def setUp(self):
-        self.simpleSetGetTestBase = SimpleSetGetTestBase()
-        self.simpleSetGetTestBase.setUp_bucket('default', 11211, 'membase', self)
-
-    def test_set_get_small_keys(self):
-        self.simpleSetGetTestBase.set_get_small_keys()
-
-    def test_set_get_large_keys(self):
-        self.simpleSetGetTestBase.set_get_large_keys()
-
-    def tearDown(self):
-        if self.simpleSetGetTestBase:
-            self.simpleSetGetTestBase.tearDown_bucket()
 
 
 class SimpleSetGetMembaseBucketNonDefaultDedicatedPort(unittest.TestCase):
