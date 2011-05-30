@@ -843,7 +843,8 @@ class RestParser(object):
             node.mcdMemoryReserved = nodeDictionary['mcdMemoryReserved']
             node.status = nodeDictionary['status']
             node.hostname = nodeDictionary['hostname']
-            node.clusterCompatibility = nodeDictionary['clusterCompatibility']
+            if 'clusterCompatibility' in nodeDictionary:
+                node.clusterCompatibility = nodeDictionary['clusterCompatibility']
             node.version = nodeDictionary['version']
             node.os = nodeDictionary['os']
             # todo : node.ports
