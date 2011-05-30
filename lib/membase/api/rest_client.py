@@ -322,11 +322,12 @@ class RestConnection(object):
             #sleep for 2 seconds
             time.sleep(2)
         if progress < 0:
+            log.error("rebalance progress code : {0}".format(progress))
             return False
         else:
             duration = time.time() - start
             log.info('rebalance progress took {0} seconds '.format(duration))
-            log.info("sleep for 10 seconds to give enough time for ejection to remove nodes")
+            log.info("sleep for 10 seconds after rebalance...")
             time.sleep(10)
             return True
 
