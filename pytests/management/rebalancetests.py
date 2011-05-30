@@ -12,7 +12,7 @@ from memcached.helper.data_helper import MemcachedClientHelper, MutationThread
 
 class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
-    def common_setup(input, bucket, testcase):
+    def common_setup(input, bucket, testcase, bucket_ram_ratio=(2.0 / 3.0)):
         log = logger.Logger.get_logger()
         servers = input.servers
         ClusterHelper.cleanup_cluster(servers)
@@ -25,8 +25,8 @@ class RebalanceBaseTest(unittest.TestCase):
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
-        bucket_ram = info.mcdMemoryReserved * 2 / 3
-        rest.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram, replicaNumber=1, proxyPort=11211)
+        bucket_ram = info.mcdMemoryReserved * bucket_ram_ratio
+        rest.create_bucket(bucket=bucket, ramQuotaMB=int(bucket_ram), replicaNumber=1, proxyPort=11211)
         BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[serverInfo],
                                                                      bucket_port=11211,
                                                                      test=testcase)
@@ -480,7 +480,7 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        RebalanceBaseTest.common_setup(self._input, 'default', self)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 4.0)
 
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self._servers, self)
@@ -507,8 +507,8 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
             MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                               ram_load_ratio=dgm_ratio * 100,
                                               value_size_distribution=distribution,
-                                              number_of_threads=40,
-                                              write_only=True)
+                                              number_of_threads=40)
+
             self.log.info('inserted {0} keys'.format(inserted_count))
             items_inserted_count += inserted_count
             final_replication_state = RestHelper(rest).wait_for_replication(120)
