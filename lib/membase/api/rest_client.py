@@ -310,12 +310,18 @@ class RestConnection(object):
     def monitorRebalance(self):
         start = time.time()
         progress = 0
-        while progress is not -1 and progress is not 100:
+        retry = 0
+        while progress is not -1 and progress is not 100 and retry < 20:
+            #-1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
+            if progress == -100:
+                log.error("unable to retrieve rebalanceProgress.try again in 2 seconds")
+                retry += 1
+            else:
+                retry = 0
             #sleep for 2 seconds
             time.sleep(2)
-
-        if progress == -1:
+        if progress < 0:
             return False
         else:
             duration = time.time() - start
@@ -336,6 +342,7 @@ class RestConnection(object):
                 log.error('unable to obtain rebalance progress ?')
                 log.error(content)
                 log.error(response)
+                percentage = -100
             elif response['status'] == '200':
                 parsed = json.loads(content)
                 if parsed.has_key('status'):
@@ -350,6 +357,11 @@ class RestConnection(object):
                                 break
                     else:
                         percentage = 100
+            else:
+                log.error('unable to obtain rebalance progress ?')
+                log.error(content)
+                log.error(response)
+                percentage = -100
             return percentage
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
