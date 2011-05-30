@@ -36,9 +36,9 @@ class FailoverBaseTest(unittest.TestCase):
             MemcachedClientHelper.flush_bucket(servers[0], 'default', 11211)
         except Exception:
             pass
+        BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
-        BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
 
     @staticmethod
     def choose_nodes(master, nodes, howmany):
