@@ -74,20 +74,28 @@ class RestHelper(object):
         return status_reached
 
     def wait_for_replication(self, timeout_in_seconds=120):
+        wait_count = 0
         end_time = time.time() + timeout_in_seconds
         while time.time() <= end_time:
             if self.all_nodes_replicated():
                 break
-            time.sleep(1)
+            wait_count += 1
+            if wait_count == 10:
+                log.info('replication state : {0}'.format(self.all_nodes_replicated(debug=True)))
+                wait_count = 0
+            time.sleep(5)
         log.info('replication state : {0}'.format(self.all_nodes_replicated()))
         return self.all_nodes_replicated()
 
-    def all_nodes_replicated(self):
+    def all_nodes_replicated(self, debug=False):
+        replicated = True
         nodes = self.rest.node_statuses()
         for node in nodes:
+            if debug:
+                log.info("node {0} replication state : {1}".format(node.id, node.replication))
             if node.replication != 1.0:
-                return False
-        return True
+                replicated = False
+        return replicated
 
 
 class RestConnection(object):
