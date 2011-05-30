@@ -1,4 +1,3 @@
-from Queue import Empty
 import copy
 from multiprocessing.process import Process
 from multiprocessing.queues import Queue
@@ -323,40 +322,43 @@ class MutationThread(threading.Thread):
 
 
 class ReaderThread(object):
-    def __init__(self, info, queue):
-        self.queue = queue
+    def __init__(self, info, keyset, queue):
         self.info = info
         self.log = logger.Logger.get_logger()
         self.error_seen = 0
+        self.keyset = keyset
         self.aborted = False
+        self.queue = queue
 
     def abort(self):
         self.aborted = True
 
     def _saw_error(self, key):
-        error_msg = "unable to get key {0}"
+#        error_msg = "unable to get key {0}"
         self.error_seen += 1
-        if self.error_seen < 500:
-            self.log.error(error_msg.format(key))
+#        if self.error_seen < 500:
+#            self.log.error(error_msg.format(key))
 
 
     def start(self):
-        queue_drained = False
         client = MemcachedClientHelper.create_memcached_client(self.info['ip'],
                                                                self.info['name'],
                                                                self.info['port'],
                                                                self.info['password'])
-        while not queue_drained and not self.aborted:
+        time.sleep(5)
+        while self.queue.empty():
+            selected = MemcachedClientHelper.random_pick(self.keyset)
+            selected['how_many'] -= 1
+            if selected['how_many'] < 1:
+                self.keyset.remove(selected)
+            key = "{0}-{1}-{2}".format(self.info['baseuuid'],
+                                       selected['size'],
+                                       int(selected['how_many']))
             try:
-                key = self.queue.get(timeout=10)
-                try:
-                #                    self.log.info("ReaderThread : {0}".format(time.time()))
-                    client.send_get(key)
-                #                    self.log.info("ReaderThread : {0}".format(time.time()))
-                except Exception:
-                    self._saw_error(key)
-            except Empty:
-                queue_drained = True
+                client.get(key)
+            except Exception:
+                self._saw_error(key)
+#        self.log.warn("attempted to get {0} keys before they are set".format(self.error_seen))
         client.close()
 
 #mutation ? let' do two cycles , first run and then try to mutate all those itesm
@@ -391,12 +393,13 @@ class WorkerThread(threading.Thread):
         self.override_vBucketId = override_vBucketId
         self.terminate_in_minutes = terminate_in_minutes
         self._base_uuid = uuid.uuid4()
+        self.queue = Queue()
         #let's create a read_thread
         self.info = {'ip': serverInfo.ip,
                      'name': self.name,
                      'port': self.port,
-                     'password': self.password}
-        self.queue = Queue()
+                     'password': self.password,
+                     'baseuuid': self._base_uuid}
         self.write_only = write_only
 
     def inserted_keys_count(self):
@@ -436,7 +439,7 @@ class WorkerThread(threading.Thread):
         #let's print out some status every 5 minutes..
 
         if not self.write_only:
-            self.reader = Process(target=start_reader_process, args=(self.info, self.queue))
+            self.reader = Process(target=start_reader_process, args=(self.info, self._value_list_copy, self.queue))
             self.reader.start()
         start_time = time.time()
         last_reported = start_time
@@ -467,8 +470,6 @@ class WorkerThread(threading.Thread):
                 if self.override_vBucketId >= 0:
                     client.vbucketId = self.override_vBucketId
                 client.set(key, 0, 0, selected['value'])
-                if not self.write_only:
-                    self.queue.put_nowait(key)
                 self._inserted_keys_count += 1
                 backoff_count = 0
             except MemcachedError as error:
@@ -486,7 +487,7 @@ class WorkerThread(threading.Thread):
                 self._rejected_keys.append(key)
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
                     break
-            #before closing the session let's try sending those items again
+                    #before closing the session let's try sending those items again
         retry = 3
         while retry > 0 and self._rejected_keys_count > 0:
             rejected_after_retry = []
@@ -508,13 +509,9 @@ class WorkerThread(threading.Thread):
             retry = - 1
         client.close()
         if not self.write_only:
-            self.reader.terminate()
+            self.queue.put_nowait("stop")
             self.reader.join()
-        try:
-            self.queue.close()
-        except Exception as ex:
-            log.error(ex)
 
 
-def start_reader_process(info, queue):
-    ReaderThread(info, queue).start()
+def start_reader_process(info, keyset, queue):
+    ReaderThread(info, keyset, queue).start()
