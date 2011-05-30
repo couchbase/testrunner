@@ -507,7 +507,8 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
             MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                               ram_load_ratio=dgm_ratio * 100,
                                               value_size_distribution=distribution,
-                                              number_of_threads=40)
+                                              number_of_threads=40,
+                                              write_only=True)
             self.log.info('inserted {0} keys'.format(inserted_count))
             items_inserted_count += inserted_count
             final_replication_state = RestHelper(rest).wait_for_replication(120)
