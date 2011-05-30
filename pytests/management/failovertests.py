@@ -28,6 +28,9 @@ class FailoverBaseTest(unittest.TestCase):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             shell.start_membase()
+            o, r = shell.execute_command("iptables -F")
+            shell.log_command_output(o, r)
+            #also flush the firewall rules
         log = logger.Logger.get_logger()
         log.info("10 seconds delay to wait for membase-server to start")
         time.sleep(10)
@@ -67,6 +70,19 @@ class FailoverTests(unittest.TestCase):
 
     def tearDown(self):
         FailoverBaseTest.common_tearDown(self._servers, self)
+
+    def test_failover_firewall_1_replica_1_percent(self):
+        self.common_test_body(1, 'firewall', 1)
+
+    def test_failover_firewall_1_replica_10_percent(self):
+        self.common_test_body(1, 'firewall', 10)
+
+
+    def test_failover_firewall_2_replica_1_percent(self):
+        self.common_test_body(2, 'firewall', 1)
+
+    def test_failover_firewall_3_replica_1_percent(self):
+        self.common_test_body(3, 'firewall', 1)
 
     def test_failover_normal_1_replica_1_percent(self):
         self.common_test_body(1, 'normal', 1)
@@ -153,19 +169,19 @@ class FailoverTests(unittest.TestCase):
             distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
         elif load_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
-        inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
-                                          ram_load_ratio=load_ratio,
-                                          value_size_distribution=distribution,
-                                          number_of_threads=20)
-        log.info('inserted {0} keys'.format(inserted_count))
+
         ClusterOperationHelper.add_all_nodes_or_assert(master, self._servers, credentials, self)
         nodes = rest.node_statuses()
         rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
         msg = "rebalance failed after adding these nodes {0}".format(nodes)
         self.assertTrue(rest.monitorRebalance(), msg=msg)
 
-
+        inserted_count, rejected_count =\
+        MemcachedClientHelper.load_bucket(servers=self._servers,
+                                          ram_load_ratio=load_ratio,
+                                          value_size_distribution=distribution,
+                                          number_of_threads=20)
+        log.info('inserted {0} keys'.format(inserted_count))
         nodes = rest.node_statuses()
         #while len(node) > replica * 2
         while (len(nodes) - replica) >= 1:
@@ -175,10 +191,15 @@ class FailoverTests(unittest.TestCase):
                 if failover_reason == 'stop_membase':
                     self.stop_membase(node)
                     log.info("10 seconds delay to wait for membase-server to shutdown")
-                    time.sleep(10)
+                    #wait for 5 minutes until node is down
+                    self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
+                                    msg="node status is not unhealthy even after waiting for 5 minutes")
+                elif failover_reason == "firewall":
+                    self.enable_firewall(node)
+                    self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
+                                    msg="node status is not unhealthy even after waiting for 5 minutes")
                 rest.fail_over(node.id)
                 log.info("failed over node : {0}".format(node.id))
-
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=[node.id for node in chosen])
             msg="rebalance failed while removing failover nodes {0}".format(chosen)
@@ -211,4 +232,16 @@ class FailoverTests(unittest.TestCase):
                 log.info("stopped membase server on {0}".format(server))
                 break
 
+#iptables -A INPUT -p tcp -i eth0 --dport 1000:20000 -j REJECT
 
+    def enable_firewall(self,node):
+        log = logger.Logger.get_logger()
+        for server in self._servers:
+            if server.ip == node.ip:
+                shell = RemoteMachineShellConnection(server)
+                o,r = shell.execute_command("iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+                shell.log_command_output(o, r)
+                log.info("enabled firewall on {0}".format(server))
+                o,r = shell.execute_command("iptables --list")
+                shell.log_command_output(o, r)
+                break

@@ -151,6 +151,11 @@ class MemcachedClient(object):
         parts=self._doCmd(memcacheConstants.CMD_GET, key, '')
         return self.__parseGet(parts)
 
+    def send_get(self, key):
+        """ sends a get message without parsing the response """
+        opaque = self.r.randint(0, 2 ** 32)
+        self._sendCmd(memcacheConstants.CMD_GET, key, '', opaque)
+
     def getl(self, key):
         """Get the value for a given key within the memcached server."""
         parts=self._doCmd(memcacheConstants.CMD_GET_LOCKED, key, '')

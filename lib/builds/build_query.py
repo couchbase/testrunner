@@ -54,7 +54,7 @@ class BuildQuery(object):
 
     def find_membase_build(self, builds, product, deliverable_type, os_architecture, build_version):
         for build in builds:
-            if build.product_version == build_version and product == build.product\
+            if build.product_version.find(build_version) != -1 and product == build.product\
                and build.architecture_type == os_architecture and deliverable_type == build.deliverable_type:
                 return build
         return None
