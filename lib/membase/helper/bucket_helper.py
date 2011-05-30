@@ -235,7 +235,7 @@ class BucketOperationHelper():
         keys_left_to_verify.extend(copy.deepcopy(keys))
         log_count = 0
         while retry < 6 and len(keys_left_to_verify) > 0:
-            msg = "trying to verify {0} keys - attempt #1 : {1} - {2} keys left to verify"
+            msg = "trying to verify {0} keys - attempt #{1} : {2} keys left to verify"
             log.info(msg.format(len(keys), retry, len(keys_left_to_verify)))
             keys_not_verified = []
             for key in keys_left_to_verify:
@@ -243,10 +243,10 @@ class BucketOperationHelper():
                     client.get(key=key)
                 except mc_bin_client.MemcachedError as error:
                     keys_not_verified.append(key)
-                    if log_count < 10000:
+                    if log_count < 1000:
                         log.error("key {0} does not exist because {1}".format(key, error))
                         log_count += 1
-            retry -= 1
+            retry += 1
             keys_left_to_verify = keys_not_verified
         client.close()
         if len(keys_left_to_verify) > 0:
