@@ -30,6 +30,7 @@ class FailoverBaseTest(unittest.TestCase):
             shell.start_membase()
             o, r = shell.execute_command("iptables -F")
             shell.log_command_output(o, r)
+            shell.disconnect()
             #also flush the firewall rules
         log = logger.Logger.get_logger()
         log.info("10 seconds delay to wait for membase-server to start")
@@ -229,6 +230,7 @@ class FailoverTests(unittest.TestCase):
             if server.ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
                 shell.stop_membase()
+                shell.disconnect()
                 log.info("stopped membase server on {0}".format(server))
                 break
 
@@ -244,4 +246,5 @@ class FailoverTests(unittest.TestCase):
                 log.info("enabled firewall on {0}".format(server))
                 o,r = shell.execute_command("iptables --list")
                 shell.log_command_output(o, r)
+                shell.disconnect()
                 break
