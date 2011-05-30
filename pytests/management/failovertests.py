@@ -206,8 +206,8 @@ class FailoverTests(unittest.TestCase):
             msg="rebalance failed while removing failover nodes {0}".format(chosen)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
 
-            final_replication_state = RestHelper(rest).wait_for_replication(120)
-            msg = "replication state after waiting for up to 2 minutes : {0}"
+            final_replication_state = RestHelper(rest).wait_for_replication(900)
+            msg = "replication state after waiting for up to 15 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
 
             start_time = time.time()
