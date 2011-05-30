@@ -63,7 +63,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                           ram_load_ratio=0.1,
                                                                           value_size_distribution=distribution)
                     log.info("wait until data is completely persisted on the disk")
-                    time.sleep(30)
+                    time.sleep(120)
         filtered_builds = []
         for build in builds:
             if build.deliverable_type == info.deliverable_type and\
