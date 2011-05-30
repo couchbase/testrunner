@@ -1,5 +1,6 @@
 from Queue import Empty
 import copy
+from multiprocessing.process import Process
 from multiprocessing.queues import Queue
 import time
 from random import Random
@@ -91,7 +92,7 @@ class MemcachedClientHelper(object):
                                        value_size_distribution=None,
                                        number_of_threads=50,
                                        override_vBucketId=-1,
-                                       write_only = False):
+                                       write_only=False):
         log = logger.Logger.get_logger()
         if not serverInfo:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
@@ -191,7 +192,7 @@ class MemcachedClientHelper(object):
                     value_size_distribution=None,
                     number_of_threads=50,
                     override_vBucketId=-1,
-                    write_only = False):
+                    write_only=False):
         inserted_keys_count = 0
         rejected_keys_count = 0
         log = logger.Logger.get_logger()
@@ -265,8 +266,8 @@ class MemcachedClientHelper(object):
         client.close()
         return
 
-class MutationThread(threading.Thread):
 
+class MutationThread(threading.Thread):
     def run(self):
         client = MemcachedClientHelper.create_memcached_client(self.serverInfo.ip,
                                                                self.name,
@@ -283,12 +284,12 @@ class MutationThread(threading.Thread):
             except MemcachedError:
                 self._rejected_count += 1
                 self._rejected_keys.append(key)
-#                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
+            #                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
             except Exception as e:
                 self.log.info(e)
                 self._rejected_count += 1
                 self._rejected_keys.append(key)
-#                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
+                #                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
                 client.close()
                 client = MemcachedClientHelper.create_memcached_client(self.serverInfo.ip,
                                                                        self.name,
@@ -321,9 +322,8 @@ class MutationThread(threading.Thread):
         self._rejected_keys = []
 
 
-class ReaderThread(threading.Thread):
+class ReaderThread(object):
     def __init__(self, info, queue):
-        threading.Thread.__init__(self)
         self.queue = queue
         self.info = info
         self.log = logger.Logger.get_logger()
@@ -340,23 +340,24 @@ class ReaderThread(threading.Thread):
             self.log.error(error_msg.format(key))
 
 
-    def run(self):
+    def start(self):
         queue_drained = False
+        client = MemcachedClientHelper.create_memcached_client(self.info['ip'],
+                                                               self.info['name'],
+                                                               self.info['port'],
+                                                               self.info['password'])
         while not queue_drained and not self.aborted:
             try:
                 key = self.queue.get(timeout=10)
                 try:
-                    client = MemcachedClientHelper.create_memcached_client(self.info['ip'],
-                                                                           self.info['name'],
-                                                                           self.info['port'],
-                                                                           self.info['password'])
-
+                #                    self.log.info("ReaderThread : {0}".format(time.time()))
                     client.send_get(key)
-                    client.close()
+                #                    self.log.info("ReaderThread : {0}".format(time.time()))
                 except Exception:
                     self._saw_error(key)
             except Empty:
                 queue_drained = True
+        client.close()
 
 #mutation ? let' do two cycles , first run and then try to mutate all those itesm
 #and return
@@ -391,12 +392,11 @@ class WorkerThread(threading.Thread):
         self.terminate_in_minutes = terminate_in_minutes
         self._base_uuid = uuid.uuid4()
         #let's create a read_thread
-        info = {'ip': serverInfo.ip,
-                'name': self.name,
-                'port': self.port,
-                'password': self.password}
+        self.info = {'ip': serverInfo.ip,
+                     'name': self.name,
+                     'port': self.port,
+                     'password': self.password}
         self.queue = Queue()
-        self.reader = ReaderThread(info, self.queue)
         self.write_only = write_only
 
     def inserted_keys_count(self):
@@ -436,6 +436,7 @@ class WorkerThread(threading.Thread):
         #let's print out some status every 5 minutes..
 
         if not self.write_only:
+            self.reader = Process(target=start_reader_process, args=(self.info, self.queue))
             self.reader.start()
         start_time = time.time()
         last_reported = start_time
@@ -485,7 +486,7 @@ class WorkerThread(threading.Thread):
                 self._rejected_keys.append(key)
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
                     break
-        #before closing the session let's try sending those items again
+            #before closing the session let's try sending those items again
         retry = 3
         while retry > 0 and self._rejected_keys_count > 0:
             rejected_after_retry = []
@@ -504,8 +505,16 @@ class WorkerThread(threading.Thread):
                     if len(rejected_after_retry) > self.ignore_how_many_errors:
                         break
             self._rejected_keys = rejected_after_retry
-            retry =- 1
+            retry = - 1
         client.close()
         if not self.write_only:
-            self.reader.abort()
+            self.reader.terminate()
             self.reader.join()
+        try:
+            self.queue.close()
+        except Exception as ex:
+            log.error(ex)
+
+
+def start_reader_process(info, queue):
+    ReaderThread(info, queue).start()
