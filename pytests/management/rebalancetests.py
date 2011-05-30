@@ -486,7 +486,7 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, dgm_ratio, distribution):
+    def _common_test_body(self, dgm_ratio, distribution, rebalance_in=1):
         master = self._servers[0]
         rest = RestConnection(master)
         items_inserted_count = 0
@@ -496,22 +496,24 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
-                                          number_of_threads=20)
+                                          number_of_threads=20,
+                                          write_only=True)
         items_inserted_count += inserted_count
 
         nodes = rest.node_statuses()
         while len(nodes) < len(self._servers):
-            self.assertTrue(RebalanceBaseTest.rebalance_in(self._servers, 1),
-                            msg="unable to add and rebalance another node")
+            self.assertTrue(RebalanceBaseTest.rebalance_in(self._servers, rebalance_in),
+                            msg="unable to add and rebalance more nodes")
             inserted_count, rejected_count =\
             MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                               ram_load_ratio=dgm_ratio * 100,
                                               value_size_distribution=distribution,
-                                              number_of_threads=40)
+                                              number_of_threads=40,
+                                              write_only=True)
 
             self.log.info('inserted {0} keys'.format(inserted_count))
             items_inserted_count += inserted_count
-            final_replication_state = RestHelper(rest).wait_for_replication(120)
+            final_replication_state = RestHelper(rest).wait_for_replication(1200)
             msg = "replication state after waiting for up to 2 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
             start_time = time.time()
@@ -531,6 +533,23 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
     def test_1_5x(self):
         distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
         self._common_test_body(1.5, distribution)
+
+    def test_1_5x_cluster_half(self):
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(1.5, distribution, len(self._servers) / 2)
+
+    def test_1_5x_cluster_one_third(self):
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(1.5, distribution, len(self._servers) / 3)
+
+    def test_5x_cluster_half(self):
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(5, distribution, len(self._servers) / 2)
+
+    def test_5x_cluster_one_third(self):
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(5, distribution, len(self._servers) / 3)
+
 
     def test_1_5x_large_values(self):
         distribution = {1 * 512: 0.4, 50 * 1024: 0.5, 2 * 1024: 0.1}
