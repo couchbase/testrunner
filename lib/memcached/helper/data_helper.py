@@ -346,7 +346,7 @@ class ReaderThread(object):
                                                                self.info['port'],
                                                                self.info['password'])
         time.sleep(5)
-        while self.queue.empty():
+        while self.queue.empty() and len(self.keyset) > 0:
             selected = MemcachedClientHelper.random_pick(self.keyset)
             selected['how_many'] -= 1
             if selected['how_many'] < 1:
@@ -473,7 +473,7 @@ class WorkerThread(threading.Thread):
                 self._inserted_keys_count += 1
                 backoff_count = 0
             except MemcachedError as error:
-                self.log.info(error.status)
+                self.log.error("memcached error {0} {1}".format(error.status,error.msg))
                 if error.status == 134:
                     backoff_count += 1
                     if backoff_count < 5:
@@ -487,6 +487,13 @@ class WorkerThread(threading.Thread):
                 self._rejected_keys.append(key)
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
                     break
+            except Exception as ex:
+                self.log.error(ex)
+                self._rejected_keys_count += 1
+                self._rejected_keys.append(key)
+                if len(self._rejected_keys) > self.ignore_how_many_errors:
+                    break
+
                     #before closing the session let's try sending those items again
         retry = 3
         while retry > 0 and self._rejected_keys_count > 0:
