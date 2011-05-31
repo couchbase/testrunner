@@ -12,7 +12,7 @@ from memcached.helper.data_helper import MemcachedClientHelper, MutationThread
 
 class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
-    def common_setup(input, bucket, testcase, bucket_ram_ratio=(2.0 / 3.0)):
+    def common_setup(input, bucket, testcase, bucket_ram_ratio=(2.0 / 3.0), replica=1):
         log = logger.Logger.get_logger()
         servers = input.servers
         ClusterHelper.cleanup_cluster(servers)
@@ -26,7 +26,7 @@ class RebalanceBaseTest(unittest.TestCase):
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         bucket_ram = info.mcdMemoryReserved * bucket_ram_ratio
-        rest.create_bucket(bucket=bucket, ramQuotaMB=int(bucket_ram), replicaNumber=1, proxyPort=11211)
+        rest.create_bucket(bucket=bucket, ramQuotaMB=int(bucket_ram), replicaNumber=replica, proxyPort=11211)
         BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[serverInfo],
                                                                      bucket_port=11211,
                                                                      test=testcase)
@@ -164,6 +164,37 @@ class IncrementalRebalanceInTests(unittest.TestCase):
     def test_dgm_300(self):
         self._common_test_body(300.0)
 
+    def test_small_load_2_replica(self):
+        self._common_test_body(0.1)
+
+    def test_medium_load_2_replica(self):
+        self._common_test_body(10.0)
+
+    def test_heavy_load_2_replica(self):
+        self._common_test_body(20.0)
+
+    def test_dgm_150_2_replica(self):
+        self._common_test_body(150.0)
+
+    def test_dgm_300_2_replica(self):
+        self._common_test_body(300.0)
+
+    def test_small_load_3_replica(self):
+        self._common_test_body(0.1)
+
+    def test_medium_load_3_replica(self):
+        self._common_test_body(10.0)
+
+    def test_heavy_load_3_replica(self):
+        self._common_test_body(20.0)
+
+    def test_dgm_150_3_replica(self):
+        self._common_test_body(150.0)
+
+    def test_dgm_300_3_replica(self):
+        self._common_test_body(300.0)
+
+
 
 #disk greater than memory
 #class IncrementalRebalanceInAndOutTests(unittest.TestCase):
@@ -265,6 +296,38 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
 
     def test_dgm_300(self):
         self._common_test_body(300.0)
+
+    def test_small_load_2_replica(self):
+        self._common_test_body(1.0)
+
+    def test_medium_load_2_replica(self):
+        self._common_test_body(10.0)
+
+    def test_heavy_load_2_replica(self):
+        self._common_test_body(40.0)
+
+    def test_dgm_150_2_replica(self):
+        self._common_test_body(150.0)
+
+    def test_dgm_300_2_replica(self):
+        self._common_test_body(300.0)
+
+    def test_small_load_3_replica(self):
+        self._common_test_body(1.0)
+
+    def test_medium_load_3_replica(self):
+        self._common_test_body(10.0)
+
+    def test_heavy_load_3_replica(self):
+        self._common_test_body(40.0)
+
+    def test_dgm_150_3_replica(self):
+        self._common_test_body(150.0)
+
+    def test_dgm_300_3_replica(self):
+        self._common_test_body(300.0)
+
+
 
 
 #this test case will add all the nodes and then start removing them one by one
@@ -480,7 +543,7 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 4.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
 
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self._servers, self)
@@ -501,12 +564,12 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         items_inserted_count += inserted_count
 
         nodes = rest.node_statuses()
-        while len(nodes) < len(self._servers):
+        while len(nodes) <= len(self._servers):
             self.assertTrue(RebalanceBaseTest.rebalance_in(self._servers, rebalance_in),
                             msg="unable to add and rebalance more nodes")
             inserted_count, rejected_count =\
             MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
-                                              ram_load_ratio=dgm_ratio * 100,
+                                              ram_load_ratio=dgm_ratio * 50,
                                               value_size_distribution=distribution,
                                               number_of_threads=40,
                                               write_only=True)
@@ -535,36 +598,36 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         self._common_test_body(1.5, distribution)
 
     def test_1_5x_cluster_half(self):
-        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution, len(self._servers) / 2)
 
     def test_1_5x_cluster_one_third(self):
-        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution, len(self._servers) / 3)
 
     def test_5x_cluster_half(self):
-        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution, len(self._servers) / 2)
 
     def test_5x_cluster_one_third(self):
-        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution, len(self._servers) / 3)
 
 
     def test_1_5x_large_values(self):
-        distribution = {1 * 512: 0.4, 50 * 1024: 0.5, 2 * 1024: 0.1}
+        distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution)
 
     def test_2_x(self):
-        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        distribution = {2 * 1024: 0.9}
         self._common_test_body(2, distribution)
 
     def test_3_x(self):
-        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        distribution = {2 * 1024: 0.9}
         self._common_test_body(3, distribution)
 
     def test_5_x(self):
-        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution)
 
 

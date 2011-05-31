@@ -85,6 +85,10 @@ class FailoverTests(unittest.TestCase):
     def test_failover_firewall_3_replica_1_percent(self):
         self.common_test_body(3, 'firewall', 1)
 
+    def test_failover_firewall_3_replica_10_percent(self):
+        self.common_test_body(3, 'firewall', 10)
+
+
     def test_failover_normal_1_replica_1_percent(self):
         self.common_test_body(1, 'normal', 1)
 
@@ -206,22 +210,24 @@ class FailoverTests(unittest.TestCase):
             msg="rebalance failed while removing failover nodes {0}".format(chosen)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
 
-            final_replication_state = RestHelper(rest).wait_for_replication(900)
-            msg = "replication state after waiting for up to 15 minutes : {0}"
-            self.log.info(msg.format(final_replication_state))
+            nodes = rest.node_statuses()
+            if len(nodes) / (1 + replica) >= 1:
+                final_replication_state = RestHelper(rest).wait_for_replication(900)
+                msg = "replication state after waiting for up to 15 minutes : {0}"
+                self.log.info(msg.format(final_replication_state))
 
-            start_time = time.time()
-            stats = rest.get_bucket_stats()
-            while time.time() < (start_time + 120) and stats["curr_items"] != inserted_count:
-                self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], inserted_count))
-                time.sleep(5)
+                start_time = time.time()
                 stats = rest.get_bucket_stats()
-            RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
-            self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], inserted_count))
-            stats = rest.get_bucket_stats()
-            msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
-            self.assertEquals(stats["curr_items"], inserted_count,
-                              msg=msg.format(stats["curr_items"], inserted_count))
+                while time.time() < (start_time + 120) and stats["curr_items"] != inserted_count:
+                    self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], inserted_count))
+                    time.sleep(5)
+                    stats = rest.get_bucket_stats()
+                RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
+                self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], inserted_count))
+                stats = rest.get_bucket_stats()
+                msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
+                self.assertEquals(stats["curr_items"], inserted_count,
+                                  msg=msg.format(stats["curr_items"], inserted_count))
             nodes = rest.node_statuses()
 
     def stop_membase(self,node):
