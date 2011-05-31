@@ -51,6 +51,7 @@ class MemcachedClientHelper(object):
                 #let's assume overhead per key is 64 bytes ?
                 how_many = int(space_to_fill / (size + 250) * probability)
                 payload = MemcachedClientHelper.create_value('*', size)
+                log.info("payload size {0}".format(len(payload)))
                 list.append({'size': size, 'value': payload, 'how_many': how_many})
         else:
             for size, probability in value_size_distribution.items():
@@ -473,7 +474,7 @@ class WorkerThread(threading.Thread):
                 self._inserted_keys_count += 1
                 backoff_count = 0
             except MemcachedError as error:
-                self.log.error("memcached error {0} {1}".format(error.status,error.msg))
+                self.log.error("memcached error {0} {1} from {2}".format(error.status, error.msg, self.serverInfo.ip))
                 if error.status == 134:
                     backoff_count += 1
                     if backoff_count < 5:
@@ -488,7 +489,7 @@ class WorkerThread(threading.Thread):
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
                     break
             except Exception as ex:
-                self.log.error(ex)
+                self.log.error("error {0} from {1}".format(ex, self.serverInfo.ip))
                 self._rejected_keys_count += 1
                 self._rejected_keys.append(key)
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
