@@ -63,17 +63,35 @@ class RebalanceHelper():
 
     @staticmethod
     def verify_items_count(master,servers,bucket,replica_factor):
+        #print out vb_pending_num,vb_active_num,vb_replica_num as well
         rest = RestConnection(master)
         master_stats = rest.get_bucket_stats(bucket)
+        vbucket_active_sum = 0
+        vbucket_replica_sum = 0
+        vbucket_pending_sum = 0
         all_server_stats = []
         for server in servers:
             #get the stats
             server_stats = rest.get_bucket_stats_for_node(bucket, server.ip)
-            all_server_stats.append(server_stats)
+            all_server_stats.append((server,server_stats))
         sum = 0
-        for single_stats in all_server_stats:
+        for server, single_stats in all_server_stats:
             sum += single_stats["curr_items"]
-        log.info('sum : {0}'.format(sum))
+            log.info("curr_items from {0} : {1}".format(server.ip, single_stats["curr_items"]))
+            if 'vb_pending_num' in single_stats:
+                vbucket_pending_sum += single_stats['vb_pending_num']
+                log.info("vb_pending_num from {0} : {1}".format(server.ip, single_stats["vb_pending_num"]))
+            if 'vb_active_num' in single_stats:
+                vbucket_active_sum += single_stats['vb_active_num']
+                log.info("vb_active_num from {0} : {1}".format(server.ip, single_stats["vb_active_num"]))
+            if 'vb_replica_num' in single_stats:
+                vbucket_replica_sum += single_stats['vb_replica_num']
+                log.info("vb_replica_num from {0} : {1}".format(server.ip, single_stats["vb_replica_num"]))
+
+        msg = "summation of vb_active_num : {0} vb_pending_num : {1} vb_replica_num : {2}"
+        log.info(msg.format(vbucket_active_sum, vbucket_pending_sum, vbucket_replica_sum))
+        msg = 'sum : {0} and sum * replica_factor ({1}) : {2}'
+        log.info(msg.format(sum, replica_factor, (sum * (replica_factor + 1))))
         log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
         return (sum * (replica_factor + 1)) == master_stats["curr_items_tot"]
 
