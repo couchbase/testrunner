@@ -109,6 +109,7 @@ class InstallTest(unittest.TestCase):
         self.log.info("waiting for all installer threads to complete...")
         for t in threads:
             self.log.info("thread {0} finished".format(t))
+            t.join()
 
 
     def test_install(self):
