@@ -55,12 +55,12 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                              test=self)
                 if insert_data:
                     #let's insert some data
-                    distribution = {10: 0.5, 20: 0.5}
+                    distribution = {30 * 1024: 0.5, 20: 0.5}
                     inserted_keys, rejected_keys =\
                     MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
                                                                           name='default',
                                                                           port=11211,
-                                                                          ram_load_ratio=0.1,
+                                                                          ram_load_ratio=0.5,
                                                                           value_size_distribution=distribution)
                     log.info("wait until data is completely persisted on the disk")
                     time.sleep(120)
