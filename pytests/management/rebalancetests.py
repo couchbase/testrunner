@@ -41,6 +41,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def rebalance_in(servers,how_many):
+        servers_rebalanced = []
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
         nodes = rest.node_statuses()
@@ -54,6 +55,7 @@ class RebalanceBaseTest(unittest.TestCase):
         for server in selection:
             if not server.ip in nodeIps:
                 toBeAdded.append(server)
+                servers_rebalanced.append(server)
             if len(toBeAdded) == how_many:
                 break
 
@@ -69,7 +71,7 @@ class RebalanceBaseTest(unittest.TestCase):
             msg = "successfully rebalanced out selected nodes from the cluster ? {0}"
             log.info(msg.format(result))
             return result
-        return False
+        return False,servers_rebalanced
 
 #load data. add one node rebalance , rebalance out
 class IncrementalRebalanceInTests(unittest.TestCase):
@@ -346,6 +348,9 @@ class IncrementalRebalanceOut(unittest.TestCase):
     def test_rebalance_out_medium_load(self):
         self.test_rebalance_out(10)
 
+    def test_rebalance_out_dgm_2x(self):
+        self.test_rebalance_out(200)
+
     def test_rebalance_out(self, ratio):
         ram_ratio = (ratio / (len(self._servers)))
         #the ratio is relative to the number of nodes ?
@@ -565,8 +570,9 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
 
         nodes = rest.node_statuses()
         while len(nodes) <= len(self._servers):
-            self.assertTrue(RebalanceBaseTest.rebalance_in(self._servers, rebalance_in),
-                            msg="unable to add and rebalance more nodes")
+            rebalanced_in, which_servers = RebalanceBaseTest.rebalance_in(self._servers, rebalance_in)
+            self.assertTrue(rebalanced_in, msg="unable to add and rebalance more nodes")
+            rebalanced_servers.extend(rebalance_in)
             inserted_count, rejected_count =\
             MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                               ram_load_ratio=dgm_ratio * 50,
@@ -577,7 +583,7 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
             self.log.info('inserted {0} keys'.format(inserted_count))
             items_inserted_count += inserted_count
             final_replication_state = RestHelper(rest).wait_for_replication(1200)
-            msg = "replication state after waiting for up to 2 minutes : {0}"
+            msg = "replication state after waiting for up to 20 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
             start_time = time.time()
             stats = rest.get_bucket_stats()
