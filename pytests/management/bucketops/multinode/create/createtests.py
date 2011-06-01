@@ -7,6 +7,7 @@ from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 import time
+import load_runner
 
 class CreateMembaseBucketsTests(unittest.TestCase):
 
@@ -47,91 +48,40 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         ClusterOperationHelper.cleanup_cluster(servers=self.servers)
 
 
-    # create maximum number of buckets (server memory / 100MB)
+    def test_max_buckets_medium_load(self):
+        self.test_buckets(bucket_count=0)
+
+    def test_two_buckets_medium_load(self):
+        self.test_buckets(bucket_count=2)
+
+    def test_five_buckets_medium_load(self):
+        self.test_buckets(bucket_count=5)
+
     def test_max_buckets(self):
-        rest = RestConnection(self.master)
-        info = rest.get_nodes_self()
-        rest.init_cluster(username=self.master.rest_username,
-                          password=self.master.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
-        bucket_ram = 100
-        bucket_count = info.mcdMemoryReserved / bucket_ram
+        self.test_buckets(bucket_count=0)
 
-        for i in range(bucket_count):
-            bucket_name = 'max_buckets-{0}'.format(uuid.uuid4())
-            rest.create_bucket(bucket=bucket_name,
-                               ramQuotaMB=bucket_ram,
-                               replicaNumber=1,
-                               authType='sasl',
-                               saslPassword='')
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert(self.servers,
-                                                                         11211,
-                                                                         test=unittest,
-                                                                         bucket_name=bucket_name,
-                                                                         bucket_password='')
-        buckets = []
-        try:
-            buckets = rest.get_buckets()
-        except:
-            self.log.info('15 seconds sleep before calling get_buckets again...')
-            time.sleep(15)
-            buckets = rest.get_buckets()
-        if len(buckets) != bucket_count:
-            msg = 'tried to create {0} buckets, only created {1}'.format(bucket_count, len(buckets))
-            self.log.error(msg)
-            unittest.fail(msg=msg)
-
-    # if cluster cannot support 10 buckets, just return
     def test_ten_buckets(self):
-        rest = RestConnection(self.master)
-        info = rest.get_nodes_self()
-        rest.init_cluster(username=self.master.rest_username,
-                          password=self.master.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
-        bucket_ram = 100
-        bucket_count = info.mcdMemoryReserved / bucket_ram
-        if bucket_count < 10:
-            self.log.error('node does not have enough capacity for 10 buckets, exiting test')
-            return
-        bucket_count = 10
+        self.test_buckets(bucket_count=10)
 
-        for i in range(bucket_count):
-            bucket_name = 'max_buckets-{0}'.format(uuid.uuid4())
-            rest.create_bucket(bucket=bucket_name,
-                               ramQuotaMB=bucket_ram,
-                               replicaNumber=1,
-                               authType='sasl',
-                               saslPassword='')
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert(self.servers,
-                                                                         11211,
-                                                                         test=unittest,
-                                                                         bucket_name=bucket_name,
-                                                                         bucket_password='')
-        buckets = []
-        try:
-            buckets = rest.get_buckets()
-        except:
-            self.log.info('15 seconds sleep before calling get_buckets again...')
-            time.sleep(15)
-            buckets = rest.get_buckets()
-        if len(buckets) != bucket_count:
-            msg = 'tried to create {0} buckets, only created {1}'.format(bucket_count, len(buckets))
-            self.log.error(msg)
-            unittest.fail(msg=msg)
-
-    # if cluster cannot support 20 buckets, just return
     def test_twenty_buckets(self):
+        self.test_buckets(bucket_count=20)
+
+    # base function that other tests can call
+    # if buckets > 0 then the test will exit if the cluster doesn't have enough space
+    # if buckets = 0 then the test will create max number of buckets
+    def test_buckets(self, bucket_count=0):
         rest = RestConnection(self.master)
         info = rest.get_nodes_self()
         rest.init_cluster(username=self.master.rest_username,
                           password=self.master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         bucket_ram = 100
-        bucket_count = info.mcdMemoryReserved / bucket_ram
-        if bucket_count < 20:
-            self.log.error('node does not have enough capacity for 20 buckets, exiting test')
+
+        if bucket_count == 0:
+            bucket_count = info.mcdMemoryReserved / bucket_ram
+        if bucket_count > info.mcdMemoryReserved / bucket_ram:
+            self.log.error('node does not have enough capacity for {0} buckets, exiting test'.format(bucket_count))
             return
-        bucket_count = 20
 
         for i in range(bucket_count):
             bucket_name = 'max_buckets-{0}'.format(uuid.uuid4())
@@ -145,6 +95,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
                                                                          test=unittest,
                                                                          bucket_name=bucket_name,
                                                                          bucket_password='')
+
         buckets = []
         try:
             buckets = rest.get_buckets()
