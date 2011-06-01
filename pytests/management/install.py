@@ -37,8 +37,10 @@ class InstallTest(unittest.TestCase):
     def test_reset(self):
         for serverInfo in self.servers:
             remote_client = RemoteMachineShellConnection(serverInfo)
+            remote_client.stop_membase()
             remote_client.start_membase()
             remote_client.disconnect()
+        time.sleep(10)
 
     def _test_install(self,serverInfo,version,builds):
         query = BuildQuery()
