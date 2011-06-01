@@ -60,7 +60,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                     MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
                                                                           name='default',
                                                                           port=11211,
-                                                                          ram_load_ratio=5.0,
+                                                                          ram_load_ratio=10.0,
                                                                           number_of_items=200000,
                                                                           value_size_distribution=distribution)
                     log.info("wait until data is completely persisted on the disk")
