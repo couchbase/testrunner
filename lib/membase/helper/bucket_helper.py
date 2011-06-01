@@ -175,6 +175,19 @@ class BucketOperationHelper():
                     except Exception as ex:
                         log.error("general error : {0} while setting key ".format(ex))
                         time.sleep(3)
+                        # problem with the connection, try to reconnect
+                        client = None
+                        while not client:
+                            if time.time() > end_time:
+                                test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                            try:
+                                client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
+                                                                                       bucket_name,
+                                                                                       bucket_port,
+                                                                                       bucket_password)
+                            except:
+                                client = None
+                                time.sleep(3)
 
             client.flush()
             time.sleep(10)
