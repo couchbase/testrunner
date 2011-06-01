@@ -548,7 +548,6 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
 
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self._servers, self)
@@ -600,39 +599,59 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_1_5x(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
         self._common_test_body(1.5, distribution)
 
+    def test_1_5x_cluster_half_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=2)
+        distribution = {2 * 1024: 0.9}
+        self._common_test_body(1.5, distribution, len(self._servers) / 2)
+
+    def test_1_5x_cluster_half_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=3)
+        distribution = {2 * 1024: 0.9}
+        self._common_test_body(1.5, distribution, len(self._servers) / 2)
+
+
     def test_1_5x_cluster_half(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution, len(self._servers) / 2)
 
     def test_1_5x_cluster_one_third(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution, len(self._servers) / 3)
 
     def test_5x_cluster_half(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution, len(self._servers) / 2)
 
     def test_5x_cluster_one_third(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution, len(self._servers) / 3)
 
 
     def test_1_5x_large_values(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution)
 
     def test_2_x(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(2, distribution)
 
     def test_3_x(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(3, distribution)
 
     def test_5_x(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution)
 
