@@ -572,7 +572,7 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         while len(nodes) <= len(self._servers):
             rebalanced_in, which_servers = RebalanceBaseTest.rebalance_in(self._servers, rebalance_in)
             self.assertTrue(rebalanced_in, msg="unable to add and rebalance more nodes")
-            rebalanced_servers.extend(rebalance_in)
+            rebalanced_servers.extend(which_servers)
             inserted_count, rejected_count =\
             MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                               ram_load_ratio=dgm_ratio * 50,
