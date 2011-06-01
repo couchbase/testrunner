@@ -205,6 +205,9 @@ class FailoverTests(unittest.TestCase):
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
                 rest.fail_over(node.id)
                 log.info("failed over node : {0}".format(node.id))
+            #REMOVEME -
+            log.info("10 seconds sleep after failover before invoking rebalance...")
+            time.sleep(10)
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=[node.id for node in chosen])
             msg="rebalance failed while removing failover nodes {0}".format(chosen)
@@ -215,6 +218,13 @@ class FailoverTests(unittest.TestCase):
                 final_replication_state = RestHelper(rest).wait_for_replication(900)
                 msg = "replication state after waiting for up to 15 minutes : {0}"
                 self.log.info(msg.format(final_replication_state))
+                self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                                              servers=self._servers,
+                                                                              bucket='default',
+                                                                              port=11211,
+                                                                              replica_factor=replica,
+                                                                              timeout_in_seconds=600),
+                                msg="replication was completed but sum(curr_items) dont match the curr_items_total")
 
                 start_time = time.time()
                 stats = rest.get_bucket_stats()

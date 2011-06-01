@@ -553,7 +553,7 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, dgm_ratio, distribution, rebalance_in=1):
+    def _common_test_body(self, dgm_ratio, distribution, rebalance_in=1, replica=1):
         master = self._servers[0]
         rest = RestConnection(master)
         items_inserted_count = 0
@@ -584,6 +584,15 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
             final_replication_state = RestHelper(rest).wait_for_replication(1200)
             msg = "replication state after waiting for up to 20 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
+
+            self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                                          servers=self._servers,
+                                                                          bucket='default',
+                                                                          port=11211,
+                                                                          replica_factor=replica,
+                                                                          timeout_in_seconds=600),
+                            msg="replication was completed but sum(curr_items) dont match the curr_items_total")
+
             start_time = time.time()
             stats = rest.get_bucket_stats()
             while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
@@ -599,71 +608,69 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_1_5x(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
-        self._common_test_body(1.5, distribution)
+        self._common_test_body(1.5, distribution, replica=1)
 
     def test_1_5x_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=2)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0, replica=2)
         distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
-        self._common_test_body(1.5, distribution)
+        self._common_test_body(1.5, distribution, replica=2)
 
     def test_1_5x_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=2)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0, replica=3)
         distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
-        self._common_test_body(1.5, distribution)
-
-
+        self._common_test_body(1.5, distribution, replica=3)
 
     def test_1_5x_cluster_half_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=2)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0, replica=2)
         distribution = {2 * 1024: 0.9}
-        self._common_test_body(1.5, distribution, len(self._servers) / 2)
+        self._common_test_body(1.5, distribution, len(self._servers) / 2, replica=2)
 
     def test_1_5x_cluster_half_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=3)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0, replica=3)
         distribution = {2 * 1024: 0.9}
-        self._common_test_body(1.5, distribution, len(self._servers) / 2)
+        self._common_test_body(1.5, distribution, len(self._servers) / 2, replica=3)
 
 
     def test_1_5x_cluster_half(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution, len(self._servers) / 2)
 
     def test_1_5x_cluster_one_third(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution, len(self._servers) / 3)
 
     def test_5x_cluster_half(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution, len(self._servers) / 2)
 
     def test_5x_cluster_one_third(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution, len(self._servers) / 3)
 
 
     def test_1_5x_large_values(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution)
 
     def test_2_x(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(2, distribution)
 
     def test_3_x(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(3, distribution)
 
     def test_5_x(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution)
 
