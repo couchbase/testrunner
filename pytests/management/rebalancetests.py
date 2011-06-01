@@ -70,7 +70,7 @@ class RebalanceBaseTest(unittest.TestCase):
             result = rest.monitorRebalance()
             msg = "successfully rebalanced out selected nodes from the cluster ? {0}"
             log.info(msg.format(result))
-            return result
+            return result,servers_rebalanced
         return False,servers_rebalanced
 
 #load data. add one node rebalance , rebalance out
