@@ -110,6 +110,11 @@ if __name__ == "__main__":
                 xunit.add_test(name=name, status='fail', time=time_taken,
                                errorType='membase.error', errorMessage=failure_string)
                 break
+            for error in result.errors:
+                test_case, error_string = error
+                xunit.add_test(name=name, status='fail', time=time_taken,
+                               errorType='membase.error', errorMessage=error_string)
+                break
         else:
             xunit.add_test(name=name, status='pass', time=time_taken)
 
