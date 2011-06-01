@@ -134,41 +134,54 @@ class BucketOperationHelper():
         for serverInfo in servers:
             msg = "waiting for memcached bucket : {0} in {1}:{2} to accept set ops"
             log.info(msg.format(bucket_name, serverInfo.ip, bucket_port))
-            inserted_keys = []
             start_time = time.time()
-            warmed_up_vBuckets = []
+            end_time = start_time + 300
             client = None
-            while time.time() <= (start_time + 120):
-                key = '{0}'.format(uuid.uuid4())
+
+            # build up a list of 1024 keys, 1 per vbucket
+            keys = {}
+            while len(keys) < 1024:
+                if time.time() > end_time:
+                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                key = str(uuid.uuid4())
                 vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+                keys[vBucketId] = key
+
+            # wait for connect to work
+            while not client:
+                if time.time() > end_time:
+                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
                 try:
                     client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
                                                                            bucket_name,
                                                                            bucket_port,
                                                                            bucket_password)
-                    client.vbucketId = vBucketId
-                    client.set(key, 0, 0, key)
-                    inserted_keys.append(key)
-                    if not vBucketId in warmed_up_vBuckets:
-                        warmed_up_vBuckets.append(vBucketId)
-                    if len(warmed_up_vBuckets) == 1024:
-                        break
-                except mc_bin_client.MemcachedError as error:
-                    msg = "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to bucket : {2}"
-                    log.error(msg.format(error.status, key, vBucketId))
-                    time.sleep(3)
-                except Exception as ex:
-                    log.error("general error : {0} while setting key ".format(ex))
-                    time.sleep(3)
-            if client:
-                client.flush()
-                time.sleep(10)
-                client.stats('reset')
-                client.close()
-            if len(warmed_up_vBuckets) < 1:
-                test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
-            else:
-                log.info("inserted {0} keys to all {1} vBuckets".format(len(inserted_keys),len(warmed_up_vBuckets)))
+                except:
+                    client = None
+
+            # wait for all vbuckets to be ready
+            for i in range(1024):
+                while keys[i]:
+                    if time.time() > end_time:
+                        test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                    try:
+                        client.vbucketId = i
+                        client.set(keys[i], 0, 0, keys[i])
+                        keys[i] = ''
+                    except mc_bin_client.MemcachedError as error:
+                        msg = "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to vbucket : {2}"
+                        log.error(msg.format(error.status, key, vBucketId))
+                        time.sleep(3)
+                    except Exception as ex:
+                        log.error("general error : {0} while setting key ".format(ex))
+                        time.sleep(3)
+
+            client.flush()
+            time.sleep(10)
+            client.stats('reset')
+            client.close()
+
+            log.info("inserted {0} keys to all {1} vBuckets".format(len(keys),1024))
 
 
     @staticmethod
@@ -300,9 +313,9 @@ class BucketOperationHelper():
             except mc_bin_client.MemcachedError as error:
                 log.error(error)
                 client.close()
-                log.error("unable to push key : {0} to bucket : {1}".format(key, client.vbucketId))
+                log.error("unable to push key : {0} to vbucket : {1}".format(key, client.vbucketId))
                 if test:
-                    test.fail("unable to push key : {0} to bucket : {1}".format(key, client.vbucketId))
+                    test.fail("unable to push key : {0} to vbucket : {1}".format(key, client.vbucketId))
                 else:
                     break
         client.close()
