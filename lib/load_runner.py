@@ -32,8 +32,15 @@ class LoadThread(threading.Thread):
 
         self.mutation_index = 0
         self.get_index = 0
-        self.mutation_max = 0
         self.value_failures = 0
+        self.backoff = 0
+
+        self.mutation_index_max = 0
+        self.time_prev = 0
+        self.items = 0
+        self.operations = 0
+        self.time = 0
+        self.size = 0
 
         # cache info
         self.cache_data = load_info['operation_info'].get('cache_data', False)
@@ -60,6 +67,14 @@ class LoadThread(threading.Thread):
 
         self.uuid = uuid.uuid4()
 
+        # limit info
+        # all but time needs to be divided equally amongst threads
+        threads = int(load_info['operation_info'].get('threads', 0))
+        self.limit_items = int(load_info['limit_info'].get('items', 0) / threads)
+        self.limit_operations = int(load_info['limit_info'].get('operations', 0) / threads)
+        self.limit_time = int(load_info['limit_info'].get('time', 0))
+        self.limit_size = int(load_info['limit_info'].get('size', 0) / threads)
+
         # connect
         self.server = mc_bin_client.MemcachedClient(self.server_ip, self.server_port)
         if self.bucket_name or self.bucket_password:
@@ -76,28 +91,50 @@ class LoadThread(threading.Thread):
             if self.stopped:
                 return
 
+            # stop thread if we hit a limit (first limit we hit ends the thread)
+            if self.limit_items and self.items > self.limit_items:
+                return
+            if self.limit_operations and self.operations > self.limit_operations:
+                return
+            if self.limit_time and self.time > self.limit_time:
+                return
+            if self.limit_size and self.size > self.limit_size:
+                return
+
             # do the actual work
             operation = self.get_operation()
             if operation == 'set':
                 key = self.name + '_' + `self.get_mutation_key()`
                 try:
 #                    print `self.mutation_index` + " : " + `self.get_mutation_key()`
-                    self.server.set(key, 0, 0, self.get_data())
-                    if self.get_mutation_key() > self.mutation_max:
-                        self.mutation_max = self.get_mutation_key()
+                    data = self.get_data()
+                    self.server.set(key, 0, 0, data)
+                    self.operations += 1
+                    self.backoff -= 1
+                    if self.get_mutation_key() > self.mutation_index_max:
+                        self.mutation_index_max = self.get_mutation_key()
+                        # looks like this will miss the first mutation
+                        self.items += 1
                     self.mutation_index += 1
                 except mc_bin_client.MemcachedError as e:
+                    if self.backoff < 0:
+                        self.backoff = 0
+                    if self.backoff > 10:
+                        self.backoff = 10
+                    self.backoff += 1
                     # temporary error
                     if e.status == 134:
-                        time.sleep(1)
+                        time.sleep(self.backoff)
                     else:
-                        print 'set',
+                        print `time.time()` + ' ' + self.name + ' set(' + `self.backoff` + ') ',
                         print e
-                        time.sleep(1)
+                        time.sleep(self.backoff)
             elif operation == 'get':
                 key = self.name + '_' + `self.get_get_key()`
                 try:
                     vdata = self.server.get(key)
+                    self.operations += 1
+                    self.backoff -= 1
                     data = vdata[2]
                     try:
                         data_expected = self.get_data(max(self.get_mutation_indexes(self.get_get_key())))
@@ -111,7 +148,7 @@ class LoadThread(threading.Thread):
 #                        print "nocreate: " + `self.nocreate`
 #                        print "get_index: " + `self.get_index`
 #                        print "get_key: " + `self.get_get_key()`
-#                        print "mutation_max: " + `self.mutation_max`
+#                        print "mutation_index_max: " + `self.mutation_index_max`
 #                        print "mutation_indexes: " + `self.get_mutation_indexes(self.get_get_key())`
 #                        print "getting data for mutation index: " + `max(self.get_mutation_indexes(self.get_get_key()))`
 #                        print "got:      \'" + data + "\'"
@@ -119,9 +156,14 @@ class LoadThread(threading.Thread):
 #                        raise ValueError
                     self.get_index += 1
                 except mc_bin_client.MemcachedError as e:
-                    print 'get',
+                    if self.backoff < 0:
+                        self.backoff = 0
+                    if self.backoff > 10:
+                        self.backoff = 10
+                    self.backoff += 1
+                    print `time.time()` + ' ' + self.name + ' get(' + `self.backoff` + ') ',
                     print e
-                    time.sleep(1)
+                    time.sleep(self.backoff)
 
 
     # get the current operation based on the get and mutation indexes
@@ -164,7 +206,7 @@ class LoadThread(threading.Thread):
     # mutation_index -> mutation_data : based on create/nocreate
     def get_data(self, index=None):
         if index == None:
-                index = self.mutation_index
+            index = self.mutation_index
 
         valuesize = self.valuesize_sequence[index % len(self.valuesize_sequence)]
         if self.cache_data:
@@ -185,7 +227,7 @@ class LoadRunner(object):
 
         self.threads = []
         self.num_servers = len(load_info['server_info'])
-        self.num_threads = load_info['operation_info']['threads']
+        self.num_threads = int(load_info['operation_info']['threads'])
         for i in range(self.num_threads):
             t = LoadThread(load_info, i % self.num_servers)
             t.start()
