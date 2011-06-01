@@ -284,7 +284,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             self.log_command_output(output, error)
             self.wait_till_file_added("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
-                                      timeout_in_seconds=300)
+                                      timeout_in_seconds=600)
         elif info.deliverable_type == 'rpm':
             #run rpm -i to install
             log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
@@ -322,7 +322,7 @@ class RemoteMachineShellConnection:
                 log.error('file does not exist : {0}/{1}'.format(remotepath, filename))
                 time.sleep(1)
             else:
-                log.info('file not exists : {0}/{1}'.format(remotepath, filename))
+                log.info('file exists : {0}/{1}'.format(remotepath, filename))
                 added = True
         return added
 

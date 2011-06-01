@@ -74,10 +74,10 @@ class InstallTest(unittest.TestCase):
         #TODO: we should poll the 8091 port until it is up and running
         self.log.info('wait 5 seconds for membase server to start')
         time.sleep(5)
-        rest = RestConnection(serverInfo)
         start_time = time.time()
         cluster_initialized = False
         while time.time() < (start_time + (10 * 60)):
+            rest = RestConnection(serverInfo)
             try:
                 rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
                 cluster_initialized = True
