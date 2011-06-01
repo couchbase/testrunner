@@ -603,6 +603,18 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
         self._common_test_body(1.5, distribution)
 
+    def test_1_5x_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=2)
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(1.5, distribution)
+
+    def test_1_5x_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=2)
+        distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
+        self._common_test_body(1.5, distribution)
+
+
+
     def test_1_5x_cluster_half_2_replica(self):
         RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 5.0, replica=2)
         distribution = {2 * 1024: 0.9}
