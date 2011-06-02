@@ -79,7 +79,7 @@ def find_runlist(filename):
     if os.path.exists(filename):
         return file(filename)
     if os.path.exists("conf/" + filename):
-        return file(filename)
+        return file("conf/" + filename)
     return None
 
 
