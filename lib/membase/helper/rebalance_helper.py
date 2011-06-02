@@ -73,11 +73,12 @@ class RebalanceHelper():
         for server in servers:
             #get the stats
             server_stats = rest.get_bucket_stats_for_node(bucket, server.ip)
+            if not server_stats:
+                log.info("unable to get stats from {0}".format(server.ip))
             all_server_stats.append((server,server_stats))
         sum = 0
         for server, single_stats in all_server_stats:
-            if "curr_items" not in single_stats:
-                log.info(single_stats)
+            if not single_stats or "curr_items" not in single_stats:
                 continue
             sum += single_stats["curr_items"]
             log.info("curr_items from {0} : {1}".format(server.ip, single_stats["curr_items"]))

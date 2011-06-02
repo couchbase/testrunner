@@ -40,7 +40,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
 
     @staticmethod
-    def rebalance_in(servers,how_many):
+    def rebalance_in(servers, how_many):
         servers_rebalanced = []
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
@@ -60,18 +60,18 @@ class RebalanceBaseTest(unittest.TestCase):
                 break
 
         for server in toBeAdded:
-            rest.add_node('Administrator','password',server.ip)
+            rest.add_node('Administrator', 'password', server.ip)
             #check if its added ?
         otpNodes = [node.id for node in rest.node_statuses()]
-        started = rest.rebalance(otpNodes,[])
+        started = rest.rebalance(otpNodes, [])
         msg = "rebalance operation started ? {0}"
         log.info(msg.format(started))
         if started:
             result = rest.monitorRebalance()
             msg = "successfully rebalanced out selected nodes from the cluster ? {0}"
             log.info(msg.format(result))
-            return result,servers_rebalanced
-        return False,servers_rebalanced
+            return result, servers_rebalanced
+        return False, servers_rebalanced
 
 #load data. add one node rebalance , rebalance out
 class IncrementalRebalanceInTests(unittest.TestCase):
@@ -156,7 +156,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                 self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
                 time.sleep(5)
                 stats = rest.get_bucket_stats()
-            RebalanceHelper.print_taps_from_all_nodes(rest,'default')
+            RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
@@ -308,7 +308,6 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
                                                                               timeout_in_seconds=600),
                                 msg="replication was completed but sum(curr_items) dont match the curr_items_total")
 
-
             start_time = time.time()
             stats = rest.get_bucket_stats()
             while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
@@ -393,7 +392,6 @@ class IncrementalRebalanceOut(unittest.TestCase):
         self.log = logger.Logger().get_logger()
 
 
-
     def test_rebalance_out_small_load(self):
         RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
         self.test_rebalance_out(1.0, replica=1)
@@ -402,6 +400,9 @@ class IncrementalRebalanceOut(unittest.TestCase):
         RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
         self.test_rebalance_out(1.0, replica=2)
 
+    def test_rebalance_out_small_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self.test_rebalance_out(1.0, replica=3)
 
     def test_rebalance_out_medium_load(self):
         RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
@@ -453,6 +454,8 @@ class IncrementalRebalanceOut(unittest.TestCase):
         ClusterHelper.add_all_nodes_or_assert(master, self._servers, creds, self)
         #remove nodes one by one and rebalance , add some item and
         #rebalance ?
+        rebalanced_servers = []
+        rebalanced_servers.extend(self._servers)
 
         nodes = rest.node_statuses()
 
@@ -486,9 +489,31 @@ class IncrementalRebalanceOut(unittest.TestCase):
             rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[toBeEjectedNode.id])
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
-            final_replication_state = RestHelper(rest).wait_for_replication(240)
-            msg = "replication state after waiting for up to 4 minutes : {0}"
-            self.log.info(msg.format(final_replication_state))
+
+            nodes = rest.node_statuses()
+            self.log.info("expect {0} / {1} replication ? {2}".format(len(nodes),
+                                                                      (1.0 + replica), len(nodes) / (1.0 + replica)))
+
+            #update rebalanced_servers
+            for node in nodes:
+                for rebalanced_server in rebalanced_servers:
+                    if rebalanced_server.ip.find(node.ip) != -1:
+                        rebalanced_servers.remove(rebalanced_server)
+                        break
+            if len(nodes) / (1.0 + replica) >= 1:
+                final_replication_state = RestHelper(rest).wait_for_replication(600)
+                msg = "replication state after waiting for up to 10 minutes : {0}"
+                self.log.info(msg.format(final_replication_state))
+                self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                                              servers=rebalanced_servers,
+                                                                              bucket='default',
+                                                                              port=11211,
+                                                                              replica_factor=replica,
+                                                                              timeout_in_seconds=600),
+                                msg="replication was completed but sum(curr_items) dont match the curr_items_total")
+
+                self.log.info(msg.format(final_replication_state))
+
             start_time = time.time()
             stats = rest.get_bucket_stats()
             while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
@@ -498,7 +523,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
 
             #visit all nodes ?
-            RebalanceHelper.print_taps_from_all_nodes(rest,'default')
+            RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             #print
@@ -513,13 +538,12 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        RebalanceBaseTest.common_setup(self._input, 'default', self)
 
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, load_ratio):
+    def _common_test_body(self, load_ratio, replica):
         self.log.info(load_ratio)
         master = self._servers[0]
         rest = RestConnection(master)
@@ -565,6 +589,7 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
 
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
+            rebalanced_servers.append(server)
 
             self.log.info("waiting for mutation thread....")
             thread.join()
@@ -572,7 +597,7 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
             rejected = thread._rejected_keys
             client = MemcachedClientHelper.create_memcached_client(master.ip)
             self.log.info("printing tap stats before verifying mutations...")
-            RebalanceHelper.print_taps_from_all_nodes(rest,'default')
+            RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
             did_not_mutate_keys = []
             for key in inserted_keys:
                 if key not in rejected:
@@ -582,16 +607,29 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
                             did_not_mutate_keys.append({'key': key, 'value': value})
                     except Exception as ex:
                         self.log.info(ex)
-                #                    self.log.info(value)
+                        #                    self.log.info(value)
             if len(did_not_mutate_keys) > 0:
                 for item in did_not_mutate_keys:
                     self.log.error(
                         "mutation did not replicate for key : {0} value : {1}".format(item['key'], item['value']))
                     self.fail("{0} mutations were not replicated during rebalance..".format(len(did_not_mutate_keys)))
 
-            final_replication_state = RestHelper(rest).wait_for_replication(120)
-            msg = "replication state after waiting for up to 2 minutes : {0}"
-            self.log.info(msg.format(final_replication_state))
+            nodes = rest.node_statuses()
+            self.log.info("expect {0} / {1} replication ? {2}".format(len(nodes),
+                                                                      (1.0 + replica), len(nodes) / (1.0 + replica)))
+
+            if len(nodes) / (1.0 + replica) >= 1:
+                final_replication_state = RestHelper(rest).wait_for_replication(600)
+                msg = "replication state after waiting for up to 10 minutes : {0}"
+                self.log.info(msg.format(final_replication_state))
+                self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                                              servers=rebalanced_servers,
+                                                                              bucket='default',
+                                                                              port=11211,
+                                                                              replica_factor=replica,
+                                                                              timeout_in_seconds=600),
+                                msg="replication was completed but sum(curr_items) dont match the curr_items_total")
+
             start_time = time.time()
             stats = rest.get_bucket_stats()
             while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
@@ -600,7 +638,7 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
                 stats = rest.get_bucket_stats()
                 #loop over all keys and verify
 
-            RebalanceHelper.print_taps_from_all_nodes(rest,'default')
+            RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
@@ -609,13 +647,43 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
-        self._common_test_body(1.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
+        self._common_test_body(1.0, replica=1)
+
+    def test_small_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self._common_test_body(1.0, replica=2)
+
+    def test_small_load_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self._common_test_body(1.0, replica=3)
+
 
     def test_medium_load(self):
-        self._common_test_body(10.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
+        self._common_test_body(10.0, replica=1)
+
+    def test_medium_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self._common_test_body(10.0, replica=2)
+
+    def test_medium_load_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self._common_test_body(10.0, replica=3)
+
 
     def test_heavy_load(self):
-        self._common_test_body(40.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
+        self._common_test_body(40.0, replica=1)
+
+    def test_heavy_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self._common_test_body(40.0, replica=2)
+
+    def test_heavy_load_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self._common_test_body(401.0, replica=3)
+
 
 # fill bucket len(nodes)X and then rebalance nodes one by one
 class IncrementalRebalanceInDgmTests(unittest.TestCase):
@@ -764,7 +832,7 @@ class RebalanceSwapTests(unittest.TestCase):
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
-    def rebalance_in(self,how_many):
+    def rebalance_in(self, how_many):
         rest = RestConnection(self._servers[0])
         nodes = rest.node_statuses()
         #choose how_many nodes from self._servers which are not part of
@@ -781,10 +849,10 @@ class RebalanceSwapTests(unittest.TestCase):
                 break
 
         for server in toBeAdded:
-            rest.add_node('Administrator','password',server.ip)
+            rest.add_node('Administrator', 'password', server.ip)
             #check if its added ?
         otpNodes = [node.id for node in nodes]
-        started = rest.rebalance(otpNodes,[])
+        started = rest.rebalance(otpNodes, [])
         msg = "rebalance operation started ? {0}"
         self.log.info(msg.format(started))
         if started:
@@ -834,13 +902,13 @@ class RebalanceSwapTests(unittest.TestCase):
             rest.add_node(creds.rest_username, creds.rest_password, server.ip)
 
         currentNodes = [node.id for node in rest.node_statuses()]
-        started = rest.rebalance(currentNodes,toBeEjected)
+        started = rest.rebalance(currentNodes, toBeEjected)
         msg = "rebalance operation started ? {0}"
         self.log.info(msg.format(started))
         self.assertTrue(started, "rebalance operation did not start for swapping out the nodes")
         result = rest.monitorRebalance()
         msg = "successfully swapped out {0} nodes from the cluster ? {0}"
-        self.assertTrue(result,msg.format(swap_count))
+        self.assertTrue(result, msg.format(swap_count))
         #rest will have to change now?
         rest = RestConnection(toBeAdded[0])
         final_replication_state = RestHelper(rest).wait_for_replication(120)
@@ -852,7 +920,7 @@ class RebalanceSwapTests(unittest.TestCase):
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             time.sleep(5)
             stats = rest.get_bucket_stats()
-        RebalanceHelper.print_taps_from_all_nodes(rest,'default')
+        RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
         self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
         stats = rest.get_bucket_stats()
         msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
