@@ -130,7 +130,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   create_buckets=False)
 
 
-
     def single_node_upgrade_s2_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=True,
@@ -154,7 +153,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=False)
-
 
 
     def single_node_upgrade_s3_1_6_5_3(self):
@@ -256,21 +254,17 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   create_buckets=True)
 
 
-
-
-
-
-#1.6.0
-#1.6.1
-#1.6.3
-#1.6.4
-#1.6.4.1
-#1.6.5
-#1.6.5.1
-#1.6.5.2.1
-#1.6.5.3
-#1.6.5.3.1
-#1.6.5.4
+    #1.6.0
+    #1.6.1
+    #1.6.3
+    #1.6.4
+    #1.6.4.1
+    #1.6.5
+    #1.6.5.1
+    #1.6.5.2.1
+    #1.6.5.3
+    #1.6.5.3.1
+    #1.6.5.4
 
     def single_node_upgrade_s5(self):
         #install the latest version and upgrade to itself
@@ -320,28 +314,44 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
     #m3 with 50% ram full ?
     def m6_1_6_5_3(self):
-        self._install_and_upgrade('1.6.5.3', True, True, 1, True, 10)
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.5.3', True, True, len(servers), True, 10)
 
     def  m6_1_6_5_4(self):
-        self._install_and_upgrade('1.6.5.4', True, True, 1, True, 10)
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.5.4', True, True, len(servers), True, 10)
 
     def  m6_1_6_5_2_1(self):
-        self._install_and_upgrade('1.6.5.2.1', True, True, 1, True, 10)
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.5.2.1', True, True, len(servers), True, 10)
 
     def  m6_1_6_4_1(self):
-        self._install_and_upgrade('1.6.4.1', True, True, 1, True, 10)
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.4.1', True, True, len(servers), True, 10)
 
     def  m6_1_6_4(self):
-        self._install_and_upgrade('1.6.4', True, True, 1, True, 10)
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.4', True, True, len(servers), True, 10)
 
     def  m6_1_6_3(self):
-        self._install_and_upgrade('1.6.3', True, True, 1, True, 10)
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.3', True, True, len(servers), True, 10)
 
     def  m6_1_6_1(self):
-        self._install_and_upgrade('1.6.1', True, True, 1, True, 10)
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.1', True, True, len(servers), True, 10)
 
     def  m6_1_6_0(self):
-        self._install_and_upgrade('1.6.0', True, True, 1, True, 10)
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.0', True, True, len(servers), True, 10)
 
 
     def multiple_node_upgrade_m5_1_6_5_3(self):
@@ -470,7 +480,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         if how_many_roll_upgrade > 0:
             #install 1.7.0 on the last nodes
             for server in servers[len(servers) - how_many_roll_upgrade:]:
-
                 remote = RemoteMachineShellConnection(server)
                 info = remote.extract_remote_info()
                 log.info("finding build {0} for machine {1}".format(latest_version, server))
@@ -524,7 +533,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 pools_info = RestConnection(server).get_pools_info()
 
                 node_upgrade_status[server] = "upgraded"
-                count +=1
+                count += 1
                 if upgrade_how_many == count:
                     break
                 remote.disconnect()
