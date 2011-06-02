@@ -4,6 +4,7 @@ import sys
 import time
 import getopt
 import unittest
+import os
 sys.path.append("lib")
 sys.path.append("pytests")
 from TestInput import TestInputParser, TestInputSingleton
@@ -14,18 +15,11 @@ class Testcase(object):
         self.description = name
         self.log = ""
 
-    def report(self):
-        return "Starting test: " + self.description + "\n" + self.log
-
     def __str__(self):
         return self.name
 
     def __repr__(self):
         return self.name
-
-
-class Report(object):
-    pass
 
 
 def usage(err=None):
@@ -49,7 +43,6 @@ Options:
 
 class Config(object):
     def __init__(self):
-        self.test_group = "quick"
         self.tests = []
 
 
@@ -68,9 +61,10 @@ def parse_args(argv):
         if o == "-h":
             usage()
         elif o == "-c":
-            for line in file("conf/" + a):
-                config.tests.append(Testcase(line.strip()))
-            config.test_group = a.replace(".conf", "")
+            if find_runlist(a):
+                for line in find_runlist(a):
+                    if not line.startswith("#"):
+                        config.tests.append(Testcase(line.strip()))
         elif o == "-t":
             config.tests.append(Testcase(a))
     test_input = TestInputParser.get_test_input(argv)
@@ -79,6 +73,14 @@ def parse_args(argv):
     if not config.tests:
         usage("no tests specified")
     return config, test_input
+
+
+def find_runlist(filename):
+    if os.path.exists(filename):
+        return file(filename)
+    if os.path.exists("conf/" + filename):
+        return file(filename)
+    return None
 
 
 if __name__ == "__main__":
