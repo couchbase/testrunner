@@ -81,13 +81,12 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        RebalanceBaseTest.common_setup(self._input, 'default', self)
 
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, load_ratio):
+    def _common_test_body(self, load_ratio, replica=1):
         master = self._servers[0]
         rest = RestConnection(master)
         creds = self._input.membase_settings
@@ -134,9 +133,23 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
             rebalanced_servers.append(server)
             items_inserted_count += inserted_count
-            final_replication_state = RestHelper(rest).wait_for_replication(120)
-            msg = "replication state after waiting for up to 2 minutes : {0}"
-            self.log.info(msg.format(final_replication_state))
+            nodes = rest.node_statuses()
+            self.log.info("expect {0} / {1} replication ? {2}".format(len(nodes),
+                                                                      (1.0 + replica), len(nodes) / (1.0 + replica)))
+
+            if len(nodes) / (1.0 + replica) >= 1:
+                final_replication_state = RestHelper(rest).wait_for_replication(600)
+                msg = "replication state after waiting for up to 10 minutes : {0}"
+                self.log.info(msg.format(final_replication_state))
+
+                self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                                              servers=rebalanced_servers,
+                                                                              bucket='default',
+                                                                              port=11211,
+                                                                              replica_factor=replica,
+                                                                              timeout_in_seconds=600),
+                                msg="replication was completed but sum(curr_items) dont match the curr_items_total")
+
             start_time = time.time()
             stats = rest.get_bucket_stats()
             while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
@@ -152,51 +165,64 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
         self._common_test_body(0.1)
 
+    def test_small_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self._common_test_body(0.1, replica=2)
+
+    def test_small_load_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self._common_test_body(0.1, replica=3)
+
     def test_medium_load(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
         self._common_test_body(10.0)
 
+    def test_medium_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self._common_test_body(10.0, replica=2)
+
+    def test_medium_load_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self._common_test_body(10.0, replica=3)
+
     def test_heavy_load(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
         self._common_test_body(20.0)
 
+    def test_heavy_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self._common_test_body(20.0, replica=2)
+
+    def test_heavy_load_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self._common_test_body(20.0, replica=3)
+
     def test_dgm_150(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self)
         self._common_test_body(150.0)
 
     def test_dgm_300(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self)
         self._common_test_body(300.0)
-
-    def test_small_load_2_replica(self):
-        self._common_test_body(0.1)
-
-    def test_medium_load_2_replica(self):
-        self._common_test_body(10.0)
-
-    def test_heavy_load_2_replica(self):
-        self._common_test_body(20.0)
 
     def test_dgm_150_2_replica(self):
-        self._common_test_body(150.0)
-
-    def test_dgm_300_2_replica(self):
-        self._common_test_body(300.0)
-
-    def test_small_load_3_replica(self):
-        self._common_test_body(0.1)
-
-    def test_medium_load_3_replica(self):
-        self._common_test_body(10.0)
-
-    def test_heavy_load_3_replica(self):
-        self._common_test_body(20.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self._common_test_body(150.0, replica=2)
 
     def test_dgm_150_3_replica(self):
-        self._common_test_body(150.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self._common_test_body(150.0, replica=3)
+
+    def test_dgm_300_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self._common_test_body(300.0, replica=2)
 
     def test_dgm_300_3_replica(self):
-        self._common_test_body(300.0)
-
-
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self._common_test_body(300.0, replica=3)
 
 #disk greater than memory
 #class IncrementalRebalanceInAndOutTests(unittest.TestCase):
@@ -339,19 +365,44 @@ class IncrementalRebalanceOut(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        RebalanceBaseTest.common_setup(self._input, 'default', self)
+
 
 
     def test_rebalance_out_small_load(self):
-        self.test_rebalance_out(1.0)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
+        self.test_rebalance_out(1.0, replica=1)
+
+    def test_rebalance_out_small_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self.test_rebalance_out(1.0, replica=2)
+
 
     def test_rebalance_out_medium_load(self):
-        self.test_rebalance_out(10)
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
+        self.test_rebalance_out(15.0, replica=1)
 
-    def test_rebalance_out_dgm_2x(self):
-        self.test_rebalance_out(200)
+    def test_rebalance_out_medium_load_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self.test_rebalance_out(15.0, replica=2)
 
-    def test_rebalance_out(self, ratio):
+    def test_rebalance_out_medium_load_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self.test_rebalance_out(15.0, replica=3)
+
+
+    def test_rebalance_out_dgm(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=1)
+        self.test_rebalance_out(200.0, replica=1)
+
+    def test_rebalance_out_dgm_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=2)
+        self.test_rebalance_out(200.0, replica=2)
+
+    def test_rebalance_out_dgm_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, 'default', self, replica=3)
+        self.test_rebalance_out(200.0, replica=3)
+
+    def test_rebalance_out(self, ratio, replica):
         ram_ratio = (ratio / (len(self._servers)))
         #the ratio is relative to the number of nodes ?
         master = self._servers[0]
