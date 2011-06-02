@@ -19,6 +19,13 @@ class FailoverBaseTest(unittest.TestCase):
     @staticmethod
     def common_setup(input, testcase):
         servers = input.servers
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            shell.start_membase()
+            o, r = shell.execute_command("iptables -F")
+            shell.log_command_output(o, r)
+            shell.disconnect()
+        time.sleep(10)
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
