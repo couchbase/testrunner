@@ -76,6 +76,9 @@ class RebalanceHelper():
             all_server_stats.append((server,server_stats))
         sum = 0
         for server, single_stats in all_server_stats:
+            if "curr_items" not in single_stats:
+                log.info(single_stats)
+                continue
             sum += single_stats["curr_items"]
             log.info("curr_items from {0} : {1}".format(server.ip, single_stats["curr_items"]))
             if 'vb_pending_num' in single_stats:
