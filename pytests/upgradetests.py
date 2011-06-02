@@ -440,6 +440,11 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             BucketOperationHelper.create_default_buckets(servers=[master],
                                                          number_of_replicas=1,
                                                          assert_on_test=self)
+
+            bucket = {'name': 'default', 'port': 11211}
+            RebalanceHelper.wait_for_stats(master,bucket,'ep_queue_size',0)
+            RebalanceHelper.wait_for_stats(master,bucket,'ep_flusher_todo',0)
+
             BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[master],
                                                                          bucket_port=11211,
                                                                          test=self)
