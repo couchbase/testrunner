@@ -313,6 +313,12 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self._install_and_upgrade('1.6.5.3', True, True, 1)
 
     #m3 with 50% ram full ?
+
+    def m6_1_6_5_3_1(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.5.3.1', True, True, len(servers), True, 10)
+
     def m6_1_6_5_3(self):
         input = TestInputSingleton.input
         servers = input.servers
