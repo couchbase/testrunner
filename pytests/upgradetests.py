@@ -319,29 +319,29 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self._install_and_upgrade('1.6.5.3', True, True, 1)
 
     #m3 with 50% ram full ?
-    def multiple_node_upgrade_m6_1_6_5_3(self):
-        self._install_and_upgrade('1.6.5.3', True, True, 1, True, 50)
+    def m6_1_6_5_3(self):
+        self._install_and_upgrade('1.6.5.3', True, True, 1, True, 10)
 
     def  m6_1_6_5_4(self):
-        self._install_and_upgrade('1.6.5.4', True, True, 1, True, 50)
+        self._install_and_upgrade('1.6.5.4', True, True, 1, True, 10)
 
     def  m6_1_6_5_2_1(self):
-        self._install_and_upgrade('1.6.5.2.1', True, True, 1, True, 50)
+        self._install_and_upgrade('1.6.5.2.1', True, True, 1, True, 10)
 
     def  m6_1_6_4_1(self):
-        self._install_and_upgrade('1.6.4.1', True, True, 1, True, 50)
+        self._install_and_upgrade('1.6.4.1', True, True, 1, True, 10)
 
     def  m6_1_6_4(self):
-        self._install_and_upgrade('1.6.4', True, True, 1, True, 50)
+        self._install_and_upgrade('1.6.4', True, True, 1, True, 10)
 
     def  m6_1_6_3(self):
-        self._install_and_upgrade('1.6.3', True, True, 1, True, 50)
+        self._install_and_upgrade('1.6.3', True, True, 1, True, 10)
 
     def  m6_1_6_1(self):
-        self._install_and_upgrade('1.6.1', True, True, 1, True, 50)
+        self._install_and_upgrade('1.6.1', True, True, 1, True, 10)
 
     def  m6_1_6_0(self):
-        self._install_and_upgrade('1.6.0', True, True, 1, True, 50)
+        self._install_and_upgrade('1.6.0', True, True, 1, True, 10)
 
 
     def multiple_node_upgrade_m5_1_6_5_3(self):
