@@ -269,7 +269,7 @@ class BucketOperationHelper():
                     client.get(key=key)
                 except mc_bin_client.MemcachedError as error:
                     keys_not_verified.append(key)
-                    if log_count < 1000:
+                    if log_count < 100:
                         log.error("key {0} does not exist because {1}".format(key, error))
                         log_count += 1
             retry += 1
@@ -280,7 +280,7 @@ class BucketOperationHelper():
             for key in keys_left_to_verify:
                 log.error("key {0} not found".format(key))
                 log_count += 1
-                if log_count > 10000:
+                if log_count > 100:
                     break
             msg = "unable to verify {0} keys".format(len(keys_left_to_verify))
             log.error(msg)
