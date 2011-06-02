@@ -4,6 +4,7 @@ from builds.build_query import BuildQuery
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 import logger
@@ -50,6 +51,9 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                 BucketOperationHelper.create_default_buckets(servers=[server],
                                                              number_of_replicas=1,
                                                              assert_on_test=self)
+                bucket = {'name': 'default', 'port': 11211}
+                RebalanceHelper.wait_for_stats(server,bucket,'ep_queue_size',0)
+                RebalanceHelper.wait_for_stats(server,bucket,'ep_flusher_todo',0)
                 BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[server],
                                                                              bucket_port=11211,
                                                                              test=self)

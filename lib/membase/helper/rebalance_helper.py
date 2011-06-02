@@ -3,10 +3,32 @@ import logger
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+import threading
 
 log = logger.Logger.get_logger()
 
 class RebalanceHelper():
+
+
+    @staticmethod
+    #bucket is a json object that contains name,port,password
+    def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120):
+        log.info("waiting for bucket {0} stat : {1} to match {2}".format(bucket, stat_key, stat_value))
+        start = time.time()
+        verified = False
+        while (time.time() - start) <= timeout_in_seconds:
+            rest = RestConnection(master)
+            stats = rest.get_bucket_stats(bucket['name'])
+            if stats and stat_key in stats and stats[stat_key] == stat_value:
+                log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                verified = True
+                break
+            else:
+                if stats and stat_key in stats:
+                    log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                time.sleep(2)
+        return verified
+
 
     @staticmethod
     def wait_till_total_numbers_match(master,
@@ -169,6 +191,10 @@ class RebalanceHelper():
         #if its not added then let try to add this and then rebalance
         #we should alo try to get the bucket information from
         #rest api instead of passing it to the fucntions
-        
-        
-        
+
+class VBucketHeartbeat(threading.Thread):
+
+    #this class will print out the current state of vbucket transfer
+    #during a rebalance operation or replication or failover
+    vbucket = {'id':0,'dead':'10.1.2.4','pending':'10.1.2.5','active':'10.1.2.6'}
+    #get 

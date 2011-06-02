@@ -552,9 +552,10 @@ class RestConnection(object):
                 stats = {}
                 #for each sample
                 for stat_name in samples:
-                    #pick the last item ?
-                    last_sample = len(samples[stat_name]) - 1
-                    stats[stat_name] = samples[stat_name][last_sample]
+                    if samples[stat_name]:
+                        last_sample = len(samples[stat_name]) - 1
+                        if last_sample:
+                            stats[stat_name] = samples[stat_name][last_sample]
                 return stats
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
