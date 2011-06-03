@@ -136,6 +136,7 @@ class BackupRestoreTests(unittest.TestCase):
 
         self.log.info("Sleep {0} seconds after data load".format(delay_after_data_load))
         RebalanceHelper.wait_for_stats(self.master, json_bucket, 'ep_queue_size', 0, 120)
+        RebalanceHelper.wait_for_stats(self.master, json_bucket, 'ep_flusher_todo', 0, 120)
         node = RestConnection(self.master).get_nodes_self()
 
         if not startup_flag:
@@ -186,7 +187,7 @@ class BackupRestoreTests(unittest.TestCase):
                 self.fail(msg.format(key, client.vbucketId, error.status))
         self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
         RebalanceHelper.wait_for_stats(self.master, json_bucket, 'ep_queue_size', 0, 120)
-
+        RebalanceHelper.wait_for_stats(self.master, json_bucket, 'ep_flusher_todo', 0, 120)
         node = RestConnection(self.master).get_nodes_self()
         output, error = self.shell.execute_command("mkdir -p {0}".format(self.remote_tmp_folder))
         self.shell.log_command_output(output, error)
