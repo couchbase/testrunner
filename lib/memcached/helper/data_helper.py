@@ -232,6 +232,19 @@ class MemcachedClientHelper(object):
         return None
 
     @staticmethod
+    def memcached_client(node,bucket):
+        client = MemcachedClient(node.ip, bucket["port"])
+        if bucket["port"] == 11210:
+            if bucket["name"] == 'default':
+                client.sasl_auth_plain(bucket["name"], '')
+            else:
+                client.sasl_auth_plain(bucket["name"], bucket["password"])
+        if bucket["name"] != 'default' and bucket["port"] == 11211:
+            client.sasl_auth_plain(bucket["name"], bucket["password"])
+        return client
+
+
+    @staticmethod
     def create_memcached_client(ip, bucket='default', port=11211, password='password'):
         client = MemcachedClient(ip, port)
         if port == 11210:

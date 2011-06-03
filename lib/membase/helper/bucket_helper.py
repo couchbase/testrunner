@@ -123,6 +123,47 @@ class BucketOperationHelper():
         return False
 
     #try to insert key in all vbuckets before returning from this function
+    #bucket { 'name' : 90,'password':,'port':1211'}
+    @staticmethod
+    def wait_for_memcached(node, bucket):
+        log = logger.Logger.get_logger()
+        msg = "waiting for memcached bucket : {0} in {1}:{2} to accept set ops"
+        log.info(msg.format(bucket["name"], node.ip, bucket["port"]))
+        start_time = time.time()
+        end_time = start_time + 300
+        client = None
+        keys = {}
+        while len(keys) < 1024:
+            key = str(uuid.uuid4())
+            vBucketId = crc32.crc32_hash(key) & 1023
+            keys[vBucketId] = {'key': key, 'inserted': False}
+        counter = 0
+        while time.time() < end_time and counter < 1024:
+            try:
+                if not client:
+                    client = MemcachedClientHelper.memcached_client(node, bucket)
+                for vBucketId in keys:
+                    if not keys[vBucketId]["inserted"]:
+                        client.set(keys[vBucketId]['key'], 0, 0, str(uuid.uuid4()))
+                        client.get(keys[vBucketId]['key'])
+                        keys[vBucketId]["inserted"] = True
+                        counter += 1
+            except mc_bin_client.MemcachedError as error:
+                msg = "(memcachedError {0} - {1} when invoking set or get)"
+                log.error(msg.format(error.status, error.msg))
+            except Exception as ex:
+                log.error("{0} while setting key ".format(ex))
+            if client:
+                try:
+                    client.flush()
+                    client.stats('reset')
+                except Exception:
+                    pass
+                client.close()
+                client = None
+            time.sleep(5)
+        return counter == 1024
+
     @staticmethod
     def wait_till_memcached_is_ready_or_assert(servers,
                                                bucket_port,
@@ -198,8 +239,9 @@ class BucketOperationHelper():
 
 
     @staticmethod
-    def verify_data(ip, keys, value_equal_to_key,verify_flags, port, test):
+    def verify_data(ip, keys, value_equal_to_key, verify_flags, port, test, debug=False):
         log = logger.Logger.get_logger()
+        log_error_count = 0
         #verify all the keys
         client = mc_bin_client.MemcachedClient(ip, port)
         #populate key
@@ -218,10 +260,15 @@ class BucketOperationHelper():
                     actual_flag = socket.ntohl(flag)
                     expected_flag = ctypes.c_uint32(zlib.adler32(value)).value
                     test.assertEquals(actual_flag, expected_flag, msg='flags dont match')
-                log.info("verified key #{0} : {1}".format(index, key))
+                if debug:
+                    log.info("verified key #{0} : {1}".format(index, key))
             except mc_bin_client.MemcachedError as error:
-                log.error(error)
-                log.error("memcachedError : {0} - unable to get a pre-inserted key : {0}".format(error.status, key))
+                if debug:
+                    log_error_count += 1
+                    if log_error_count < 100:
+                        log.error(error)
+                        log.error(
+                            "memcachedError : {0} - unable to get a pre-inserted key : {0}".format(error.status, key))
                 keys_failed.append(key)
                 all_verified = False
         client.close()
