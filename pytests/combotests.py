@@ -2,7 +2,6 @@ from random import shuffle
 from TestInput import TestInputSingleton
 import logger
 import time
-import threading
 
 import unittest
 from membase.api.rest_client import RestConnection
@@ -60,7 +59,6 @@ class ComboBaseTests(unittest.TestCase):
 
 
 class ComboTests(unittest.TestCase):
-
     def setUp(self):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
@@ -83,7 +81,7 @@ class ComboTests(unittest.TestCase):
             replica = int(self._input.test_params['replica'])
         self.common_test_body(replica, step, 5, duration)
 
-    def common_test_body(self, replica, steps, load_ratio,timeout=10):
+    def common_test_body(self, replica, steps, load_ratio, timeout=10):
         log = logger.Logger.get_logger()
         start_time = time.time()
         log.info("replica : {0}".format(replica))
@@ -100,7 +98,7 @@ class ComboTests(unittest.TestCase):
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,
                            proxyPort=11211)
-        json_bucket = {'name':'default','port':11211,'password':''}
+        json_bucket = {'name': 'default', 'port': 11211, 'password': ''}
         BucketOperationHelper.wait_for_memcached(master, json_bucket)
         log.info("inserting some items in the master before adding any nodes")
         distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
@@ -121,7 +119,7 @@ class ComboTests(unittest.TestCase):
                                                            number_of_threads=20)
 
 
-    def rebalance_out(self,how_many):
+    def rebalance_out(self, how_many):
         msg = "choosing three nodes and rebalance them out from the cluster"
         self.log.info(msg)
         rest = RestConnection(self._servers[0])
@@ -138,19 +136,20 @@ class ComboTests(unittest.TestCase):
                     break
             if len(toBeEjected) == how_many:
                 break
-        self.log.info("selected {0} for rebalance out from the cluster".format(toBeEjected))
-        otpNodes = [node.id for node in nodes]
-        started = rest.rebalance(otpNodes,toBeEjected)
-        msg = "rebalance operation started ? {0}"
-        self.log.info(msg.format(started))
-        if started:
-            result = rest.monitorRebalance()
-            msg = "successfully rebalanced out selected nodes from the cluster ? {0}"
-            self.log.info(msg.format(result))
-            return result
-        return False
+        if len(toBeEjected) > 0:
+            self.log.info("selected {0} for rebalance out from the cluster".format(toBeEjected))
+            otpNodes = [node.id for node in nodes]
+            started = rest.rebalance(otpNodes, toBeEjected)
+            msg = "rebalance operation started ? {0}"
+            self.log.info(msg.format(started))
+            if started:
+                result = rest.monitorRebalance()
+                msg = "successfully rebalanced out selected nodes from the cluster ? {0}"
+                self.log.info(msg.format(result))
+                return result
+        return True
 
-    def rebalance_in(self,how_many):
+    def rebalance_in(self, how_many):
         rest = RestConnection(self._servers[0])
         nodes = rest.node_statuses()
         #choose how_many nodes from self._servers which are not part of
@@ -167,10 +166,10 @@ class ComboTests(unittest.TestCase):
                 break
 
         for server in toBeAdded:
-            rest.add_node('Administrator','password',server.ip)
+            rest.add_node('Administrator', 'password', server.ip)
             #check if its added ?
         otpNodes = [node.id for node in nodes]
-        started = rest.rebalance(otpNodes,[])
+        started = rest.rebalance(otpNodes, [])
         msg = "rebalance operation started ? {0}"
         self.log.info(msg.format(started))
         if started:
