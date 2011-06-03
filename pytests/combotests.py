@@ -4,7 +4,7 @@ import logger
 import time
 
 import unittest
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -129,12 +129,14 @@ class ComboTests(unittest.TestCase):
         nodeIps = [node.ip for node in nodes]
         self.log.info("current nodes : {0}".format(nodeIps))
         toBeEjected = []
+        toBeEjectedServers = []
         selection = self._servers[1:]
         shuffle(selection)
         for server in selection:
             for node in nodes:
                 if server.ip == node.ip:
                     toBeEjected.append(node.id)
+                    toBeEjectedServers.append(server)
                     break
             if len(toBeEjected) == how_many:
                 break
@@ -148,6 +150,13 @@ class ComboTests(unittest.TestCase):
                 result = rest.monitorRebalance()
                 msg = "successfully rebalanced out selected nodes from the cluster ? {0}"
                 self.log.info(msg.format(result))
+                for server in toBeEjectedServers:
+                    shell = RemoteMachineShellConnection(server)
+                    shell.stop_membase()
+                    shell.start_membase()
+                    shell.disconnect()
+                    RestHelper(RestConnection(server)).is_ns_server_running()
+                #let's restart membase on those nodes
                 return result
         return True
 
