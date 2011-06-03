@@ -168,6 +168,7 @@ class ComboTests(unittest.TestCase):
         for server in toBeAdded:
             rest.add_node('Administrator', 'password', server.ip)
             #check if its added ?
+        nodes = rest.node_statuses()
         otpNodes = [node.id for node in nodes]
         started = rest.rebalance(otpNodes, [])
         msg = "rebalance operation started ? {0}"
