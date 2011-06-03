@@ -72,16 +72,15 @@ class ComboTests(unittest.TestCase):
     def loop(self):
         duration = 240
         replica = 1
-        step = 1
         if 'duration' in self._input.test_params:
             duration = int(self._input.test_params['duration'])
         if 'step' in self._input.test_params:
             step = int(self._input.test_params['step'])
         if 'replica' in self._input.test_params:
             replica = int(self._input.test_params['replica'])
-        self.common_test_body(replica, step, 5, duration)
+        self.common_test_body(replica, 5, duration)
 
-    def common_test_body(self, replica, steps, load_ratio, timeout=10):
+    def common_test_body(self, replica, load_ratio, timeout=10):
         log = logger.Logger.get_logger()
         start_time = time.time()
         log.info("replica : {0}".format(replica))
@@ -114,11 +113,13 @@ class ComboTests(unittest.TestCase):
             nodes = rest.node_statuses()
             delta = len(self._servers) - len(nodes)
             how_many_add = Random().randint(1, delta)
+            self.log.info("going to add {0} nodes".format(how_many_add))
             self.rebalance_in(how_many=how_many_add)
             [t.join() for t in threads]
             nodes = rest.node_statuses()
             how_many_out = Random().randint(1, len(nodes) - 1)
             self.rebalance_out(how_many=how_many_out)
+            self.log.info("going to remove {0} nodes".format(how_many_out))
             threads = MemcachedClientHelper.create_threads(servers=[master],
                                                            ram_load_ratio=10,
                                                            value_size_distribution=distribution,
