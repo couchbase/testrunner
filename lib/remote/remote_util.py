@@ -218,7 +218,7 @@ class RemoteMachineShellConnection:
                 files.append({'path': remote_path, 'file': name})
             sftp.close()
         except IOError:
-            return False
+            return []
         return files
 
     #check if this file exists in the remote
