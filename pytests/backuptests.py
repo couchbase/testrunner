@@ -126,7 +126,7 @@ class BackupRestoreTests(unittest.TestCase):
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              name=bucket,
                                                                                              port=port_no,
-                                                                                             ram_load_ratio=1,
+                                                                                             ram_load_ratio=30,
                                                                                              value_size_distribution=distribution,
                                                                                              number_of_threads=40)
 
@@ -463,7 +463,6 @@ class BackupRestoreTests(unittest.TestCase):
     def default_bucket(self):
         self.common_setUp()
         self._test_backup_add_restore_bucket_body("default", 11211, 60, True, True)
-
 
     def test_backup_add_restore_non_default_bucket_started_server(self):
         self.common_setUp()
