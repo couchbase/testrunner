@@ -3,7 +3,6 @@ from TestInput import TestInputSingleton
 import mc_bin_client
 import uuid
 import logger
-import crc32
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -19,7 +18,6 @@ class SimpleSetGetTestBase(object):
     bucket_name = None
 
     def setUp_bucket(self, bucket_name, port, bucket_type, unittest):
-
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         unittest.assertTrue(self.input, msg="input parameters missing...")
@@ -33,10 +31,10 @@ class SimpleSetGetTestBase(object):
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
             info = rest.get_nodes_self()
-            rest.init_cluster(username = serverInfo.rest_username,
-                              password = serverInfo.rest_password)
+            rest.init_cluster(username=serverInfo.rest_username,
+                              password=serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
-            bucket_ram = info.mcdMemoryReserved * 2 / 3
+            bucket_ram = info.mcdMemoryReserved * 4 / 5
             if bucket_name != 'default' and self.bucket_port == 11211:
                 rest.create_bucket(bucket=bucket_name,
                                    bucketType=bucket_type,
@@ -66,30 +64,45 @@ class SimpleSetGetTestBase(object):
                                                                              bucket_name=self.bucket_name)
 
     #distribution = {10: 0.4, 20: 0.4, 100: 0.2}
-    def set_get_test(self,value_size_distribution,number_of_items):
+    def set_get_test(self, value_size_distribution, number_of_items):
         for serverInfo in self.servers:
             client = MemcachedClientHelper.create_memcached_client(ip=serverInfo.ip,
                                                                    bucket=self.bucket_name,
                                                                    port=self.bucket_port,
                                                                    password='password')
-            inserted, rejected = \
+            inserted, rejected =\
             MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[serverInfo],
-                                                                   name=self.bucket_name,
-                                                                   port=self.bucket_port,
-                                                                   number_of_items=number_of_items,
-                                                                   value_size_distribution=value_size_distribution)
+                                                                  name=self.bucket_name,
+                                                                  port=self.bucket_port,
+                                                                  number_of_items=number_of_items,
+                                                                  value_size_distribution=value_size_distribution)
 
-            for key in inserted:
-                try:
-                    client.vbucketId = crc32.crc32_hash(key) & 1023
-                    #value should have only stars ?
-                    flag, keyx, value = client.get(key=key)
-                    #value could be all * or == key
-                    if value != key and value.find("*") == -1:
-                        self.test.assertTrue(value.find('*') != -1, 'value mismatch')
-                except mc_bin_client.MemcachedError as error:
-                    self.log.info('memcachedError : {0}'.format(error.status))
-                    self.test.fail("unable to get a pre-inserted key : {0}".format(key))
+            retry = 0
+            remaining_items = []
+            remaining_items.extend(inserted)
+            msg = "memcachedError : {0} - unable to get a pre-inserted key : {1}"
+            while retry < 10 and len(remaining_items) > 0:
+                verified_keys = []
+                for key in remaining_items:
+                    try:
+                        #value should have only stars ? , value could be all * or == key
+                        flag, keyx, value = client.get(key=key)
+                        if value != key and value.find("*") == -1:
+                            self.test.assertTrue(value.find('*') != -1, 'value mismatch')
+                        verified_keys.append(key)
+                    except mc_bin_client.MemcachedError as error:
+                        self.log.error(msg.format(error.status, key))
+                    retry += 1
+                [remaining_items.remove(x) for x in verified_keys]
+
+            print_count = 0
+            for key in remaining_items:
+                if print_count > 100:
+                    break
+                print_count += 1
+                self.log.error("unable to verify key : {0}".format(key))
+            if remaining_items:
+                self.test.fail("unable to verify {0} keys".format(len(remaining_items)))
 
 
     def tearDown_bucket(self):
@@ -105,33 +118,19 @@ class SimpleSetGetMembaseBucketNonDefaultDedicatedPort(unittest.TestCase):
 
     def test_set_get_small_keys(self):
         distribution = {10: 0.4, 20: 0.4, 100: 0.2}
-        self.simpleSetGetTestBase.set_get_test(distribution,4000)
+        self.simpleSetGetTestBase.set_get_test(distribution, 4000)
+    def value_500kb(self):
+        distribution = {100 * 1024: 0.5, 500 * 1024: 0.49, 1 * 1024 * 1024: 0.001}
+        self.simpleSetGetTestBase.set_get_test(distribution, 4000)
 
+    def value_10mb(self):
+        distribution = {10 * 1024 * 1024: 0.9, 1024: 0.1}
+        self.simpleSetGetTestBase.set_get_test(distribution, 40)
 
-    def test_set_get_large_keys(self):
-        distribution = {100 * 1024: 0.5, 200 * 1024: 0.49, 1 * 1024 * 1024: 0.001}
-        self.simpleSetGetTestBase.set_get_test(distribution,4000)
+    def value_1mb(self):
+        distribution = {1 * 1024 * 1024: 0.9, 1024: 0.1}
+        self.simpleSetGetTestBase.set_get_test(distribution, 400)
 
-
-    def tearDown(self):
-        if self.simpleSetGetTestBase:
-            self.simpleSetGetTestBase.tearDown_bucket()
-
-
-class SimpleSetGetMembaseBucketNonDefaultPost11211(unittest.TestCase):
-    simpleSetGetTestBase = None
-
-    def setUp(self):
-        self.simpleSetGetTestBase = SimpleSetGetTestBase()
-        self.simpleSetGetTestBase.setUp_bucket('setget-{0}'.format(uuid.uuid4()), 11211, 'membase', self)
-
-    def test_set_get_small_keys(self):
-        distribution = {10: 0.4, 20: 0.4, 100: 0.2}
-        self.simpleSetGetTestBase.set_get_test(distribution,4000)
-
-    def test_set_get_large_keys(self):
-        distribution = {100 * 1024: 0.5, 200 * 1024: 0.49, 1 * 1024 * 1024: 0.001}
-        self.simpleSetGetTestBase.set_get_test(distribution,4000)
 
     def tearDown(self):
         if self.simpleSetGetTestBase:
