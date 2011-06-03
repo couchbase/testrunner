@@ -109,16 +109,17 @@ class SimpleSetGetTestBase(object):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self.test)
 
 
-class SimpleSetGetMembaseBucketNonDefaultDedicatedPort(unittest.TestCase):
+class MembaseBucket(unittest.TestCase):
     simpleSetGetTestBase = None
 
     def setUp(self):
         self.simpleSetGetTestBase = SimpleSetGetTestBase()
         self.simpleSetGetTestBase.setUp_bucket('setget-{0}'.format(uuid.uuid4()), 11220, 'membase', self)
 
-    def test_set_get_small_keys(self):
+    def value_100b(self):
         distribution = {10: 0.4, 20: 0.4, 100: 0.2}
         self.simpleSetGetTestBase.set_get_test(distribution, 4000)
+
     def value_500kb(self):
         distribution = {100 * 1024: 0.5, 500 * 1024: 0.49, 1 * 1024 * 1024: 0.001}
         self.simpleSetGetTestBase.set_get_test(distribution, 4000)
