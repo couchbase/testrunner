@@ -1,4 +1,4 @@
-from random import shuffle
+from random import shuffle, Random
 from TestInput import TestInputSingleton
 import logger
 import time
@@ -110,9 +110,15 @@ class ComboTests(unittest.TestCase):
             thread.start()
         while time.time() < ( start_time + 60 * timeout):
             #rebalance out step nodes
-            self.rebalance_in(how_many=steps)
-            self.rebalance_out(how_many=steps)
+            #let's add some items ?
+            nodes = rest.node_statuses()
+            delta = len(self._servers) - len(nodes)
+            how_many_add = Random().randint(1, delta)
+            self.rebalance_in(how_many=how_many_add)
             [t.join() for t in threads]
+            nodes = rest.node_statuses()
+            how_many_out = Random().randint(1, len(nodes) - 1)
+            self.rebalance_out(how_many=how_many_out)
             threads = MemcachedClientHelper.create_threads(servers=[master],
                                                            ram_load_ratio=10,
                                                            value_size_distribution=distribution,
