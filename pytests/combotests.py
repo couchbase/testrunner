@@ -117,6 +117,8 @@ class ComboTests(unittest.TestCase):
                                                            ram_load_ratio=10,
                                                            value_size_distribution=distribution,
                                                            number_of_threads=20)
+            for thread in threads:
+                thread.start()
 
 
     def rebalance_out(self, how_many):
