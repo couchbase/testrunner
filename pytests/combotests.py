@@ -2,6 +2,7 @@ from random import shuffle
 from TestInput import TestInputSingleton
 import logger
 import time
+import threading
 
 import unittest
 from membase.api.rest_client import RestConnection
@@ -44,8 +45,8 @@ class ComboBaseTests(unittest.TestCase):
     def choose_nodes(master, nodes, howmany):
         selected = []
         for node in nodes:
-            if not FailoverBaseTest.contains(node.ip, master.ip) and\
-               not FailoverBaseTest.contains(node.ip, '127.0.0.1'):
+            if not ComboBaseTests.contains(node.ip, master.ip) and\
+               not ComboBaseTests.contains(node.ip, '127.0.0.1'):
                 selected.append(node)
                 if len(selected) == howmany:
                     break
@@ -69,67 +70,23 @@ class ComboTests(unittest.TestCase):
     def tearDown(self):
         ComboBaseTests.common_tearDown(self._servers, self)
 
-    def test_failover_normal_1_replica_1_percent(self):
-        self.common_test_body(1, 'normal', 1)
 
-    def test_failover_normal_2_replica_1_percent(self):
-        self.common_test_body(2, 'normal', 1)
-
-    def test_failover_normal_3_replica_1_percent(self):
-        self.common_test_body(3, 'normal', 1)
-
-    def test_failover_normal_1_replica_10_percent(self):
-        self.common_test_body(1, 'normal', 10)
-
-    def test_failover_normal_2_replica_10_percent(self):
-        self.common_test_body(2, 'normal', 10)
-
-    def test_failover_normal_3_replica_10_percent(self):
-        self.common_test_body(3, 'normal', 10)
-
-    def test_failover_normal_1_replica_30_percent(self):
-        self.common_test_body(1, 'normal', 30)
-
-    def test_failover_normal_2_replica_30_percent(self):
-        self.common_test_body(2, 'normal', 30)
-
-    def test_failover_normal_3_replica_30_percent(self):
-        self.common_test_body(3, 'normal', 30)
-
-
-    def test_failover_stop_membase_1_replica_1_percent(self):
-        self.common_test_body(1, 'stop_membase', 1)
-
-    def test_failover_stop_membase_2_replica_1_percent(self):
-        self.common_test_body(2, 'stop_membase', 1)
-
-    def test_failover_stop_membase_3_replica_1_percent(self):
-        self.common_test_body(3, 'stop_membase', 1)
-
-    def test_failover_stop_membase_1_replica_10_percent(self):
-        self.common_test_body(1, 'stop_membase', 10)
-
-    def test_failover_stop_membase_2_replica_10_percent(self):
-        self.common_test_body(2, 'stop_membase', 10)
-
-    def test_failover_stop_membase_3_replica_10_percent(self):
-        self.common_test_body(3, 'stop_membase', 10)
-
-    def test_failover_stop_membase_1_replica_30_percent(self):
-        self.common_test_body(1, 'stop_membase', 30)
-
-    def test_failover_stop_membase_2_replica_30_percent(self):
-        self.common_test_body(2, 'stop_membase', 30)
-
-    def test_failover_stop_membase_3_replica_30_percent(self):
-        self.common_test_body(3, 'stop_membase', 30)
-
+    def loop(self):
+        duration = 240
+        replica = 1
+        step = 1
+        if 'duration' in self._input.test_params:
+            duration = int(self._input.test_params['duration'])
+        if 'step' in self._input.test_params:
+            step = int(self._input.test_params['step'])
+        if 'replica' in self._input.test_params:
+            replica = int(self._input.test_params['replica'])
+        self.common_test_body(replica, step, 5, duration)
 
     def common_test_body(self, replica, steps, load_ratio,timeout=10):
         log = logger.Logger.get_logger()
         start_time = time.time()
         log.info("replica : {0}".format(replica))
-        log.info("failover_reason : {0}".format(failover_reason))
         log.info("load_ratio : {0}".format(load_ratio))
         master = self._servers[0]
         log.info('picking server : {0} as the master'.format(master))
@@ -143,33 +100,38 @@ class ComboTests(unittest.TestCase):
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,
                            proxyPort=11211)
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[master],
-                                                                     bucket_port=11211,
-                                                                     test=self)
+        json_bucket = {'name':'default','port':11211,'password':''}
+        BucketOperationHelper.wait_for_memcached(master, json_bucket)
         credentials = self._input.membase_settings
         log.info("inserting some items in the master before adding any nodes")
-        if load_ratio >= 10:
-            distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-        else:
-            distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
-        inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(serverInfo=master,
-                                          ram_load_ratio=load_ratio,
-                                          value_size_distribution=distribution,
-                                          number_of_threads=40)
-        log.info('inserted {0} keys'.format(inserted_count))
+        distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
+        threads = MemcachedClientHelper.create_threads(servers=[master],
+                                                       ram_load_ratio=load_ratio,
+                                                       value_size_distribution=distribution,
+                                                       number_of_threads=20)
+        for thread in threads:
+            thread.start()
         ClusterOperationHelper.add_all_nodes_or_assert(master, self._servers, credentials, self)
         nodes = rest.node_statuses()
         rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
         msg = "rebalance failed after adding these nodes {0}".format(nodes)
         self.assertTrue(rest.monitorRebalance(), msg=msg)
-
         while time.time()  > ( start_time + 60 * timeout) :
-
             #rebalance out step nodes
             self.rebalance_in(how_many=steps)
-            self.rebalance_out(how_many=steps)
+            all_dead = True
+            for t in threads:
+                if not t.isAlive():
+                    all_dead = False
+                    break
 
+            if all_dead:
+                threads = MemcachedClientHelper.create_threads(servers=[master],
+                                                               ram_load_ratio=10,
+                                                               value_size_distribution=distribution,
+                                                               number_of_threads=20)
+            self.rebalance_out(how_many=steps)
+        [t.join() for t in threads]
 
 
     def rebalance_out(self,how_many):
