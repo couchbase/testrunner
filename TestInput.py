@@ -126,7 +126,7 @@ class TestInputParser():
             if not server.port and 'port' in global_properties:
                 server.port = global_properties['port']
             if server.cli_path == '' and 'cli' in global_properties:
-                server.ssh_username = global_properties['cli']
+                server.cli_path = global_properties['cli']
             if server.rest_username == '' and input.membase_settings.rest_username != '':
                 server.rest_username = input.membase_settings.rest_username
             if server.rest_password == '' and input.membase_settings.rest_password != '':
