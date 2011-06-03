@@ -102,7 +102,6 @@ class ComboTests(unittest.TestCase):
                            proxyPort=11211)
         json_bucket = {'name':'default','port':11211,'password':''}
         BucketOperationHelper.wait_for_memcached(master, json_bucket)
-        credentials = self._input.membase_settings
         log.info("inserting some items in the master before adding any nodes")
         distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
         threads = MemcachedClientHelper.create_threads(servers=[master],
@@ -111,27 +110,15 @@ class ComboTests(unittest.TestCase):
                                                        number_of_threads=20)
         for thread in threads:
             thread.start()
-        ClusterOperationHelper.add_all_nodes_or_assert(master, self._servers, credentials, self)
-        nodes = rest.node_statuses()
-        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
-        msg = "rebalance failed after adding these nodes {0}".format(nodes)
-        self.assertTrue(rest.monitorRebalance(), msg=msg)
-        while time.time()  > ( start_time + 60 * timeout) :
+        while time.time() < ( start_time + 60 * timeout):
             #rebalance out step nodes
             self.rebalance_in(how_many=steps)
-            all_dead = True
-            for t in threads:
-                if not t.isAlive():
-                    all_dead = False
-                    break
-
-            if all_dead:
-                threads = MemcachedClientHelper.create_threads(servers=[master],
-                                                               ram_load_ratio=10,
-                                                               value_size_distribution=distribution,
-                                                               number_of_threads=20)
             self.rebalance_out(how_many=steps)
-        [t.join() for t in threads]
+            [t.join() for t in threads]
+            threads = MemcachedClientHelper.create_threads(servers=[master],
+                                                           ram_load_ratio=10,
+                                                           value_size_distribution=distribution,
+                                                           number_of_threads=20)
 
 
     def rebalance_out(self,how_many):
@@ -174,7 +161,7 @@ class ComboTests(unittest.TestCase):
         selection = self._servers[1:]
         shuffle(selection)
         for server in selection:
-            if server.ip in nodeIps:
+            if not server.ip in nodeIps:
                 toBeAdded.append(server)
             if len(toBeAdded) == how_many:
                 break
