@@ -72,13 +72,14 @@ class ComboTests(unittest.TestCase):
     def loop(self):
         duration = 240
         replica = 1
+        load_ratio = 5
         if 'duration' in self._input.test_params:
             duration = int(self._input.test_params['duration'])
-        if 'step' in self._input.test_params:
-            step = int(self._input.test_params['step'])
+        if 'load_ratio' in self._input.test_params:
+            load_ratio = int(self._input.test_params['load_ratio'])
         if 'replica' in self._input.test_params:
             replica = int(self._input.test_params['replica'])
-        self.common_test_body(replica, 5, duration)
+        self.common_test_body(replica, load_ratio, duration)
 
     def common_test_body(self, replica, load_ratio, timeout=10):
         log = logger.Logger.get_logger()
@@ -100,11 +101,11 @@ class ComboTests(unittest.TestCase):
         json_bucket = {'name': 'default', 'port': 11211, 'password': ''}
         BucketOperationHelper.wait_for_memcached(master, json_bucket)
         log.info("inserting some items in the master before adding any nodes")
-        distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
+        distribution = {512: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
         threads = MemcachedClientHelper.create_threads(servers=[master],
                                                        ram_load_ratio=load_ratio,
                                                        value_size_distribution=distribution,
-                                                       number_of_threads=20)
+                                                       number_of_threads=40)
         for thread in threads:
             thread.start()
         while time.time() < ( start_time + 60 * timeout):
@@ -118,12 +119,13 @@ class ComboTests(unittest.TestCase):
             [t.join() for t in threads]
             nodes = rest.node_statuses()
             how_many_out = Random().randint(1, len(nodes) - 1)
+            RestHelper(rest).wait_for_replication(120)
             self.rebalance_out(how_many=how_many_out)
             self.log.info("going to remove {0} nodes".format(how_many_out))
             threads = MemcachedClientHelper.create_threads(servers=[master],
-                                                           ram_load_ratio=10,
+                                                           ram_load_ratio=load_ratio,
                                                            value_size_distribution=distribution,
-                                                           number_of_threads=20)
+                                                           number_of_threads=40)
             for thread in threads:
                 thread.start()
 
