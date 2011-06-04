@@ -36,11 +36,13 @@ class LoadThread(threading.Thread):
         self.backoff = 0
 
         self.mutation_index_max = 0
-        self.time_prev = 0
         self.items = 0
         self.operations = 0
         self.time = 0
         self.size = 0
+        self.operation_rate = 0
+
+        threads = int(load_info['operation_info'].get('threads', 0))
 
         # cache info
         self.cache_data = load_info['operation_info'].get('cache_data', False)
@@ -65,11 +67,12 @@ class LoadThread(threading.Thread):
             for i in range(load_info['operation_info']['valuesize_distribution'][op]):
                 self.valuesize_sequence.append(op)
 
+        self.max_operation_rate = int(load_info['operation_info'].get('operation_rate', 0) / threads)
+
         self.uuid = uuid.uuid4()
 
         # limit info
         # all but time needs to be divided equally amongst threads
-        threads = int(load_info['operation_info'].get('threads', 0))
         self.limit_items = int(load_info['limit_info'].get('items', 0) / threads)
         self.limit_operations = int(load_info['limit_info'].get('operations', 0) / threads)
         self.limit_time = int(load_info['limit_info'].get('time', 0))
@@ -91,6 +94,8 @@ class LoadThread(threading.Thread):
             if self.stopped:
                 return
 
+            start_time = time.time()
+
             # stop thread if we hit a limit (first limit we hit ends the thread)
             if self.limit_items and self.items > self.limit_items:
                 return
@@ -101,26 +106,42 @@ class LoadThread(threading.Thread):
             if self.limit_size and self.size > self.limit_size:
                 return
 
+            # rate limit if we need to
+            if self.max_operation_rate and self.operation_rate > self.max_operation_rate:
+                time.sleep(1.0/float(self.max_operation_rate))
+
             # do the actual work
             operation = self.get_operation()
             if operation == 'set':
                 key = self.name + '_' + `self.get_mutation_key()`
                 try:
 #                    print `self.mutation_index` + " : " + `self.get_mutation_key()`
-                    data = self.get_data()
-                    self.server.set(key, 0, 0, data)
+                    self.server.set(key, 0, 0, self.get_data())
                     self.operations += 1
                     self.backoff -= 1
+
+                    # update number of items
+                    # for now the only time we have new items is with ever increasing mutation key indexes
                     if self.get_mutation_key() > self.mutation_index_max:
                         self.mutation_index_max = self.get_mutation_key()
                         # looks like this will miss the first mutation
                         self.items += 1
+
+                    # TODO: verify that this works, we may need to take the second to max index
+                    # update the size of all data (values, not keys) that is in the system
+                    # this can be either from new keys or overwriting old keys
+                    prev_indexes = get_mutation_indexes(self.get_mutation_key())
+                    prev_size = 0
+                    if prev_indexes:
+                        prev_size = self.get_data_size(max(prev_indexes))
+                    self.size += self.get_data_size() - prev_size
+
                     self.mutation_index += 1
                 except mc_bin_client.MemcachedError as e:
                     if self.backoff < 0:
                         self.backoff = 0
-                    if self.backoff > 10:
-                        self.backoff = 10
+                    if self.backoff > 30:
+                        self.backoff = 30
                     self.backoff += 1
                     # temporary error
                     if e.status == 134:
@@ -158,13 +179,16 @@ class LoadThread(threading.Thread):
                 except mc_bin_client.MemcachedError as e:
                     if self.backoff < 0:
                         self.backoff = 0
-                    if self.backoff > 10:
-                        self.backoff = 10
+                    if self.backoff > 30:
+                        self.backoff = 30
                     self.backoff += 1
                     print `time.time()` + ' ' + self.name + ' get(' + `self.backoff` + ') ',
                     print e
                     time.sleep(self.backoff)
 
+            end_time = time.time()
+            self.time += (end_time-start_time)
+            self.operation_rate = (float(self.operations) / self.time)
 
     # get the current operation based on the get and mutation indexes
     def get_operation(self):
@@ -215,6 +239,15 @@ class LoadThread(threading.Thread):
             return `index` + self.data_cache[valuesize]
         else:
             return (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
+
+    # mutation_index -> mutation_data : based on create/nocreate
+    # shortcut for getting the expected size of a mutation without generating the data
+    def get_data_size(self, index=None):
+        if index == None:
+            index = self.mutation_index
+
+        valuesize = self.valuesize_sequence[index % len(self.valuesize_sequence)]
+        return valuesize
 
 
 class LoadRunner(object):
@@ -288,8 +321,8 @@ class LoadRunner(object):
         }
 
     # block till condition
-    def wait(self, time_limit=0):
-        if time_limit == 0:
+    def wait(self, time_limit=None):
+        if time_limit == None:
             for t in self.threads:
                 t.join()
         else:
