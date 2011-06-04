@@ -230,7 +230,16 @@ class BucketOperationHelper():
                                 client = None
                                 time.sleep(3)
 
-            client.flush()
+            flushed = False
+            while not flushed:
+                if time.time() > end_time:
+                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                try:
+                    client.flush()
+                    flushed = True
+                except:
+                    time.sleep(3)
+
             time.sleep(10)
             client.stats('reset')
             client.close()
