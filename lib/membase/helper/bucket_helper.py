@@ -241,7 +241,15 @@ class BucketOperationHelper():
                     time.sleep(3)
 
             time.sleep(10)
-            client.stats('reset')
+            stats_reset = False
+            while not stats_reset:
+                if time.time() > end_time:
+                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                try:
+                    client.stats('reset')
+                    stats_reset = True
+                except:
+                    time.sleep(3)
             client.close()
 
             log.info("inserted {0} keys to all {1} vBuckets".format(len(keys),1024))
