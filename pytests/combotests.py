@@ -110,6 +110,7 @@ class ComboTests(unittest.TestCase):
                                                        write_only=True,
                                                        async_write=True)
         for thread in threads:
+            thread.terminate_in_minutes = 24 * 60
             thread.start()
         while time.time() < ( start_time + 60 * timeout):
             #rebalance out step nodes
