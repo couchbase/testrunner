@@ -101,11 +101,11 @@ class ComboTests(unittest.TestCase):
         json_bucket = {'name': 'default', 'port': 11211, 'password': ''}
         BucketOperationHelper.wait_for_memcached(master, json_bucket)
         log.info("inserting some items in the master before adding any nodes")
-        distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
+        distribution = {1024: 0.4, 2 * 1024: 0.5, 512: 0.1}
         threads = MemcachedClientHelper.create_threads(servers=[master],
                                                        value_size_distribution=distribution,
                                                        number_of_threads=20,
-                                                       number_of_items=4000000000,
+                                                       number_of_items=400000000,
                                                        moxi=False,
                                                        write_only=True)
         for thread in threads:
