@@ -101,11 +101,12 @@ class ComboTests(unittest.TestCase):
         json_bucket = {'name': 'default', 'port': 11211, 'password': ''}
         BucketOperationHelper.wait_for_memcached(master, json_bucket)
         log.info("inserting some items in the master before adding any nodes")
-        distribution = {512: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
+        distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
         threads = MemcachedClientHelper.create_threads(servers=[master],
-                                                       ram_load_ratio=load_ratio,
                                                        value_size_distribution=distribution,
-                                                       number_of_threads=40)
+                                                       number_of_threads=20,
+                                                       number_of_items=4000000000,
+                                                       moxi=False)
         for thread in threads:
             thread.start()
         while time.time() < ( start_time + 60 * timeout):
@@ -116,19 +117,18 @@ class ComboTests(unittest.TestCase):
             how_many_add = Random().randint(1, delta)
             self.log.info("going to add {0} nodes".format(how_many_add))
             self.rebalance_in(how_many=how_many_add)
-            [t.join() for t in threads]
-            nodes = rest.node_statuses()
-            how_many_out = Random().randint(1, len(nodes) - 1)
-            RestHelper(rest).wait_for_replication(120)
-            self.rebalance_out(how_many=how_many_out)
-            self.log.info("going to remove {0} nodes".format(how_many_out))
-            threads = MemcachedClientHelper.create_threads(servers=[master],
-                                                           ram_load_ratio=load_ratio,
-                                                           value_size_distribution=distribution,
-                                                           number_of_threads=40)
-            for thread in threads:
-                thread.start()
+            time.sleep(240)
+            RestHelper(rest).wait_for_replication(600)
+            #dont rebalance out if there are not too many nodes
+            if len(nodes) >= (3.0 / 4.0 * len(self._servers)):
+                nodes = rest.node_statuses()
+                how_many_out = Random().randint(1, len(nodes) - 1)
+                self.log.info("going to remove {0} nodes".format(how_many_out))
+                self.rebalance_out(how_many=how_many_out)
 
+        for t in threads:
+            t.aborted = True
+            t.join()
 
     def rebalance_out(self, how_many):
         msg = "choosing three nodes and rebalance them out from the cluster"
@@ -165,7 +165,7 @@ class ComboTests(unittest.TestCase):
                     shell.start_membase()
                     shell.disconnect()
                     RestHelper(RestConnection(server)).is_ns_server_running()
-                #let's restart membase on those nodes
+                    #let's restart membase on those nodes
                 return result
         return True
 
