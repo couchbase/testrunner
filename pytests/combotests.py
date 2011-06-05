@@ -106,7 +106,8 @@ class ComboTests(unittest.TestCase):
                                                        value_size_distribution=distribution,
                                                        number_of_threads=20,
                                                        number_of_items=4000000000,
-                                                       moxi=False)
+                                                       moxi=False,
+                                                       write_only=True)
         for thread in threads:
             thread.start()
         while time.time() < ( start_time + 60 * timeout):
