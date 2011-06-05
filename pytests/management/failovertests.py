@@ -197,6 +197,9 @@ class FailoverTests(unittest.TestCase):
         nodes = rest.node_statuses()
         #while len(node) > replica * 2
         while (len(nodes) - replica) >= 1:
+            final_replication_state = RestHelper(rest).wait_for_replication(900)
+            msg = "replication state after waiting for up to 15 minutes : {0}"
+            self.log.info(msg.format(final_replication_state))
             chosen = FailoverBaseTest.choose_nodes(master, nodes, replica)
             for node in chosen:
                 #let's do op
