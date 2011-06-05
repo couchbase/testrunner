@@ -161,8 +161,14 @@ class ComboTests(unittest.TestCase):
                 self.log.info(msg.format(result))
                 for server in toBeEjectedServers:
                     shell = RemoteMachineShellConnection(server)
-                    shell.stop_membase()
-                    shell.start_membase()
+                    try:
+                        shell.stop_membase()
+                    except:
+                        pass
+                    try:
+                        shell.start_membase()
+                    except:
+                        pass
                     shell.disconnect()
                     RestHelper(RestConnection(server)).is_ns_server_running()
                     #let's restart membase on those nodes
