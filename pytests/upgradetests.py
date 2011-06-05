@@ -59,13 +59,13 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                              test=self)
                 if insert_data:
                     #let's insert some data
-                    distribution = {30 * 1024: 0.5, 20: 0.5}
+                    distribution = {2 * 1024: 0.5, 20: 0.5}
                     inserted_keys, rejected_keys =\
                     MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
                                                                           name='default',
                                                                           port=11211,
-                                                                          ram_load_ratio=10.0,
-                                                                          number_of_items=200000,
+                                                                          ram_load_ratio=25.0,
+                                                                          number_of_threads=1,
                                                                           value_size_distribution=distribution,
                                                                           write_only=True)
                     log.info("wait until data is completely persisted on the disk")
@@ -454,12 +454,13 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 if load_ratio == -1:
                     #let's load 0.1 data
                     load_ratio = 0.1
-                distribution = {10: 0.5, 20: 0.5}
+                distribution = {1024: 0.5, 20: 0.5}
                 inserted_keys, rejected_keys =\
                 MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
                                                                       name='default',
                                                                       port=11211,
                                                                       ram_load_ratio=load_ratio,
+                                                                      number_of_threads=1,
                                                                       value_size_distribution=distribution)
                 log.info("wait until data is completely persisted on the disk")
 
