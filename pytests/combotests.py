@@ -105,7 +105,7 @@ class ComboTests(unittest.TestCase):
         threads = MemcachedClientHelper.create_threads(servers=[master],
                                                        value_size_distribution=distribution,
                                                        number_of_threads=20,
-                                                       number_of_items=400000000,
+                                                       number_of_items=4000000000,
                                                        moxi=False,
                                                        write_only=True)
         for thread in threads:
@@ -115,9 +115,15 @@ class ComboTests(unittest.TestCase):
             #let's add some items ?
             nodes = rest.node_statuses()
             delta = len(self._servers) - len(nodes)
-            how_many_add = Random().randint(1, delta)
-            self.log.info("going to add {0} nodes".format(how_many_add))
-            self.rebalance_in(how_many=how_many_add)
+            if delta > 0:
+                if delta > 1:
+                    how_many_add = Random().randint(1, delta)
+                else:
+                    how_many_add = 1
+                self.log.info("going to add {0} nodes".format(how_many_add))
+                self.rebalance_in(how_many=how_many_add)
+            else:
+                self.log.info("all nodes already joined the clustr")
             time.sleep(240)
             RestHelper(rest).wait_for_replication(600)
             #dont rebalance out if there are not too many nodes
