@@ -320,7 +320,6 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
-            rebalanced_servers.append(server)
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
