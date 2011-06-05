@@ -12,15 +12,16 @@ from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientH
 from remote.remote_util import RemoteMachineShellConnection
 
 class SyncReplicationTest(unittest.TestCase):
-
     awareness = None
 
-    def common_setup(self,replica):
+    def common_setup(self, replica):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         first = self._servers[0]
         self.log = logger.Logger().get_logger()
         self.log.info(self._input)
+        rest = RestConnection(first)
+        bucket = {"name": "default", "port": 11211, "password": ""}
         for server in self._servers:
             shell = RemoteMachineShellConnection(server)
             shell.start_membase()
@@ -29,7 +30,6 @@ class SyncReplicationTest(unittest.TestCase):
         ClusterOperationHelper.cleanup_cluster(self._servers)
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
         ClusterOperationHelper.add_all_nodes_or_assert(self._servers[0], self._servers, self._input.membase_settings, self)
-        rest = RestConnection(first)
         nodes = rest.node_statuses()
         otpNodeIds = []
         for node in nodes:
@@ -44,7 +44,6 @@ class SyncReplicationTest(unittest.TestCase):
                         "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
         info = rest.get_nodes_self()
         bucket_ram = info.mcdMemoryReserved * 3 / 4
-        bucket = {"name":"default","port":11211,"password":""}
         rest.create_bucket(bucket=bucket["name"], ramQuotaMB=int(bucket_ram), replicaNumber=replica, proxyPort=11211)
         msg = "wait_for_memcached fails"
         ready = BucketOperationHelper.wait_for_memcached(first, bucket),
@@ -54,14 +53,14 @@ class SyncReplicationTest(unittest.TestCase):
     def tearDown(self):
         if self.awareness:
             self.awareness.done()
-        ClusterOperationHelper.cleanup_cluster(self._servers)
-        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
+            ClusterOperationHelper.cleanup_cluster(self._servers)
+            BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
 
     def one_replica(self):
         self.common_setup(1)
-        keys = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, 1000)]
-        value = MemcachedClientHelper.create_value("*", 102400)
+        keys = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, 100)]
+        value = MemcachedClientHelper.create_value("*", 1024)
         for k in keys:
             vBucket = crc32.crc32_hash(k)
             mc = self.awareness.memcached(k)
@@ -70,6 +69,7 @@ class SyncReplicationTest(unittest.TestCase):
         for k in keys:
             mc = self.awareness.memcached(k)
             mc.get(k)
+
 
     def one_replica_one_node(self):
         pass
@@ -86,7 +86,7 @@ class SyncReplicationTest(unittest.TestCase):
     def three_replica(self):
         self._unsupported_replicas(1)
 
-    def _unsupported_replicas(self,replica):
+    def _unsupported_replicas(self, replica):
         self.common_setup(1)
         keys = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, 100)]
         value = MemcachedClientHelper.create_value("*", 102400)
@@ -102,23 +102,44 @@ class SyncReplicationTest(unittest.TestCase):
             except MemcachedError as error:
                 self.log.info("error {0} {1} as expected".format(error.status, error.msg))
 
-#        for k in keys:
-#            mc = self.awareness.memcached(k)
-#            mc.get(k)
+        for k in keys:
+            mc = self.awareness.memcached(k)
+            mc.get(k)
 
     def invalid_key(self):
         pass
 
     def not_your_vbucket(self):
-        pass
+        self.common_setup(1)
+        keys = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, 100)]
+        value = MemcachedClientHelper.create_value("*", 1024)
+        for k in keys:
+            vBucket = crc32.crc32_hash(k)
+            mc = self.awareness.memcached(k)
+            mc.set(k, 0, 0, value)
+            not_your_vbucket_mc = self.awareness.not_my_vbucket_memcached(k)
+            try:
+                a, b, response = not_your_vbucket_mc.sync_replication(1, [{"key": k, "vbucket": vBucket}])
+                a, b, response = not_your_vbucket_mc.sync_replication(1, [{"key": k, "vbucket": vBucket}])
+                a, b, response = not_your_vbucket_mc.sync_replication(1, [{"key": k, "vbucket": vBucket}])
+                if response and response[0]["event"] != "invalid key":
+                    msg = "server did not raise an error when running sync_replication with invalid vbucket"
+                    self.fail(msg)
+            except MemcachedError as error:
+                self.log.error(error)
+
     def some_invalid_keys(self):
         pass
+
     def some_not_your_vbucket(self):
         pass
+
     def some_large_values(self):
         pass
+
     def too_many_keys(self):
         pass
+
     def singlenode(self):
         pass
 
