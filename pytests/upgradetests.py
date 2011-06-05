@@ -444,7 +444,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             bucket = {'name': 'default', 'port': 11211}
             RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
             RebalanceHelper.wait_for_stats(master, bucket, 'ep_flusher_todo', 0)
-
+            json_bucket = {'name': 'default', 'port': 11211}
             ready = BucketOperationHelper.wait_for_memcached(master, json_bucket)
             self.assertTrue(ready, "wait_for_memcached failed")
 
