@@ -261,7 +261,8 @@ class ReplicationTests(unittest.TestCase):
                                           port=11220,
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
-                                          number_of_threads=40)
+                                          number_of_threads=40,
+                                          moxi=False)
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
         inserted_keys, rejected_keys =\
@@ -270,7 +271,8 @@ class ReplicationTests(unittest.TestCase):
                                                               port=11220,
                                                               ram_load_ratio=fill_ram_percentage,
                                                               value_size_distribution=distribution,
-                                                              number_of_threads=40)
+                                                              number_of_threads=40,
+                                                              moxi=False)
         self.keys = inserted_keys
         self.log.info('updating all keys by appending _20 to each value')
         self._update_keys('20')
@@ -316,7 +318,8 @@ class ReplicationTests(unittest.TestCase):
                                           port=11220,
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
-                                          number_of_threads=40)
+                                          number_of_threads=40,
+                                          moxi=False)
 
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
@@ -328,7 +331,8 @@ class ReplicationTests(unittest.TestCase):
                                                               port=11220,
                                                               ram_load_ratio=fill_ram_percentage,
                                                               value_size_distribution=distribution,
-                                                              number_of_threads=40)
+                                                              number_of_threads=40,
+                                                              moxi=False)
 
         self.keys = inserted_keys
         self.log.info('updating all keys by appending _20 to each value')

@@ -244,10 +244,7 @@ class MemcachedClientHelper(object):
     def memcached_client(node,bucket):
         client = MemcachedClient(node.ip, bucket["port"])
         if bucket["port"] == 11210:
-            if bucket["name"] == 'default':
-                client.sasl_auth_plain(bucket["name"], '')
-            else:
-                client.sasl_auth_plain(bucket["name"], bucket["password"])
+            client.sasl_auth_plain(bucket["name"], '')
         if bucket["name"] != 'default' and bucket["port"] == 11211:
             client.sasl_auth_plain(bucket["name"], bucket["password"])
         return client
