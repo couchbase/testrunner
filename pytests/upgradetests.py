@@ -51,12 +51,11 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                 BucketOperationHelper.create_default_buckets(servers=[server],
                                                              number_of_replicas=1,
                                                              assert_on_test=self)
-                bucket = {'name': 'default', 'port': 11211}
-                RebalanceHelper.wait_for_stats(server,bucket,'ep_queue_size',0)
-                RebalanceHelper.wait_for_stats(server,bucket,'ep_flusher_todo',0)
-                BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[server],
-                                                                             bucket_port=11211,
-                                                                             test=self)
+                json_bucket = {'name': 'default', 'port': 11211}
+                RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_queue_size', 0)
+                RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_flusher_todo', 0)
+                ready = BucketOperationHelper.wait_for_memcached(server, json_bucket)
+                self.assertTrue(ready, "wait_for_memcached failed")
                 if insert_data:
                     #let's insert some data
                     distribution = {2 * 1024: 0.5, 20: 0.5}
@@ -68,8 +67,8 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                           number_of_threads=1,
                                                                           value_size_distribution=distribution,
                                                                           write_only=True)
-                    log.info("wait until data is completely persisted on the disk")
-                    time.sleep(120)
+                    RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_queue_size', 0)
+                    RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_flusher_todo', 0)
         filtered_builds = []
         for build in builds:
             if build.deliverable_type == info.deliverable_type and\
@@ -443,12 +442,12 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                                          assert_on_test=self)
 
             bucket = {'name': 'default', 'port': 11211}
-            RebalanceHelper.wait_for_stats(master,bucket,'ep_queue_size',0)
-            RebalanceHelper.wait_for_stats(master,bucket,'ep_flusher_todo',0)
+            RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
+            RebalanceHelper.wait_for_stats(master, bucket, 'ep_flusher_todo', 0)
 
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[master],
-                                                                         bucket_port=11211,
-                                                                         test=self)
+            ready = BucketOperationHelper.wait_for_memcached(master, json_bucket)
+            self.assertTrue(ready, "wait_for_memcached failed")
+
             if insert_data:
                 #let's insert some data
                 if load_ratio == -1:
