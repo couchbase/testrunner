@@ -31,7 +31,8 @@ class MemcachedClientHelper(object):
                        number_of_threads=50,
                        override_vBucketId=-1,
                        write_only=False,
-                       moxi=True):
+                       moxi=True,
+                       async_write=True):
         log = logger.Logger.get_logger()
         if not servers:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
@@ -80,7 +81,8 @@ class MemcachedClientHelper(object):
                                   ignore_how_many_errors=5000,
                                   override_vBucketId=override_vBucketId,
                                   write_only=write_only,
-                                  moxi=moxi)
+                                  moxi=moxi,
+                                  async_write=async_write)
             threads.append(thread)
 
         return threads
@@ -241,7 +243,7 @@ class MemcachedClientHelper(object):
         return None
 
     @staticmethod
-    def memcached_client(node,bucket):
+    def memcached_client(node, bucket):
         client = MemcachedClient(node.ip, bucket["port"])
         if bucket["port"] == 11210:
             client.sasl_auth_plain(bucket["name"], '')
@@ -354,10 +356,11 @@ class ReaderThread(object):
         self.aborted = True
 
     def _saw_error(self, key):
-#        error_msg = "unable to get key {0}"
+    #        error_msg = "unable to get key {0}"
         self.error_seen += 1
-#        if self.error_seen < 500:
-#            self.log.error(error_msg.format(key))
+
+    #        if self.error_seen < 500:
+    #            self.log.error(error_msg.format(key))
 
 
     def start(self):
@@ -378,7 +381,7 @@ class ReaderThread(object):
                 client.get(key)
             except Exception:
                 self._saw_error(key)
-#        self.log.warn("attempted to get {0} keys before they are set".format(self.error_seen))
+                #        self.log.warn("attempted to get {0} keys before they are set".format(self.error_seen))
         client.close()
 
 #mutation ? let' do two cycles , first run and then try to mutate all those itesm
@@ -396,7 +399,8 @@ class WorkerThread(threading.Thread):
                  override_vBucketId=-1,
                  terminate_in_minutes=60,
                  write_only=False,
-                 moxi=True):
+                 moxi=True,
+                 async_write=False):
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
@@ -424,6 +428,7 @@ class WorkerThread(threading.Thread):
                      'baseuuid': self._base_uuid}
         self.write_only = write_only
         self.aborted = False
+        self.async_write = async_write
 
     def inserted_keys_count(self):
         return self._inserted_keys_count
@@ -462,9 +467,9 @@ class WorkerThread(threading.Thread):
             except Exception:
                 self.log.info("unable to create memcached client. stop thread...")
                 return
-            #keeping keys in the memory is not such a good idea because
-        #we run out of memory so best is to just keep a counter ?
-        #if someone asks for the keys we can give them the formula which is
+                #keeping keys in the memory is not such a good idea because
+                #we run out of memory so best is to just keep a counter ?
+            #if someone asks for the keys we can give them the formula which is
         # baseuuid-{0}-{1} , size and counter , which is between n-0 except those
         #keys which were rejected
         #let's print out some status every 5 minutes..
@@ -487,6 +492,15 @@ class WorkerThread(threading.Thread):
             else:
                 #every two minutes print the status
                 if time.time() - last_reported > 2 * 60:
+                    if not self.moxi:
+                        awareness.done()
+                        try:
+                            awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                        except Exception:
+                            #vbucket map is changing . sleep 5 seconds
+                            time.sleep(5)
+                            awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                        self.log.info("now connected to {0} memcacheds".format(len(awareness.memcacheds)))
                     last_reported = time.time()
                     for item in self.values_list:
                         self.log.info(
@@ -504,13 +518,22 @@ class WorkerThread(threading.Thread):
             try:
                 if self.override_vBucketId >= 0:
                     client.vbucketId = self.override_vBucketId
-                client.set(key, 0, 0, selected['value'])
+                if self.async_write:
+                    client.send_set(key, 0, 0, selected['value'])
+                else:
+                    client.set(key, 0, 0, selected['value'])
                 self._inserted_keys_count += 1
                 backoff_count = 0
             except MemcachedError as error:
                 if not self.moxi:
                     awareness.done()
-                    awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                    try:
+                        awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                    except Exception:
+                        #vbucket map is changing . sleep 5 seconds
+                        time.sleep(5)
+                        awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                    self.log.info("now connected to {0} memcacheds".format(len(awareness.memcacheds)))
                 self.log.error("memcached error {0} {1} from {2}".format(error.status, error.msg, self.serverInfo.ip))
                 if error.status == 134:
                     backoff_count += 1
@@ -528,7 +551,13 @@ class WorkerThread(threading.Thread):
             except Exception as ex:
                 if not self.moxi:
                     awareness.done()
-                    awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                    try:
+                        awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                    except Exception:
+                        #vbucket map is changing . sleep 5 seconds
+                        time.sleep(5)
+                        awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                    self.log.info("now connected to {0} memcacheds".format(len(awareness.memcacheds)))
                 self.log.error("error {0} from {1}".format(ex, self.serverInfo.ip))
                 self._rejected_keys_count += 1
                 self._rejected_keys.append(key)
@@ -546,7 +575,10 @@ class WorkerThread(threading.Thread):
                 try:
                     if self.override_vBucketId >= 0:
                         client.vbucketId = self.override_vBucketId
-                    client.set(key, 0, 0, key)
+                    if self.async_write:
+                        client.send_set(key, 0, 0, selected['value'])
+                    else:
+                        client.set(key, 0, 0, selected['value'])
                     self._inserted_keys_count += 1
                 except MemcachedError:
                     self._rejected_keys_count += 1
@@ -555,14 +587,14 @@ class WorkerThread(threading.Thread):
                         break
             self._rejected_keys = rejected_after_retry
             retry = - 1
-#        client.close()
+            #        client.close()
         awareness.done()
         if not self.write_only:
             self.queue.put_nowait("stop")
             self.reader.join()
 
-class VBucketAwareMemcached(object):
 
+class VBucketAwareMemcached(object):
     def __init__(self, rest, bucket):
         self.log = logger.Logger.get_logger()
         self.memcacheds = {}
@@ -575,15 +607,21 @@ class VBucketAwareMemcached(object):
                 server = TestInputServer()
                 server.ip = masterIp
                 bucket["port"] = 11210
-                self.memcacheds[masterIp] =\
-                MemcachedClientHelper.memcached_client(server, bucket)
+                try:
+                    self.memcacheds[masterIp] =\
+                    MemcachedClientHelper.memcached_client(server, bucket)
+                except Exception as ex:
+                    msg = "unable to establish connection to {0}.cleanup open connections"
+                    self.log.warn(msg.format(masterIp))
+                    self.done()
+                    raise ex
 
 
-    def memcached(self,key):
+    def memcached(self, key):
         vBucketId = crc32.crc32_hash(key) & 1023
         return self.memcacheds[self.vBucketMap[vBucketId]]
 
-    def not_my_vbucket_memcached(self,key):
+    def not_my_vbucket_memcached(self, key):
         vBucketId = crc32.crc32_hash(key) & 1023
         which_mc = self.vBucketMap[vBucketId]
         for ip in self.memcacheds:

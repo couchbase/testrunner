@@ -101,22 +101,31 @@ class ComboTests(unittest.TestCase):
         json_bucket = {'name': 'default', 'port': 11211, 'password': ''}
         BucketOperationHelper.wait_for_memcached(master, json_bucket)
         log.info("inserting some items in the master before adding any nodes")
-        distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
+        distribution = {1024: 0.4, 2 * 1024: 0.5, 512: 0.1}
         threads = MemcachedClientHelper.create_threads(servers=[master],
                                                        value_size_distribution=distribution,
                                                        number_of_threads=20,
                                                        number_of_items=4000000000,
-                                                       moxi=False)
+                                                       moxi=False,
+                                                       write_only=True,
+                                                       async_write=True)
         for thread in threads:
+            thread.terminate_in_minutes = 24 * 60
             thread.start()
         while time.time() < ( start_time + 60 * timeout):
             #rebalance out step nodes
             #let's add some items ?
             nodes = rest.node_statuses()
             delta = len(self._servers) - len(nodes)
-            how_many_add = Random().randint(1, delta)
-            self.log.info("going to add {0} nodes".format(how_many_add))
-            self.rebalance_in(how_many=how_many_add)
+            if delta > 0:
+                if delta > 1:
+                    how_many_add = Random().randint(1, delta)
+                else:
+                    how_many_add = 1
+                self.log.info("going to add {0} nodes".format(how_many_add))
+                self.rebalance_in(how_many=how_many_add)
+            else:
+                self.log.info("all nodes already joined the clustr")
             time.sleep(240)
             RestHelper(rest).wait_for_replication(600)
             #dont rebalance out if there are not too many nodes
@@ -161,8 +170,14 @@ class ComboTests(unittest.TestCase):
                 self.log.info(msg.format(result))
                 for server in toBeEjectedServers:
                     shell = RemoteMachineShellConnection(server)
-                    shell.stop_membase()
-                    shell.start_membase()
+                    try:
+                        shell.stop_membase()
+                    except:
+                        pass
+                    try:
+                        shell.start_membase()
+                    except:
+                        pass
                     shell.disconnect()
                     RestHelper(RestConnection(server)).is_ns_server_running()
                     #let's restart membase on those nodes

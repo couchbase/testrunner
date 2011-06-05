@@ -133,6 +133,12 @@ class MemcachedClient(object):
         """Set a value in the memcached server."""
         return self._mutate(memcacheConstants.CMD_SET, key, exp, flags, 0, val)
 
+    def send_set(self, key, exp, flags, val):
+        """Set a value in the memcached server without handling the response"""
+        self.vbucketId = crc32.crc32_hash(key) & 1023
+        opaque = self.r.randint(0, 2 ** 32)
+        self._sendCmd(memcacheConstants.CMD_SET, key, val, opaque, struct.pack(SET_PKT_FMT, flags, exp), 0)
+
     def add(self, key, exp, flags, val):
         """Add a value in the memcached server iff it doesn't already exist."""
         return self._mutate(memcacheConstants.CMD_ADD, key, exp, flags, 0, val)
