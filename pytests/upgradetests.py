@@ -66,7 +66,8 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                           port=11211,
                                                                           ram_load_ratio=10.0,
                                                                           number_of_items=200000,
-                                                                          value_size_distribution=distribution)
+                                                                          value_size_distribution=distribution,
+                                                                          write_only=True)
                     log.info("wait until data is completely persisted on the disk")
                     time.sleep(120)
         filtered_builds = []
