@@ -511,6 +511,7 @@ class WorkerThread(threading.Thread):
                 if not self.moxi:
                     awareness.done()
                     awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                    self.log.info("now connected to {0} memcacheds".format(len(awareness.memcacheds)))
                 self.log.error("memcached error {0} {1} from {2}".format(error.status, error.msg, self.serverInfo.ip))
                 if error.status == 134:
                     backoff_count += 1
@@ -529,6 +530,7 @@ class WorkerThread(threading.Thread):
                 if not self.moxi:
                     awareness.done()
                     awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                    self.log.info("now connected to {0} memcacheds".format(len(awareness.memcacheds)))
                 self.log.error("error {0} from {1}".format(ex, self.serverInfo.ip))
                 self._rejected_keys_count += 1
                 self._rejected_keys.append(key)
