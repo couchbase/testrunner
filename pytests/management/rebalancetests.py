@@ -75,7 +75,6 @@ class RebalanceBaseTest(unittest.TestCase):
 
 #load data. add one node rebalance , rebalance out
 class IncrementalRebalanceInTests(unittest.TestCase):
-    pass
 
     def setUp(self):
         self._input = TestInputSingleton.input
@@ -99,7 +98,8 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                           ram_load_ratio=0.1,
                                           value_size_distribution=distribution,
-                                          number_of_threads=20)
+                                          number_of_threads=20,
+                                          moxi=False)
         items_inserted_count += inserted_count
 
         for server in self._servers[1:]:
@@ -126,7 +126,8 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             MemcachedClientHelper.load_bucket(servers=rebalanced_servers,
                                               ram_load_ratio=load_ratio,
                                               value_size_distribution=distribution,
-                                              number_of_threads=5)
+                                              number_of_threads=5,
+                                              moxi=False)
             self.log.info('inserted {0} keys'.format(inserted_count))
             rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
@@ -252,7 +253,6 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
                                           value_size_distribution=distribution,
                                           number_of_threads=20)
         items_inserted_count += inserted_count
-        rebalanced_servers = [master]
 
         for server in self._servers[1:]:
             nodes = rest.node_statuses()
@@ -721,7 +721,8 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
                                               ram_load_ratio=dgm_ratio * 50,
                                               value_size_distribution=distribution,
                                               number_of_threads=40,
-                                              write_only=True)
+                                              write_only=True,
+                                              moxi=False)
 
             self.log.info('inserted {0} keys'.format(inserted_count))
             items_inserted_count += inserted_count
