@@ -578,10 +578,8 @@ class VBucketAwareMemcached(object):
                 server = TestInputServer()
                 server.ip = masterIp
                 bucket["port"] = 11210
-                self.log.info("creating a new connection to {0}:{1}".format(server.ip, bucket["port"]))
                 self.memcacheds[masterIp] =\
                 MemcachedClientHelper.memcached_client(server, bucket)
-                self.log.info("created a new connection to {0}:{1}".format(server.ip, bucket["port"]))
 
 
     def memcached(self,key):
@@ -598,7 +596,6 @@ class VBucketAwareMemcached(object):
 
     def done(self):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
-        logger.Logger.get_logger().info("closed memcached connection...")
 
 
 def start_reader_process(info, keyset, queue):
