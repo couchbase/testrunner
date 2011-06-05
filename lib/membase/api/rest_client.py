@@ -578,6 +578,9 @@ class RestConnection(object):
             raise ServerUnavailableException(ip=self.ip)
         return bucketInfo
 
+    def get_vbuckets(self, bucket='default'):
+        return self.get_bucket(bucket).vbuckets
+
     def delete_bucket(self, bucket='default'):
         api = '{0}{1}{2}'.format(self.baseUrl, '/pools/default/buckets/', bucket)
         try:
@@ -743,6 +746,7 @@ class vBucket(object):
     def __init__(self):
         self.master = ''
         self.replica = []
+        self.id = -1
 
 
 class RestParser(object):
@@ -816,6 +820,7 @@ class RestParser(object):
                                 vbucketInfo.replica.append(serverList[vbucket[i]])
                     bucket.forward_map.append(vbucketInfo)
             vBucketMap = vBucketServerMap['vBucketMap']
+            counter = 0
             for vbucket in vBucketMap:
                 #there will be n number of replicas
                 vbucketInfo = vBucket()
@@ -824,6 +829,8 @@ class RestParser(object):
                     for i in range(1, len(vbucket)):
                         if vbucket[i] != -1:
                             vbucketInfo.replica.append(serverList[vbucket[i]])
+                vbucketInfo.id = counter
+                counter += 1
                 bucket.vbuckets.append(vbucketInfo)
                 #now go through each vbucket and populate the info
             #who is master , who is replica
@@ -860,4 +867,3 @@ class RestParser(object):
             # todo : node.ports
             bucket.nodes.append(node)
         return bucket
-
