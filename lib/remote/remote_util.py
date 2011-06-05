@@ -345,6 +345,7 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T /IM ISBEW64.*')
             self.execute_command('taskkill /F /T /IM firefox.*')
             self.execute_command('taskkill /F /T /IM WerFault.*')
+            self.execute_command('rm -rf /cygdrive/c/Program Files/Membase/Server/')
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
             self.wait_till_file_deleted("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
