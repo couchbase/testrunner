@@ -5,18 +5,17 @@ Binary memcached test client.
 Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 """
 
-import sys
-import time
 import hmac
 import socket
 import random
 import struct
 import exceptions
+import crc32
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
-from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
-from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT
+from memcacheConstants import SET_PKT_FMT, INCRDECR_RES_FMT
+
 import memcacheConstants
 
 class MemcachedError(exceptions.Exception):
@@ -68,7 +67,7 @@ class MemcachedClient(object):
         while len(response) < MIN_RECV_PACKET:
             data = self.s.recv(MIN_RECV_PACKET - len(response))
             if data == '':
-                raise exceptions.EOFError("Got empty data (remote died?).")
+                raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
             response += data
         assert len(response) == MIN_RECV_PACKET
         magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas=\
@@ -78,7 +77,7 @@ class MemcachedClient(object):
         while remaining > 0:
             data = self.s.recv(remaining)
             if data == '':
-                raise exceptions.EOFError("Got empty data (remote died?).")
+                raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
             rv += data
             remaining -= len(data)
 
@@ -89,7 +88,7 @@ class MemcachedClient(object):
         cmd, errcode, opaque, cas, keylen, extralen, rv = self._recvMsg()
         assert myopaque is None or opaque == myopaque, \
             "expected opaque %x, got %x" % (myopaque, opaque)
-        if errcode != 0:
+        if errcode:
             raise MemcachedError(errcode,  rv)
         return cmd, opaque, cas, keylen, extralen, rv
 
@@ -130,6 +129,7 @@ class MemcachedClient(object):
         return self.__incrdecr(memcacheConstants.CMD_DECR, key, amt, init, exp)
 
     def set(self, key, exp, flags, val):
+        self.vbucketId = crc32.crc32_hash(key) & 1023
         """Set a value in the memcached server."""
         return self._mutate(memcacheConstants.CMD_SET, key, exp, flags, 0, val)
 
@@ -148,6 +148,7 @@ class MemcachedClient(object):
 
     def get(self, key):
         """Get the value for a given key within the memcached server."""
+        self.vbucketId = crc32.crc32_hash(key) & 1023
         parts=self._doCmd(memcacheConstants.CMD_GET, key, '')
         return self.__parseGet(parts)
 
@@ -196,6 +197,7 @@ class MemcachedClient(object):
 
     def sasl_auth_cram_md5(self, user, password):
         """Start a plan auth session."""
+        challenge = None
         try:
             self.sasl_auth_start('CRAM-MD5', '')
         except MemcachedError, e:
@@ -313,23 +315,23 @@ class MemcachedClient(object):
     def sync_persistence(self, keyspecs):
         payload = self._build_sync_payload(0x8, keyspecs)
 
-        print "sending sync for persistence command for the following keyspecs:", keyspecs
+#        print "sending sync for persistence command for the following keyspecs:", keyspecs
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
-        return (opaque, cas, self._parse_sync_response(data))
+        return opaque, cas, self._parse_sync_response(data)
 
     def sync_mutation(self, keyspecs):
         payload = self._build_sync_payload(0x4, keyspecs)
 
-        print "sending sync for mutation command for the following keyspecs:", keyspecs
+#        print "sending sync for mutation command for the following keyspecs:", keyspecs
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
-        return (opaque, cas, self._parse_sync_response(data))
+        return opaque, cas, self._parse_sync_response(data)
 
     def sync_replication(self, numReplicas, keyspecs):
         payload = self._build_sync_payload((numReplicas & 0x0f) << 4, keyspecs)
 
-        print "sending sync for replication command for the following keyspecs:", keyspecs
+#        print "sending sync for replication command for the following keyspecs:", keyspecs
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
-        return (opaque, cas, self._parse_sync_response(data))
+        return opaque, cas, self._parse_sync_response(data)
 
     def sync_replication_or_persistence(self, numReplicas, keyspecs):
         payload = self._build_sync_payload(((numReplicas & 0x0f) << 4) | 0x8, keyspecs)
@@ -337,7 +339,7 @@ class MemcachedClient(object):
         print "sending sync for replication or persistence command for the " \
             "following keyspecs:", keyspecs
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
-        return (opaque, cas, self._parse_sync_response(data))
+        return opaque, cas, self._parse_sync_response(data)
 
     def sync_replication_and_persistence(self, numReplicas, keyspecs):
         payload = self._build_sync_payload(((numReplicas & 0x0f) << 4) | 0xA, keyspecs)
@@ -345,7 +347,7 @@ class MemcachedClient(object):
         print "sending sync for replication and persistence command for the " \
             "following keyspecs:", keyspecs
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
-        return (opaque, cas, self._parse_sync_response(data))
+        return opaque, cas, self._parse_sync_response(data)
 
     def _build_sync_payload(self, flags, keyspecs):
         payload = struct.pack(">I", flags)
