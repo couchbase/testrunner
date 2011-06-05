@@ -31,7 +31,8 @@ class MemcachedClientHelper(object):
                        number_of_threads=50,
                        override_vBucketId=-1,
                        write_only=False,
-                       moxi=True):
+                       moxi=True,
+                       async_write=True):
         log = logger.Logger.get_logger()
         if not servers:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
@@ -80,7 +81,8 @@ class MemcachedClientHelper(object):
                                   ignore_how_many_errors=5000,
                                   override_vBucketId=override_vBucketId,
                                   write_only=write_only,
-                                  moxi=moxi)
+                                  moxi=moxi,
+                                  async_write=async_write)
             threads.append(thread)
 
         return threads
@@ -397,7 +399,8 @@ class WorkerThread(threading.Thread):
                  override_vBucketId=-1,
                  terminate_in_minutes=60,
                  write_only=False,
-                 moxi=True):
+                 moxi=True,
+                 async_write=False):
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
@@ -425,6 +428,7 @@ class WorkerThread(threading.Thread):
                      'baseuuid': self._base_uuid}
         self.write_only = write_only
         self.aborted = False
+        self.async_write = async_write
 
     def inserted_keys_count(self):
         return self._inserted_keys_count
@@ -505,7 +509,10 @@ class WorkerThread(threading.Thread):
             try:
                 if self.override_vBucketId >= 0:
                     client.vbucketId = self.override_vBucketId
-                client.set(key, 0, 0, selected['value'])
+                if self.async_write:
+                    client.send_set(key, 0, 0, selected['value'])
+                else:
+                    client.set(key, 0, 0, selected['value'])
                 self._inserted_keys_count += 1
                 backoff_count = 0
             except MemcachedError as error:
@@ -559,7 +566,10 @@ class WorkerThread(threading.Thread):
                 try:
                     if self.override_vBucketId >= 0:
                         client.vbucketId = self.override_vBucketId
-                    client.set(key, 0, 0, key)
+                    if self.async_write:
+                        client.send_set(key, 0, 0, selected['value'])
+                    else:
+                        client.set(key, 0, 0, selected['value'])
                     self._inserted_keys_count += 1
                 except MemcachedError:
                     self._rejected_keys_count += 1

@@ -107,7 +107,8 @@ class ComboTests(unittest.TestCase):
                                                        number_of_threads=20,
                                                        number_of_items=4000000000,
                                                        moxi=False,
-                                                       write_only=True)
+                                                       write_only=True,
+                                                       async_write=True)
         for thread in threads:
             thread.start()
         while time.time() < ( start_time + 60 * timeout):
