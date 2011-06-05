@@ -492,6 +492,15 @@ class WorkerThread(threading.Thread):
             else:
                 #every two minutes print the status
                 if time.time() - last_reported > 2 * 60:
+                    if not self.moxi:
+                        awareness.done()
+                        try:
+                            awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                        except Exception:
+                            #vbucket map is changing . sleep 5 seconds
+                            time.sleep(5)
+                            awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), json)
+                        self.log.info("now connected to {0} memcacheds".format(len(awareness.memcacheds)))
                     last_reported = time.time()
                     for item in self.values_list:
                         self.log.info(
