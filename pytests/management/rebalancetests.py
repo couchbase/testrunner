@@ -726,17 +726,22 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
 
             self.log.info('inserted {0} keys'.format(inserted_count))
             items_inserted_count += inserted_count
-            final_replication_state = RestHelper(rest).wait_for_replication(1200)
-            msg = "replication state after waiting for up to 20 minutes : {0}"
-            self.log.info(msg.format(final_replication_state))
 
-            self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
-                                                                          servers=self._servers,
-                                                                          bucket='default',
-                                                                          port=11211,
-                                                                          replica_factor=replica,
-                                                                          timeout_in_seconds=600),
-                            msg="replication was completed but sum(curr_items) dont match the curr_items_total")
+            nodes = rest.node_statuses()
+            self.log.info("expect {0} / {1} replication ? {2}".format(len(nodes),
+                                                                      (1.0 + replica), len(nodes) / (1.0 + replica)))
+
+            if len(nodes) / (1.0 + replica) >= 1:
+                final_replication_state = RestHelper(rest).wait_for_replication(1200)
+                msg = "replication state after waiting for up to 20 minutes : {0}"
+                self.log.info(msg.format(final_replication_state))
+                self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                                              servers=rebalanced_servers,
+                                                                              bucket='default',
+                                                                              port=11211,
+                                                                              replica_factor=replica,
+                                                                              timeout_in_seconds=600),
+                                msg="replication was completed but sum(curr_items) dont match the curr_items_total")
 
             start_time = time.time()
             stats = rest.get_bucket_stats()
