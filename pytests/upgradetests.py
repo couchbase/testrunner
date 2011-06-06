@@ -69,19 +69,14 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                           write_only=True)
                     RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_queue_size', 0)
                     RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_flusher_todo', 0)
-        filtered_builds = []
-        for build in builds:
-            if build.deliverable_type == info.deliverable_type and\
-               build.architecture_type == info.architecture_type:
-                filtered_builds.append(build)
-        sorted_builds = BuildQuery().sort_builds_by_version(filtered_builds)
-        latest_version = sorted_builds[0].product_version
+        version = input.test_params['version']
         #pick the first one in the list
-        appropriate_build = BuildQuery().find_membase_build(builds=filtered_builds,
-                                                            product='membase-server-enterprise',
-                                                            build_version=latest_version,
-                                                            deliverable_type=info.deliverable_type,
-                                                            os_architecture=info.architecture_type)
+        appropriate_build = BuildQuery().find_membase_build(builds,
+                                 'membase-server-enterprise',
+                                 info.deliverable_type,
+                                 info.architecture_type,
+                                 version.strip())
+
         remote.download_build(appropriate_build)
         remote.membase_upgrade(appropriate_build)
         remote.disconnect()
@@ -537,11 +532,13 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 remote = RemoteMachineShellConnection(server)
                 info = remote.extract_remote_info()
                 log.info("finding build {0} for machine {1}".format(latest_version, server))
-                appropriate_build = BuildQuery().find_membase_build(builds=builds,
-                                                                    product='membase-server-enterprise',
-                                                                    build_version=latest_version,
-                                                                    deliverable_type=info.deliverable_type,
-                                                                    os_architecture=info.architecture_type)
+                version = input.test_params['version']
+                #pick the first one in the list
+                appropriate_build = BuildQuery().find_membase_build(builds,
+                                             'membase-server-enterprise',
+                                             info.deliverable_type,
+                                             info.architecture_type,
+                                             version.strip())
                 remote.download_build(appropriate_build)
                 remote.membase_upgrade(appropriate_build)
                 RestHelper(RestConnection(server)).is_ns_server_running(120)
