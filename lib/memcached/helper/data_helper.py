@@ -32,7 +32,7 @@ class MemcachedClientHelper(object):
                        override_vBucketId=-1,
                        write_only=False,
                        moxi=True,
-                       async_write=True):
+                       async_write=False):
         log = logger.Logger.get_logger()
         if not servers:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
