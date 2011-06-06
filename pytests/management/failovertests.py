@@ -176,10 +176,8 @@ class FailoverTests(unittest.TestCase):
         credentials = self._input.membase_settings
 
         log.info("inserting some items in the master before adding any nodes")
-        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
-        if load_ratio == 10:
-            distribution = {1024: 0.4, 2 * 1024: 0.5, 10 * 1024: 0.1}
-        elif load_ratio > 10:
+        distribution = {512: 0.4, 1 * 1024: 0.59, 5 * 1024: 0.01}
+        if load_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
 
         ClusterOperationHelper.add_all_nodes_or_assert(master, self._servers, credentials, self)
