@@ -86,6 +86,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
     #load data add one node , rebalance add another node rebalance
     def _common_test_body(self, load_ratio, replica=1):
+        asserts = []
         master = self._servers[0]
         rest = RestConnection(master)
         creds = self._input.membase_settings
@@ -113,8 +114,8 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             otpNode = rest.add_node(creds.rest_username,
                                     creds.rest_password,
                                     server.ip)
-            msg = "unable to add node {0} to the cluster"
-            self.assertTrue(otpNode, msg.format(server.ip))
+            msg = "unable to add node {0} to the cluster {1}"
+            self.assertTrue(otpNode, msg.format(server.ip, master.ip))
             otpNodeIds.append(otpNode.id)
             distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
             if load_ratio == 10:
@@ -139,17 +140,18 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                                                                       (1.0 + replica), len(nodes) / (1.0 + replica)))
 
             if len(nodes) / (1.0 + replica) >= 1:
-                final_replication_state = RestHelper(rest).wait_for_replication(600)
-                msg = "replication state after waiting for up to 10 minutes : {0}"
+                final_replication_state = RestHelper(rest).wait_for_replication(300)
+                msg = "replication state after waiting for up to 5 minutes : {0}"
                 self.log.info(msg.format(final_replication_state))
 
-                self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                replica_match = RebalanceHelper.wait_till_total_numbers_match(master=master,
                                                                               servers=rebalanced_servers,
                                                                               bucket='default',
                                                                               port=11211,
                                                                               replica_factor=replica,
-                                                                              timeout_in_seconds=600),
-                                msg="replication was completed but sum(curr_items) dont match the curr_items_total")
+                                                                              timeout_in_seconds=300)
+                if not replica_match:
+                    asserts.append("replication was completed but sum(curr_items) dont match the curr_items_total")
 
             start_time = time.time()
             stats = rest.get_bucket_stats()
@@ -161,8 +163,13 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
-            self.assertEquals(stats["curr_items"], items_inserted_count,
-                              msg=msg.format(stats["curr_items"], items_inserted_count))
+            active_items_match = stats["curr_items"] == items_inserted_count
+            if not active_items_match:
+                asserts.append(msg.format(stats["curr_items"], items_inserted_count))
+        if len(asserts) > 0:
+            for msg in asserts:
+                self.log.error(msg)
+            self.assertTrue(len(asserts) == 0, msg=asserts)
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_small_load(self):
