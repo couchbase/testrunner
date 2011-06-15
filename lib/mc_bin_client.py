@@ -14,8 +14,8 @@ import crc32
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
-from memcacheConstants import SET_PKT_FMT, INCRDECR_RES_FMT
-
+from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
+from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
 import memcacheConstants
 
 class MemcachedError(exceptions.Exception):
@@ -163,10 +163,11 @@ class MemcachedClient(object):
         opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(memcacheConstants.CMD_GET, key, '', opaque)
 
-    def getl(self, key):
+    def getl(self, key, exp=15):
         """Get the value for a given key within the memcached server."""
-        parts=self._doCmd(memcacheConstants.CMD_GET_LOCKED, key, '')
-        return self.__parseGet(parts, len(key))
+        parts=self._doCmd(memcacheConstants.CMD_GET_LOCKED, key, '',
+            struct.pack(memcacheConstants.GETL_PKT_FMT, exp))
+        return self.__parseGet(parts)
 
     def cas(self, key, exp, flags, oldVal, val):
         """CAS in a new value for the given key and comparison value."""
