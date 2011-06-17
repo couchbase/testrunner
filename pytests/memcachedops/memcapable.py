@@ -275,7 +275,7 @@ class GetlTests(unittest.TestCase):
         key = "{0}_{1}".format(prefix, str(uuid.uuid4()))
         expiration = 0
         self.log.info("setting key {0} with expiration {1}".format(key, expiration))
-        mc.set(key, 0, 0, key)
+        mc.set(key, expiration, 0, key)
         self.log.info("getl key {0} timeout {1}".format(key, getl_timeout))
         mc.getl(key, getl_timeout)
         self.log.info("get key {0} which is locked now".format(key))
@@ -327,7 +327,7 @@ class GetlTests(unittest.TestCase):
         mc = MemcachedClientHelper.create_memcached_client(node.ip, port=11210)
         key = "{0}_{1}".format(prefix, str(uuid.uuid4()))
         self.log.info("setting key {0} with expiration {1}".format(key, expiration))
-        mc.set(key, 0, 0, key)
+        mc.set(key, expiration, 0, key)
         self.log.info("getl key {0} timeout {1}".format(key, getl_timeout))
         mc.getl(key, getl_timeout)
         self.log.info("get key {0} which is locked now".format(key))
@@ -345,9 +345,9 @@ class GetlTests(unittest.TestCase):
         self.log.info("get key {0} which was locked when it expired. should fail".format(key))
         try:
             mc.get(key)
-            self.fail("get {0} should have raied not_found error".format(key))
-        except Exception as ex:
-            self.log.info("raised exception as expected : {0}".format(ex))
+            self.fail("get {0} should have raised not_found error".format(key))
+        except mc_bin_client.MemcachedError as error:
+            self.log.info("raised exception as expected : {0}".format(error))
         self.log.info("item expired and lock should have timed out by now . try to set the item again")
         new_value = "*"
         self.log.info("setting key {0} with new value {1}".format(key, new_value))
