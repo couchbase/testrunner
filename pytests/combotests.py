@@ -104,8 +104,8 @@ class ComboTests(unittest.TestCase):
         distribution = {1024: 0.4, 2 * 1024: 0.5, 512: 0.1}
         threads = MemcachedClientHelper.create_threads(servers=[master],
                                                        value_size_distribution=distribution,
-                                                       number_of_threads=20,
-                                                       number_of_items=4000000000,
+                                                       number_of_threads=len(self._servers),
+                                                       number_of_items=400000000,
                                                        moxi=False,
                                                        write_only=True,
                                                        async_write=True)
