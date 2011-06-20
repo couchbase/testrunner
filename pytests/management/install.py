@@ -45,19 +45,20 @@ class InstallTest(unittest.TestCase):
     def _test_install(self,serverInfo,version,builds):
         query = BuildQuery()
         info = self.machine_infos[serverInfo.ip]
-        build = query.find_membase_build(builds,
-                                         'membase-server-enterprise',
-                                         info.deliverable_type,
-                                         info.architecture_type,
-                                         version.strip())
-        if not build:
-            self.log.info('find community edition build')
+        names = ['membase-server-enterprise',
+                 'membase-server-community',
+                 'couchbase-server-enterprise',
+                 'couchbase-server-community']
+        build = None
+        for name in names:
             build = query.find_membase_build(builds,
-                                             'membase-server-community',
+                                             name,
                                              info.deliverable_type,
                                              info.architecture_type,
                                              version.strip())
-            #try community ?
+            if build:
+                break
+
         if not build:
             self.fail('unable to find any {0} build for {1} for arch : {2} '.format(info.distribution_type,
                                                                                     info.architecture_type,
