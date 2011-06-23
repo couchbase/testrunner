@@ -522,3 +522,21 @@ class RemoteMachineShellConnection:
             info.distribution_version = os_version
             info.deliverable_type = ext
             return info
+        
+    def stop_couchbase(self):
+        info = self.extract_remote_info()
+        if info.type.lower() == 'windows':
+            o, r = self.execute_command("net stop couchbaseserver")
+            self.log_command_output(o, r)
+        if info.type.lower() == "linux":
+            o, r = self.execute_command("/etc/init.d/couchbase-server stop")
+            self.log_command_output(o, r)
+
+    def start_couchbase(self):
+        info = self.extract_remote_info()
+        if info.type.lower() == 'windows':
+            o, r = self.execute_command("net start couchbaseserver")
+            self.log_command_output(o, r)
+        if info.type.lower() == "linux":
+            o, r = self.execute_command("/etc/init.d/couchbase-server start")
+            self.log_command_output(o, r)
