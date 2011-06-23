@@ -457,6 +457,24 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
+
+    def cluster_status(self):
+        parsed = []
+        api = self.baseUrl + 'pools/default'
+        try:
+            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            #if status is 200 then it was a success otherwise it was a failure
+            if response['status'] == '400':
+                #extract the error
+                log.error('unable to retrieve pools/default')
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+            return parsed
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
     def get_pools_info(self):
         api = self.baseUrl + 'pools'
         try:
@@ -644,6 +662,104 @@ class RestConnection(object):
             else:
                 log.error('create_bucket error {0} {1}'.format(content, response))
                 raise BucketCreationException(ip=self.ip, bucket_name=bucket)
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def enable_autofailover(self, age, max_nodes):
+        api = self.baseUrl + 'settings/autoFailover'
+        params = urllib.urlencode({'enabled': 'true',
+                                   'age': age,
+                                   'maxNodes': max_nodes})
+        log.info('settings/autoFailover params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/autoFailover response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('enable_autofailover error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def disable_autofailover(self, age, max_nodes):
+        api = self.baseUrl + 'settings/autoFailover'
+        params = urllib.urlencode({'enabled': 'false'})
+        log.info('settings/autoFailover params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/autoFailover response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('enable_autofailover error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def reset_autofailover(self):
+        api = self.baseUrl + 'settings/autoFailover/resetCount'
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', '', headers=self._create_headers())
+            log.info("settings/autoFailover/resetCount response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('reset_autofailover error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def enable_autofailover_alerts(self, recipients, sender, email_username, email_password, email_host='localhost', email_port=25, email_encrypt='false', alerts='auto_failover_node,auto_failover_maximum_reached'):
+        api = self.baseUrl + 'settings/alerts'
+        params = urllib.urlencode({'enabled': 'true',
+                                   'recipients': recipients,
+                                   'sender': sender,
+                                   'emailUser': email_username,
+                                   'emailPass': email_password,
+                                   'emailHost': email_host,
+                                   'emailPrt': email_port,
+                                   'emailEncrypt': email_encrypt,
+                                   'alerts': alerts})
+        log.info('settings/alerts params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/alerts response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('enable_autofailover_alerts error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def disable_autofailover_alerts(self):
+        api = self.baseUrl + 'settings/alerts'
+        params = urllib.urlencode({'enabled': 'false'})
+        log.info('settings/alerts params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/alerts response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('enable_autofailover_alerts error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
         except httplib2.ServerNotFoundError:
