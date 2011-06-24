@@ -14,6 +14,19 @@ class RestHelper(object):
     def __init__(self, rest_connection):
         self.rest = rest_connection
 
+    def is_ns_server_running(self, timeout_in_seconds=360):
+        end_time = time.time() + timeout_in_seconds
+        while time.time() <= end_time:
+            try:
+                if self.is_cluster_healthy():
+                    return True
+            except ServerUnavailableException:
+                time.sleep(1)
+        msg = 'unable to connect to the node {0} even after waiting {1} seconds'
+        log.info(msg.format(self.rest.ip,timeout_in_seconds))
+        return False
+
+
     def is_cluster_healthy(self):
         #get the nodes and verify that all the nodes.status are healthy
         nodes = self.rest.node_statuses()
@@ -31,31 +44,58 @@ class RestHelper(object):
         return self.rest.monitorRebalance()
 
     def bucket_exists(self, bucket):
-        buckets = self.rest.get_buckets()
-        names = [item.name for item in buckets]
-        log.info("existing buckets : {0}".format(names))
-        for item in buckets:
-            if item.name == bucket:
-                log.info("found bucket {0}".format(bucket))
-                return True
-        return False
+        try:
+            buckets = self.rest.get_buckets()
+            names = [item.name for item in buckets]
+            log.info("existing buckets : {0}".format(names))
+            for item in buckets:
+                if item.name == bucket:
+                    log.info("found bucket {0}".format(bucket))
+                    return True
+            return False
+        except Exception:
+            return False
+
+    def wait_for_node_status(self, node, expected_status, timeout_in_seconds):
+        status_reached = False
+        end_time = time.time() + timeout_in_seconds
+        while time.time() <= end_time and not status_reached:
+            nodes = self.rest.node_statuses()
+            for n in nodes:
+                if node.id == n.id:
+                    log.info('node {0} status : {1}'.format(node.id, n.status))
+                    if n.status.lower() == expected_status.lower():
+                        status_reached = True
+                    break
+            if not status_reached:
+                log.info("sleep for 5 seconds before reading the node.status again")
+                time.sleep(5)
+        log.info('node {0} status_reached : {1}'.format(node.id, status_reached))
+        return status_reached
 
     def wait_for_replication(self, timeout_in_seconds=120):
+        wait_count = 0
         end_time = time.time() + timeout_in_seconds
-        while time.time() <= end_time :
+        while time.time() <= end_time:
             if self.all_nodes_replicated():
                 break
-            time.sleep(1)
+            wait_count += 1
+            if wait_count == 10:
+                log.info('replication state : {0}'.format(self.all_nodes_replicated(debug=True)))
+                wait_count = 0
+            time.sleep(5)
         log.info('replication state : {0}'.format(self.all_nodes_replicated()))
         return self.all_nodes_replicated()
 
-    def all_nodes_replicated(self):
+    def all_nodes_replicated(self, debug=False):
+        replicated = True
         nodes = self.rest.node_statuses()
         for node in nodes:
+            if debug:
+                log.info("node {0} replication state : {1}".format(node.id, node.replication))
             if node.replication != 1.0:
-                return False
-        return True
-
+                replicated = False
+        return replicated
 
 
 class RestConnection(object):
@@ -75,7 +115,6 @@ class RestConnection(object):
         self.baseUrl = "http://{0}:8091/".format(self.ip)
 
 
-
     #authorization mut be a base64 string of username:password
     def _create_headers(self):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
@@ -88,9 +127,11 @@ class RestConnection(object):
         params = urllib.urlencode({'port': '8091',
                                    'username': username,
                                    'password': password})
+        log.info('settings/web params : {0}'.format(params))
 
         try:
             response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/web response {0} ,content {1}".format(response, content))
             if response['status'] == '400':
                 log.error('init_cluster error {0}'.format(content))
                 return False
@@ -102,13 +143,17 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
-    def init_cluster_port(self):
+    def init_cluster_port(self, username='Administrator', password='password'):
         api = self.baseUrl + 'settings/web'
         params = urllib.urlencode({'port': '8091',
-                                   'username': 'Administrator',
-                                   'password': 'password'})
+                                   'username': username,
+                                   'password': password})
+
+        log.info('settings/web params : {0}'.format(params))
+
         try:
-            response, content = httplib2.Http().request(api, 'GET', params, headers=self._create_headers())
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/web response {0} ,content {1}".format(response, content))
             if response['status'] == '400':
                 log.error('init_cluster_port error {0}'.format(content))
                 return False
@@ -156,7 +201,7 @@ class RestConnection(object):
         try:
             response, content = httplib2.Http().request(api, 'POST', params,
                                                         headers=self._create_headers())
-            log.info('add_node response : {0} content : {1}'.format(response,content))
+            log.info('add_node response : {0} content : {1}'.format(response, content))
             if response['status'] == '400':
                 log.error('error occured while adding remote node: {0}'.format(remoteIp))
                 if content.find('Prepare join failed. Node is already part of cluster') >= 0:
@@ -169,7 +214,7 @@ class RestConnection(object):
                     #todo: raise an exception here
                     log.error('get_pools error : {0}'.format(content))
             elif response['status'] == '200':
-                log.info('added node {0} : response {1}'.format(remoteIp,content))
+                log.info('added node {0} : response {1}'.format(remoteIp, content))
                 dict = json.loads(content)
                 otpNodeId = dict['otpNode']
                 otpNode = OtpNode(otpNodeId)
@@ -258,7 +303,6 @@ class RestConnection(object):
                                                         headers=self._create_headers())
             #if status is 200 then it was a success otherwise it was a failure
             log.info('rebalance: {0}'.format(response))
-            log.info('rebalance: {0}'.format(content))
             if response['status'] == '400':
                 #extract the error
                 raise InvalidArgumentException('controller/rebalance',
@@ -274,16 +318,25 @@ class RestConnection(object):
     def monitorRebalance(self):
         start = time.time()
         progress = 0
-        while progress is not -1 and progress is not 100:
+        retry = 0
+        while progress is not -1 and progress is not 100 and retry < 20:
+            #-1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
+            if progress == -100:
+                log.error("unable to retrieve rebalanceProgress.try again in 2 seconds")
+                retry += 1
+            else:
+                retry = 0
             #sleep for 2 seconds
             time.sleep(2)
-
-        if progress == -1:
+        if progress < 0:
+            log.error("rebalance progress code : {0}".format(progress))
             return False
         else:
             duration = time.time() - start
             log.info('rebalance progress took {0} seconds '.format(duration))
+            log.info("sleep for 10 seconds after rebalance...")
+            time.sleep(10)
             return True
 
     def _rebalance_progress(self):
@@ -295,7 +348,10 @@ class RestConnection(object):
             #if status is 200 then it was a success otherwise it was a failure
             if response['status'] == '400':
                 #extract the error , how ?
-                log.info('unable to obtain rebalance progress ?')
+                log.error('unable to obtain rebalance progress ?')
+                log.error(content)
+                log.error(response)
+                percentage = -100
             elif response['status'] == '200':
                 parsed = json.loads(content)
                 if parsed.has_key('status'):
@@ -310,6 +366,11 @@ class RestConnection(object):
                                 break
                     else:
                         percentage = 100
+            else:
+                log.error('unable to obtain rebalance progress ?')
+                log.error(content)
+                log.error(response)
+                percentage = -100
             return percentage
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
@@ -336,10 +397,10 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
-    def log_client_error(self,post):
+    def log_client_error(self, post):
         api = self.baseUrl + 'logClientError'
         try:
-            response, content = httplib2.Http().request(api, 'POST',body=post, headers=self._create_headers())
+            response, content = httplib2.Http().request(api, 'POST', body=post, headers=self._create_headers())
             #if status is 200 then it was a success otherwise it was a failure
             if response['status'] == '400':
                 #extract the error
@@ -396,13 +457,46 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
+
+    def cluster_status(self):
+        parsed = []
+        api = self.baseUrl + 'pools/default'
+        try:
+            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            #if status is 200 then it was a success otherwise it was a failure
+            if response['status'] == '400':
+                #extract the error
+                log.error('unable to retrieve pools/default')
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+            return parsed
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def get_pools_info(self):
+        api = self.baseUrl + 'pools'
+        try:
+            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            if response['status'] == '400':
+                log.error('get_pools error {0}'.format(content))
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+                return parsed
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+
     def get_pools(self):
         version = None
         api = self.baseUrl + 'pools'
         try:
             response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
             if response['status'] == '400':
-                    log.error('get_pools error {0}'.format(content))
+                log.error('get_pools error {0}'.format(content))
             elif response['status'] == '200':
                 parsed = json.loads(content)
                 version = MembaseServerVersion(parsed['implementationVersion'], parsed['componentsVersion'])
@@ -433,6 +527,59 @@ class RestConnection(object):
             raise ServerUnavailableException(ip=self.ip)
         return buckets
 
+    def get_bucket_stats_for_node(self, bucket='default', node_ip=None):
+        if not Node:
+            log.error('node_ip not specified')
+            return None
+        api = "{0}{1}{2}{3}{4}{5}".format(self.baseUrl, 'pools/default/buckets/',
+                                          bucket, "/nodes/", node_ip, ":8091/stats")
+        try:
+            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            if response['status'] == '400':
+                log.error('get_bucket error {0}'.format(content))
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+                #let's just return the samples
+                #we can also go through the list
+                #and for each item remove all items except the first one ?
+                op = parsed["op"]
+                samples = op["samples"]
+                stats = {}
+                #for each sample
+                for stat_name in samples:
+                    stats[stat_name] = samples[stat_name][0]
+                return stats
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def get_bucket_stats(self, bucket='default'):
+        api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
+        try:
+            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            if response['status'] == '400':
+                log.error('get_bucket error {0}'.format(content))
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+                #let's just return the samples
+                #we can also go through the list
+                #and for each item remove all items except the first one ?
+                op = parsed["op"]
+                samples = op["samples"]
+                stats = {}
+                #for each sample
+                for stat_name in samples:
+                    if samples[stat_name]:
+                        last_sample = len(samples[stat_name]) - 1
+                        if last_sample:
+                            stats[stat_name] = samples[stat_name][last_sample]
+                return stats
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
     def get_bucket(self, bucket='default'):
         bucketInfo = None
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
@@ -442,12 +589,15 @@ class RestConnection(object):
                 log.error('get_bucket error {0}'.format(content))
             elif response['status'] == '200':
                 bucketInfo = RestParser().parse_get_bucket_response(content)
-#                log.debug('set stats to {0}'.format(bucketInfo.stats.ram))
+            #                log.debug('set stats to {0}'.format(bucketInfo.stats.ram))
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
         return bucketInfo
+
+    def get_vbuckets(self, bucket='default'):
+        return self.get_bucket(bucket).vbuckets
 
     def delete_bucket(self, bucket='default'):
         api = '{0}{1}{2}'.format(self.baseUrl, '/pools/default/buckets/', bucket)
@@ -501,7 +651,7 @@ class RestConnection(object):
                                        'bucketType': bucketType})
 
         try:
-            log.info(params)
+            log.info("{0} with param: {1}".format(api, params))
             response, content = httplib2.Http().request(api, 'POST', params,
                                                         headers=self._create_headers())
             log.info(content)
@@ -512,6 +662,104 @@ class RestConnection(object):
             else:
                 log.error('create_bucket error {0} {1}'.format(content, response))
                 raise BucketCreationException(ip=self.ip, bucket_name=bucket)
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def enable_autofailover(self, age, max_nodes):
+        api = self.baseUrl + 'settings/autoFailover'
+        params = urllib.urlencode({'enabled': 'true',
+                                   'age': age,
+                                   'maxNodes': max_nodes})
+        log.info('settings/autoFailover params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/autoFailover response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('enable_autofailover error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def disable_autofailover(self, age, max_nodes):
+        api = self.baseUrl + 'settings/autoFailover'
+        params = urllib.urlencode({'enabled': 'false'})
+        log.info('settings/autoFailover params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/autoFailover response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('enable_autofailover error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def reset_autofailover(self):
+        api = self.baseUrl + 'settings/autoFailover/resetCount'
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', '', headers=self._create_headers())
+            log.info("settings/autoFailover/resetCount response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('reset_autofailover error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def enable_autofailover_alerts(self, recipients, sender, email_username, email_password, email_host='localhost', email_port=25, email_encrypt='false', alerts='auto_failover_node,auto_failover_maximum_reached'):
+        api = self.baseUrl + 'settings/alerts'
+        params = urllib.urlencode({'enabled': 'true',
+                                   'recipients': recipients,
+                                   'sender': sender,
+                                   'emailUser': email_username,
+                                   'emailPass': email_password,
+                                   'emailHost': email_host,
+                                   'emailPrt': email_port,
+                                   'emailEncrypt': email_encrypt,
+                                   'alerts': alerts})
+        log.info('settings/alerts params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/alerts response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('enable_autofailover_alerts error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def disable_autofailover_alerts(self):
+        api = self.baseUrl + 'settings/alerts'
+        params = urllib.urlencode({'enabled': 'false'})
+        log.info('settings/alerts params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("settings/alerts response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('enable_autofailover_alerts error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
         except httplib2.ServerNotFoundError:
@@ -614,6 +862,7 @@ class vBucket(object):
     def __init__(self):
         self.master = ''
         self.replica = []
+        self.id = -1
 
 
 class RestParser(object):
@@ -682,22 +931,25 @@ class RestParser(object):
                     vbucketInfo = vBucket()
                     vbucketInfo.master = serverList[vbucket[0]]
                     if vbucket:
-                        for i in range(1,len(vbucket)):
+                        for i in range(1, len(vbucket)):
                             if vbucket[i] != -1:
                                 vbucketInfo.replica.append(serverList[vbucket[i]])
                     bucket.forward_map.append(vbucketInfo)
             vBucketMap = vBucketServerMap['vBucketMap']
+            counter = 0
             for vbucket in vBucketMap:
                 #there will be n number of replicas
                 vbucketInfo = vBucket()
                 vbucketInfo.master = serverList[vbucket[0]]
                 if vbucket:
-                    for i in range(1,len(vbucket)):
+                    for i in range(1, len(vbucket)):
                         if vbucket[i] != -1:
                             vbucketInfo.replica.append(serverList[vbucket[i]])
+                vbucketInfo.id = counter
+                counter += 1
                 bucket.vbuckets.append(vbucketInfo)
-            #now go through each vbucket and populate the info
-        #who is master , who is replica
+                #now go through each vbucket and populate the info
+            #who is master , who is replica
         # get the 'storageTotals'
         log.debug('read {0} vbuckets'.format(len(bucket.vbuckets)))
         stats = parsed['basicStats']
@@ -724,10 +976,10 @@ class RestParser(object):
             node.mcdMemoryReserved = nodeDictionary['mcdMemoryReserved']
             node.status = nodeDictionary['status']
             node.hostname = nodeDictionary['hostname']
-            node.clusterCompatibility = nodeDictionary['clusterCompatibility']
+            if 'clusterCompatibility' in nodeDictionary:
+                node.clusterCompatibility = nodeDictionary['clusterCompatibility']
             node.version = nodeDictionary['version']
             node.os = nodeDictionary['os']
             # todo : node.ports
             bucket.nodes.append(node)
         return bucket
-

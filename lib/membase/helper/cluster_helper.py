@@ -1,7 +1,5 @@
 from membase.api.rest_client import RestConnection, RestHelper
-from remote.remote_util import RemoteMachineShellConnection
 import logger
-import os
 
 class ClusterOperationHelper(object):
     #the first ip is taken as the master ip
@@ -32,10 +30,19 @@ class ClusterOperationHelper(object):
         return otpNodes
 
     @staticmethod
+    def wait_for_ns_servers_or_assert(servers,testcase):
+        for server in servers:
+            rest = RestConnection(server)
+            testcase.assertTrue(RestHelper(rest).is_ns_server_running(),
+                            "ns_server is not running in {0}".format(server.ip))
+
+    @staticmethod
     def cleanup_cluster(servers):
         log = logger.Logger.get_logger()
         master = servers[0]
+#        for master in servers:
         rest = RestConnection(master)
+        RestHelper(rest).is_ns_server_running(timeout_in_seconds=120)
         nodes = rest.node_statuses()
         allNodes = []
         toBeEjectedNodes = []
@@ -46,11 +53,11 @@ class ClusterOperationHelper(object):
             #let's rebalance to remove all the nodes from the master
                 #this is not the master , let's remove it
                 #now load data into the main bucket
-        if toBeEjectedNodes:
+        if len(allNodes) > len(toBeEjectedNodes) and toBeEjectedNodes:
             log.info("rebalancing all nodes in order to remove nodes")
             helper = RestHelper(rest)
             removed = helper.remove_nodes(knownNodes=allNodes,ejectedNodes=toBeEjectedNodes)
-            log.info("removed all the nodes from this cluster ? ".format(removed))
+            log.info("removed all the nodes from cluster associated with {0} ? {1}".format(master.ip, removed))
 
     @staticmethod
     def rebalance_params_for_declustering(master,all_nodes):

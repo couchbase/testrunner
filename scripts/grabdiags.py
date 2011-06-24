@@ -1,3 +1,4 @@
+from httplib import BadStatusLine
 import sys
 import os
 import urllib2
@@ -43,4 +44,7 @@ if __name__ == "__main__":
             print "downloaded and zipped diags @ : {0}".format("{0}.zip".format(filename))
         except urllib2.URLError as error:
             print "unable to obtain diags from {0}".format(diag_url)
-
+        except BadStatusLine:
+            print "unable to obtain diags from {0}".format(diag_url)
+        except Exception:
+            print "unable to obtain diags from {0}".format(diag_url)

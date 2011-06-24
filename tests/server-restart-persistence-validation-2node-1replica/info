@@ -1,3 +1,0 @@
-Persistence validation after restarting the 2 node cluster with 1 replica
-Chiyoung Seo
-Performs a persistence validation to see if all the items are correctly loaded right after restarting the cluster

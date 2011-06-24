@@ -1,3 +1,4 @@
+import copy
 import time
 import uuid
 import zlib
@@ -7,6 +8,7 @@ import crc32
 import socket
 import ctypes
 from membase.api.rest_client import RestConnection, RestHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 
 
 class BucketOperationHelper():
@@ -28,6 +30,26 @@ class BucketOperationHelper():
                 if assert_on_test:
                     assert_on_test.fail(msg=msg)
 
+    @staticmethod
+    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1):
+        log = logger.Logger.get_logger()
+        rest = RestConnection(serverInfo)
+        if bucket_ram < 0:
+            info = rest.get_nodes_self()
+            bucket_ram = info.mcdMemoryReserved * 2 / 3
+
+        rest.create_bucket(bucket=name,
+                           ramQuotaMB=bucket_ram,
+                           replicaNumber=replica,
+                           proxyPort=port)
+        msg = 'create_bucket succeeded but bucket "default" does not exist'
+        bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
+        if not bucket_created:
+            log.error(msg)
+            if test_case:
+                test_case.fail(msg=msg)
+        return bucket_created
+
 
     @staticmethod
     def delete_all_buckets_or_assert(servers, test_case):
@@ -35,7 +57,13 @@ class BucketOperationHelper():
         log.info('deleting existing buckets on {0}'.format(servers))
         for serverInfo in servers:
             rest = RestConnection(serverInfo)
-            buckets = rest.get_buckets()
+            buckets = []
+            try:
+                buckets = rest.get_buckets()
+            except:
+                log.info('15 seconds sleep before calling get_buckets again...')
+                time.sleep(15)
+                buckets = rest.get_buckets()
             for bucket in buckets:
                 print bucket.name
                 rest.delete_bucket(bucket.name)
@@ -43,7 +71,27 @@ class BucketOperationHelper():
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
                 test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200)
                                      , msg=msg)
+        log.info('sleeping for 10 seconds because we want to :)')
+        time.sleep(10)
 
+    @staticmethod
+    def delete_bucket_or_assert(serverInfo, bucket = 'default', test_case = None):
+        log = logger.Logger.get_logger()
+        log.info('deleting existing buckets on {0}'.format(serverInfo))
+
+        rest = RestConnection(serverInfo)
+        rest.delete_bucket(bucket)
+
+        log.info('deleted bucket : {0} from {1}'.format(bucket,serverInfo.ip))
+        msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket)
+        if test_case:
+            test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200), msg=msg)
+
+        log.info('sleeping for 10 seconds because we want to :)')
+        time.sleep(10)
+
+    #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
+    # BUCKET DELETION IS A SYNC CALL W.R.T MEMCACHED
     @staticmethod
     def wait_for_bucket_deletion(bucket,
                                  rest,
@@ -74,38 +122,143 @@ class BucketOperationHelper():
                 time.sleep(2)
         return False
 
+    #try to insert key in all vbuckets before returning from this function
+    #bucket { 'name' : 90,'password':,'port':1211'}
     @staticmethod
-    def wait_till_memcached_is_ready_or_assert(servers, bucket_port, test):
+    def wait_for_memcached(node, bucket):
         log = logger.Logger.get_logger()
-        for serverInfo in servers:
-            start_time = time.time()
-            memcached_ready = False
-            #bucket port
-            while time.time() <= (start_time + (5 * 60)):
-                client = mc_bin_client.MemcachedClient(serverInfo.ip, bucket_port)
-                key = '{0}'.format(uuid.uuid4())
-                vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-                client.vbucketId = vbucketId
+        msg = "waiting for memcached bucket : {0} in {1}:{2} to accept set ops"
+        log.info(msg.format(bucket["name"], node.ip, bucket["port"]))
+        start_time = time.time()
+        end_time = start_time + 300
+        client = None
+        keys = {}
+        while len(keys) < 1024:
+            key = str(uuid.uuid4())
+            vBucketId = crc32.crc32_hash(key) & 1023
+            keys[vBucketId] = {'key': key, 'inserted': False}
+        counter = 0
+        while time.time() < end_time and counter < 1024:
+            try:
+                if not client:
+                    client = MemcachedClientHelper.memcached_client(node, bucket)
+                for vBucketId in keys:
+                    if not keys[vBucketId]["inserted"]:
+                        client.set(keys[vBucketId]['key'], 0, 0, str(uuid.uuid4()))
+                        client.get(keys[vBucketId]['key'])
+                        keys[vBucketId]["inserted"] = True
+                        counter += 1
+            except mc_bin_client.MemcachedError as error:
+                msg = "(memcachedError {0} - {1} when invoking set or get)"
+                log.error(msg.format(error.status, error.msg))
+            except Exception as ex:
+                log.error("{0} while setting key ".format(ex))
+            if client:
                 try:
-                    client.set(key, 0, 0, key)
-                    log.info("inserted key {0} to vBucket {1}".format(key, vbucketId))
-                    memcached_ready = True
-                    break
-                except mc_bin_client.MemcachedError as error:
-                    log.error(
-                        "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to bucket : {2}".format(
-                            error.status, key, client.vbucketId))
-                except:
-                    log.error("memcached not ready yet .. unable to push key : {0} to bucket : {1}".format(key,
-                                                                                                           client.vbucketId))
+                    client.flush()
+                    client.stats('reset')
+                except Exception:
+                    pass
                 client.close()
-                time.sleep(1)
-            if not memcached_ready:
-                test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                client = None
+            time.sleep(5)
+        return counter == 1024
 
     @staticmethod
-    def verify_data(ip, keys, value_equal_to_key,verify_flags, port, test):
+    def wait_till_memcached_is_ready_or_assert(servers,
+                                               bucket_port,
+                                               test,
+                                               bucket_name = 'default',
+                                               bucket_password='password'):
         log = logger.Logger.get_logger()
+
+        for serverInfo in servers:
+            msg = "waiting for memcached bucket : {0} in {1}:{2} to accept set ops"
+            log.info(msg.format(bucket_name, serverInfo.ip, bucket_port))
+            start_time = time.time()
+            end_time = start_time + 300
+            client = None
+
+            # build up a list of 1024 keys, 1 per vbucket
+            keys = {}
+            while len(keys) < 1024:
+                if time.time() > end_time:
+                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                key = str(uuid.uuid4())
+                vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+                keys[vBucketId] = key
+
+            # wait for connect to work
+            while not client:
+                if time.time() > end_time:
+                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                try:
+                    client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
+                                                                           bucket_name,
+                                                                           bucket_port,
+                                                                           bucket_password)
+                except:
+                    client = None
+
+            # wait for all vbuckets to be ready
+            for i in range(1024):
+                while keys[i]:
+                    if time.time() > end_time:
+                        test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                    try:
+                        client.vbucketId = i
+                        client.set(keys[i], 0, 0, keys[i])
+                        keys[i] = ''
+                    except mc_bin_client.MemcachedError as error:
+                        msg = "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to vbucket : {2}"
+                        log.error(msg.format(error.status, key, vBucketId))
+                        time.sleep(3)
+                    except Exception as ex:
+                        log.error("general error : {0} while setting key ".format(ex))
+                        time.sleep(3)
+                        # problem with the connection, try to reconnect
+                        client = None
+                        while not client:
+                            if time.time() > end_time:
+                                test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                            try:
+                                client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
+                                                                                       bucket_name,
+                                                                                       bucket_port,
+                                                                                       bucket_password)
+                            except:
+                                client = None
+                                time.sleep(3)
+
+            flushed = False
+            while not flushed:
+                if time.time() > end_time:
+                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                try:
+                    client.flush()
+                    flushed = True
+                except:
+                    time.sleep(3)
+
+            time.sleep(10)
+            stats_reset = False
+            while not stats_reset:
+                if time.time() > end_time:
+                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
+                try:
+                    client.stats('reset')
+                    stats_reset = True
+                except:
+                    time.sleep(3)
+            client.close()
+
+            log.info("inserted {0} keys to all {1} vBuckets".format(len(keys),1024))
+
+
+    @staticmethod
+    def verify_data(ip, keys, value_equal_to_key, verify_flags, port, test, debug=False):
+        log = logger.Logger.get_logger()
+        log_error_count = 0
         #verify all the keys
         client = mc_bin_client.MemcachedClient(ip, port)
         #populate key
@@ -124,10 +277,15 @@ class BucketOperationHelper():
                     actual_flag = socket.ntohl(flag)
                     expected_flag = ctypes.c_uint32(zlib.adler32(value)).value
                     test.assertEquals(actual_flag, expected_flag, msg='flags dont match')
-                log.info("verified key #{0} : {1}".format(index, key))
+                if debug:
+                    log.info("verified key #{0} : {1}".format(index, key))
             except mc_bin_client.MemcachedError as error:
-                log.error(error)
-                log.error("memcachedError : {0} - unable to get a pre-inserted key : {0}".format(error.status, key))
+                if debug:
+                    log_error_count += 1
+                    if log_error_count < 100:
+                        log.error(error)
+                        log.error(
+                            "memcachedError : {0} - unable to get a pre-inserted key : {0}".format(error.status, key))
                 keys_failed.append(key)
                 all_verified = False
         client.close()
@@ -153,6 +311,49 @@ class BucketOperationHelper():
                 log.error("expected memcachedError : {0} - unable to get a pre-inserted key : {1}".format(error.status, key))
         client.close()
         return True
+
+    @staticmethod
+    def keys_exist_or_assert(keys,ip,name,port,password,test):
+        #we should try out at least three times
+        log = logger.Logger.get_logger()
+        #verify all the keys
+        client = MemcachedClientHelper.create_memcached_client(ip,name,port,password)
+        #populate key
+        retry = 1
+
+        keys_left_to_verify = []
+        keys_left_to_verify.extend(copy.deepcopy(keys))
+        log_count = 0
+        while retry < 6 and len(keys_left_to_verify) > 0:
+            msg = "trying to verify {0} keys - attempt #{1} : {2} keys left to verify"
+            log.info(msg.format(len(keys), retry, len(keys_left_to_verify)))
+            keys_not_verified = []
+            for key in keys_left_to_verify:
+                try:
+                    client.get(key=key)
+                except mc_bin_client.MemcachedError as error:
+                    keys_not_verified.append(key)
+                    if log_count < 100:
+                        log.error("key {0} does not exist because {1}".format(key, error))
+                        log_count += 1
+            retry += 1
+            keys_left_to_verify = keys_not_verified
+        client.close()
+        if len(keys_left_to_verify) > 0:
+            log_count = 0
+            for key in keys_left_to_verify:
+                log.error("key {0} not found".format(key))
+                log_count += 1
+                if log_count > 100:
+                    break
+            msg = "unable to verify {0} keys".format(len(keys_left_to_verify))
+            log.error(msg)
+            if test:
+                test.fail(msg=msg)
+            return False
+        log.info("verified that {0} keys exist".format(len(keys)))
+        return True
+
 
     @staticmethod
     def load_data_or_assert(serverInfo,
@@ -189,9 +390,9 @@ class BucketOperationHelper():
             except mc_bin_client.MemcachedError as error:
                 log.error(error)
                 client.close()
-                log.error("unable to push key : {0} to bucket : {1}".format(key, client.vbucketId))
+                log.error("unable to push key : {0} to vbucket : {1}".format(key, client.vbucketId))
                 if test:
-                    test.fail("unable to push key : {0} to bucket : {1}".format(key, client.vbucketId))
+                    test.fail("unable to push key : {0} to vbucket : {1}".format(key, client.vbucketId))
                 else:
                     break
         client.close()

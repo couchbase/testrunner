@@ -167,3 +167,283 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             #make sure it raises bucketcreateexception
             except BucketCreationException as ex:
                 self.log.error(ex)
+
+    def test_less_than_minimum_memory_quota(self):
+        postfix = uuid.uuid4()
+        name = 'minmemquota_{0}'.format(postfix)
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=99,
+                                   replicaNumber=1,
+                                   authType='sasl',
+                                   saslPassword='')
+                self.fail('create-bucket did not throw exception while creating a new bucket with 99 MB quota')
+            #make sure it raises bucketcreateexception
+            except BucketCreationException as ex:
+                self.log.error(ex)
+
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=0,
+                                   replicaNumber=1,
+                                   authType='sasl',
+                                   saslPassword='')
+                self.fail('create-bucket did not throw exception while creating a new bucket with 0 MB quota')
+            #make sure it raises bucketcreateexception
+            except BucketCreationException as ex:
+                self.log.info(ex)
+
+    def test_max_memory_quota(self):
+        postfix = uuid.uuid4()
+        name = 'maxquota_{0}'.format(postfix)
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            info = rest.get_nodes_self()
+            bucket_ram = info.mcdMemoryReserved
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=bucket_ram,
+                                   replicaNumber=1,
+                                   authType='sasl',
+                                   saslPassword='')
+            except BucketCreationException as ex:
+                self.log.error(ex)
+                self.fail('failed to create bucket with max ram per node')
+
+            msg = 'failed to start up bucket with max ram per node'
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+
+    def test_negative_replica(self):
+        postfix = uuid.uuid4()
+        name = '-1replica_{0}'.format(postfix)
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=200,
+                                   replicaNumber=-1,
+                                   authType='sasl',
+                                   saslPassword='')
+                self.fail('bucket create succeded even with a negative replica count')
+            except BucketCreationException as ex:
+                self.log.info(ex)
+
+    def test_zero_replica(self):
+        postfix = uuid.uuid4()
+        name = '0replica_{0}'.format(postfix)
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=200,
+                                   replicaNumber=0,
+                                   authType='sasl',
+                                   saslPassword='')
+            except BucketCreationException as ex:
+                self.log.error(ex)
+                self.fail('failed to create bucket with 0 replicas')
+
+            msg = 'failed to start up bucket with 0 replicas'
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+
+    def test_one_replica(self):
+        postfix = uuid.uuid4()
+        name = '0replica_{0}'.format(postfix)
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=200,
+                                   replicaNumber=1,
+                                   authType='sasl',
+                                   saslPassword='')
+            except BucketCreationException as ex:
+                self.log.error(ex)
+                self.fail('failed to create bucket with 1 replicas')
+
+            msg = 'failed to start up bucket with 1 replicas'
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+
+    def test_two_replica(self):
+        postfix = uuid.uuid4()
+        name = '2replica_{0}'.format(postfix)
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=200,
+                                   replicaNumber=2,
+                                   authType='sasl',
+                                   saslPassword='')
+            except BucketCreationException as ex:
+                self.log.error(ex)
+                self.fail('failed to create bucket with 2 replicas')
+
+            msg = 'failed to start up bucket with 2 replicas'
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+
+    def test_three_replica(self):
+        postfix = uuid.uuid4()
+        name = '3replica_{0}'.format(postfix)
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=200,
+                                   replicaNumber=3,
+                                   authType='sasl',
+                                   saslPassword='')
+            except BucketCreationException as ex:
+                self.log.error(ex)
+                self.fail('failed to create bucket with 3 replicas')
+
+            msg = 'failed to start up bucket with 3 replicas'
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+
+    def test_four_replica(self):
+        postfix = uuid.uuid4()
+        name = '4replica_{0}'.format(postfix)
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=200,
+                                   replicaNumber=4,
+                                   authType='sasl',
+                                   saslPassword='')
+                self.fail('created bucket with 4 replicas')
+            except BucketCreationException as ex:
+                self.log.info(ex)
+
+    # Bucket name can only contain characters in range A-Z, a-z, 0-9 as well as underscore, period, dash & percent. Consult the documentation.
+    def test_valid_chars(self):
+        postfix = uuid.uuid4()
+        name = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.%'
+        for serverInfo in self.servers:
+            rest = RestConnection(serverInfo)
+            try:
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=200,
+                                   replicaNumber=1,
+                                   authType='sasl',
+                                   saslPassword='')
+            except BucketCreationException as ex:
+                self.log.error(ex)
+                self.fail('could not create bucket with all valid characters')
+
+            msg = 'failed to start up bucket with all valid characters'
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+
+    # Bucket name can only contain characters in range A-Z, a-z, 0-9 as well as underscore, period, dash & percent. Consult the documentation.
+    # only done on the first server
+    def test_invalid_chars(self):
+        postfix = uuid.uuid4()
+        for char in ['~','!','@','#','$','^','&','*','(',')',':',',',';','"','\'','<','>','?','/']:
+            name = '{0}invalid_{1}'.format(postfix,char)
+            for serverInfo in [self.servers[0]]:
+                rest = RestConnection(serverInfo)
+                try:
+                    rest.create_bucket(bucket=name,
+                                       ramQuotaMB=200,
+                                       replicaNumber=1,
+                                       authType='sasl',
+                                       saslPassword='')
+                    self.fail('created a bucket with invalid characters')
+                except BucketCreationException as ex:
+                    self.log.info(ex)
+
+    # create maximum number of buckets (server memory / 100MB)
+    # only done on the first server
+    def test_max_buckets(self):
+        log = logger.Logger.get_logger()
+        serverInfo = self.servers[0]
+        log.info('picking server : {0} as the master'.format(serverInfo))
+        rest = RestConnection(serverInfo)
+        info = rest.get_nodes_self()
+        rest.init_cluster(username=serverInfo.rest_username,
+                          password=serverInfo.rest_password)
+        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
+        bucket_ram = 100
+        bucket_count = info.mcdMemoryReserved / bucket_ram
+
+        for i in range(bucket_count):
+            bucket_name = 'max_buckets-{0}'.format(uuid.uuid4())
+            rest.create_bucket(bucket=bucket_name,
+                               ramQuotaMB=bucket_ram,
+                               replicaNumber=1,
+                               authType='sasl',
+                               saslPassword='')
+            BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],
+                                                                         11211,
+                                                                         test=unittest,
+                                                                         bucket_name=bucket_name,
+                                                                         bucket_password='')
+        buckets = []
+        try:
+            buckets = rest.get_buckets()
+        except:
+            log.info('15 seconds sleep before calling get_buckets again...')
+            time.sleep(15)
+            buckets = rest.get_buckets()
+        if len(buckets) != bucket_count:
+            msg = 'tried to create {0} buckets, only created {1}'.format(bucket_count, len(buckets))
+            log.error(msg)
+            unittest.fail(msg=msg)
+
+
+    # create maximum number of buckets + 1 (server memory / 100MB)
+    # only done on the first server
+    # negative test
+    def test_more_than_max_buckets(self):
+        log = logger.Logger.get_logger()
+        serverInfo = self.servers[0]
+        log.info('picking server : {0} as the master'.format(serverInfo))
+        rest = RestConnection(serverInfo)
+        info = rest.get_nodes_self()
+        rest.init_cluster(username=serverInfo.rest_username,
+                          password=serverInfo.rest_password)
+        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
+        bucket_ram = 100
+        bucket_count = info.mcdMemoryReserved / bucket_ram
+
+        for i in range(bucket_count):
+            bucket_name = 'max_buckets-{0}'.format(uuid.uuid4())
+            rest.create_bucket(bucket=bucket_name,
+                               ramQuotaMB=bucket_ram,
+                               replicaNumber=1,
+                               authType='sasl',
+                               saslPassword='')
+            BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],
+                                                                         11211,
+                                                                         test=unittest,
+                                                                         bucket_name=bucket_name,
+                                                                         bucket_password='')
+
+
+        bucket_name = 'max_buckets-{0}'.format(uuid.uuid4())
+        try:
+            rest.create_bucket(bucket=bucket_name,
+                               ramQuotaMB=bucket_ram,
+                               replicaNumber=1,
+                               authType='sasl',
+                               saslPassword='')
+            msg = 'bucket creation did not fail even though system was overcommited'
+            log.error(msg)
+            unittest.fail(msg)
+        except BucketCreationException as ex:
+            self.log.info('BucketCreationException was thrown as expected')
+            self.log.info(ex.message)
+
+        buckets = []
+        try:
+            buckets = rest.get_buckets()
+        except:
+            log.info('15 seconds sleep before calling get_buckets again...')
+            time.sleep(15)
+            buckets = rest.get_buckets()
+        if len(buckets) != bucket_count:
+            msg = 'tried to create {0} buckets, created {1}'.format(bucket_count, len(buckets))
+            log.error(msg)
+            unittest.fail(msg=msg)

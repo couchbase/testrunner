@@ -20,7 +20,7 @@ class InstallerHelper(object):
         remote_client = RemoteMachineShellConnection(ip = ip,
                                                      username = 'root',
                                                      pkey_location = self.get_pkey())
-        downloaded = connection.download_binary(build)
+        downloaded = connection.download_build(build)
         if not downloaded:
             raise BuildException(build)
         connection.membase_uninstall()

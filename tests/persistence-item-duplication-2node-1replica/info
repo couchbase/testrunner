@@ -1,3 +1,0 @@
-Persistence item duplication on 2 node and 1 replica
-Chiyoung Seo
-This checks if there are any duplicate items after executing the mixes of writes, vbucket deleitons and recreations, and then restarting the servers.

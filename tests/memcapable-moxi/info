@@ -1,3 +1,0 @@
-Memcapable run against moxi
-Keith Batten
-Runs memcapable against moxi on each server listed, skips setq, flushq, addq, replaceq, deleteq

@@ -53,7 +53,7 @@ class DeleteMembaseBucketsTests(unittest.TestCase):
             rest.create_bucket(bucket=name,
                                ramQuotaMB=200,
                                replicaNumber=1,
-                               proxyPort=11211)
+                               proxyPort=11212)
             remote = RemoteMachineShellConnection(serverInfo)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)

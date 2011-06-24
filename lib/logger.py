@@ -31,7 +31,8 @@ class Logger:
         # create formatter
         formatter = logging.Formatter("[%(asctime)s] - [%(module)s] [%(thread)d] - %(levelname)s - %(message)s")
 
-        fileHandler = RotatingFileHandler('{0}.log'.format(name), backupCount=0)
+        max_size = 20 * 1024 * 1024 #max size is 50 megabytes
+        fileHandler = RotatingFileHandler('{0}.log'.format(name), backupCount=2,maxBytes=max_size)
 
         # add formatter to ch
         consoleHandler.setFormatter(formatter)

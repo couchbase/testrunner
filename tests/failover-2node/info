@@ -1,3 +1,0 @@
-Failover on 2 nodes, verify replicas
-Keith Batten
-Runs mc-loader against 2 nodes, then fails over one node and verifies that all values are accessable
