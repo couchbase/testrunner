@@ -112,6 +112,9 @@ class AutoFailoverTests(unittest.TestCase):
     def test_autofailover_stop_membase_2_replica_150_percent_20_age_1_node(self):
         self.common_test_body(2, 'stop_membase', 150, 60, 1)
 
+    def test_autofailover_stop_membase_2_replica_1_percent_0_age_1_node(self):
+        self.common_test_body(2, 'stop_membase', 1, 0, 1)
+
     def test_autofailover_stop_membase_2_replica_150_percent_0_age_1_node(self):
         self.common_test_body(2, 'stop_membase', 150, 0, 1)
 
