@@ -1,21 +1,91 @@
-trunner
+testrunner
 
 Syntax: testrunner [options]
 
 Options:
- -c <file>        Config file name (located in the conf subdirectory)
- -i <file>        Path to file containing server list.This file contains
-                  required information for connecting to all servers
- -s <server>      Hostname of server (multiple -s options add more servers)
- -t <test>        Test name (multiple -t options add more tests)
- -p key=value pairs e.g version=xyz,key1=value1
+ -c <file>        runlist name                      example -c conf/py-all.conf
+ -t <test>        test case                         example : -t setgettests.MembaseBucket.value_100b
+ -i <file>        resource file                     example : -i resources/jenkins/single-node-centos-32.ini
+ -p key=value     key,value pairs                   example : version=xyz,key1=value1 : example  : -p version=1.7.0,amazon=true
 
 
-The config file is located in ./conf and is simply a list of tests. A test is defined by its path relative to ./tests/ and can be nested.
-Testrunner will execute each test in sequence. It will run ./tests/<testname>/run.sh
+Requirements :
+ Python >= 2.6
+ Paramiko (http://www.lag.net/paramiko/)
+ pycrypto https://www.dlitz.net/software/pycrypto/
+
+ pycrypto is not supported on all windows platform.
+
+ while paramiko and pycrypto both support pypi package
+ installation i still recommend downloading and installing these two modules manually.
+
+ wget http://ftp.dlitz.net/pub/dlitz/crypto/pycrypto/pycrypto-2.3.tar.gz
+ tar -xvf pycrypto-2.3.tar.gz
+ cd pycrypto-2.3
+ python setup.py build
+ python setup.py install
+ cd ..
+ wget http://www.lag.net/paramiko/download/paramiko-1.7.4.tar.gz
+ tar -xvf paramiko-1.7.4.tar.gz
+ cd paramiko-1.7.4
+ python setup.py build
+ python setup.py install
+ cd ..
+
+Resource File:
+
+Ini files represents the ns_server information which is accessible to the tests.
+
+[global] section defines the rest username,password that tests use to login to ns_server
 
 
-Environment variables available to tests:
+[global]
+username:Administrator
+password:membase
 
-Each test has access to a TestInput object which contains serverInfo and test specific parameter
+[servers] section lists port and ssh related information. ssh connection information
+is required for small subset of tests where test needs to perform installation,backup or restore.
+If ns_server instances are started using ns_server/cluster_run script then you only need to define ip and port
+for those nodes.
+
+example:
+
+[servers]
+1:10.1.6.104_1
+2:10.1.6.104_2
+3:10.1.6.104_3
+4:10.1.6.104_4
+
+[10.1.6.104_1]
+ip:10.1.6.104
+port:9000
+
+
+[10.1.6.104_2]
+10.1.6.104
+port:9001
+
+[10.1.6.104_3]
+10.1.6.104
+port:9002
+
+[10.1.6.104_4]
+10.1.6.104
+port:9003
+
+
+Test Execution and Reporting:
+
+For every test run testrunner creates a temp folder and dumps the logs and xunit reports in the newly generated folder.
+
+for instance if you run
+./testrunner -i resources/jenkins/single-node-centos-32.ini -t setgettests.MembaseBucket.value_100b
+
+you will see this summary after each test is ran.
+
+summary so far suite setgettests.MembaseBucket , pass 1 , fail 0
+logs and results are available under tmp-12-11-47
+
+ls  tmp-12-11-47/
+report-12-11-47.xml-setgettests.MembaseBucket.xml	value_100b.log
 
