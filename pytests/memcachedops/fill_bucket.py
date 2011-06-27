@@ -51,7 +51,7 @@ class FillTheBucketTest(unittest.TestCase):
                 flag = socket.htonl(ctypes.c_uint32(zlib.adler32(payload)).value)
                 try:
                     (opaque, cas, data) = self.clients[ip].set(key, 0, flag, payload)
-                    if count % 10000 == 0:
+                    if not count % 10000:
                         log.info('pushed in  the key # {0} to memcached @ {1}'.format(count,ip))
                     count += 1
                 except MemcachedError as error:

@@ -17,7 +17,6 @@ class TestInput(object):
     def __init__(self):
         self.servers = []
         self.membase_settings = None
-        self.membase_build = None
         self.test_params = {}
         #servers , each server can have u,p,port,directory
 
@@ -77,7 +76,6 @@ class TestInputParser():
                 has_ini = True
                 ini_file = argument
             if option == '-p':
-                print 'test specific parameters'
                 pairs = argument.split(',')
                 for pair in pairs:
                     key_value = pair.split('=')
@@ -103,8 +101,6 @@ class TestInputParser():
         for section in sections:
             if section == 'servers':
                 ips = TestInputParser.get_server_ips(config,section)
-            elif section == 'build':
-                input.membase_build = TestInputParser.get_membase_build(config,section)
             elif section == 'membase':
                 input.membase_settings = TestInputParser.get_membase_settings(config,section)
             elif  section == 'global':
@@ -164,6 +160,8 @@ class TestInputParser():
                         server.ssh_key = config.get(section,option)
                     if option == 'port':
                         server.port = config.get(section,option)
+                    if option == 'ip':
+                        server.ip = config.get(section,option)
                 break
                 #get username
                 #get password
@@ -212,9 +210,8 @@ class TestInputParser():
             # -p : for smtp ( taken care of by jenkins)
             # -o : taken care of by jenkins
             servers = []
-            input_build = None
             membase_setting = None
-            (opts, args) = getopt.getopt(argv[1:],'h:t:c:v:s:i:p:', [])
+            (opts, args) = getopt.getopt(argv[1:],'h:t:c:i:p:', [])
             #first let's loop over and find out if user has asked for help
             need_help = False
             for option,argument in opts:
@@ -268,7 +265,6 @@ class TestInputParser():
                 if not server.port:
                     server.port = 8091
             input.servers  = servers
-            input.membase_build = input_build
             input.membase_settings = membase_setting
             return input
         except Exception:

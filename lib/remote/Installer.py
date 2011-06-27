@@ -18,7 +18,6 @@ class InstallerHelper(object):
                                                   username = username,
                                                   pkey_location = key_location)
         remote_client = RemoteMachineShellConnection(ip = ip,
-                                                     username = 'root',
                                                      pkey_location = self.get_pkey())
         downloaded = connection.download_build(build)
         if not downloaded:

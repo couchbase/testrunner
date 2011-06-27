@@ -74,7 +74,7 @@ class CLIInterface(object):
         cmd = " rebalance " + self.acting_server_args
         return self.execute_command(cmd)
 
-    def rebalance_stop():
+    def rebalance_stop(self):
         cmd = " reblance-stop " + self.acting_server_args
         return self.execute_command(cmd)
 
@@ -116,7 +116,7 @@ class CLIInterface(object):
         cmd = " bucket-delete " + self.acting_server_args + " --bucket=%s" % (bucket_name)
         return self.execute_command(cmd)
         
-    def bucket_flush():
+    def bucket_flush(self):
         return "I don't work yet :-("
 
     def execute_command(self, cmd):
@@ -128,7 +128,7 @@ class CLIInterface(object):
     def execute_local(self, cmd):
         rtn = ""
         process = subprocess.Popen(cmd ,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        stdoutdata,stderrdata=process.communicate(None)
+        stdoutdata,stderrdata=process.communicate()
         rtn += stdoutdata
         return rtn
 
@@ -138,6 +138,6 @@ class CLIInterface(object):
             process = subprocess.Popen("ssh root@%s \"%s\"" % (self.server,cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         else:
             process = subprocess.Popen("ssh -i %s root@%s \"%s\"" % (self.sshkey, self.server, cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        stdoutdata,stderrdata=process.communicate(None)
+        stdoutdata,stderrdata=process.communicate()
         rtn += stdoutdata
         return rtn

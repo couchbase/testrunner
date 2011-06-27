@@ -106,13 +106,15 @@ class RestConnection(object):
         self.username = username
         self.password = password
         self.baseUrl = "http://{0}:8091/".format(self.ip)
+        self.port = 8091
 
     def __init__(self, serverInfo):
         #throw some error here if the ip is null ?
         self.ip = serverInfo.ip
         self.username = serverInfo.rest_username
         self.password = serverInfo.rest_password
-        self.baseUrl = "http://{0}:8091/".format(self.ip)
+        self.port = serverInfo.port
+        self.baseUrl = "http://{0}:{1}/".format(self.ip,self.port)
 
 
     #authorization mut be a base64 string of username:password
@@ -190,12 +192,12 @@ class RestConnection(object):
     #can't add the node to itself ( TODO )
     #server already added
     #returns otpNode
-    def add_node(self, user='', password='', remoteIp='' ):
+    def add_node(self, user='', password='', remoteIp='', port='8091' ):
         otpNode = None
         log.info('adding remote node : {0} to this cluster @ : {1}'\
         .format(remoteIp, self.ip))
         api = self.baseUrl + 'controller/addNode'
-        params = urllib.urlencode({'hostname': remoteIp,
+        params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
                                    'user': user,
                                    'password': password})
         try:
@@ -262,11 +264,14 @@ class RestConnection(object):
             params = urllib.urlencode({'otpNode': otpNode})
             response, content = httplib2.Http().request(api, 'POST', params,
                                                         headers=self._create_headers())
+            log.info("failover response : {0}".format(response))
             if response['status'] == '400':
                 log.error('fail_over error : {0}'.format(content))
+                return False
             elif response['status'] == '200':
                 log.info('fail_over successful')
-            return True
+                return True
+            return False
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
         except httplib2.ServerNotFoundError:
@@ -343,7 +348,7 @@ class RestConnection(object):
         percentage = -1
         api = self.baseUrl + "pools/default/rebalanceProgress"
         try:
-            response, content = httplib2.Http().request(api, 'GET',
+            response, content = httplib2.Http().request(api,
                                                         headers=self._create_headers())
             #if status is 200 then it was a success otherwise it was a failure
             if response['status'] == '400':
@@ -359,7 +364,7 @@ class RestConnection(object):
                         log.error('{0} - rebalance failed'.format(parsed))
                     elif parsed['status'] == 'running':
                         for key in parsed:
-                            if key.find('ns_1') >= 0:
+                            if key.find('@') >= 0:
                                 ns_1_dictionary = parsed[key]
                                 percentage = ns_1_dictionary['progress'] * 100
                                 log.info('rebalance percentage : {0} %' .format(percentage))
@@ -371,6 +376,8 @@ class RestConnection(object):
                 log.error(content)
                 log.error(response)
                 percentage = -100
+            if percentage == -1:
+                print response, content
             return percentage
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
@@ -382,7 +389,7 @@ class RestConnection(object):
     def rebalance_statuses(self):
         api = self.baseUrl + 'pools/rebalanceStatuses'
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             #if status is 200 then it was a success otherwise it was a failure
             if response['status'] == '400':
                 #extract the error
@@ -415,7 +422,7 @@ class RestConnection(object):
         node = None
         api = self.baseUrl + 'nodes/self'
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             #if status is 200 then it was a success otherwise it was a failure
             if response['status'] == '400':
                 #extract the error
@@ -433,7 +440,7 @@ class RestConnection(object):
         nodes = []
         api = self.baseUrl + 'nodeStatuses'
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             #if status is 200 then it was a success otherwise it was a failure
             if response['status'] == '400':
                 #extract the error
@@ -448,6 +455,7 @@ class RestConnection(object):
                                    status=value['status'])
                     if node.ip == '127.0.0.1':
                         node.ip = self.ip
+                    node.port = int(key[key.rfind(":") + 1:])
                     node.replication = value['replication']
                     nodes.append(node)
                     #let's also populate the membase_version_info
@@ -478,7 +486,7 @@ class RestConnection(object):
     def get_pools_info(self):
         api = self.baseUrl + 'pools'
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             if response['status'] == '400':
                 log.error('get_pools error {0}'.format(content))
             elif response['status'] == '200':
@@ -494,7 +502,7 @@ class RestConnection(object):
         version = None
         api = self.baseUrl + 'pools'
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             if response['status'] == '400':
                 log.error('get_pools error {0}'.format(content))
             elif response['status'] == '200':
@@ -511,7 +519,7 @@ class RestConnection(object):
         buckets = []
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets/')
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             if response['status'] == '400':
                 log.error('get_buckets error {0}'.format(content))
             elif response['status'] == '200':
@@ -534,7 +542,7 @@ class RestConnection(object):
         api = "{0}{1}{2}{3}{4}{5}".format(self.baseUrl, 'pools/default/buckets/',
                                           bucket, "/nodes/", node_ip, ":8091/stats")
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             if response['status'] == '400':
                 log.error('get_bucket error {0}'.format(content))
             elif response['status'] == '200':
@@ -554,10 +562,37 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
+    def get_nodes(self):
+        nodes = []
+        api = self.baseUrl + 'pools/default'
+        try:
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
+            #if status is 200 then it was a success otherwise it was a failure
+            if response['status'] == '400':
+                #extract the error
+                log.error('unable to retrieve nodesStatuses')
+            elif response['status'] == '200':
+                parsed = json.loads(content)
+                if "nodes" in parsed:
+                    for json_node in parsed["nodes"]:
+                        node = RestParser().parse_get_nodes_response(json_node)
+                        node.rest_username = self.username
+                        node.rest_password = self.password
+                        node.port = self.port
+                        if node.ip == "127.0.0.1":
+                            node.ip = self.ip
+                        nodes.append(node)
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+        return nodes
+
+
     def get_bucket_stats(self, bucket='default'):
         api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             if response['status'] == '400':
                 log.error('get_bucket error {0}'.format(content))
             elif response['status'] == '200':
@@ -584,7 +619,7 @@ class RestConnection(object):
         bucketInfo = None
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
         try:
-            response, content = httplib2.Http().request(api, 'GET', headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             if response['status'] == '400':
                 log.error('get_bucket error {0}'.format(content))
             elif response['status'] == '200':
@@ -647,7 +682,7 @@ class RestConnection(object):
                                        'authType': authType,
                                        'saslPassword': saslPassword,
                                        'replicaNumber': replicaNumber,
-                                       'proxyPort': 11211,
+                                       'proxyPort': self.get_nodes_self().moxi,
                                        'bucketType': bucketType})
 
         try:
@@ -777,6 +812,7 @@ class OtpNode(object):
         self.id = id
         self.ip = ''
         self.replication = ''
+        self.port = 8091
         #extract ns ip from the otpNode string
         #its normally ns_1@10.20.30.40
         if id.find('@') >= 0:
@@ -815,12 +851,16 @@ class NodeDiskStorage(object):
 class Bucket(object):
     def __init__(self):
         self.name = ''
+        self.port = 11211
         self.type = ''
         self.nodes = None
         self.stats = None
         self.servers = []
         self.vbuckets = []
         self.forward_map = []
+        self.numReplicas = 0
+        self.saslPassword = ""
+        self.authType = ""
 
 
 class Node(object):
@@ -839,6 +879,12 @@ class Node(object):
         self.availableStorage = []
         self.storage = []
         self.memoryQuota = 0
+        self.moxi =11211
+        self.memcached = 11210
+        self.id = ""
+        self.ip = ""
+        self.rest_username = ""
+        self.rest_password = ""
 
 
 class NodePort(object):
@@ -878,6 +924,11 @@ class RestParser(object):
         node.clusterCompatibility = parsed['clusterCompatibility']
         node.version = parsed['version']
         node.os = parsed['os']
+        if "otpNode" in parsed:
+            node.id = parsed["otpNode"]
+            if parsed["otpNode"].find('@') >= 0:
+                node.ip = node.id[node.id.index('@') + 1:]
+
         # memoryQuota
         if 'memoryQuota' in parsed:
             node.memoryQuota = parsed['memoryQuota']
@@ -907,6 +958,14 @@ class RestParser(object):
                         dataStorage.state = dict['state']
                         dataStorage.type = key
                         node.storage.append(dataStorage)
+
+        # ports":{"proxy":11211,"direct":11210}
+        if "ports" in parsed:
+            ports = parsed["ports"]
+            if "proxy" in ports:
+                node.moxi = ports["proxy"]
+            if "direct" in ports:
+                node.memcached = ports["direct"]
         return node
 
     def parse_get_bucket_response(self, response):
@@ -917,11 +976,16 @@ class RestParser(object):
         bucket = Bucket()
         bucket.name = parsed['name']
         bucket.type = parsed['bucketType']
+        bucket.port = parsed['proxyPort']
+        bucket.authType = parsed["authType"]
+        bucket.saslPassword = parsed["saslPassword"]
         bucket.nodes = list()
         if 'vBucketServerMap' in parsed:
             vBucketServerMap = parsed['vBucketServerMap']
             serverList = vBucketServerMap['serverList']
             bucket.servers.extend(serverList)
+            if "numReplicas" in vBucketServerMap:
+                bucket.numReplicas = vBucketServerMap["numReplicas"]
             #vBucketMapForward
             if 'vBucketMapForward' in vBucketServerMap:
                 #let's gather the forward map
@@ -980,6 +1044,17 @@ class RestParser(object):
                 node.clusterCompatibility = nodeDictionary['clusterCompatibility']
             node.version = nodeDictionary['version']
             node.os = nodeDictionary['os']
-            # todo : node.ports
+            if "ports" in nodeDictionary:
+                ports = nodeDictionary["ports"]
+                if "proxy" in ports:
+                    node.moxi = ports["proxy"]
+                if "direct" in ports:
+                    node.memcached = ports["direct"]
+            if "hostname" in nodeDictionary:
+                value = str(nodeDictionary["hostname"])
+                node.ip = value[:value.rfind(":")]
+                node.port = int(value[value.rfind(":") + 1:])
+            if "otpNode" in nodeDictionary:
+                node.id = nodeDictionary["otpNode"]
             bucket.nodes.append(node)
         return bucket

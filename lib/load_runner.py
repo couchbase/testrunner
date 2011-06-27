@@ -2,8 +2,12 @@ import threading
 import time
 import fractions
 import uuid
+import logger
+from TestInput import TestInputServer
 
 import mc_bin_client
+from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import VBucketAwareMemcached
 
 
 class FakeMemcachedClient(object):
@@ -26,6 +30,7 @@ class LoadThread(threading.Thread):
         threading.Thread.__init__(self)
         self.daemon = True
 
+        self.log = logger.Logger()
         # thread state info
         self.stopped = False
         self.paused = True
@@ -70,6 +75,7 @@ class LoadThread(threading.Thread):
         self.max_operation_rate = int(load_info['operation_info'].get('operation_rate', 0) / threads)
 
         self.uuid = uuid.uuid4()
+        self.name = str(self.uuid) + self.name
 
         # limit info
         # all but time needs to be divided equally amongst threads
@@ -77,12 +83,21 @@ class LoadThread(threading.Thread):
         self.limit_operations = int(load_info['limit_info'].get('operations', 0) / threads)
         self.limit_time = int(load_info['limit_info'].get('time', 0))
         self.limit_size = int(load_info['limit_info'].get('size', 0) / threads)
-
+        self.poxi = self._poxi()
         # connect
-        self.server = mc_bin_client.MemcachedClient(self.server_ip, self.server_port)
-        if self.bucket_name or self.bucket_password:
-            self.server.sasl_auth_plain(self.bucket_name,self.bucket_password)
+        #self.server should be vbucketaware memcached
+#        self.server = mc_bin_client.MemcachedClient(self.server_ip, self.server_port)
+#        if self.bucket_name or self.bucket_password:
+#            self.server.sasl_auth_plain(self.bucket_name,self.bucket_password)
 
+
+    def _poxi(self):
+        tServer = TestInputServer()
+        tServer.ip = self.server_ip
+        tServer.rest_username = "Administrator"
+        tServer.rest_password = "password"
+        rest = RestConnection(tServer)
+        return VBucketAwareMemcached(rest, self.bucket_name)
 
     def run(self):
         while True:
@@ -98,12 +113,16 @@ class LoadThread(threading.Thread):
 
             # stop thread if we hit a limit (first limit we hit ends the thread)
             if self.limit_items and self.items > self.limit_items:
+                self.log.info("items count limit reached")
                 return
             if self.limit_operations and self.operations > self.limit_operations:
+                self.log.info("operations limit reached")
                 return
             if self.limit_time and self.time > self.limit_time:
+                self.log.info("time limit reached")
                 return
             if self.limit_size and self.size > self.limit_size:
+                self.log.info("size limit reached")
                 return
 
             # rate limit if we need to
@@ -116,7 +135,7 @@ class LoadThread(threading.Thread):
                 key = self.name + '_' + `self.get_mutation_key()`
                 try:
 #                    print `self.mutation_index` + " : " + `self.get_mutation_key()`
-                    self.server.set(key, 0, 0, self.get_data())
+                    self.poxi.memcached(key).set(key, 0, 0, self.get_data())
                     self.operations += 1
                     self.backoff -= 1
 
@@ -130,7 +149,7 @@ class LoadThread(threading.Thread):
                     # TODO: verify that this works, we may need to take the second to max index
                     # update the size of all data (values, not keys) that is in the system
                     # this can be either from new keys or overwriting old keys
-                    prev_indexes = get_mutation_indexes(self.get_mutation_key())
+                    prev_indexes = self.get_mutation_indexes(self.get_mutation_key())
                     prev_size = 0
                     if prev_indexes:
                         prev_size = self.get_data_size(max(prev_indexes))
@@ -138,6 +157,8 @@ class LoadThread(threading.Thread):
 
                     self.mutation_index += 1
                 except mc_bin_client.MemcachedError as e:
+                    self.poxi.done()
+                    self.poxi = self._poxi()
                     if self.backoff < 0:
                         self.backoff = 0
                     if self.backoff > 30:
@@ -153,7 +174,7 @@ class LoadThread(threading.Thread):
             elif operation == 'get':
                 key = self.name + '_' + `self.get_get_key()`
                 try:
-                    vdata = self.server.get(key)
+                    vdata = self.poxi.memcached(key).get(key)
                     self.operations += 1
                     self.backoff -= 1
                     data = vdata[2]
@@ -162,19 +183,17 @@ class LoadThread(threading.Thread):
                         if data != data_expected:
                             self.value_failures += 1
                             raise
-                    except:
+                    except Exception as e:
                         print e
-#                        print self.server.db
-#                        print "create: " + `self.create`
-#                        print "nocreate: " + `self.nocreate`
-#                        print "get_index: " + `self.get_index`
-#                        print "get_key: " + `self.get_get_key()`
-#                        print "mutation_index_max: " + `self.mutation_index_max`
-#                        print "mutation_indexes: " + `self.get_mutation_indexes(self.get_get_key())`
-#                        print "getting data for mutation index: " + `max(self.get_mutation_indexes(self.get_get_key()))`
-#                        print "got:      \'" + data + "\'"
-#                        print "expected: \'" + data_expected + "\'"
-#                        raise ValueError
+                        print "create: " + `self.create`
+                        print "nocreate: " + `self.nocreate`
+                        print "get_index: " + `self.get_index`
+                        print "get_key: " + `self.get_get_key()`
+                        print "mutation_index_max: " + `self.mutation_index_max`
+                        print "mutation_indexes: " + `self.get_mutation_indexes(self.get_get_key())`
+                        print "getting data for mutation index: " + `max(self.get_mutation_indexes(self.get_get_key()))`
+                        print "got:      \'" + data + "\'"
+                        raise ValueError
                     self.get_index += 1
                 except mc_bin_client.MemcachedError as e:
                     if self.backoff < 0:
@@ -303,7 +322,7 @@ class LoadRunner(object):
             t.join(0)
         self.threads = [t for t in self.threads if t.isAlive()]
 
-        if len(self.threads) == 0:
+        if not len(self.threads):
             self.stopped = True
 
         if self.stopped:

@@ -9,7 +9,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 class RecreateMembaseBuckets(unittest.TestCase):
     version = None
     servers = None
-    log  = None
+    log = None
     input = TestInput.TestInput
 
     #as part of the setup let's delete all the existing buckets
@@ -18,27 +18,30 @@ class RecreateMembaseBuckets(unittest.TestCase):
         self.input = TestInput.TestInputSingleton.input
         self.assertTrue(self.input, msg="input parameters missing...")
         self.servers = self.input.servers
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers,test_case=self)
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, test_case=self)
 
     def tearDown(self):
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers,test_case=self)
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, test_case=self)
 
     #create bucket-load some keys-delete bucket-recreate bucket
-    def test_recreate_default_on_11211(self):
+    def default_moxi(self):
         name = 'default'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
+            replicaNumber = 1
+            proxyPort = rest.get_nodes_self().moxi
             rest.create_bucket(bucket=name,
                                ramQuotaMB=200,
-                               replicaNumber=1,
-                               proxyPort=11211)
+                               replicaNumber=replicaNumber,
+                               proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],11211,self)
-            inserted_keys = BucketOperationHelper.load_data_or_assert(serverInfo,1,name,11211,self)
-            self.assertTrue(inserted_keys,'unable to insert any key to memcached')
-            self.assertTrue(BucketOperationHelper.verify_data(serverInfo.ip,inserted_keys,True,False,11211,self),
-            msg='verified all the keys stored')
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, name)
+            self.assertTrue(ready, "wait_for_memcached failed")
+            inserted_keys = BucketOperationHelper.load_some_data(serverInfo, 1, name)
+            self.assertTrue(inserted_keys, 'unable to insert any key to memcached')
+            verified = BucketOperationHelper.verify_data(serverInfo, inserted_keys, True, False, self, bucket=name)
+            self.assertTrue(verified, msg='verified all the keys stored')
             #verify keys
             rest.delete_bucket(name)
             msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(name)
@@ -46,32 +49,35 @@ class RecreateMembaseBuckets(unittest.TestCase):
 
             rest.create_bucket(bucket=name,
                                ramQuotaMB=200,
-                               replicaNumber=1,
-                               proxyPort=11211)
+                               replicaNumber=replicaNumber,
+                               proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],11211,self)
+            BucketOperationHelper.wait_for_memcached(serverInfo, name)
             #now let's recreate the bucket
             self.log.info('recreated the default bucket...')
             #loop over the keys make sure they dont exist
-            self.assertTrue(BucketOperationHelper.keys_dont_exist(inserted_keys,serverInfo.ip,11211,self),
+            self.assertTrue(BucketOperationHelper.keys_dont_exist(serverInfo, inserted_keys, name),
                             msg='at least one key found in the bucket')
 
-    def test_recreate_non_default_on_11220(self):
+    def default_dedicated(self):
         name = 'recreate-non-default-{0}'.format(uuid.uuid4())
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
+            replicaNumber = 1
+            proxyPort = rest.get_nodes_self().memcached + 2000
             rest.create_bucket(bucket=name,
                                ramQuotaMB=200,
-                               replicaNumber=1,
-                               proxyPort=11220)
+                               replicaNumber=replicaNumber,
+                               proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],11220,self)
-            inserted_keys = BucketOperationHelper.load_data_or_assert(serverInfo,1,name,11220,self)
-            self.assertTrue(inserted_keys,'unable to insert any key to memcached')
-            self.assertTrue(BucketOperationHelper.verify_data(serverInfo.ip,inserted_keys,True,False,11220,self),
-            msg='verified all the keys stored')
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, name)
+            self.assertTrue(ready, "wait_for_memcached failed")
+            inserted_keys = BucketOperationHelper.load_some_data(serverInfo, 1, name)
+            self.assertTrue(inserted_keys, 'unable to insert any key to memcached')
+            verified = BucketOperationHelper.verify_data(serverInfo, inserted_keys, True, False, self, bucket=name)
+            self.assertTrue(verified, msg='verified all the keys stored')
             #verify keys
             rest.delete_bucket(name)
             msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(name)
@@ -79,29 +85,35 @@ class RecreateMembaseBuckets(unittest.TestCase):
 
             rest.create_bucket(bucket=name,
                                ramQuotaMB=200,
-                               replicaNumber=1,
-                               proxyPort=11220)
+                               replicaNumber=replicaNumber,
+                               proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],11220,self)
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, name)
+            self.assertTrue(ready, "wait_for_memcached failed")
             #now let's recreate the bucket
             self.log.info('recreated the default bucket...')
             #loop over the keys make sure they dont exist
-            self.assertTrue(BucketOperationHelper.keys_dont_exist(inserted_keys,serverInfo.ip,11220,self),
+            self.assertTrue(BucketOperationHelper.keys_dont_exist(serverInfo, inserted_keys, name),
                             msg='at least one key found in the bucket')
 
 
-    def test_recreate_non_default(self):
+    def default_moxi_sasl(self):
         name = 'new-bucket-{0}'.format(uuid.uuid4())
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
+            replicaNumber = 1
+            proxyPort = rest.get_nodes_self().moxi
             rest.create_bucket(bucket=name,
                                ramQuotaMB=200,
-                               replicaNumber=1,
-                               saslPassword='password',
-                               proxyPort=11211)
+                               replicaNumber=replicaNumber,
+                               proxyPort=proxyPort,
+                               authType="sasl",
+                               saslPassword='password')
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, name)
+            self.assertTrue(ready, "wait_for_memcached failed")
             rest.delete_bucket(name)
             msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(name, rest, timeout_in_seconds=30), msg=msg)

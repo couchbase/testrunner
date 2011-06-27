@@ -106,7 +106,7 @@ def wait_on_replication(config):
             if replication_status != 1.0:
                 reached = False
                 break
-        if reached == True:
+        if reached:
             break
         time.sleep(1.0)
 
@@ -242,7 +242,7 @@ def set_items(server, vbucket, num_of_items):
     client.vbucketId = vbucket
     for i in range(num_of_items):
         key = "key_" + `vbucket` + "_" + `i`
-        payload = generate_payload(key + '\0\r\n\0\0\n\r\0', random.randint(100, 1024));
+        payload = generate_payload(key + '\0\r\n\0\0\n\r\0', random.randint(100, 1024))
         flag = socket.htonl(ctypes.c_uint32(zlib.adler32(payload)).value)
         backoff_sec = 0
         while backoff_sec < 4 :
@@ -258,7 +258,7 @@ def set_items(server, vbucket, num_of_items):
 
 def validate_items(server, vbucket, num_of_items):
     client = mc_bin_client.MemcachedClient(server.host,server.moxi_port)
-    client.vbucketId = vbucket;
+    client.vbucketId = vbucket
     count = 0
     for cur_op in range(num_of_items):
         key = "key_" + `vbucket` + "_" + `cur_op`
@@ -309,7 +309,7 @@ def initialize_membase_cluster(config):
     for server in config.servers:
         servers.append(server.host)
 
-    if config.create == True:
+    if config.create:
         # if we are creating, then uninstall, clean up and reinstall the rpm on all the nodes
         ssh(servers,
             "rpm -e membase-server ; sleep 2 ; \

@@ -6,6 +6,7 @@ class MembaseHttpExceptionTypes(object):
     NODE_ALREADY_JOINED = 1002
     NODE_CANT_ADD_TO_ITSELF=1003
     BUCKET_CREATION_ERROR = 1004
+    STATS_UNAVAILABLE = 1005
 
 #base exception class for membase apis
 class MembaseHttpException(Exception):
@@ -45,6 +46,12 @@ class BucketCreationException(MembaseHttpException):
         self.type = MembaseHttpExceptionTypes.BUCKET_CREATION_ERROR
         self._message = 'unable to create bucket {0} on the host @ {1}'\
             .format(bucket_name,ip)
+
+class StatsUnavailableException(MembaseHttpException):
+    def __init__(self):
+        self.type = MembaseHttpExceptionTypes.STATS_UNAVAILABLE
+        self._message = 'unable to get stats'
+
 
 class ServerUnavailableException(MembaseHttpException):
     def __init__(self,ip = ''):

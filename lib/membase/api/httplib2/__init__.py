@@ -426,6 +426,9 @@ class Authentication(object):
         self.host = host
         self.credentials = credentials
         self.http = http
+        self.response = response
+        self.headers = headers
+        self.content = content
 
     def depth(self, request_uri):
         (scheme, authority, path, query, fragment) = parse_uri(request_uri)
@@ -468,7 +471,7 @@ class DigestAuthentication(Authentication):
 
     def __init__(self, credentials, host, request_uri, headers, response, content, http):
         Authentication.__init__(self, credentials, host, request_uri, headers, response, content, http)
-        challenge = _parse_www_authenticate(response, 'www-authenticate')
+        challenge = _parse_www_authenticate(response)
         self.challenge = challenge['digest']
         qop = self.challenge.get('qop')
         self.challenge['qop'] = ('auth' in [x.strip() for x in qop.split()]) and 'auth' or None
@@ -508,7 +511,7 @@ class DigestAuthentication(Authentication):
 
     def response(self, response, content):
         if not response.has_key('authentication-info'):
-            challenge = _parse_www_authenticate(response, 'www-authenticate').get('digest', {})
+            challenge = _parse_www_authenticate(response).get('digest', {})
             if 'true' == challenge.get('stale'):
                 self.challenge['nonce'] = challenge['nonce']
                 self.challenge['nc'] = 1
@@ -528,7 +531,7 @@ class HmacDigestAuthentication(Authentication):
 
     def __init__(self, credentials, host, request_uri, headers, response, content, http):
         Authentication.__init__(self, credentials, host, request_uri, headers, response, content, http)
-        challenge = _parse_www_authenticate(response, 'www-authenticate')
+        challenge = _parse_www_authenticate(response)
         self.challenge = challenge['hmacdigest']
         # TODO: self.challenge['domain']
         self.challenge['reason'] = self.challenge.get('reason', 'unauthorized')
@@ -583,7 +586,7 @@ class HmacDigestAuthentication(Authentication):
         )
 
     def response(self, response, content):
-        challenge = _parse_www_authenticate(response, 'www-authenticate').get('hmacdigest', {})
+        challenge = _parse_www_authenticate(response).get('hmacdigest', {})
         if challenge.get('reason') in ['integrity', 'stale']:
             return True
         return False
@@ -620,7 +623,7 @@ class GoogleLoginAuthentication(Authentication):
         from urllib import urlencode
 
         Authentication.__init__(self, credentials, host, request_uri, headers, response, content, http)
-        challenge = _parse_www_authenticate(response, 'www-authenticate')
+        challenge = _parse_www_authenticate(response)
         service = challenge['googlelogin'].get('service', 'xapi')
         # Bloggger actually returns the service in the challenge
         # For the rest we guess based on the URI
@@ -858,7 +861,7 @@ the same interface as FileCache."""
         """A generator that creates Authorization objects
            that can be applied to requests.
         """
-        challenges = _parse_www_authenticate(response, 'www-authenticate')
+        challenges = _parse_www_authenticate(response)
         for cred in self.credentials.iter(host):
             for scheme in AUTH_SCHEME_ORDER:
                 if challenges.has_key(scheme):
@@ -889,7 +892,7 @@ the same interface as FileCache."""
                 conn.close()
                 raise ServerNotFoundError("Unable to find the server at %s" % conn.host)
             except httplib.HTTPException, e:
-                if i == 0:
+                if not i:
                     conn.close()
                     conn.connect()
                     continue
@@ -901,7 +904,7 @@ the same interface as FileCache."""
                 if method != "HEAD":
                     content = _decompressContent(response, content)
 
-            break;
+            break
         return (response, content)
 
 
@@ -1062,7 +1065,7 @@ a string that contains the response entity body.
             if cached_value and method in ["GET", "HEAD"] and self.cache and 'range' not in headers:
                 if info.has_key('-x-permanent-redirect-url'):
                     # Should cached permanent redirects be counted in our redirection count? For now, yes.
-                    (response, new_content) = self.request(info['-x-permanent-redirect-url'], "GET", headers=headers,
+                    (response, new_content) = self.request(info['-x-permanent-redirect-url'], headers=headers,
                                                            redirections=redirections - 1)
                     response.previous = Response(info)
                     response.previous.fromcache = True

@@ -52,6 +52,13 @@ class BuildQuery(object):
         #parse build page and create build object
         pass
 
+    def find_build(self,builds,product,type,arch,version):
+        for build in builds:
+            if build.product_version.find(version) != -1 and product == build.product\
+               and build.architecture_type == arch and type == build.deliverable_type:
+                return build
+        return None
+
     def find_membase_build(self, builds, product, deliverable_type, os_architecture, build_version):
         for build in builds:
             if build.product_version.find(build_version) != -1 and product == build.product\
@@ -74,6 +81,16 @@ class BuildQuery(object):
 
         return sorted(membase_builds,
                       key=lambda membase_build: membase_build.build_number, reverse=True)
+
+    def sort_builds_by_time(self, builds):
+        membase_builds = list()
+        for build in builds:
+            if build.product == 'membase-server-enterprise':
+                membase_builds.append(build)
+
+        return sorted(membase_builds,
+                      key=lambda membase_build: membase_build.time, reverse=True)
+
 
     def get_latest_builds(self):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds')

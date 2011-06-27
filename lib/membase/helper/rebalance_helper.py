@@ -1,5 +1,6 @@
 import time
 import logger
+from membase.api.exception import StatsUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -8,8 +9,6 @@ import threading
 log = logger.Logger.get_logger()
 
 class RebalanceHelper():
-
-
     @staticmethod
     #bucket is a json object that contains name,port,password
     def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120):
@@ -18,7 +17,7 @@ class RebalanceHelper():
         verified = False
         while (time.time() - start) <= timeout_in_seconds:
             rest = RestConnection(master)
-            stats = rest.get_bucket_stats(bucket['name'])
+            stats = rest.get_bucket_stats(bucket)
             if stats and stat_key in stats and stats[stat_key] == stat_value:
                 log.info("{0} : {1}".format(stat_key, stats[stat_key]))
                 verified = True
@@ -32,33 +31,37 @@ class RebalanceHelper():
 
     @staticmethod
     def wait_till_total_numbers_match(master,
-                                      servers,
                                       bucket,
-                                      port,
-                                      replica_factor,
-                                      timeout_in_seconds=120,
-                                      password = 'password'):
+                                      timeout_in_seconds=120):
+
         log.info('waiting for sum_of_curr_items == total_items....')
         start = time.time()
         verified = False
         while (time.time() - start) <= timeout_in_seconds:
-            if RebalanceHelper.verify_items_count(master, servers, bucket, replica_factor):
+            try:
+                if RebalanceHelper.verify_items_count(master,bucket):
+                    verified = True
+                    break
+                else:
+                    time.sleep(2)
+            except StatsUnavailableException:
+                log.info("unable to retrieve stats for any node. returning true")
                 verified = True
                 break
-            else:
-                time.sleep(2)
         rest = RestConnection(master)
-        RebalanceHelper.print_taps_from_all_nodes(rest,bucket,port,password)
+        RebalanceHelper.print_taps_from_all_nodes(rest, bucket)
         return verified
 
     @staticmethod
     #TODO: add password and port
-    def print_taps_from_all_nodes(rest, bucket='default', port=11210, password='password'):
+    def print_taps_from_all_nodes(rest, bucket='default'):
+        #get the port number from rest ?
+        
         log = logger.Logger.get_logger()
-        nodes_for_stats = rest.node_statuses()
+        nodes_for_stats = rest.get_nodes()
         for node_for_stat in nodes_for_stats:
             try:
-                client = MemcachedClientHelper.create_memcached_client(node_for_stat.ip, bucket, port,password)
+                client = MemcachedClientHelper.direct_client(node_for_stat, bucket)
                 log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
                 tap_stats = client.stats('tap')
                 if tap_stats:
@@ -84,20 +87,29 @@ class RebalanceHelper():
 
 
     @staticmethod
-    def verify_items_count(master,servers,bucket,replica_factor):
-        #print out vb_pending_num,vb_active_num,vb_replica_num as well
+    def verify_items_count(master,bucket):
+        #get the #of buckets from rest
         rest = RestConnection(master)
+        bucket_info = rest.get_bucket(bucket)
+        replica_factor = bucket_info.numReplicas
+        #print out vb_pending_num,vb_active_num,vb_replica_num as well
         master_stats = rest.get_bucket_stats(bucket)
         vbucket_active_sum = 0
         vbucket_replica_sum = 0
         vbucket_pending_sum = 0
         all_server_stats = []
-        for server in servers:
+        stats_received = 0
+        nodes = rest.get_nodes()
+        for server in nodes:
             #get the stats
             server_stats = rest.get_bucket_stats_for_node(bucket, server.ip)
             if not server_stats:
                 log.info("unable to get stats from {0}".format(server.ip))
-            all_server_stats.append((server,server_stats))
+            else:
+                stats_received += 1
+            all_server_stats.append((server, server_stats))
+        if not stats_received:
+            raise StatsUnavailableException()
         sum = 0
         for server, single_stats in all_server_stats:
             if not single_stats or "curr_items" not in single_stats:
@@ -123,27 +135,27 @@ class RebalanceHelper():
 
 
     @staticmethod
-    def verify_maps(vbucket_map_before,vbucket_map_after):
+    def verify_maps(vbucket_map_before, vbucket_map_after):
         #for each bucket check the replicas
-        for i in range(0,len(vbucket_map_before)):
+        for i in range(0, len(vbucket_map_before)):
             if not vbucket_map_before[i].master == vbucket_map_after[i].master:
                 log.error(
-                    'vbucket[{0}].master mismatch {1} vs {2}'.format(i,vbucket_map_before[i].master,vbucket_map_after[i].master))
+                    'vbucket[{0}].master mismatch {1} vs {2}'.format(i, vbucket_map_before[i].master,
+                                                                     vbucket_map_after[i].master))
                 return False
-            for j in range(0,len(vbucket_map_before[i].replica)):
+            for j in range(0, len(vbucket_map_before[i].replica)):
                 if not (vbucket_map_before[i].replica[j]) == (vbucket_map_after[i].replica[j]):
-                    log.error('vbucket[{0}].replica[{1} mismatch {2} vs {3}'.format(i,j,
-                        vbucket_map_before[i].replica[j],vbucket_map_after[i].replica[j] ))
+                    log.error('vbucket[{0}].replica[{1} mismatch {2} vs {3}'.format(i, j,
+                                                                                    vbucket_map_before[i].replica[j],
+                                                                                    vbucket_map_after[i].replica[j]))
                     return False
         return True
 
     @staticmethod
-    def delete_all_buckets_or_assert(ips,test_case):
+    def delete_all_buckets_or_assert(ips, test_case):
         log.info('deleting existing buckets on {0}'.format(ips))
         for ip in ips:
-            rest = RestConnection(ip=ip,
-                                  username='Administrator',
-                                  password='password')
+            rest = RestConnection(ip=ip)
             buckets = rest.get_buckets()
             for bucket in buckets:
                 print bucket.name
@@ -151,7 +163,7 @@ class RebalanceHelper():
                 log.info('deleted bucket : {0}'.format(bucket.name))
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
                 test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200)
-                                , msg=msg)
+                                     , msg=msg)
 
     @staticmethod
     def wait_for_bucket_deletion(bucket,
@@ -181,20 +193,14 @@ class RebalanceHelper():
                 time.sleep(2)
         return False
 
-    # in this method
-#    @staticmethod
-#    def add_node_and_rebalance(rest,node_ip):
-#        pass
-        #read the current nodes
-        # if the node_ip already added then just
-        #silently return
-        #if its not added then let try to add this and then rebalance
-        #we should alo try to get the bucket information from
-        #rest api instead of passing it to the fucntions
+        # in this method
 
-class VBucketHeartbeat(threading.Thread):
-
-    #this class will print out the current state of vbucket transfer
-    #during a rebalance operation or replication or failover
-    vbucket = {'id':0,'dead':'10.1.2.4','pending':'10.1.2.5','active':'10.1.2.6'}
-    #get 
+    #    @staticmethod
+    #    def add_node_and_rebalance(rest,node_ip):
+    #        pass
+    #read the current nodes
+    # if the node_ip already added then just
+    #silently return
+    #if its not added then let try to add this and then rebalance
+    #we should alo try to get the bucket information from
+    #rest api instead of passing it to the fucntions

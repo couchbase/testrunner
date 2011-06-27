@@ -1,11 +1,9 @@
 import unittest
-import math
 from TestInput import TestInputSingleton
 import mc_bin_client
 import time
 import uuid
 import logger
-import crc32
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -42,35 +40,27 @@ class MemcapableTestBase(object):
                 rest.create_bucket(bucket=bucket_name,
                                    bucketType=bucket_type,
                                    ramQuotaMB=bucket_ram,
-                                   replicaNumber=1,
                                    proxyPort=self.bucket_port,
                                    authType='sasl',
                                    saslPassword='password')
                 msg = 'create_bucket succeeded but bucket "default" does not exist'
                 self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
-                BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],
-                                                                                         self.bucket_port,
-                                                                                         test=unittest,
-                                                                                         bucket_name=self.bucket_name,
-                                                                                         bucket_password='password')
+                ready = BucketOperationHelper.wait_for_memcached(serverInfo, self.bucket_name)
+                unittest.assertTrue(ready, "wait_for_memcached failed")
 
             else:
                 rest.create_bucket(bucket=bucket_name,
                                    bucketType=bucket_type,
                                    ramQuotaMB=bucket_ram,
-                                   replicaNumber=1,
                                    proxyPort=self.bucket_port)
                 msg = 'create_bucket succeeded but bucket "default" does not exist'
                 self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
-                BucketOperationHelper.wait_till_memcached_is_ready_or_assert([serverInfo],
-                                                                                         self.bucket_port,
-                                                                                         test=unittest,
-                                                                                         bucket_name=self.bucket_name)
+                ready = BucketOperationHelper.wait_for_memcached(serverInfo, self.bucket_name)
+                unittest.assertTrue(ready, "wait_for_memcached failed")
 
     def set_test(self, key, exp, flags, values):
         for serverInfo in self.servers:
-            client = mc_bin_client.MemcachedClient(host=serverInfo.ip,
-                                                   port=self.bucket_port)
+            client = MemcachedClientHelper.proxy_client(serverInfo,self.bucket_name,)
             #            self.log.info('Waitting 15 seconds for memcached started')
             #            time.sleep(15)
             for v in values:
@@ -93,17 +83,17 @@ class MemcapableTestBase(object):
     # you can simply ADD it instead before incrementing each time.
     # If it's already there, your ADD is ignored, and if it's not there, it's set.
     def incr_test(self, key, exp, flags, value, incr_amt, decr_amt, incr_time):
+        global update_value
         for serverInfo in self.servers:
-            client = mc_bin_client.MemcachedClient(host=serverInfo.ip,
-                                                   port=self.bucket_port)
+            client = MemcachedClientHelper.proxy_client(serverInfo,self.bucket_name)
             #            self.log.info('Waitting 15 seconds for memcached started')
             #            time.sleep(15)
             if key != 'no_key':
                 client.set(key, exp, flags, value)
-            if exp != 0:
+            if exp:
                 self.log.info('Wait {0} seconds for the key expired' .format(exp + 2))
                 time.sleep(exp + 2)
-            if decr_amt != 0:
+            if decr_amt:
                 c, d = client.decr(key, decr_amt)
                 self.log.info('decr amt {0}' .format(c))
             try:
@@ -119,17 +109,15 @@ class MemcapableTestBase(object):
 
 
     def decr_test(self, key, exp, flags, value, incr_amt, decr_amt, decr_time):
+        global update_value
         for serverInfo in self.servers:
-            client = mc_bin_client.MemcachedClient(host=serverInfo.ip,
-                                                   port=self.bucket_port)
-            #            self.log.info('Waitting 15 seconds for memcached started')
-            #            time.sleep(15)
+            client = MemcachedClientHelper.proxy_client(serverInfo,self.bucket_name)
             if key != 'no_key':
                 client.set(key, exp, flags, value)
-            if exp != 0:
+            if exp:
                 self.log.info('Wait {0} seconds for the key expired' .format(exp + 2))
                 time.sleep(exp + 2)
-            if incr_amt != 0:
+            if incr_amt:
                 c, d = client.incr(key, incr_amt)
                 self.log.info('incr amt {0}' .format(c))
             i = 0
@@ -198,7 +186,7 @@ class SimpleIncrMembaseBucketDefaultPort(unittest.TestCase):
             self.log.info('Value update correctly.  Expected value {0}.  Tested value {1}'\
             .format((int(value) + incr_amt * incr_time), update_v))
         else:
-            self.test.fail("FAILED test_incr_an_exist_key_never_exp. Original value %s. \
+            self.fail("FAILED test_incr_an_exist_key_never_exp. Original value %s. \
                             Expected value %d" % (value, int(value) + incr_amt * incr_time))
 
     def test_incr_non_exist_key(self):
@@ -212,7 +200,7 @@ class SimpleIncrMembaseBucketDefaultPort(unittest.TestCase):
             self.log.info('Value update correctly.  Expected value {0}.  Tested value {1}'\
             .format(incr_amt * (incr_time - 1), update_v))
         else:
-            self.test.fail("FAILED test_incr_non_exist_key")
+            self.fail("FAILED test_incr_non_exist_key")
 
     def test_incr_with_exist_key_and_expired(self):
         key_test = 'expire_key'
@@ -226,7 +214,7 @@ class SimpleIncrMembaseBucketDefaultPort(unittest.TestCase):
             self.log.info('Value update correctly.  Expected value {0}.  Tested value {1}'\
             .format(incr_amt * (incr_time - 1), update_v))
         else:
-            self.test.fail("FAILED test_incr_with_exist_key_and_expired")
+            self.fail("FAILED test_incr_with_exist_key_and_expired")
 
     def test_incr_with_exist_key_decr_then_incr_never_expired(self):
         key_test = 'has_key'
@@ -238,9 +226,9 @@ class SimpleIncrMembaseBucketDefaultPort(unittest.TestCase):
         update_v = self.memcapableTestBase.incr_test(key_test, exp_time, 0, value, incr_amt, decr_amt, incr_time)
         if update_v == (int(value) - decr_amt + incr_amt * incr_time):
             self.log.info('Value update correctly.  Expected value {0}.  Tested value {1}'\
-            .format(int(value) - decr_amt + incr_amt * (incr_time), update_v))
+            .format(int(value) - decr_amt + incr_amt * incr_time, update_v))
         else:
-            self.test.fail("FAILED test_incr_with_exist_key_and_expired")
+            self.fail("FAILED test_incr_with_exist_key_and_expired")
 
 ## this test will fail as expected
 #    def test_incr_with_non_int_key(self):
@@ -271,9 +259,8 @@ class GetlTests(unittest.TestCase):
 
     def _getl_body(self, prefix, getl_timeout, expiration):
         node = self.memcapableTestBase.servers[0]
-        mc = MemcachedClientHelper.create_memcached_client(node.ip, port=11210)
+        mc = MemcachedClientHelper.direct_client(node,"default")
         key = "{0}_{1}".format(prefix, str(uuid.uuid4()))
-        expiration = 0
         self.log.info("setting key {0} with expiration {1}".format(key, expiration))
         mc.set(key, expiration, 0, key)
         self.log.info("getl key {0} timeout {1}".format(key, getl_timeout))
@@ -281,11 +268,23 @@ class GetlTests(unittest.TestCase):
         self.log.info("get key {0} which is locked now".format(key))
         flags_v, cas_v, get_v = mc.get(key)
         self.assertEquals(get_v, key)
+        i = 0
+        while i < 40:
+            self.log.info("setting key {0} with new value {1}".format(key, '*'))
+            try:
+                mc.set(key, 0, 0, '*')
+                break
+            except Exception as ex:
+                print ex
+            time.sleep(1)
+            print i
+            i += 1
         if getl_timeout > 30:
             self.log.info("sleep for {0} seconds".format(30))
             time.sleep(30)
         elif getl_timeout > 0:
-            self.log.info("sleep for {0} seconds".format(getl_timeout))
+            self.log.info("sleep for {0} seconds".format(15 - getl_timeout))
+            self.log.info("sleep for {0} seconds".format(15))
             time.sleep(getl_timeout)
         else:
             self.log.info("sleep for {0} seconds".format(15))
@@ -301,11 +300,11 @@ class GetlTests(unittest.TestCase):
     def getl_minus_one(self):
         self._getl_body("getl_-1", -1, 0)
 
-    def getl_sixty(self):
+    def getl_zero(self):
         self._getl_body("getl_0", 0, 0)
 
     def getl_five(self):
-        self._getl_body("getl_5", 5, 0)
+        self._getl_body("getl_5", 15, 0)
 
     def getl_ten(self):
         self._getl_body("getl_10", 10, 0)
@@ -324,7 +323,7 @@ class GetlTests(unittest.TestCase):
         expiration = 5
         getl_timeout = 15
         node = self.memcapableTestBase.servers[0]
-        mc = MemcachedClientHelper.create_memcached_client(node.ip, port=11210)
+        mc = MemcachedClientHelper.direct_client(node,"default")
         key = "{0}_{1}".format(prefix, str(uuid.uuid4()))
         self.log.info("setting key {0} with expiration {1}".format(key, expiration))
         mc.set(key, expiration, 0, key)
@@ -356,6 +355,7 @@ class GetlTests(unittest.TestCase):
         flags_v, cas_v, get_v = mc.get(key)
         self.assertEquals(get_v, "*")
 
+
 class SimpleDecrMembaseBucketDefaultPort(unittest.TestCase):
     memcapableTestBase = None
     log = logger.Logger.get_logger()
@@ -376,7 +376,7 @@ class SimpleDecrMembaseBucketDefaultPort(unittest.TestCase):
             self.log.info('Value update correctly.  Expected value {0}.  Tested value {1}'\
             .format((int(value) - decr_amt * decr_time), update_v))
         else:
-            self.test.fail("FAILED test_decr_an_exist_key_never_exp. Original value %s. \
+            self.fail("FAILED test_decr_an_exist_key_never_exp. Original value %s. \
                             Expected value %d" % (value, int(value) - decr_amt * decr_time))
 
     def test_decr_non_exist_key(self):
@@ -387,11 +387,11 @@ class SimpleDecrMembaseBucketDefaultPort(unittest.TestCase):
         incr_amt = 0
         decr_time = 10
         update_v = self.memcapableTestBase.decr_test(key_test, exp_time, 0, value, incr_amt, decr_amt, decr_time)
-        if update_v == 0:
+        if not update_v:
             self.log.info('Value update correctly.  Expected value 0.  Tested value {0}'\
             .format(update_v))
         else:
-            self.test.fail('FAILED test_decr_non_exist_key. Expected value 0')
+            self.fail('FAILED test_decr_non_exist_key. Expected value 0')
 
     def test_decr_with_exist_key_and_expired(self):
         key_test = 'has_key'
@@ -401,11 +401,11 @@ class SimpleDecrMembaseBucketDefaultPort(unittest.TestCase):
         incr_amt = 0
         decr_time = 10
         update_v = self.memcapableTestBase.decr_test(key_test, exp_time, 0, value, incr_amt, decr_amt, decr_time)
-        if update_v == 0:
+        if not update_v:
             self.log.info('Value update correctly.  Expected value 0.  Tested value {0}'\
             .format(update_v))
         else:
-            self.test.fail('FAILED test_decr_with_exist_key_and_expired.  Expected value 0')
+            self.fail('FAILED test_decr_with_exist_key_and_expired.  Expected value 0')
 
     def test_decr_with_exist_key_incr_then_decr_never_expired(self):
         key_test = 'has_key'
@@ -417,7 +417,7 @@ class SimpleDecrMembaseBucketDefaultPort(unittest.TestCase):
         update_v = self.memcapableTestBase.decr_test(key_test, exp_time, 0, value, incr_amt, decr_amt, decr_time)
         if update_v == (int(value) + incr_amt - decr_amt * decr_time):
             self.log.info('Value update correctly.  Expected value {0}.  Tested value {1}'\
-            .format(int(value) + incr_amt - decr_amt * (decr_time), update_v))
+            .format(int(value) + incr_amt - decr_amt * decr_time, update_v))
         else:
-            self.test.fail(
-                "Expected value %d.  Test result %d" % (int(value) + incr_amt - decr_amt * (decr_time), update_v))
+            self.fail(
+                "Expected value %d.  Test result %d" % (int(value) + incr_amt - decr_amt * decr_time, update_v))

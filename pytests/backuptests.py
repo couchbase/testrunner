@@ -56,34 +56,6 @@ class BackupRestoreTests(unittest.TestCase):
         self.shell.disconnect()
 
 
-    def wait_for_disk_queue(self, server, server_port=11211, timeout=180):
-        client = mc_bin_client.MemcachedClient(server.ip, port=server_port)
-        stats = client.stats("")
-        end_time = time.time() + timeout
-        while time.time() < end_time:
-            if stats['ep_queue_size'] == '0' and stats['ep_flusher_todo'] == '0':
-                break
-            else:
-                self.log.info('still waiting ...')
-                time.sleep(5)
-                stats = client.stats("")
-                #self.log.info(stats)
-
-        self.log.info("Stats for server {0}: ep_queue_size size is {1}; ep_flusher_todo size is {2}"
-        .format(server.ip, stats['ep_queue_size'], stats['ep_flusher_todo']))
-
-        client.close()
-
-
-    def wait_for_disk_queues(self, server_port=11211, timeout=180):
-        end_time = time.time() + timeout
-        for server in self.servers:
-            if time.time() < end_time:
-                self.wait_for_disk_queue(server, server_port, timeout)
-            else:
-                break
-
-
     def add_node_and_rebalance(self, master, servers):
         ClusterOperationHelper.add_all_nodes_or_assert(master, servers, self.input.membase_settings, self)
         rest = RestConnection(master)
@@ -111,23 +83,31 @@ class BackupRestoreTests(unittest.TestCase):
 
 
     def _test_backup_add_restore_bucket_body(self,
-                                             bucket="default",
-                                             port_no=11211,
-                                             delay_after_data_load=180,
-                                             startup_flag=True,
-                                             single_node=False):
+                                             bucket,
+                                             delay_after_data_load,
+                                             startup_flag,
+                                             single_node):
         server = self.master
-        BucketOperationHelper.create_bucket(server, bucket, 1, port_no, self, -1)
-        json_bucket = {'name': bucket, 'port': port_no, 'password': ''}
-        BucketOperationHelper.wait_for_memcached(server, json_bucket)
+        rest = RestConnection(server)
+        info = rest.get_nodes_self()
+        size = int(info.mcdMemoryReserved * 2.0 / 3.0)
+        if bucket == "default":
+            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
+        else:
+            proxyPort = info.moxi + 500
+            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort,
+                               authType="sasl", saslPassword="password")
+
+        ready = BucketOperationHelper.wait_for_memcached(server, bucket)
+        self.assertTrue(ready, "wait_for_memcached failed")
         if not single_node:
             self.add_nodes_and_rebalance()
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              name=bucket,
-                                                                                             port=port_no,
                                                                                              ram_load_ratio=30,
                                                                                              value_size_distribution=distribution,
+                                                                                             moxi=False,
                                                                                              number_of_threads=40)
 
         if not single_node:
@@ -135,10 +115,11 @@ class BackupRestoreTests(unittest.TestCase):
             self.assertTrue(RestHelper(rest).wait_for_replication(180), msg="replication did not complete")
 
         self.log.info("Sleep {0} seconds after data load".format(delay_after_data_load))
-        RebalanceHelper.wait_for_stats(self.master, json_bucket, 'ep_queue_size', 0, 120)
-        RebalanceHelper.wait_for_stats(self.master, json_bucket, 'ep_flusher_todo', 0, 120)
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         node = RestConnection(self.master).get_nodes_self()
-
         if not startup_flag:
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
@@ -159,21 +140,26 @@ class BackupRestoreTests(unittest.TestCase):
                 RestHelper(RestConnection(server)).is_ns_server_running()
                 shell.disconnect()
 
-        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, replica=1, port=port_no,
-                                            test_case=self)
-        BucketOperationHelper.wait_for_memcached(server, json_bucket)
-        BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder, moxi_port=port_no)
-        keys_exist = BucketOperationHelper.keys_exist_or_assert(inserted_keys, self.master.ip, bucket, port_no,
-                                                                'password', self)
-        self.assertTrue(keys_exist, msg="unable to verify keys after restor")
+        if bucket == "default":
+            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
+        else:
+            proxyPort = info.moxi + 500
+            rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort,
+                               authType="sasl", saslPassword="password")
+        BucketOperationHelper.wait_for_memcached(server, bucket)
+        BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder, moxi_port=info.moxi)
+        keys_exist = BucketOperationHelper.keys_exist_or_assert(inserted_keys, self.master, bucket, self)
+        self.assertTrue(keys_exist, msg="unable to verify keys after restore")
 
 
-    def _test_backup_add_restore_bucket_with_expiration_key(self,replica):
+    def _test_backup_add_restore_bucket_with_expiration_key(self, replica):
         bucket = "default"
-        json_bucket = {'name': "default", 'port': 11211, 'password': ''}
-        BucketOperationHelper.create_bucket(serverInfo=self.master, test_case=self, replica=replica)
-        BucketOperationHelper.wait_for_memcached(self.master,json_bucket)
-        client = MemcachedClientHelper.create_memcached_client(ip=self.master.ip, port=11211)
+        rest = RestConnection(self.master)
+        info = rest.get_nodes_self()
+        size = int(info.mcdMemoryReserved * 2.0 / 3.0)
+        rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi, replicaNumber=replica)
+        BucketOperationHelper.wait_for_memcached(self.master, bucket)
+        client = MemcachedClientHelper.direct_client(self.master.ip, "default")
         expiry = 60
         test_uuid = uuid.uuid4()
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(5000)]
@@ -186,8 +172,10 @@ class BackupRestoreTests(unittest.TestCase):
                 self.log.error(msg.format(key, client.vbucketId, error.status))
                 self.fail(msg.format(key, client.vbucketId, error.status))
         self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
-        RebalanceHelper.wait_for_stats(self.master, json_bucket, 'ep_queue_size', 0, 120)
-        RebalanceHelper.wait_for_stats(self.master, json_bucket, 'ep_flusher_todo', 0, 120)
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         node = RestConnection(self.master).get_nodes_self()
         output, error = self.shell.execute_command("mkdir -p {0}".format(self.remote_tmp_folder))
         self.shell.log_command_output(output, error)
@@ -195,8 +183,8 @@ class BackupRestoreTests(unittest.TestCase):
         backupHelper.backup(bucket, node, self.remote_tmp_folder)
 
         BucketOperationHelper.delete_bucket_or_assert(self.master, bucket, self)
-        BucketOperationHelper.create_bucket(self.master, name=bucket, replica=replica, test_case=self)
-        BucketOperationHelper.wait_for_memcached(self.master,json_bucket)
+        rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
+        BucketOperationHelper.wait_for_memcached(self.master, bucket)
         backupHelper.restore(self.remote_tmp_folder)
         time.sleep(60)
 
@@ -215,13 +203,10 @@ class BackupRestoreTests(unittest.TestCase):
     def _test_backup_and_restore_bucket_overwriting_body(self, overwrite_flag=True):
         bucket = "default"
         BucketOperationHelper.create_bucket(serverInfo=self.master, test_case=self)
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[self.master],
-                                                                     bucket_port=11210,
-                                                                     test=self,
-                                                                     bucket_name=bucket)
+        BucketOperationHelper.wait_for_memcached(self.master,bucket)
         self.add_nodes_and_rebalance()
 
-        client = MemcachedClientHelper.create_memcached_client(ip=self.master.ip, port=11210)
+        client = MemcachedClientHelper.direct_client(self.master.ip, "default")
         expiry = 2400
         test_uuid = uuid.uuid4()
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(500)]
@@ -239,7 +224,11 @@ class BackupRestoreTests(unittest.TestCase):
 
         node = RestConnection(self.master).get_nodes_self()
         backupHelper = BackupHelper(self.master, self)
-        self.wait_for_disk_queues()
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+
         backupHelper.backup(bucket, node, self.remote_tmp_folder)
 
         for key in keys:
@@ -267,10 +256,10 @@ class BackupRestoreTests(unittest.TestCase):
 
 
     def _test_cluster_topology_change_body(self):
+        bucket = "default"
         BucketOperationHelper.create_bucket(serverInfo=self.master, test_case=self)
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[self.master],
-                                                                     bucket_port=11210,
-                                                                     test=self)
+        ready = BucketOperationHelper.wait_for_memcached(self.master, bucket)
+        self.assertTrue(ready, "wait_for_memcached failed")
         self.add_nodes_and_rebalance()
 
         rest = RestConnection(self.master)
@@ -279,14 +268,18 @@ class BackupRestoreTests(unittest.TestCase):
 
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              ram_load_ratio=1,
-                                                                                             value_size_distribution=distribution
-                                                                                             ,
+                                                                                             value_size_distribution=distribution,
+                                                                                             moxi=False,
                                                                                              number_of_threads=40)
 
         self.assertTrue(RestHelper(rest).wait_for_replication(180), msg="replication did not complete")
 
         self.log.info("Sleep after data load")
-        self.wait_for_disk_queues(server_port=11210)
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+
 
         #let's create a unique folder in the remote location
         output, error = self.shell.execute_command("mkdir -p {0}".format(self.remote_tmp_folder))
@@ -309,9 +302,8 @@ class BackupRestoreTests(unittest.TestCase):
         BucketOperationHelper.delete_bucket_or_assert(self.master, bucket, self)
         BucketOperationHelper.create_bucket(serverInfo=self.master, test_case=self)
 
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[self.master],
-                                                                     bucket_port=11210,
-                                                                     test=self)
+        ready = BucketOperationHelper.wait_for_memcached(self.master, bucket)
+        self.assertTrue(ready, "wait_for_memcached failed")
 
         BackupHelper(self.master, self).restore(self.remote_tmp_folder)
         time.sleep(10)
@@ -321,15 +313,13 @@ class BackupRestoreTests(unittest.TestCase):
 
     def _test_delete_key_and_backup_and_restore_body(self):
         bucket = "default"
-        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, replica=1, test_case=self)
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[self.master],
-                                                                     bucket_port=11210,
-                                                                     test=self,
-                                                                     bucket_name=bucket)
+        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, test_case=self)
+        ready = BucketOperationHelper.wait_for_memcached(self.master, bucket)
+        self.assertTrue(ready, "wait_for_memcached failed")
 
         self.add_nodes_and_rebalance()
 
-        client = MemcachedClientHelper.create_memcached_client(ip=self.master.ip, port=11210)
+        client = MemcachedClientHelper.direct_client(self.master.ip, "default")
         expiry = 2400
         test_uuid = uuid.uuid4()
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(500)]
@@ -349,7 +339,11 @@ class BackupRestoreTests(unittest.TestCase):
 
         node = RestConnection(self.master).get_nodes_self()
         backupHelper = BackupHelper(self.master, self)
-        self.wait_for_disk_queues(server_port=11210)
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+
         backupHelper.backup(bucket, node, self.remote_tmp_folder)
 
         backupHelper.restore(self.remote_tmp_folder, overwrite_flag=True)
@@ -365,7 +359,7 @@ class BackupRestoreTests(unittest.TestCase):
             else:
                 verify_keys.append(key)
 
-        self.assertTrue(BucketOperationHelper.keys_dont_exist(missing_keys, self.master.ip, 11210, self),
+        self.assertTrue(BucketOperationHelper.keys_dont_exist(self.master, missing_keys, self),
                         "Keys are not empty")
         self.assertTrue(BucketOperationHelper.verify_data(self.master.ip, verify_keys, False, False, 11210, self),
                         "Missing keys")
@@ -373,11 +367,9 @@ class BackupRestoreTests(unittest.TestCase):
 
     def _test_backup_and_restore_on_different_port_body(self):
         bucket = "testb"
-        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, replica=1, port=11212, test_case=self)
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[self.master],
-                                                                     bucket_port=11212,
-                                                                     test=self,
-                                                                     bucket_name=bucket)
+        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, port=11212, test_case=self)
+        ready = BucketOperationHelper.wait_for_memcached(self.master, bucket)
+        self.assertTrue(ready, "wait_for_memcached failed")
 
         self.add_nodes_and_rebalance()
 
@@ -385,26 +377,28 @@ class BackupRestoreTests(unittest.TestCase):
 
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              ram_load_ratio=1,
-                                                                                             value_size_distribution=distribution
-                                                                                             ,
+                                                                                             value_size_distribution=distribution,
+                                                                                             moxi=False,
                                                                                              number_of_threads=40)
 
         rest = RestConnection(self.master)
         self.assertTrue(RestHelper(rest).wait_for_replication(180), msg="replication did not complete")
 
         self.log.info("Sleep after data load")
-        self.wait_for_disk_queues(server_port=11210)
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+
 
         node = RestConnection(self.master).get_nodes_self()
         BackupHelper(self.master, self).backup(bucket, node, self.remote_tmp_folder)
 
         BucketOperationHelper.delete_bucket_or_assert(self.master, bucket, self)
-        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, replica=1, port=11213, test_case=self)
+        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, port=11213, test_case=self)
 
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[self.master],
-                                                                     bucket_port=11213,
-                                                                     test=self,
-                                                                     bucket_name=bucket)
+        ready = BucketOperationHelper.wait_for_memcached(self.master, bucket)
+        self.assertTrue(ready, "wait_for_memcached failed")
 
         BackupHelper(self.master, self).restore(self.remote_tmp_folder, moxi_port=11213)
         self.assertTrue(BucketOperationHelper.verify_data(self.master.ip, inserted_keys, False, False, 11213, self),
@@ -413,11 +407,9 @@ class BackupRestoreTests(unittest.TestCase):
 
     def _test_backup_and_restore_from_to_different_buckets(self):
         bucket = "testb"
-        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, replica=1, port=11212, test_case=self)
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[self.master],
-                                                                     bucket_port=11212,
-                                                                     test=self,
-                                                                     bucket_name=bucket)
+        BucketOperationHelper.create_bucket(serverInfo=self.master, name=bucket, port=11212, test_case=self)
+        ready = BucketOperationHelper.wait_for_memcached(self.master, bucket)
+        self.assertTrue(ready, "wait_for_memcached failed")
 
         self.add_nodes_and_rebalance()
 
@@ -425,27 +417,28 @@ class BackupRestoreTests(unittest.TestCase):
 
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              ram_load_ratio=1,
-                                                                                             value_size_distribution=distribution
-                                                                                             ,
+                                                                                             value_size_distribution=distribution,
+                                                                                             moxi=False,
                                                                                              number_of_threads=40)
 
         rest = RestConnection(self.master)
         self.assertTrue(RestHelper(rest).wait_for_replication(180), msg="replication did not complete")
 
         self.log.info("Sleep after data load")
-        self.wait_for_disk_queues(server_port=11212)
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+
 
         node = RestConnection(self.master).get_nodes_self()
         BackupHelper(self.master, self).backup(bucket, node, self.remote_tmp_folder)
 
         BucketOperationHelper.delete_bucket_or_assert(self.master, bucket, self)
-        BucketOperationHelper.create_bucket(serverInfo=self.master, name="testb2", replica=1, port=11212,
+        BucketOperationHelper.create_bucket(serverInfo=self.master, name="testb2", port=11212,
                                             test_case=self)
 
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[self.master],
-                                                                     bucket_port=11212,
-                                                                     test=self,
-                                                                     bucket_name="testb2")
+        BucketOperationHelper.wait_for_memcached(self.master, "testb2")
         BackupHelper(self.master, self).restore(self.remote_tmp_folder, moxi_port=11212)
         time.sleep(10)
 
@@ -455,36 +448,36 @@ class BackupRestoreTests(unittest.TestCase):
 
     def test_backup_add_restore_default_bucket_started_server(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body()
+        self._test_backup_add_restore_bucket_body("default", 180, True, True)
 
     def non_default_bucket(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body(str(uuid.uuid4()), 11220, 60, True, True)
+        self._test_backup_add_restore_bucket_body(str(uuid.uuid4()), 60, True, True)
 
     def default_bucket(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body("default", 11211, 60, True, True)
+        self._test_backup_add_restore_bucket_body("default", 60, True, True)
 
     def test_backup_add_restore_non_default_bucket_started_server(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body(bucket="testb", port_no=11212)
+        self._test_backup_add_restore_bucket_body("testb", 180, True, True)
         #self._test_backup_add_restore_bucket_body(bucket="test_bucket")
 
 
     def test_backup_add_restore_default_bucket_non_started_server(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body(startup_flag=False)
+        self._test_backup_add_restore_bucket_body("default", 180, False, True)
 
 
     def test_backup_add_restore_non_default_bucket_non_started_server(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body(bucket="testb", port_no=11212, startup_flag=False)
+        self._test_backup_add_restore_bucket_body("testb", 180, False, True)
         #self._test_backup_add_restore_bucket_body(bucket="test_bucket", startup_flag = False)
 
 
     def test_backup_add_restore_when_ide(self):
         self.common_setUp()
-        self._test_backup_add_restore_bucket_body(delay_after_data_load=120)
+        self._test_backup_add_restore_bucket_body("default", 120, True, True)
 
     def expired_keys_1_replica(self):
         self.common_setUp()

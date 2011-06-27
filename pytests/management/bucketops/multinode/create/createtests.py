@@ -87,7 +87,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         bucket_ram = 100
 
-        if bucket_count == 0:
+        if not bucket_count:
             bucket_count = info.mcdMemoryReserved / bucket_ram
         if bucket_count > info.mcdMemoryReserved / bucket_ram:
             self.log.error('node does not have enough capacity for {0} buckets, exiting test'.format(bucket_count))

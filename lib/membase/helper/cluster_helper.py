@@ -33,6 +33,8 @@ class ClusterOperationHelper(object):
     def wait_for_ns_servers_or_assert(servers,testcase):
         for server in servers:
             rest = RestConnection(server)
+            log = logger.Logger.get_logger()
+            log.info("waiting for ns_server @ {0}:{1}".format(server.ip, server.port))
             testcase.assertTrue(RestHelper(rest).is_ns_server_running(),
                             "ns_server is not running in {0}".format(server.ip))
 
@@ -48,7 +50,7 @@ class ClusterOperationHelper(object):
         toBeEjectedNodes = []
         for node in nodes:
             allNodes.append(node.id)
-            if node.id.find(master.ip) < 0 and node.id.find('127.0.0.1') < 0:
+            if "{0}:{1}".format(node.ip,node.port) != "{0}:{1}".format(master.ip,master.port):
                 toBeEjectedNodes.append(node.id)
             #let's rebalance to remove all the nodes from the master
                 #this is not the master , let's remove it
@@ -58,17 +60,3 @@ class ClusterOperationHelper(object):
             helper = RestHelper(rest)
             removed = helper.remove_nodes(knownNodes=allNodes,ejectedNodes=toBeEjectedNodes)
             log.info("removed all the nodes from cluster associated with {0} ? {1}".format(master.ip, removed))
-
-    @staticmethod
-    def rebalance_params_for_declustering(master,all_nodes):
-        log = logger.Logger.get_logger()
-        otpNodeIds = [node.id for node in all_nodes]
-        knownNodes = []
-        knownNodes.extend(otpNodeIds)
-        if 'ns_1@' + master.ip in otpNodeIds:
-            otpNodeIds.remove('ns_1@' + master.ip)
-        if 'ns_1@127.0.0.1' in otpNodeIds:
-            otpNodeIds.remove('ns_1@127.0.0.1')
-        ejectedNodes = otpNodeIds
-        log.info('ejectedNodes : {0} , knownNodes : {1}'.format(ejectedNodes,knownNodes))
-        return knownNodes,ejectedNodes

@@ -112,12 +112,23 @@ class RemoteMachineShellConnection:
                     processes.append(process)
         return processes
 
+    def stop_couchbase(self):
+        info = self.extract_remote_info()
+        if info.type.lower() == 'windows':
+            o, r = self.execute_command("net stop membaseserver")
+            self.log_command_output(o, r)
+        if info.type.lower() == "linux":
+            o, r = self.execute_command("/etc/init.d/membase-server stop")
+            self.log_command_output(o, r)
+
+
     def stop_membase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
             o, r = self.execute_command("net stop membaseserver")
             self.log_command_output(o, r)
         if info.type.lower() == "linux":
+            #check if /opt/membase exists or /opt/couchbase or /opt/couchbase-single
             o, r = self.execute_command("/etc/init.d/membase-server stop")
             self.log_command_output(o, r)
 
@@ -271,32 +282,43 @@ class RemoteMachineShellConnection:
 
 
     def membase_install(self, build):
-        #install membase server ?
-        #run the right command
+        is_membase = False
+        is_couchbase = False
+        if build.name.lower().find("membase") != -1:
+            is_membase = True
+        if build.name.lower().find("couchbase") != -1:
+            is_membase = True
+        if not is_membase and not is_couchbase:
+            raise Exception("its not a membase or couchbase ?")
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            self.execute_command('taskkill /F /T /IM msiexec32.exe')
-            self.execute_command('taskkill /F /T /IM msiexec.exe')
-            self.execute_command('taskkill /F /T IM setup.exe')
-            self.execute_command('taskkill /F /T /IM ISBEW64.exe')
+            win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
+                             "firefox.*", "WerFault.*", "iexplore.*"]
+            self.terminate_processes(info,win_processes)
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             self.log_command_output(output, error)
-            self.wait_till_file_added("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
-                                      timeout_in_seconds=600)
-        elif info.deliverable_type == 'rpm':
-            #run rpm -i to install
-            log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
-            output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
-            self.log_command_output(output, error)
-            output, error = self.execute_command('/opt/membase/bin/mbenable_core_dumps.sh  /tmp')
-            self.log_command_output(output, error)
-        elif info.deliverable_type == 'deb':
-            output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
-            self.log_command_output(output, error)
-            output, error = self.execute_command('/opt/membase/bin/mbenable_core_dumps.sh  /tmp')
-            self.log_command_output(output, error)
+            if is_membase:
+                self.wait_till_file_added("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
+                                          timeout_in_seconds=600)
+            else:
+                self.wait_till_file_added("/cygdrive/c/Program Files/Couchbase/Server/", 'VERSION.txt',
+                                          timeout_in_seconds=600)
+        elif info.deliverable_type in ["rpm","deb"]:
+            if info.deliverable_type == 'rpm':
+                log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
+                output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
+                self.log_command_output(output, error)
+            elif info.deliverable_type == 'deb':
+                output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
+                self.log_command_output(output, error)
+            if is_membase:
+                output, error = self.execute_command('/opt/membase/bin/mbenable_core_dumps.sh  /tmp')
+                self.log_command_output(output, error)
+            else:
+                output, error = self.execute_command('/opt/couchbase/bin/mbenable_core_dumps.sh  /tmp')
+                self.log_command_output(output, error)
 
     def wait_till_file_deleted(self, remotepath, filename, timeout_in_seconds=180):
         end_time = time.time() + float(timeout_in_seconds)
@@ -326,84 +348,111 @@ class RemoteMachineShellConnection:
                 added = True
         return added
 
+    def terminate_processes(self,info,list):
+        for process in list:
+            type = info.distribution_type.lower()
+            if type == "windows":
+                self.execute_command("taskkill /F /T /IM {0}".format(process))
+            elif type in ["ubuntu", "centos", "red hat"]:
+                self.terminate_process(info, process)
 
-    def membase_uninstall(self):
+    def remove_folders(self,list):
+        for folder in list:
+            output, error = self.execute_command("rm -rf {0}".format(folder))
+            self.log_command_output(output, error)
+
+
+    def couchbase_uninstall(self):
+        linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
+                         "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
+                         "/opt/couchbase"]
+
         info = self.extract_remote_info()
         log.info(info.distribution_type)
-        if info.type.lower() == 'windows':
-            log.info(
-                "exists ? {0}".format(self.file_exists("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt')))
-            output, error = self.execute_command(
-                "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > /cygdrive/c/automation/install.bat")
+        type = info.distribution_type.lower()
+        if type == 'windows':
+            exists = self.file_exists("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt')
+            log.info("exists ? {0}".format(exists))
+            install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > /cygdrive/c/automation/install.bat"
+            output, error = self.execute_command(install_command)
+            uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat"
             self.log_command_output(output, error)
-            output, error = self.execute_command(
-                "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat")
+            output, error = self.execute_command(uninstall_command)
             self.log_command_output(output, error)
-            self.execute_command('taskkill /F /T /IM msiexec32.exe')
-            self.execute_command('taskkill /F /T /IM msiexec.exe')
-            self.execute_command('taskkill /F /T IM setup.exe')
-            self.execute_command('taskkill /F /T /IM ISBEW64.*')
-            self.execute_command('taskkill /F /T /IM firefox.*')
-            self.execute_command('taskkill /F /T /IM WerFault.*')
-            self.execute_command('rm -rf /cygdrive/c/Program Files/Membase/Server/')
+            win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
+                             "firefox.*", "WerFault.*", "iexplore.*"]
+            self.terminate_processes(info, win_processes)
+            self.remove_folders([" /cygdrive/c/Program Files/Membase/Server/"])
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
             self.wait_till_file_deleted("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
                                         timeout_in_seconds=120)
             time.sleep(60)
-        if info.distribution_type.lower() == 'ubuntu':
-            #first remove the package
-            #then install membase
-            #check if its installed
-            #call installed
-            cleanup_cmd = 'rm -rf /var/opt/membase /opt/membase /etc/opt/membase /var/membase/data/* /opt/membase/var/lib/membase/*'
-            uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};'.format('membase-server', 'membase-server')
-            output, error = self.execute_command(uninstall_cmd)
+        elif type in ["ubuntu", "centos", "red hat"]:
+            #uninstallation command is different
+            if type == "ubuntu":
+                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            elif type == "centos":
+                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server", "couchbase-server")
+                log.info('running rpm -e to remove couchbase-server')
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            elif type == "red hat":
+                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server", "couchbase-server")
+                log.info('running rpm -e to remove couchbase-server')
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            self.terminate_processes(info, ["beam", "memcached", "moxi", "vbucketmigrator", "couchdb"])
+            self.remove_folders(linux_folders)
+
+
+    def membase_uninstall(self):
+        linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
+                         "/var/membase/data/*", "/opt/membase/var/lib/membase/*"]
+
+        info = self.extract_remote_info()
+        log.info(info.distribution_type)
+        type = info.distribution_type.lower()
+        if type == 'windows':
+            exists = self.file_exists("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt')
+            log.info("exists ? {0}".format(exists))
+            install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > /cygdrive/c/automation/install.bat"
+            output, error = self.execute_command(install_command)
+            uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat"
             self.log_command_output(output, error)
-            log.info('running kill commands to force kill membase processes')
-            self.terminate_process(info, 'beam')
-            self.terminate_process(info, 'memcached')
-            self.terminate_process(info, 'moxi')
-            self.terminate_process(info, 'vbucketmigrator')
-            log.info('running rm command to remove /etc/membase and /etc/opt/membase')
-            output, error = self.execute_command(cleanup_cmd)
+            output, error = self.execute_command(uninstall_command)
             self.log_command_output(output, error)
-        elif info.distribution_type.lower() == 'red hat':
-            #first remove the package
-            #then install membase
-            #check if its installed
-            #call installed
-            cleanup_cmd = 'rm -rf /var/opt/membase /opt/membase /etc/opt/membase /var/membase/data/* /opt/membase/var/lib/membase/*'
-            uninstall_cmd = 'rpm -e {0}'.format('membase-server')
-            log.info('running rpm -e to remove membase-server')
-            output, error = self.execute_command(uninstall_cmd)
+            win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
+                             "firefox.*", "WerFault.*", "iexplore.*"]
+            self.terminate_processes(info, win_processes)
+            self.remove_folders([" /cygdrive/c/Program Files/Membase/Server/"])
+            output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
-            log.info('running kill commands to force kill membase processes')
-            self.terminate_process(info, 'beam')
-            self.terminate_process(info, 'memcached')
-            self.terminate_process(info, 'moxi')
-            self.terminate_process(info, 'vbucketmigrator')
-            log.info('running rm command to remove /etc/membase and /etc/opt/membase')
-            output, error = self.execute_command(cleanup_cmd)
-            self.log_command_output(output, error)
-        elif info.distribution_type.lower() == 'centos':
-            #first remove the package
-            #then install membase
-            #check if its installed
-            #call installed
-            cleanup_cmd = 'rm -rf /var/opt/membase /opt/membase /etc/opt/membase /var/membase/data/* /opt/membase/var/lib/membase/*'
-            uninstall_cmd = 'rpm -e {0}'.format('membase-server')
-            log.info('running rpm -e to remove membase-server')
-            output, error = self.execute_command(uninstall_cmd)
-            self.log_command_output(output, error)
-            log.info('running kill commands to force kill membase processes')
-            self.terminate_process(info, 'beam')
-            self.terminate_process(info, 'memcached')
-            self.terminate_process(info, 'moxi')
-            self.terminate_process(info, 'vbucketmigrator')
-            log.info('running rm command to remove /etc/membase and /etc/opt/membase')
-            output, error = self.execute_command(cleanup_cmd)
-            self.log_command_output(output, error)
+            self.wait_till_file_deleted("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
+                                        timeout_in_seconds=120)
+            time.sleep(60)
+        elif type in ["ubuntu", "centos", "red hat"]:
+            #uninstallation command is different
+            if type == "ubuntu":
+                uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};'.format('membase-server', 'membase-server')
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            elif type == "centos":
+                uninstall_cmd = 'rpm -e {0}'.format('membase-server')
+                log.info('running rpm -e to remove membase-server')
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            elif type == "red hat":
+                uninstall_cmd = 'rpm -e {0}'.format('membase-server')
+                log.info('running rpm -e to remove membase-server')
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            self.terminate_processes(info, ["beam", "memcached", "moxi", "vbucketmigrator", "couchdb"])
+            self.remove_folders(linux_folders)
+
+
 
     def log_command_output(self, output, error):
         for line in error:
@@ -432,9 +481,11 @@ class RemoteMachineShellConnection:
         if info is None:
             info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            self.execute_command("taskkill /F /T /IM {0}*".format(process_name))
+            o,r = self.execute_command("taskkill /F /T /IM {0}*".format(process_name))
+            self.log_command_output(o, r)
         else:
-            self.execute_command("killall -9 {0}".format(process_name))
+            o,r = self.execute_command("killall -9 {0}".format(process_name))
+            self.log_command_output(o, r)
 
     def disconnect(self):
         self._ssh_client.close()

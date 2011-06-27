@@ -128,8 +128,11 @@ class MemcachedClient(object):
         """Decrement or create the named counter."""
         return self.__incrdecr(memcacheConstants.CMD_DECR, key, amt, init, exp)
 
-    def set(self, key, exp, flags, val):
-        self.vbucketId = crc32.crc32_hash(key) & 1023
+    def set(self, key, exp, flags, val, vbucket=-1):
+        if vbucket == -1:
+            self.vbucketId = crc32.crc32_hash(key) & 1023
+        else:
+            self.vbucketId = vbucket
         """Set a value in the memcached server."""
         return self._mutate(memcacheConstants.CMD_SET, key, exp, flags, 0, val)
 
@@ -152,10 +155,14 @@ class MemcachedClient(object):
         flags=struct.unpack(memcacheConstants.GET_RES_FMT, data[-1][:4])[0]
         return flags, data[1], data[-1][4 + klen:]
 
-    def get(self, key):
+    def get(self, key, vbucket=-1):
         """Get the value for a given key within the memcached server."""
-        self.vbucketId = crc32.crc32_hash(key) & 1023
+        if vbucket == -1:
+            self.vbucketId = crc32.crc32_hash(key) & 1023
+        else:
+            self.vbucketId = vbucket
         parts=self._doCmd(memcacheConstants.CMD_GET, key, '')
+
         return self.__parseGet(parts)
 
     def send_get(self, key):
@@ -307,7 +314,9 @@ class MemcachedClient(object):
         """Send a noop command."""
         return self._doCmd(memcacheConstants.CMD_NOOP, '', '')
 
-    def delete(self, key, cas=0):
+    def delete(self, key, cas=0, vbucket=-1):
+        if vbucket == -1:
+            self.vbucketId = crc32.crc32_hash(key) & 1023
         """Delete the value for a given key within the memcached server."""
         return self._doCmd(memcacheConstants.CMD_DELETE, key, '', '', cas)
 
@@ -414,8 +423,8 @@ class MemcachedClient(object):
 
     def restore_complete(self):
         """Notify the server that we're done restoring."""
-        return self._doCmd(memcacheConstants.CMD_RESTORE_COMPLETE, '', '', '', 0)
+        return self._doCmd(memcacheConstants.CMD_RESTORE_COMPLETE, '', '')
 
     def deregister_tap_client(self, tap_name):
         """Deregister the TAP client with a given name."""
-        return self._doCmd(memcacheConstants.CMD_DEREGISTER_TAP_CLIENT, tap_name, '', '', 0)
+        return self._doCmd(memcacheConstants.CMD_DEREGISTER_TAP_CLIENT, tap_name, '')

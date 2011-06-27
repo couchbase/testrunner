@@ -65,6 +65,6 @@ def status_membase(server):
 def ssh(host,cmd,key=None):
     rtn=""
     process = subprocess.Popen("ssh -i ~/.ssh/mikew_key.pem root@%s \"%s\"" % (host,cmd),shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-    stdoutdata,stderrdata=process.communicate(None)
+    stdoutdata,stderrdata=process.communicate()
     rtn += stdoutdata
     return rtn

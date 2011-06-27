@@ -4,3 +4,4 @@
 *.DS_*
 *.idea
 *.log
+*tmp-

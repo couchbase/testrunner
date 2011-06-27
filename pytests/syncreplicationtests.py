@@ -21,10 +21,7 @@ class SyncReplicationTest(unittest.TestCase):
         self.log = logger.Logger().get_logger()
         self.log.info(self._input)
         rest = RestConnection(first)
-        bucket = {"name": "default", "port": 11211, "password": ""}
         for server in self._servers:
-            shell = RemoteMachineShellConnection(server)
-            shell.start_membase()
             RestHelper(RestConnection(server)).is_ns_server_running()
 
         ClusterOperationHelper.cleanup_cluster(self._servers)
@@ -34,6 +31,15 @@ class SyncReplicationTest(unittest.TestCase):
         otpNodeIds = []
         for node in nodes:
             otpNodeIds.append(node.id)
+        info = rest.get_nodes_self()
+        bucket_ram = info.mcdMemoryReserved * 3 / 4
+        rest.create_bucket(bucket="default",
+                           ramQuotaMB=int(bucket_ram),
+                           replicaNumber=replica,
+                           proxyPort=rest.get_nodes_self().moxi)
+        msg = "wait_for_memcached fails"
+        ready = BucketOperationHelper.wait_for_memcached(first, "default"),
+        self.assertTrue(ready, msg)
         rebalanceStarted = rest.rebalance(otpNodeIds, [])
         self.assertTrue(rebalanceStarted,
                         "unable to start rebalance on master node {0}".format(first.ip))
@@ -42,13 +48,7 @@ class SyncReplicationTest(unittest.TestCase):
         # without a bucket this seems to fail
         self.assertTrue(rebalanceSucceeded,
                         "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
-        info = rest.get_nodes_self()
-        bucket_ram = info.mcdMemoryReserved * 3 / 4
-        rest.create_bucket(bucket=bucket["name"], ramQuotaMB=int(bucket_ram), replicaNumber=replica, proxyPort=11211)
-        msg = "wait_for_memcached fails"
-        ready = BucketOperationHelper.wait_for_memcached(first, bucket),
-        self.assertTrue(ready, msg)
-        self.awareness = VBucketAwareMemcached(rest, bucket)
+        self.awareness = VBucketAwareMemcached(rest, "default")
 
     def tearDown(self):
         if self.awareness:
@@ -119,12 +119,17 @@ class SyncReplicationTest(unittest.TestCase):
             mc.set(k, 0, 0, value)
             not_your_vbucket_mc = self.awareness.not_my_vbucket_memcached(k)
             try:
-                a, b, response = not_your_vbucket_mc.sync_replication(1, [{"key": k, "vbucket": vBucket}])
-                a, b, response = not_your_vbucket_mc.sync_replication(1, [{"key": k, "vbucket": vBucket}])
-                a, b, response = not_your_vbucket_mc.sync_replication(1, [{"key": k, "vbucket": vBucket}])
-                if response and response[0]["event"] != "invalid key":
-                    msg = "server did not raise an error when running sync_replication with invalid vbucket"
-                    self.fail(msg)
+                count = 0
+                expected_error = 0
+                while count < 100:
+                    a, b, response = not_your_vbucket_mc.sync_replication(1,
+                        [{"key": k, "vbucket": vBucket}])
+                    count += 1
+                    self.log.info("response : {0}".format(response))
+                    if response and response[0]["event"] != "invalid key":
+                        expected_error += 1
+                if expected_error is not 100:
+                    self.fail(msg="server did not raise an error when running sync_replication with invalid vbucket")
             except MemcachedError as error:
                 self.log.error(error)
 

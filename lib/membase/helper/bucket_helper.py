@@ -14,6 +14,56 @@ from memcached.helper.data_helper import MemcachedClientHelper
 class BucketOperationHelper():
 
     #this function will assert
+
+    @staticmethod
+    def base_bucket_ratio(servers):
+        ratio = 1.0
+        #check if ip is same for all servers
+        ip = servers[0]
+        dev_environment = True
+        for server in servers:
+            if server.ip != ip:
+                dev_environment = False
+        if dev_environment:
+            ratio = 2.0/3.0 * 1/len(servers)
+        else:
+            ratio = 2.0/3.0
+        return ratio
+
+    @staticmethod
+    def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0), howmany=3):
+        success = True
+        log = logger.Logger.get_logger()
+        rest = RestConnection(server)
+        info = rest.get_nodes_self()
+        if info.mcdMemoryReserved < 450.0:
+            log.error("at least need 450MB mcdMemoryReserved")
+            success = False
+        else:
+            available_ram = info.mcdMemoryReserved * bucket_ram_ratio
+            if available_ram / howmany > 100:
+                bucket_ram = int(available_ram / howmany)
+            else:
+                bucket_ram = 100
+                #choose a port that is not taken by this ns server
+            port = info.memcached
+#            type = ["membase" for i in range(0, howmany)]
+            for i in range(0,howmany):
+                name = "bucket-{0}".format(i)
+                rest.create_bucket(bucket=name,
+                                   ramQuotaMB=bucket_ram,
+                                   replicaNumber=replica,
+                                   authType="sasl",
+                                   saslPassword="password")
+                port += 1
+                msg = "create_bucket succeeded but bucket \"{0}\" does not exist"
+                bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
+                if not bucket_created:
+                    log.error(msg.format(name))
+                    success = False
+                    break
+        return success
+
     @staticmethod
     def create_default_buckets(servers,number_of_replicas=1,assert_on_test = None):
         log = logger.Logger.get_logger()
@@ -31,23 +81,30 @@ class BucketOperationHelper():
                     assert_on_test.fail(msg=msg)
 
     @staticmethod
-    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1):
+    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1,password=""):
         log = logger.Logger.get_logger()
         rest = RestConnection(serverInfo)
         if bucket_ram < 0:
             info = rest.get_nodes_self()
             bucket_ram = info.mcdMemoryReserved * 2 / 3
 
+        if password:
+            authType = "sasl"
+        else:
+            authType = "none"
+
         rest.create_bucket(bucket=name,
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,
-                           proxyPort=port)
-        msg = 'create_bucket succeeded but bucket "default" does not exist'
+                           proxyPort=port,
+                           authType = authType,
+                           saslPassword=password)
+        msg = 'create_bucket succeeded but bucket "{0}" does not exist'
         bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
         if not bucket_created:
             log.error(msg)
             if test_case:
-                test_case.fail(msg=msg)
+                test_case.fail(msg=msg.format(name))
         return bucket_created
 
 
@@ -71,8 +128,8 @@ class BucketOperationHelper():
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
                 test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200)
                                      , msg=msg)
-        log.info('sleeping for 10 seconds because we want to :)')
-        time.sleep(10)
+#        log.info('sleeping for 10 seconds because we want to :)')
+#        time.sleep(10)
 
     @staticmethod
     def delete_bucket_or_assert(serverInfo, bucket = 'default', test_case = None):
@@ -87,8 +144,8 @@ class BucketOperationHelper():
         if test_case:
             test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200), msg=msg)
 
-        log.info('sleeping for 10 seconds because we want to :)')
-        time.sleep(10)
+#        log.info('sleeping for 10 seconds because we want to :)')
+#        time.sleep(10)
 
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
     # BUCKET DELETION IS A SYNC CALL W.R.T MEMCACHED
@@ -127,8 +184,8 @@ class BucketOperationHelper():
     @staticmethod
     def wait_for_memcached(node, bucket):
         log = logger.Logger.get_logger()
-        msg = "waiting for memcached bucket : {0} in {1}:{2} to accept set ops"
-        log.info(msg.format(bucket["name"], node.ip, bucket["port"]))
+        msg = "waiting for memcached bucket : {0} in {1} to accept set ops"
+        log.info(msg.format(bucket, node.ip))
         start_time = time.time()
         end_time = start_time + 300
         client = None
@@ -141,11 +198,10 @@ class BucketOperationHelper():
         while time.time() < end_time and counter < 1024:
             try:
                 if not client:
-                    client = MemcachedClientHelper.memcached_client(node, bucket)
+                    client = MemcachedClientHelper.direct_client(node, bucket)
                 for vBucketId in keys:
                     if not keys[vBucketId]["inserted"]:
                         client.set(keys[vBucketId]['key'], 0, 0, str(uuid.uuid4()))
-                        client.get(keys[vBucketId]['key'])
                         keys[vBucketId]["inserted"] = True
                         counter += 1
             except mc_bin_client.MemcachedError as error:
@@ -165,102 +221,11 @@ class BucketOperationHelper():
         return counter == 1024
 
     @staticmethod
-    def wait_till_memcached_is_ready_or_assert(servers,
-                                               bucket_port,
-                                               test,
-                                               bucket_name = 'default',
-                                               bucket_password='password'):
-        log = logger.Logger.get_logger()
-
-        for serverInfo in servers:
-            msg = "waiting for memcached bucket : {0} in {1}:{2} to accept set ops"
-            log.info(msg.format(bucket_name, serverInfo.ip, bucket_port))
-            start_time = time.time()
-            end_time = start_time + 300
-            client = None
-
-            # build up a list of 1024 keys, 1 per vbucket
-            keys = {}
-            while len(keys) < 1024:
-                if time.time() > end_time:
-                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
-                key = str(uuid.uuid4())
-                vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-                keys[vBucketId] = key
-
-            # wait for connect to work
-            while not client:
-                if time.time() > end_time:
-                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
-                try:
-                    client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
-                                                                           bucket_name,
-                                                                           bucket_port,
-                                                                           bucket_password)
-                except:
-                    client = None
-
-            # wait for all vbuckets to be ready
-            for i in range(1024):
-                while keys[i]:
-                    if time.time() > end_time:
-                        test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
-                    try:
-                        client.vbucketId = i
-                        client.set(keys[i], 0, 0, keys[i])
-                        keys[i] = ''
-                    except mc_bin_client.MemcachedError as error:
-                        msg = "memcached not ready yet .. (memcachedError : {0}) - unable to push key : {1} to vbucket : {2}"
-                        log.error(msg.format(error.status, key, vBucketId))
-                        time.sleep(3)
-                    except Exception as ex:
-                        log.error("general error : {0} while setting key ".format(ex))
-                        time.sleep(3)
-                        # problem with the connection, try to reconnect
-                        client = None
-                        while not client:
-                            if time.time() > end_time:
-                                test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
-                            try:
-                                client = MemcachedClientHelper.create_memcached_client(serverInfo.ip,
-                                                                                       bucket_name,
-                                                                                       bucket_port,
-                                                                                       bucket_password)
-                            except:
-                                client = None
-                                time.sleep(3)
-
-            flushed = False
-            while not flushed:
-                if time.time() > end_time:
-                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
-                try:
-                    client.flush()
-                    flushed = True
-                except:
-                    time.sleep(3)
-
-            time.sleep(10)
-            stats_reset = False
-            while not stats_reset:
-                if time.time() > end_time:
-                     test.fail('memcached not ready for {0} after waiting for 5 minutes'.format(serverInfo.ip))
-                try:
-                    client.stats('reset')
-                    stats_reset = True
-                except:
-                    time.sleep(3)
-            client.close()
-
-            log.info("inserted {0} keys to all {1} vBuckets".format(len(keys),1024))
-
-
-    @staticmethod
-    def verify_data(ip, keys, value_equal_to_key, verify_flags, port, test, debug=False):
+    def verify_data(server, keys, value_equal_to_key, verify_flags, test, debug=False,bucket="default"):
         log = logger.Logger.get_logger()
         log_error_count = 0
         #verify all the keys
-        client = mc_bin_client.MemcachedClient(ip, port)
+        client = MemcachedClientHelper.direct_client(server, bucket)
         #populate key
         index = 0
         all_verified = True
@@ -293,10 +258,10 @@ class BucketOperationHelper():
         return all_verified
 
     @staticmethod
-    def keys_dont_exist(keys,ip,port,test):
+    def keys_dont_exist(server,keys,bucket):
         log = logger.Logger.get_logger()
         #verify all the keys
-        client = mc_bin_client.MemcachedClient(ip, port)
+        client = MemcachedClientHelper.direct_client(server,bucket)
         #populate key
         for key in keys:
             try:
@@ -313,11 +278,11 @@ class BucketOperationHelper():
         return True
 
     @staticmethod
-    def keys_exist_or_assert(keys,ip,name,port,password,test):
+    def keys_exist_or_assert(keys,server,name,test):
         #we should try out at least three times
         log = logger.Logger.get_logger()
         #verify all the keys
-        client = MemcachedClientHelper.create_memcached_client(ip,name,port,password)
+        client = MemcachedClientHelper.direct_client(server,name)
         #populate key
         retry = 1
 
@@ -356,15 +321,13 @@ class BucketOperationHelper():
 
 
     @staticmethod
-    def load_data_or_assert(serverInfo,
+    def load_some_data(serverInfo,
                    fill_ram_percentage=10.0,
-                   bucket_name = 'default',
-                   port=11211,
-                   test = None):
+                   bucket_name = 'default'):
         log = logger.Logger.get_logger()
         if fill_ram_percentage <= 0.0:
             fill_ram_percentage = 5.0
-        client = mc_bin_client.MemcachedClient(serverInfo.ip, port)
+        client = MemcachedClientHelper.direct_client(serverInfo,bucket_name)
         #populate key
         rest = RestConnection(serverInfo)
         testuuid = uuid.uuid4()

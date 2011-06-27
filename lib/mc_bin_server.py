@@ -108,7 +108,7 @@ class DictBackend(BaseBackend):
                                                + string.digits, 32))
 
     def __lookup(self, key):
-        rv=self.storage.get(key, None)
+        rv=self.storage.get(key)
         if rv:
             now=time.time()
             if now >= rv[1]:
@@ -146,7 +146,7 @@ class DictBackend(BaseBackend):
     def __handle_unconditional_set(self, cmd, hdrs, key, data):
         exp=hdrs[1]
         # If it's going to expire soon, tell it to wait a while.
-        if exp == 0:
+        if not exp:
             exp=float(2 ** 31)
         self.storage[key]=(hdrs[0], time.time() + exp, data)
         print "Stored", self.storage[key], "in", key
@@ -157,7 +157,7 @@ class DictBackend(BaseBackend):
     def __mutation(self, cmd, hdrs, key, data, multiplier):
         amount, initial, expiration=hdrs
         rv=self._error(memcacheConstants.ERR_NOT_FOUND, 'Not found')
-        val=self.storage.get(key, None)
+        val=self.storage.get(key)
         print "Mutating %s, hdrs=%s, val=%s %s" % (key, `hdrs`, `val`,
             multiplier)
         if val:
@@ -168,7 +168,7 @@ class DictBackend(BaseBackend):
             if expiration != memcacheConstants.INCRDECR_SPECIAL:
                 self.storage[key]=(0, time.time() + expiration, initial)
                 rv=0, id(self.storage[key]), str(initial)
-        if rv[0] == 0:
+        if not rv[0]:
             rv = rv[0], rv[1], struct.pack(
                 memcacheConstants.INCRDECR_RES_FMT, long(rv[2]))
         print "Returning", rv
@@ -231,7 +231,7 @@ class DictBackend(BaseBackend):
         return 0, 0, "Python test memcached server %s" % VERSION
 
     def _withCAS(self, key, cas, f):
-        val=self.storage.get(key, None)
+        val=self.storage.get(key)
         if cas == 0 or (val and cas == id(val)):
             rv=f(val)
         elif val:
@@ -361,7 +361,7 @@ class MemcachedBinaryChannel(asyncore.dispatcher):
 
 class MemcachedServer(asyncore.dispatcher):
     """A memcached server."""
-    def __init__(self, backend, handler, port=11211):
+    def __init__(self, backend, handler, port=11210):
         asyncore.dispatcher.__init__(self)
 
         self.handler=handler

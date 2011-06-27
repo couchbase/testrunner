@@ -1,12 +1,13 @@
 #!/usr/bin/python
-
 import sys
+sys.path.append("lib")
+sys.path.append("pytests")
 import time
 import getopt
 import unittest
 import os
-sys.path.append("lib")
-sys.path.append("pytests")
+import logger
+from xunit import XUnitTestResult
 from TestInput import TestInputParser, TestInputSingleton
 
 class Testcase(object):
@@ -35,45 +36,38 @@ Syntax: testrunner [options]
 Options:
  -c <file>        Config file name (located in the conf subdirectory)
  -i <file>        Path to .ini file containing server information
- -s <server>      Hostname of server (multiple -s options add more servers)
  -t <test>        Test name (multiple -t options add more tests)
 """
     sys.exit(r)
 
 
-class Config(object):
-    def __init__(self):
-        self.tests = []
-
-
 def parse_args(argv):
-    config = Config()
+    tests = []
 
     try:
         (opts, args) = getopt.getopt(argv[1:],
-                                     'h:t:c:v:s:i:p:', [])
+                                     'h:t:c:v:i:p:', [])
+        for o, a in opts:
+            if o == "-h":
+                usage()
+            elif o == "-c":
+                if find_runlist(a):
+                    for line in find_runlist(a):
+                        if not line.startswith("#"):
+                            tests.append(Testcase(line.strip()))
+            elif o == "-t":
+                tests.append(Testcase(a))
+        test_input = TestInputParser.get_test_input(argv)
+        if not test_input.servers:
+            usage("no servers specified")
+        if not tests:
+            usage("no tests specified")
+        return tests, test_input
+
     except IndexError:
         usage()
     except getopt.GetoptError, err:
         usage(err)
-
-    for o, a in opts:
-        if o == "-h":
-            usage()
-        elif o == "-c":
-            if find_runlist(a):
-                for line in find_runlist(a):
-                    if not line.startswith("#"):
-                        config.tests.append(Testcase(line.strip()))
-        elif o == "-t":
-            config.tests.append(Testcase(a))
-    test_input = TestInputParser.get_test_input(argv)
-    if not test_input.servers:
-        usage("no servers specified")
-    if not config.tests:
-        usage("no tests specified")
-    return config, test_input
-
 
 def find_runlist(filename):
     if os.path.exists(filename):
@@ -82,27 +76,28 @@ def find_runlist(filename):
         return file("conf/" + filename)
     return None
 
-
 if __name__ == "__main__":
-    config, test_input = parse_args(sys.argv)
+    str_time = time.strftime("%H:%M:%S", time.localtime()).replace(":", "-")
+    tests, test_input = parse_args(sys.argv)
 
-    names = [test.name for test in config.tests]
-    from xunit import XUnitTestSuite
+    names = [test.name for test in tests]
 
-    xunit = XUnitTestSuite()
-    xunit.name = "testrunner-suite"
-    xunit_loaded = True
+    xunit = XUnitTestResult()
+
+    tmp_folder = "tmp-{0}".format(str_time)
+    os.makedirs(tmp_folder)
+    #this only works on linux/mac
+    os.environ["TEMP-FOLDER"] = os.getcwd() + "/" + tmp_folder
+    print os.environ["TEMP-FOLDER"]
 
     for name in names:
-        import logger
-
+        #let's create temporary folder for logs and xml results
         start_time = time.time()
         dotnames = name.split('.')
         log_name = dotnames[len(dotnames) - 1]
         logger.Logger.start_logger(log_name)
-
         TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
-        suite = unittest.TestLoader().loadTestsFromNames(names=[name])
+        suite = unittest.TestLoader().loadTestsFromName(name)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         logger.Logger.stop_logger()
         time_taken = time.time() - start_time
@@ -118,8 +113,7 @@ if __name__ == "__main__":
                                errorType='membase.error', errorMessage=error_string)
                 break
         else:
-            xunit.add_test(name=name, status='pass', time=time_taken)
-
-    report_xml_file = open('report.xml', 'w')
-    report_xml_file.write(xunit.to_xml())
-    report_xml_file.close()
+            xunit.add_test(name=name, time=time_taken)
+        xunit.write("{0}/report-{1}.xml".format(tmp_folder, str_time))
+        xunit.print_summary()
+        print "logs and results are available under {0}".format(tmp_folder)

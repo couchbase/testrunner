@@ -17,7 +17,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                              initialize_cluster=False,
                              create_buckets=False,
                              insert_data=False):
-        inserted_keys = []
         log = logger.Logger.get_logger()
         input = TestInputSingleton.input
         rest_settings = input.membase_settings
@@ -28,47 +27,47 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         info = remote.extract_remote_info()
         remote.membase_uninstall()
         builds, changes = BuildQuery().get_all_builds()
-        build_1_6_5_3_1 = BuildQuery().find_membase_build(builds=builds,
+        older_build = BuildQuery().find_membase_build(builds=builds,
                                                           deliverable_type=info.deliverable_type,
                                                           os_architecture=info.architecture_type,
                                                           build_version=initial_version,
                                                           product='membase-server-enterprise')
         remote.execute_command('/etc/init.d/membase-server stop')
-        remote.download_build(build_1_6_5_3_1)
+        remote.download_build(older_build)
         #now let's install ?
-        remote.membase_install(build_1_6_5_3_1)
+        remote.membase_install(older_build)
         RestHelper(rest).is_ns_server_running(120)
         log.info("sleep for 10 seconds to wait for membase-server to start...")
         rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
-
+        bucket_data = {}
+        
         if initialize_cluster:
             rest.init_cluster_memoryQuota()
             if create_buckets:
-                #let's create buckets
-                #wait for the bucket
-                #bucket port should also be configurable , pass it as the
-                #parameter to this test ? later
-                BucketOperationHelper.create_default_buckets(servers=[server],
-                                                             number_of_replicas=1,
-                                                             assert_on_test=self)
-                json_bucket = {'name': 'default', 'port': 11211}
-                RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_queue_size', 0)
-                RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_flusher_todo', 0)
-                ready = BucketOperationHelper.wait_for_memcached(server, json_bucket)
-                self.assertTrue(ready, "wait_for_memcached failed")
-                if insert_data:
+                created = BucketOperationHelper.create_multiple_buckets(server, 1)
+                self.assertTrue(created, "unable to create multiple buckets")
+                buckets = rest.get_buckets()
+
+                for bucket in buckets:
+                    bucket_data[bucket.name] = {}
+                    ready = BucketOperationHelper.wait_for_memcached(server, bucket.name)
+                    self.assertTrue(ready, "wait_for_memcached failed")
+                    if insert_data:
                     #let's insert some data
-                    distribution = {2 * 1024: 0.5, 20: 0.5}
-                    inserted_keys, rejected_keys =\
-                    MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
-                                                                          name='default',
-                                                                          port=11211,
-                                                                          ram_load_ratio=25.0,
-                                                                          number_of_threads=1,
-                                                                          value_size_distribution=distribution,
-                                                                          write_only=True)
-                    RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_queue_size', 0)
-                    RebalanceHelper.wait_for_stats(server, json_bucket, 'ep_flusher_todo', 0)
+                        distribution = {2 * 1024: 0.5, 20: 0.5}
+                        bucket_data[bucket.name]["inserted_keys"], bucket_data[bucket.name]["reject_keys"] =\
+                        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
+                                                                              name=bucket.name,
+                                                                              ram_load_ratio=2.0,
+                                                                              number_of_threads=1,
+                                                                              value_size_distribution=distribution,
+                                                                              write_only=True,
+                                                                              moxi=False)
+                        RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_queue_size', 0)
+                        RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_flusher_todo', 0)
+
+
+
         version = input.test_params['version']
         #pick the first one in the list
         appropriate_build = BuildQuery().find_membase_build(builds,
@@ -92,15 +91,13 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         if initialize_cluster:
             #TODO: how can i verify that the cluster init config is preserved
             if create_buckets:
-                self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('default', rest),
+                self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('bucket-0', rest),
                                 msg="bucket 'default' does not exist..")
             if insert_data:
-                BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys,
-                                                           ip=server.ip,
-                                                           port=11211,
-                                                           name='default',
-                                                           password='',
-                                                           test=self)
+                buckets = rest.get_buckets()
+                for bucket in buckets:
+                    BucketOperationHelper.keys_exist_or_assert(bucket_data[bucket.name]["inserted_keys"], server,
+                                                               bucket.name, self)
 
 
     def single_node_upgrade_s1_1_6_5_3(self):
@@ -281,10 +278,8 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                 filtered_builds.append(build)
         sorted_builds = BuildQuery().sort_builds_by_version(filtered_builds)
         latest_version = sorted_builds[0].product_version
-        self._install_and_upgrade(initial_version=latest_version,
-                                  initialize_cluster=False,
-                                  insert_data=False,
-                                  create_buckets=False)
+        self._install_and_upgrade(initial_version=latest_version
+        )
 
         #TODO : expect a message like 'package membase-server-1.7~basestar-1.x86_64 is already installed'
 
@@ -309,7 +304,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         # nodes update all nodes one by one and then restart node(1),node(2) and node(3)
 
     def multiple_node_upgrade_m3_1_6_5_3(self):
-        self._install_and_upgrade('1.6.5.3', True, True, 1)
+        self._install_and_upgrade('1.6.5.3', True, True)
 
     #m3 with 50% ram full ?
 
@@ -407,7 +402,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             remote = RemoteMachineShellConnection(server)
             rest = RestConnection(server)
             info = remote.extract_remote_info()
-            build_1_6_5_3_1 = BuildQuery().find_membase_build(builds=builds,
+            older_build = BuildQuery().find_membase_build(builds=builds,
                                                               deliverable_type=info.deliverable_type,
                                                               os_architecture=info.architecture_type,
                                                               build_version=initial_version,
@@ -415,9 +410,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
             remote.membase_uninstall()
             remote.execute_command('/etc/init.d/membase-server stop')
-            remote.download_build(build_1_6_5_3_1)
+            remote.download_build(older_build)
             #now let's install ?
-            remote.membase_install(build_1_6_5_3_1)
+            remote.membase_install(older_build)
             RestHelper(rest).is_ns_server_running(120)
             log.info("sleep for 10 seconds to wait for membase-server to start...")
             rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
@@ -433,14 +428,12 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             #parameter to this test ? later
 
             BucketOperationHelper.create_default_buckets(servers=[master],
-                                                         number_of_replicas=1,
                                                          assert_on_test=self)
 
-            bucket = {'name': 'default', 'port': 11211}
-            RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
-            RebalanceHelper.wait_for_stats(master, bucket, 'ep_flusher_todo', 0)
-            json_bucket = {'name': 'default', 'port': 11211}
-            ready = BucketOperationHelper.wait_for_memcached(master, json_bucket)
+
+            RebalanceHelper.wait_for_stats(master, "default", 'ep_queue_size', 0)
+            RebalanceHelper.wait_for_stats(master, "default", 'ep_flusher_todo', 0)
+            ready = BucketOperationHelper.wait_for_memcached(master, "default")
             self.assertTrue(ready, "wait_for_memcached failed")
 
             if insert_data:
@@ -451,7 +444,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 distribution = {1024: 0.5, 20: 0.5}
                 inserted_keys, rejected_keys =\
                 MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
-                                                                      name='default',
                                                                       port=11211,
                                                                       ram_load_ratio=load_ratio,
                                                                       number_of_threads=1,
@@ -581,9 +573,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                 msg="bucket 'default' does not exist..")
             if insert_data:
                 BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys,
-                                                           ip=master.ip,
-                                                           port=11211,
+                                                           server=master,
                                                            name='default',
-                                                           password='',
                                                            test=self)
         return node_upgrade_status

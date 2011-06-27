@@ -44,7 +44,7 @@ class FailoverBaseTest(unittest.TestCase):
         time.sleep(10)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         try:
-            MemcachedClientHelper.flush_bucket(servers[0], 'default', 11211)
+            MemcachedClientHelper.flush_bucket(servers, 'default')
         except Exception:
             pass
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
@@ -168,10 +168,9 @@ class FailoverTests(unittest.TestCase):
         rest.create_bucket(bucket='default',
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,
-                           proxyPort=11211)
-        BucketOperationHelper.wait_till_memcached_is_ready_or_assert(servers=[master],
-                                                                     bucket_port=11211,
-                                                                     test=self)
+                           proxyPort=info.moxi)
+        ready = BucketOperationHelper.wait_for_memcached(master,"default")
+        self.assertTrue(ready,"wait_for_memcached_failed")
 
         credentials = self._input.membase_settings
 
@@ -186,11 +185,13 @@ class FailoverTests(unittest.TestCase):
         msg = "rebalance failed after adding these nodes {0}".format(nodes)
         self.assertTrue(rest.monitorRebalance(), msg=msg)
 
+
         inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(servers=self._servers,
+        MemcachedClientHelper.load_bucket(servers=[master],
                                           ram_load_ratio=load_ratio,
                                           value_size_distribution=distribution,
-                                          number_of_threads=20)
+                                          number_of_threads=20,
+                                          moxi=False)
         log.info('inserted {0} keys'.format(inserted_count))
         nodes = rest.node_statuses()
         #while len(node) > replica * 2
@@ -211,7 +212,14 @@ class FailoverTests(unittest.TestCase):
                     self.enable_firewall(node)
                     self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
-                rest.fail_over(node.id)
+
+                failed_over = rest.fail_over(node.id)
+                if not failed_over:
+                    self.log.info("unable to failover the node the first time. try again in  60 seconds..")
+                    #try again in 60 seconds
+                    time.sleep(75)
+                    failed_over = rest.fail_over(node.id)
+                self.assertTrue(failed_over, "unable to failover node after {0}".format(failover_reason))
                 log.info("failed over node : {0}".format(node.id))
             #REMOVEME -
             log.info("10 seconds sleep after failover before invoking rebalance...")
@@ -221,16 +229,14 @@ class FailoverTests(unittest.TestCase):
             msg="rebalance failed while removing failover nodes {0}".format(chosen)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
 
+
             nodes = rest.node_statuses()
             if len(nodes) / (1 + replica) >= 1:
                 final_replication_state = RestHelper(rest).wait_for_replication(900)
                 msg = "replication state after waiting for up to 15 minutes : {0}"
                 self.log.info(msg.format(final_replication_state))
                 self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
-                                                                              servers=self._servers,
                                                                               bucket='default',
-                                                                              port=11211,
-                                                                              replica_factor=replica,
                                                                               timeout_in_seconds=600),
                                 msg="replication was completed but sum(curr_items) dont match the curr_items_total")
 

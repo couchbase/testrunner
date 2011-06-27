@@ -151,7 +151,7 @@ class PageElement:
 
         newChild.parent = self
         previousChild = None
-        if position == 0:
+        if not position:
             newChild.previousSibling = None
             newChild.previous = self
         else:
@@ -468,7 +468,7 @@ class Tag(PageElement):
         #print "Getattr %s.%s" % (self.__class__, tag)
         if len(tag) > 3 and tag.rfind('Tag') == len(tag)-3:
             return self.find(tag[:-3])
-        elif tag.find('__') != 0:
+        elif tag.find('__'):
             return self.find(tag)
 
     def __eq__(self, other):
@@ -928,7 +928,7 @@ class BeautifulStoneSoup(Tag, SGMLParser):
         if methodName.find('start_') == 0 or methodName.find('end_') == 0 \
                or methodName.find('do_') == 0:
             return SGMLParser.__getattr__(self, methodName)
-        elif methodName.find('__') != 0:
+        elif methodName.find('__'):
             return Tag.__getattr__(self, methodName)
         else:
             raise AttributeError
@@ -980,7 +980,7 @@ class BeautifulStoneSoup(Tag, SGMLParser):
                     currentData = ' '
             self.currentData = []
             if self.parseOnlyThese and len(self.tagStack) <= 1 and \
-                   (not self.parseOnlyThese.text or \
+                   (not self.parseOnlyThese.text or
                     not self.parseOnlyThese.search(currentData)):
                 return
             o = containerClass(currentData)
@@ -1140,7 +1140,7 @@ class BeautifulStoneSoup(Tag, SGMLParser):
         characters."""
         data = None
         if self.convertEntities == self.HTML_ENTITIES or \
-               (self.convertEntities == self.XML_ENTITIES and \
+               (self.convertEntities == self.XML_ENTITIES and
                 self.XML_ENTITY_LIST.get(ref)):
             try:
                 data = unichr(name2codepoint[ref])
@@ -1664,8 +1664,8 @@ class UnicodeDammit:
                     90,244,245,246,247,248,249,48,49,50,51,52,53,54,55,56,57,
                     250,251,252,253,254,255)
             import string
-            c.EBCDIC_TO_ASCII_MAP = string.maketrans( \
-            ''.join(map(chr, range(256))), ''.join(map(chr, emap)))
+            c.EBCDIC_TO_ASCII_MAP = string.maketrans(
+                ''.join(map(chr, range(256))), ''.join(map(chr, emap)))
         return s.translate(c.EBCDIC_TO_ASCII_MAP)
 
     MS_CHARS = { '\x80' : ('euro', '20AC'),

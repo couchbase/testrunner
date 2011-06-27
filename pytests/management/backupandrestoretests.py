@@ -48,7 +48,7 @@ class BackupAndRestoreTests(unittest.TestCase):
         node = RestConnection(master).get_nodes_self()
         BucketOperationHelper.delete_bucket_or_assert(master, bucket, self)
         BucketOperationHelper.create_bucket(serverInfo=master, name=bucket, replica=1, port=port_no, test_case=self)
-        keys = BucketOperationHelper.load_data_or_assert(master, bucket_name=bucket, test = self)
+        keys = BucketOperationHelper.load_some_data(master, bucket_name=bucket, test = self)
 
         if not startup_flag:
             self.shell.stop_membase()
