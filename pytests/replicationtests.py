@@ -259,7 +259,7 @@ class ReplicationTests(unittest.TestCase):
         self.log.info('verifying keys now...._20')
         self._verify_data('30')
         #flushing the node before cleaup
-        MemcachedClientHelper.flush_bucket(self.servers[0].ip, self.bucket_name)
+        MemcachedClientHelper.flush_bucket(self.servers[0], self.bucket_name)
 
 
     def tearDown(self):

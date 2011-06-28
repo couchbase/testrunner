@@ -44,7 +44,7 @@ class FailoverBaseTest(unittest.TestCase):
         time.sleep(10)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         try:
-            MemcachedClientHelper.flush_bucket(servers, 'default')
+            MemcachedClientHelper.flush_bucket(servers[0], 'default')
         except Exception:
             pass
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
