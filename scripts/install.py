@@ -1,15 +1,9 @@
-##this script will take the product name  , version number and ini file
-#
-#
-#
-#def supported_products():
-#    return ["membase-server","couchbase-server","couchbase-single-server"]
-#
-#def linux_start_command(product):
-#    if product
+# example : python scripts/install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
+# example : python scripts/install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-34
 
-#params : product,version,mode,amazon
+# TODO: add installer support for membasez and couchbase-single-server
 
+import copy
 import sys
 from threading import Thread
 
@@ -31,17 +25,20 @@ errors = {"UNREACHABLE": "",
           "BUILD-NOT-FOUND": "unable to find build",
           "INVALID-PARAMS": "invalid params given"}
 
-class Installer(object):
-    def machine_types(self, serverInfo):
-        log = logger.new_logger("Installer")
-        remote_client = RemoteMachineShellConnection(serverInfo)
-        info = remote_client.extract_remote_info()
-        remote_client.disconnect()
-        log.info('IP : {0} Distribution : {1} Arch: {2} Version : {3}'.format(info.ip, info.distribution_type,
-                                                                              info.architecture_type,
-                                                                              info.distribution_version))
-        return info
 
+def installer_factory(params):
+    mb_alias = ["membase", "membase-server", "mbs", "mb"]
+    cb_alias = ["couchbase", "couchbase-server", "cb"]
+    cbs_alias = ["couchbase-single", "couchbase-single-server", "cbs"]
+    if params["product"] in mb_alias:
+        return MembaseServerInstaller()
+    elif params["product"] in cb_alias:
+        return CouchbaseServerInstaller()
+    elif params["product"] in cbs_alias:
+        return CouchbaseSingleServerInstaller()
+
+
+class Installer(object):
 
     def install(self, params):
         pass
@@ -50,11 +47,12 @@ class Installer(object):
         pass
 
     def uninstall(self, params):
-        pass
+        remote_client = RemoteMachineShellConnection(params["server"])
+        remote_client.membase_uninstall()
+        remote_client.couchbase_uninstall()
 
     def build_url(self, params):
         errors = []
-        log = logger.new_logger("Installer")
         #vars
         version = ''
         server = ''
@@ -106,7 +104,7 @@ class Installer(object):
                 errors.append(errors["INVALID-PARAMS"])
 
         if ok:
-            info = self.machine_types(server)
+            info = RemoteMachineShellConnection(serverInfo).extract_remote_info()
             builds, changes = BuildQuery().get_all_builds()
             for name in names:
                 build = BuildQuery().find_build(builds, name, info.deliverable_type,
@@ -123,7 +121,6 @@ class Installer(object):
             ok = False
 
         raise Exception("unable to find a build...")
-
 
 class MembaseServerInstaller(Installer):
     def __init__(self):
@@ -145,7 +142,6 @@ class MembaseServerInstaller(Installer):
                 log.error("error happened while initializing the cluster @ {0}".format(server.ip))
             log.info('sleep for 5 seconds before trying again ...')
             time.sleep(5)
-            log.error()
         if not cluster_initialized:
             raise Exception("unable to initialize membase node")
 
@@ -154,9 +150,9 @@ class MembaseServerInstaller(Installer):
         log = logger.new_logger("Installer")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
-        remote_client.membase_uninstall()
         downloaded = remote_client.download_build(build)
-        log.error(downloaded, 'unable to download binaries :'.format(build.url))
+        if not downloaded:
+            log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
         remote_client.membase_uninstall()
         remote_client.membase_install(build)
         ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
@@ -164,11 +160,6 @@ class MembaseServerInstaller(Installer):
             log.error("membase-server did not start...")
         log.info('wait 5 seconds for membase server to start')
         time.sleep(5)
-
-
-class CouchbaseSingleServerInstaller(Installer):
-    pass
-
 
 class CouchbaseServerInstaller(Installer):
     def __init__(self):
@@ -199,14 +190,11 @@ class CouchbaseServerInstaller(Installer):
         log = logger.new_logger("Installer")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
-        remote_client.membase_uninstall()
         downloaded = remote_client.download_build(build)
-        log.error(downloaded, 'unable to download binaries :'.format(build.url))
-        remote_client.membase_uninstall()
+        if not downloaded:
+            log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
+        #TODO: need separate methods in remote_util for couchbase and membase install
         remote_client.membase_install(build)
-        ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
-        if not ready:
-            log.error("membase-server did not start...")
         log.info('wait 5 seconds for membase server to start')
         time.sleep(5)
 
@@ -214,13 +202,14 @@ class CouchbaseServerInstaller(Installer):
 class InstallerJob(object):
     def sequential_install(self, params):
         for server in input.servers:
-            input.test_params["server"] = server
-            params = input.test_params
-            installer = MembaseServerInstaller()
+            _params = copy.deepcopy(params)
+            _params["server"] = server
+            installer = installer_factory(_params)
             try:
-                installer.install(params)
+                installer.uninstall(_params)
+                installer.install(_params)
                 try:
-                    installer.initialize(params)
+                    installer.initialize(_params)
                 except Exception as ex:
                     print "unable to initialize the server after successful installation", ex
             except Exception as ex:
@@ -228,29 +217,45 @@ class InstallerJob(object):
 
 
     def parallel_install(self, servers, params):
-        threads = []
+        uninstall_threads = []
+        install_threads = []
+        initializer_threads = []
         for server in servers:
-            input.test_params["server"] = server
-            params = input.test_params
-            t = Thread(target=MembaseServerInstaller().install,
+            _params = copy.deepcopy(params)
+            _params["server"] = server
+            u_t = Thread(target=installer_factory(params).uninstall,
+                       name="uninstaller-thread-{0}".format(server.ip),
+                       args=(_params,))
+            i_t = Thread(target=installer_factory(params).install,
                        name="installer-thread-{0}".format(server.ip),
-                       args=(params,))
-            threads.append(t)
-        for t in threads:
+                       args=(_params,))
+            init_t = Thread(target=installer_factory(params).initialize,
+                       name="installer-thread-{0}".format(server.ip),
+                       args=(_params,))
+            uninstall_threads.append(u_t)
+            install_threads.append(i_t)
+            initializer_threads.append(init_t)
+        for t in uninstall_threads:
             t.start()
-        for t in threads:
+        for t in uninstall_threads:
+            print "thread {0} finished".format(t.name)
             t.join()
-            print "thread {0} finished".format(t)
-        for server in servers:
-            input.test_params["server"] = server
-            MembaseServerInstaller().initialize(params)
+        for t in install_threads:
+            t.start()
+        for t in install_threads:
+            print "thread {0} finished".format(t.name)
+            t.join()
+        for t in initializer_threads:
+            t.start()
+        for t in initializer_threads:
+            print "thread {0} finished".format(t.name)
+            t.join()
 
 params = {"ini": "resources/jenkins/fusion.ini",
           "product": "ms", "version": "1.7.1r-31", "amazon": "false"}
 
 if __name__ == "__main__":
     input = TestInput.TestInputParser.get_test_input(sys.argv)
-    #for each server ?
     if "parallel" in input.test_params:
         InstallerJob().parallel_install(input.servers, input.test_params)
     else:

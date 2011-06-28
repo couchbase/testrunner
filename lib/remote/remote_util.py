@@ -286,8 +286,8 @@ class RemoteMachineShellConnection:
         is_couchbase = False
         if build.name.lower().find("membase") != -1:
             is_membase = True
-        if build.name.lower().find("couchbase") != -1:
-            is_membase = True
+        elif build.name.lower().find("couchbase") != -1:
+            is_couchbase = True
         if not is_membase and not is_couchbase:
             raise Exception("its not a membase or couchbase ?")
         info = self.extract_remote_info()
