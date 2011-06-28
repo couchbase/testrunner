@@ -236,14 +236,13 @@ class ReplicationTests(unittest.TestCase):
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
-        RebalanceBaseTest.load_data_for_buckets(rest, fill_ram_percentage, distribution, self.servers, bucket_data,
-                                                self)
         inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=self.servers,
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
                                                               name=self.bucket_name,
                                                               ram_load_ratio=fill_ram_percentage,
                                                               value_size_distribution=distribution,
                                                               number_of_threads=40,
+                                                              write_only=True,
                                                               moxi=False)
         self.keys = inserted_keys
         self.log.info('updating all keys by appending _20 to each value')
