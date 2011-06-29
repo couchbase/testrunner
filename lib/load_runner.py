@@ -55,7 +55,6 @@ class LoadThread(threading.Thread):
 
         # server info
         self.server_ip = load_info['server_info'][server_index].ip
-        self.server_port = int(load_info['memcached_info'].get('bucket_port', 11211))
         self.bucket_name = load_info['memcached_info'].get('bucket_name', '')
         self.bucket_password = load_info['memcached_info'].get('bucket_password', '')
 
@@ -84,6 +83,7 @@ class LoadThread(threading.Thread):
         self.limit_time = int(load_info['limit_info'].get('time', 0))
         self.limit_size = int(load_info['limit_info'].get('size', 0) / threads)
         self.poxi = self._poxi()
+        print "now connected to {0} memcacheds".format(len(self.poxi.memcacheds))
         # connect
         #self.server should be vbucketaware memcached
 #        self.server = mc_bin_client.MemcachedClient(self.server_ip, self.server_port)
@@ -96,6 +96,7 @@ class LoadThread(threading.Thread):
         tServer.ip = self.server_ip
         tServer.rest_username = "Administrator"
         tServer.rest_password = "password"
+        tServer.port = 8091
         rest = RestConnection(tServer)
         return VBucketAwareMemcached(rest, self.bucket_name)
 
@@ -159,18 +160,19 @@ class LoadThread(threading.Thread):
                 except mc_bin_client.MemcachedError as e:
                     self.poxi.done()
                     self.poxi = self._poxi()
+                    print "now connected to {0} memcacheds".format(len(self.poxi.memcacheds))
                     if self.backoff < 0:
                         self.backoff = 0
                     if self.backoff > 30:
                         self.backoff = 30
                     self.backoff += 1
                     # temporary error
-                    if e.status == 134:
-                        time.sleep(self.backoff)
-                    else:
-                        print `time.time()` + ' ' + self.name + ' set(' + `self.backoff` + ') ',
-                        print e
-                        time.sleep(self.backoff)
+#                    if e.status == 134:
+#                        time.sleep(self.backoff)
+#                    else:
+#                        print `time.time()` + ' ' + self.name + ' set(' + `self.backoff` + ') ',
+#                        print e
+#                        time.sleep(self.backoff)
             elif operation == 'get':
                 key = self.name + '_' + `self.get_get_key()`
                 try:

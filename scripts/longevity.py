@@ -1,9 +1,11 @@
+from random import Random, shuffle
 import sys
 from threading import Thread
-from load_runner import LoadRunner
-
 sys.path.append('.')
 sys.path.append('lib')
+
+from load_runner import LoadRunner
+
 from multiprocessing import Queue
 from multiprocessing.process import Process
 from TestInput import TestInputParser
@@ -15,7 +17,7 @@ import time
 # run the mbbackup maybe every 60 minutes and then after getting the backup just delete those files
 
 #request = {'queue':queue,'servers':servers,'interval':600}
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 
@@ -23,31 +25,32 @@ def start_load(argv):
     queue = Queue(10)
     test_input = TestInputParser.get_test_input(argv)
     load_info = {
-    'server_info': test_input.servers,
-    'memcached_info': {
-        'bucket_name': "default",
-        'bucket_port': "11210",
-        'bucket_password': "",
-        },
-    'operation_info': {
-        'operation_distribution': {'set': 10},
-        'valuesize_distribution': {20: 30, 30: 5, 25: 5},
-        'create_percent': 25,
-        'threads': 4,
-        },
-    'limit_info': {
-        'max_items': 0,
-        'operation_count': 0,
-        'time': time.time() + 24 * 60 * 60,
-        'max_size': 0,
-        },
-    }
+        'server_info': [test_input.servers[0]],
+        'memcached_info': {
+            'bucket_name': "default",
+            'bucket_port': "11210",
+            'bucket_password': "",
+            },
+        'operation_info': {
+            'operation_distribution': {'set': 10},
+            'valuesize_distribution': {20: 30, 30: 5, 25: 5},
+            'create_percent': 25,
+            'threads': 6,
+            },
+        'limit_info': {
+            'max_items': 0,
+            'operation_count': 0,
+            'time': time.time() + 24 * 60 * 60,
+            'max_size': 0,
+            },
+        }
     thread = Thread(target=loadrunner, args=(queue, test_input.servers, load_info))
     thread.start()
     time.sleep(24 * 60 * 60)
     queue.put("stop")
 
-def loadrunner(queue,servers,load_info):
+
+def loadrunner(queue, servers, load_info):
     interval = 2 * 60 * 60
     params = {"queue": queue, "servers": servers, "interval": interval, "load_info": load_info}
     print params
@@ -57,21 +60,19 @@ def loadrunner(queue,servers,load_info):
 
 
 class LoadRunnerProcess(object):
-
-    def __init__(self,params):
+    def __init__(self, params):
         self.queue = params["queue"]
-        self.servers = params["servers"]
+        self.servers = [params["servers"][0]]
         self.interval = params["interval"]
         self.log = logger.Logger.get_logger()
         self.load_info = params["load_info"]
 
     def load(self):
-        loader = LoadRunner(self.load_info, dryrun=False)
+        loader = LoadRunner(self.load_info)
         loader.start()
-        time.sleep(60)
+        time.sleep(6000)
         loader.stop()
         loader.wait()
-
 
 
 ################################################################################
@@ -79,13 +80,13 @@ class LoadRunnerProcess(object):
 def start_backup(argv):
     queue = Queue(10)
     test_input = TestInputParser.get_test_input(argv)
-    thread = Thread(target=backup, args=(queue,test_input.servers))
+    thread = Thread(target=backup, args=(queue, test_input.servers))
     thread.start()
     time.sleep(24 * 60 * 60)
     queue.put("stop")
 
 
-def backup(queue,servers):
+def backup(queue, servers):
     interval = 2 * 60 * 60
     params = {"queue": queue, "servers": servers, "interval": interval}
     backup = BackupProcess(params=params)
@@ -93,7 +94,6 @@ def backup(queue,servers):
 
 
 class BackupProcess(object):
-
     def __init__(self, params):
         self.queue = params["queue"]
         self.servers = params["servers"]
@@ -116,13 +116,18 @@ class BackupProcess(object):
                 map = self.node_server_map(nodes, self.servers)
                 self.log.info("cluster has {0} nodes".format(len(nodes)))
                 for node in nodes:
-                    BackupHelper(map[node]).backup('default', "/tmp")
+                    try:
+                        from Crypto.Random import atfork
+                        atfork()
+                        BackupHelper(map[node]).backup('default', "/tmp")
+                        BackupHelper(map[node]).backup('default', "/tmp")
+                    except Exception as ex:
+                        print ex
                     self.log.info("backed up the data into ")
                 time.sleep(self.interval)
 
 
-
-    def node_server_map(self,nodes,servers):
+    def node_server_map(self, nodes, servers):
         map = {}
         for node in nodes:
             for server in servers:
@@ -136,6 +141,7 @@ class BackupProcess(object):
             pass
             #a thread function which monitor vital system stats during mbbackup
             #to see if the ops per second drops signifcantly
+
 
 class BackupHelper(object):
     def __init__(self, serverInfo):
@@ -156,13 +162,24 @@ class BackupHelper(object):
         self.shell.log_command_output(output, error)
 
 
+def start_combo(argv):
+    queue = Queue(10)
+    test_input = TestInputParser.get_test_input(argv)
+    thread = Thread(target=combo, args=(queue, test_input))
+    thread.start()
+    time.sleep(24 * 60 * 60)
+    queue.put("stop")
+
+
+def combo(queue, input):
+    combo = ComboBaseTests(input)
+    combo.loop()
+
+
 class ComboBaseTests(object):
     # start from 1..n
     # then from no failover x node and rebalance and
     # verify we did not lose items
-
-
-
     @staticmethod
     def choose_nodes(master, nodes, howmany):
         selected = []
@@ -180,16 +197,13 @@ class ComboBaseTests(object):
             return string1.find(string2) != -1
         return False
 
-
-class ComboTests(object):
-
-    def __init__(self,input):
+    def __init__(self, input):
         self._input = input
         self._servers = self._input.servers
         self.log = logger.Logger.get_logger()
 
     def loop(self):
-        duration = 240
+        duration = 2400
         replica = 1
         load_ratio = 5
         if 'duration' in self._input.test_params:
@@ -206,8 +220,6 @@ class ComboTests(object):
         master = self._servers[0]
         log.info('picking server : {0} as the master'.format(master))
         rest = RestConnection(master)
-        info = rest.get_nodes_self()
-        log.info("inserting some items in the master before adding any nodes")
         while time.time() < ( start_time + 60 * timeout):
             #rebalance out step nodes
             #let's add some items ?
@@ -221,9 +233,8 @@ class ComboTests(object):
                 self.log.info("going to add {0} nodes".format(how_many_add))
                 self.rebalance_in(how_many=how_many_add)
             else:
-                self.log.info("all nodes already joined the clustr")
-            time.sleep(240)
-            RestHelper(rest).wait_for_replication(600)
+                self.log.info("all nodes already joined the cluster")
+            time.sleep(30 * 60)
             #dont rebalance out if there are not too many nodes
             if len(nodes) >= (3.0 / 4.0 * len(self._servers)):
                 nodes = rest.node_statuses()
@@ -309,12 +320,12 @@ class ComboTests(object):
 
 
 if __name__ == "__main__":
-#    start_backup(sys.argv)
-#    process = {}
-#    for i in range(0,5):
-#        process[i] = Process(target=start_load, args=(sys.argv,))
-#    for i in range(0,5):
-#        process[i].start()
-#    for i in range(0,5):
-#        process[i].join()
-    start_load(sys.argv)
+    process1 = Process(target=start_load, args=(sys.argv,))
+    process1.start()
+    process2 = Process(target=start_combo, args=(sys.argv,))
+    process2.start()
+    process3 = Process(target=start_backup, args=(sys.argv,))
+    process3.start()
+    process1.join()
+    process2.join()
+    process3.join()
