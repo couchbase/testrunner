@@ -800,6 +800,24 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
+    def set_data_path(self, data_path):
+        api = self.baseUrl + '/nodes/self/controller/settings'
+        params = urllib.urlencode({'path': data_path})
+        log.info('/nodes/self/controller/settings params : {0}'.format(params))
+
+        try:
+            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            log.info("/nodes/self/controller/settings response {0} ,content {1}".format(response, content))
+            if response['status'] == '400':
+                log.error('set_data_path error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):

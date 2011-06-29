@@ -31,6 +31,7 @@ class TestInputServer(object):
         self.rest_password = ''
         self.port = ''
         self.cli_path = ''
+        self.data_path = ''
 
     def __str__(self):
         ip_str = "ip:{0}".format(self.ip)
@@ -127,7 +128,8 @@ class TestInputParser():
                 server.rest_username = input.membase_settings.rest_username
             if server.rest_password == '' and input.membase_settings.rest_password != '':
                 server.rest_password = input.membase_settings.rest_password
-
+            if server.data_path == '' and 'data_path' in global_properties:
+                server.data_path = global_properties['data_path']
 
 
         input.servers = servers
