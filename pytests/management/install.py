@@ -84,6 +84,7 @@ class InstallTest(unittest.TestCase):
             try:
                 if serverInfo.data_path:
                     self.log.info("setting data path to " + serverInfo.data_path)
+                    rest.set_data_path(serverInfo.data_path)
                 rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
                 cluster_initialized = True
                 break
