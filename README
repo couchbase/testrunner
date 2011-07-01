@@ -43,6 +43,10 @@ Ini files represents the ns_server information which is accessible to the tests.
 username:Administrator
 password:membase
 
+[membase]
+rest_username:Administrator
+rest_password:asdasd
+
 [servers] section lists port and ssh related information. ssh connection information
 is required for small subset of tests where test needs to perform installation,backup or restore.
 If ns_server instances are started using ns_server/cluster_run script then you only need to define ip and port
@@ -62,15 +66,15 @@ port:9000
 
 
 [10.1.6.104_2]
-10.1.6.104
+ip:10.1.6.104
 port:9001
 
 [10.1.6.104_3]
-10.1.6.104
+ip:10.1.6.104
 port:9002
 
 [10.1.6.104_4]
-10.1.6.104
+ip:10.1.6.104
 port:9003
 
 
