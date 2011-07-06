@@ -29,13 +29,11 @@ errors = {"UNREACHABLE": "",
 def installer_factory(params):
     mb_alias = ["membase", "membase-server", "mbs", "mb"]
     cb_alias = ["couchbase", "couchbase-server", "cb"]
-    cbs_alias = ["couchbase-single", "couchbase-single-server", "cbs"]
+#    cbs_alias = ["couchbase-single", "couchbase-single-server", "cbs"]
     if params["product"] in mb_alias:
         return MembaseServerInstaller()
     elif params["product"] in cb_alias:
         return CouchbaseServerInstaller()
-    elif params["product"] in cbs_alias:
-        return CouchbaseSingleServerInstaller()
 
 
 class Installer(object):
@@ -104,7 +102,7 @@ class Installer(object):
                 errors.append(errors["INVALID-PARAMS"])
 
         if ok:
-            info = RemoteMachineShellConnection(serverInfo).extract_remote_info()
+            info = RemoteMachineShellConnection(server).extract_remote_info()
             builds, changes = BuildQuery().get_all_builds()
             for name in names:
                 build = BuildQuery().find_build(builds, name, info.deliverable_type,
@@ -153,7 +151,6 @@ class MembaseServerInstaller(Installer):
         downloaded = remote_client.download_build(build)
         if not downloaded:
             log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        remote_client.membase_uninstall()
         remote_client.membase_install(build)
         ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
         if not ready:
@@ -207,6 +204,7 @@ class InstallerJob(object):
             installer = installer_factory(_params)
             try:
                 installer.uninstall(_params)
+                print "uninstall succeeded"
                 installer.install(_params)
                 try:
                     installer.initialize(_params)
