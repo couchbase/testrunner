@@ -383,6 +383,14 @@ class Database(object):
         _, _, data = self.resource.post_json(body=data)
         return data['id']
 
+    def multisave(self, docs, **options):
+        """Perform a bulk insertion of the given documents.
+        """
+        responses = []
+        for doc in docs:
+            id, rev = self.save(doc, **options)
+            responses.append((id, rev))
+
     def save(self, doc, **options):
         """Create a new document or update an existing document.
 
