@@ -1,7 +1,7 @@
 # example : python scripts/install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
-# example : python scripts/install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-34
+# example : python scripts/install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38
 
-# TODO: add installer support for membasez and couchbase-single-server
+# TODO: add installer support for membasez 
 
 import copy
 import sys
@@ -29,11 +29,13 @@ errors = {"UNREACHABLE": "",
 def installer_factory(params):
     mb_alias = ["membase", "membase-server", "mbs", "mb"]
     cb_alias = ["couchbase", "couchbase-server", "cb"]
-#    cbs_alias = ["couchbase-single", "couchbase-single-server", "cbs"]
+    css_alias = ["couchbase-single", "couchbase-single-server", "css"]
     if params["product"] in mb_alias:
         return MembaseServerInstaller()
     elif params["product"] in cb_alias:
         return CouchbaseServerInstaller()
+    elif params["product"] in css_alias:
+        return CouchbaseSingleServerInstaller()
 
 
 class Installer(object):
@@ -48,6 +50,7 @@ class Installer(object):
         remote_client = RemoteMachineShellConnection(params["server"])
         remote_client.membase_uninstall()
         remote_client.couchbase_uninstall()
+        remote_client.couchbase_single_uninstall()
 
     def build_url(self, params):
         errors = []
@@ -89,13 +92,13 @@ class Installer(object):
         if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
-            cbs_alias = ["couchbase-single", "couchbase-single-server", "cbs"]
+            css_alias = ["couchbase-single", "couchbase-single-server", "css"]
 
             if params["product"] in mb_alias:
                 names = ['membase-server-enterprise', 'membase-server-community']
             elif params["product"] in cb_alias:
                 names = ['couchbase-server-enterprise', 'couchbase-server-community']
-            elif params["product"] in cbs_alias:
+            elif params["product"] in css_alias:
                 names = ['couchbase-single-server-enterprise', 'couchbase-single-server-community']
             else:
                 ok = False
@@ -193,6 +196,23 @@ class CouchbaseServerInstaller(Installer):
         #TODO: need separate methods in remote_util for couchbase and membase install
         remote_client.membase_install(build)
         log.info('wait 5 seconds for membase server to start')
+        time.sleep(5)
+
+
+class CouchbaseSingleServerInstaller(Installer):
+    def __init__(self):
+        Installer.__init__(self)
+
+
+    def install(self, params):
+        log = logger.new_logger("Installer")
+        build = self.build_url(params)
+        remote_client = RemoteMachineShellConnection(params["server"])
+        downloaded = remote_client.download_build(build)
+        if not downloaded:
+            log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
+        remote_client.couchbase_single_install(build)
+        log.info('wait 5 seconds for couchbase-single server to start')
         time.sleep(5)
 
 

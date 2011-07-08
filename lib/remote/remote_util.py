@@ -281,6 +281,56 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
 
 
+    def couchbase_single_install(self, build):
+        is_couchbase_single = False
+        if build.name.lower().find("couchbase-single") != -1:
+            is_couchbase_single = True
+        if not is_couchbase_single:
+            raise Exception("its not a couchbase-single ?")
+        info = self.extract_remote_info()
+        log.info('deliverable_type : {0}'.format(info.deliverable_type))
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            win_processes = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
+                             "WerFault.*"]
+            self.terminate_processes(info,win_processes)
+            install_init_command = "echo '[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-DlgOrder]\r\n\
+Dlg0={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdWelcome-0\r\n\
+Count=4\r\n\
+Dlg1={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdAskDestPath-0\r\n\
+Dlg2={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdStartCopy2-0\r\n\
+Dlg3={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0\r\n\
+[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdWelcome-0]\r\n\
+Result=1\r\n\
+[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdAskDestPath-0]\r\n\
+szDir=C:\\Program Files (x86)\\Couchbase\\Server\\\r\n\
+Result=1\r\n\
+[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdStartCopy2-0]\r\n\
+Result=1\r\n\
+[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0]\r\n\
+Result=1\r\n\
+bOpt1=0\r\n\
+bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
+            output, error = self.execute_command(install_init_command)
+            self.log_command_output(output, error)
+            install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\css_win2k8_64_install.iss' > /cygdrive/c/automation/install.bat"
+            output, error = self.execute_command(install_command)
+            self.log_command_output(output, error)
+            output, error = self.execute_command("cmd /c schtasks /run /tn installme")
+            self.log_command_output(output, error)
+            self.wait_till_file_added("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
+                                          timeout_in_seconds=600)
+        elif info.deliverable_type in ["rpm","deb"]:
+            if info.deliverable_type == 'rpm':
+                log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
+                output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
+                self.log_command_output(output, error)
+            elif info.deliverable_type == 'deb':
+                output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
+                self.log_command_output(output, error)
+
+
     def membase_install(self, build):
         is_membase = False
         is_couchbase = False
@@ -361,6 +411,60 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf {0}".format(folder))
             self.log_command_output(output, error)
 
+
+    def couchbase_single_uninstall(self):
+        linux_folders = ["/opt/couchbase"]
+
+        info = self.extract_remote_info()
+        log.info(info.distribution_type)
+        type = info.type.lower()
+        if type == 'windows':
+            exists = self.file_exists("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt')
+            log.info("exists ? {0}".format(exists))
+
+            uninstall_init_command = "echo '[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-DlgOrder]\r\n\
+Dlg0={95137A8D-0896-4BB8-85B3-9D7723BA6811}-MessageBox-0\r\n\
+Count=2\r\n\
+Dlg1={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0\r\n\
+[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-MessageBox-0]\r\n\
+Result=6\r\n\
+[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0]\r\n\
+Result=1\r\n\
+bOpt1=0\r\n\
+bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
+            output, error = self.execute_command(uninstall_init_command)
+            self.log_command_output(output, error)
+            uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\css_win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat"
+            self.log_command_output(output, error)
+            output, error = self.execute_command(uninstall_command)
+            self.log_command_output(output, error)
+            win_processes = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
+                             "WerFault.*"]
+            self.terminate_processes(info, win_processes)
+            self.remove_folders(["/cygdrive/c/Program Files (x86)/Couchbase/Server/"])
+            output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
+            self.log_command_output(output, error)
+            self.wait_till_file_deleted("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
+                                        timeout_in_seconds=120)
+            time.sleep(60)
+        elif type in ["ubuntu", "centos", "red hat"]:
+            #uninstallation command is different
+            if type == "ubuntu":
+                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            elif type == "centos":
+                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server", "couchbase-server")
+                log.info('running rpm -e to remove couchbase-server')
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            elif type == "red hat":
+                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server", "couchbase-server")
+                log.info('running rpm -e to remove couchbase-server')
+                output, error = self.execute_command(uninstall_cmd)
+                self.log_command_output(output, error)
+            self.terminate_processes(info, ["beam", "couchdb"])
+            self.remove_folders(linux_folders)
 
     def couchbase_uninstall(self):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
@@ -451,7 +555,6 @@ class RemoteMachineShellConnection:
                 self.log_command_output(output, error)
             self.terminate_processes(info, ["beam", "memcached", "moxi", "vbucketmigrator", "couchdb"])
             self.remove_folders(linux_folders)
-
 
 
     def log_command_output(self, output, error):
