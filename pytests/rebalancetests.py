@@ -38,7 +38,7 @@ class RebalanceBaseTest(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
 
     @staticmethod
-    def replication_verification(master,bucket_data,replica,test):
+    def replication_verification(master,bucket_data,replica,test,failed_over=False):
         asserts = []
         rest = RestConnection(master)
         buckets = rest.get_buckets()
@@ -56,12 +56,14 @@ class RebalanceBaseTest(unittest.TestCase):
                                                                               timeout_in_seconds=300)
                 if not replica_match:
                     asserts.append("replication was completed but sum(curr_items) dont match the curr_items_total")
-                stats = rest.get_bucket_stats(bucket=bucket.name)
-                RebalanceHelper.print_taps_from_all_nodes(rest, bucket.name)
-                msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
-                active_items_match = stats["curr_items"] == bucket_data[bucket.name]["items_inserted_count"]
-                if not active_items_match:
-                    asserts.append(msg.format(stats["curr_items"], bucket_data[bucket.name]["items_inserted_count"]))
+                if not failed_over:
+                    stats = rest.get_bucket_stats(bucket=bucket.name)
+                    RebalanceHelper.print_taps_from_all_nodes(rest, bucket.name)
+                    msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
+                    active_items_match = stats["curr_items"] == bucket_data[bucket.name]["items_inserted_count"]
+                    if not active_items_match:
+                        asserts.append(
+                            msg.format(stats["curr_items"], bucket_data[bucket.name]["items_inserted_count"]))
 
         if len(asserts) > 0:
             for msg in asserts:
@@ -470,9 +472,194 @@ class IncrementalRebalanceOut(unittest.TestCase):
                         break
             RebalanceBaseTest.replication_verification(master,bucket_data,replica,self)
             nodes = rest.node_statuses()
-            
+
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
+
+class StopRebalanceAfterFailoverTests(unittest.TestCase):
+    # this test will create cluster of n nodes
+    # stops rebalance
+    def setUp(self):
+        self._input = TestInputSingleton.input
+        self._servers = self._input.servers
+        self.log = logger.Logger().get_logger()
+
+
+    def stop_rebalance_1_replica(self):
+        RebalanceBaseTest.common_setup(self._input, self, replica=1)
+        self._common_test_body(1.0, replica=1)
+
+    def _common_test_body(self, ratio, replica):
+        ram_ratio = (ratio / (len(self._servers)))
+        #the ratio is relative to the number of nodes ?
+        master = self._servers[0]
+        rest = RestConnection(master)
+        creds = self._input.membase_settings
+        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+
+        distribution = RebalanceBaseTest.get_distribution(ram_ratio)
+
+        ClusterHelper.add_all_nodes_or_assert(master, self._servers, creds, self)
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+        self.assertTrue(rest.monitorRebalance(),
+                        msg="rebalance operation failed after adding nodes")
+
+        nodes = rest.node_statuses()
+
+        #dont rebalance out the current node
+        while len(nodes) > 1:
+            #pick a node that is not the master node
+            toBeEjectedNode = RebalanceBaseTest.pick_node(master)
+            RebalanceBaseTest.load_data_for_buckets(rest,ram_ratio,distribution,[master],bucket_data,self)
+            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+            #let's start/step rebalance three times
+            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+            rest.fail_over(toBeEjectedNode.id)
+            self.log.info("failed over {0}".format(toBeEjectedNode.id))
+            time.sleep(10)
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
+                           ejectedNodes=[toBeEjectedNode.id])
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
+            expected_progress = 30
+            reached = RestHelper(rest).rebalance_reached(expected_progress)
+            self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
+            stopped = rest.stop_rebalance()
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+            time.sleep(20)
+            RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
+            time.sleep(20)
+
+            RebalanceBaseTest.replication_verification(master,bucket_data,replica,self)
+            nodes = rest.node_statuses()
+
+        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
+
+class StopRebalanceTests(unittest.TestCase):
+    # this test will create cluster of n nodes
+    # stops rebalance
+    def setUp(self):
+        self._input = TestInputSingleton.input
+        self._servers = self._input.servers
+        self.log = logger.Logger().get_logger()
+
+
+    def stop_rebalance_1_replica(self):
+        RebalanceBaseTest.common_setup(self._input, self, replica=1)
+        self._common_test_body(5.0, replica=1)
+
+    def _common_test_body(self, ratio, replica):
+        ram_ratio = (ratio / (len(self._servers)))
+        #the ratio is relative to the number of nodes ?
+        master = self._servers[0]
+        rest = RestConnection(master)
+        creds = self._input.membase_settings
+        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+
+        distribution = RebalanceBaseTest.get_distribution(ram_ratio)
+
+        ClusterHelper.add_all_nodes_or_assert(master, self._servers, creds, self)
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+        self.assertTrue(rest.monitorRebalance(),
+                        msg="rebalance operation failed after adding nodes")
+
+        nodes = rest.node_statuses()
+
+        #dont rebalance out the current node
+        while len(nodes) > 1:
+            #pick a node that is not the master node
+            toBeEjectedNode = RebalanceBaseTest.pick_node(master)
+            RebalanceBaseTest.load_data_for_buckets(rest,ram_ratio,distribution,[master],bucket_data,self)
+            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+            #let's start/step rebalance three times
+            for i in range(0, 3):
+                self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
+                expected_progress = 30
+                reached = RestHelper(rest).rebalance_reached(expected_progress)
+                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
+                stopped = rest.stop_rebalance()
+                self.assertTrue(stopped, msg="unable to stop rebalance")
+                time.sleep(20)
+                RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
+            time.sleep(20)
+
+            RebalanceBaseTest.replication_verification(master,bucket_data,replica,self)
+            nodes = rest.node_statuses()
+
+        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
+
+
+class FailoverRebalanceRepeatTests(unittest.TestCase):
+
+    def setUp(self):
+        self._input = TestInputSingleton.input
+        self._servers = self._input.servers
+        self.log = logger.Logger().get_logger()
+
+    def tearDown(self):
+        RebalanceBaseTest.common_tearDown(self._servers, self)
+
+    #load data add one node , rebalance add another node rebalance
+    def _common_test_body(self, load_ratio, replica=1):
+        master = self._servers[0]
+        rest = RestConnection(master)
+        creds = self._input.membase_settings
+        rebalanced_servers = [master]
+        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+
+        for server in self._servers[1:]:
+            otpNodeIds = RebalanceBaseTest.getOtpNodeIds(master)
+            self.log.info("current nodes : {0}".format(otpNodeIds))
+            #do this 3 times , start rebalance , failover the node , remove the node and rebalance
+            for i in range(0,5):
+                distribution = RebalanceBaseTest.get_distribution(load_ratio)
+                RebalanceBaseTest.load_data_for_buckets(rest,load_ratio,distribution,[master],bucket_data,self)
+                self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
+                otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip,server.port)
+                msg = "unable to add node {0} to the cluster {1}"
+                self.assertTrue(otpNode, msg.format(server.ip, master.ip))
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+                self.assertTrue(rest.monitorRebalance(),
+                                msg="rebalance operation failed after adding node {0}".format(server.ip))
+                rebalanced_servers.append(server)
+                RebalanceBaseTest.replication_verification(master, bucket_data, replica, self, True)
+                rest.fail_over(otpNode.id)
+                self.log.info("failed over {0}".format(otpNode.id))
+                time.sleep(10)
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
+                               ejectedNodes=[otpNode.id])
+                msg="rebalance failed while removing failover nodes {0}".format(otpNode.id)
+                self.assertTrue(rest.monitorRebalance(), msg=msg)
+                #now verify the numbers again ?
+                RebalanceBaseTest.replication_verification(master,bucket_data,replica,self,True)
+                #wait 6 minutes
+                time.sleep(6 * 60)
+
+
+
+            self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
+            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip,server.port)
+            msg = "unable to add node {0} to the cluster {1}"
+            self.assertTrue(otpNode, msg.format(server.ip, master.ip))
+            distribution = RebalanceBaseTest.get_distribution(load_ratio)
+            RebalanceBaseTest.load_data_for_buckets(rest,load_ratio,distribution,rebalanced_servers,bucket_data,self)
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node {0}".format(server.ip))
+            rebalanced_servers.append(server)
+            RebalanceBaseTest.replication_verification(master,bucket_data,replica,self,True)
+
+        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
+
+    def test_small_load_replica_1(self):
+        RebalanceBaseTest.common_setup(self._input, self, replica=1)
+        self._common_test_body(1)
 
 class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
     def setUp(self):
