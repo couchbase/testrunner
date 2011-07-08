@@ -9,7 +9,7 @@ import logger
 import crc32
 import threading
 from mc_bin_client import MemcachedClient, MemcachedError
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 
 class MemcachedClientHelperExcetion(Exception):
     def __init__(self, errorcode, message):
@@ -583,6 +583,9 @@ class VBucketAwareMemcached(object):
         self.log = logger.Logger.get_logger()
         self.memcacheds = {}
         self.vBucketMap = {}
+        vb_ready = RestHelper(rest).vbucket_map_ready(bucket,60)
+        if not vb_ready:
+            raise Exception("vbucket map is not ready for bucket {0}".format(bucket))
         vBuckets = rest.get_vbuckets(bucket)
         nodes = rest.get_nodes()
         for vBucket in vBuckets:
@@ -610,6 +613,12 @@ class VBucketAwareMemcached(object):
 
     def memcached(self, key):
         vBucketId = crc32.crc32_hash(key) & 1023
+        if vBucketId not in self.vBucketMap:
+            msg = "vbucket map does not have an entry for vb : {0}"
+            raise Exception(msg.format(vBucketId))
+        if self.vBucketMap[vBucketId] not in self.memcacheds:
+            msg = "poxi does not have a mc connection for server : {0}"
+            raise Exception(msg.format(self.vBucketMap[vBucketId]))
         return self.memcacheds[self.vBucketMap[vBucketId]]
 
     def not_my_vbucket_memcached(self, key):

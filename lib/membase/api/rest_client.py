@@ -32,6 +32,27 @@ class RestHelper(object):
         nodes = self.rest.node_statuses()
         return all(node.status == 'healthy' for node in nodes)
 
+    def rebalance_reached(self, percentage=100):
+        start = time.time()
+        progress = 0
+        retry = 0
+        while progress is not -1 and progress <= percentage and retry < 20:
+            #-1 is error , -100 means could not retrieve progress
+            progress = self.rest._rebalance_progress()
+            if progress == -100:
+                log.error("unable to retrieve rebalanceProgress.try again in 2 seconds")
+                retry += 1
+            else:
+                retry = 0
+            #sleep for 2 seconds
+            time.sleep(2)
+        if progress < 0:
+            log.error("rebalance progress code : {0}".format(progress))
+            return False
+        else:
+            duration = time.time() - start
+            log.info('rebalance reached >{0}% in {1} seconds '.format(progress, duration))
+            return True
 
     def is_cluster_rebalanced(self):
         #get the nodes and verify that all the nodes.status are healthy
@@ -42,6 +63,18 @@ class RestHelper(object):
     def remove_nodes(self, knownNodes, ejectedNodes):
         self.rest.rebalance(knownNodes, ejectedNodes)
         return self.rest.monitorRebalance()
+
+    def vbucket_map_ready(self, bucket, timeout_in_seconds=360):
+        end_time = time.time() + timeout_in_seconds
+        while time.time() <= end_time:
+            vBuckets = self.rest.get_vbuckets(bucket)
+            if vBuckets:
+                return True
+            else:
+                time.sleep(0.5)
+        msg = 'vbucket map is not ready for bucket {0} after waiting {1} seconds'
+        log.info(msg.format(bucket, timeout_in_seconds))
+        return False
 
     def bucket_exists(self, bucket):
         try:
@@ -109,12 +142,18 @@ class RestConnection(object):
         self.port = 8091
 
     def __init__(self, serverInfo):
-        #throw some error here if the ip is null ?
-        self.ip = serverInfo.ip
-        self.username = serverInfo.rest_username
-        self.password = serverInfo.rest_password
-        self.port = serverInfo.port
-        self.baseUrl = "http://{0}:{1}/".format(self.ip,self.port)
+        #serverInfo can be a json object
+        if isinstance(serverInfo, dict):
+            self.ip = serverInfo["ip"]
+            self.username = serverInfo["username"]
+            self.password = serverInfo["password"]
+            self.port = serverInfo["port"]
+        else:
+            self.ip = serverInfo.ip
+            self.username = serverInfo.rest_username
+            self.password = serverInfo.rest_password
+            self.port = serverInfo.port
+        self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
 
 
     #authorization mut be a base64 string of username:password
@@ -792,6 +831,19 @@ class RestConnection(object):
             log.info("settings/alerts response {0} ,content {1}".format(response, content))
             if response['status'] == '400':
                 log.error('enable_autofailover_alerts error {0}'.format(content))
+                return False
+            elif response['status'] == '200':
+                return True
+        except socket.error:
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def stop_rebalance(self):
+        api = self.baseUrl + '/controller/stopRebalance'
+        try:
+            response, content = httplib2.Http().request(api, method='POST', headers=self._create_headers())
+            if response['status'] == '400':
                 return False
             elif response['status'] == '200':
                 return True
