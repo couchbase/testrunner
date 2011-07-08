@@ -47,7 +47,7 @@ class AllDocsTests(unittest.TestCase):
             docs.append(doc)
         return docs
 
-    def multipledocs(self):
+    def test_multipledocs(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
         docs = self._random_doc(10)

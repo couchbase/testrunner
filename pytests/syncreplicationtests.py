@@ -57,7 +57,7 @@ class SyncReplicationTest(unittest.TestCase):
             BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
 
-    def one_replica(self):
+    def test_one_replica(self):
         self.common_setup(1)
         keys = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, 100)]
         value = MemcachedClientHelper.create_value("*", 1024)
@@ -71,19 +71,19 @@ class SyncReplicationTest(unittest.TestCase):
             mc.get(k)
 
 
-    def one_replica_one_node(self):
+    def test_one_replica_one_node(self):
         pass
 
-    def one_replica_multiple_nodes(self):
+    def test_one_replica_multiple_nodes(self):
         pass
 
-    def one_replica_bucket_replica_one(self):
+    def test_one_replica_bucket_replica_one(self):
         pass
 
-    def two_replica(self):
+    def test_two_replica(self):
         self._unsupported_replicas(2)
 
-    def three_replica(self):
+    def test_three_replica(self):
         self._unsupported_replicas(1)
 
     def _unsupported_replicas(self, replica):
@@ -106,10 +106,10 @@ class SyncReplicationTest(unittest.TestCase):
             mc = self.awareness.memcached(k)
             mc.get(k)
 
-    def invalid_key(self):
+    def test_invalid_key(self):
         pass
 
-    def not_your_vbucket(self):
+    def test_not_your_vbucket(self):
         self.common_setup(1)
         keys = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, 100)]
         value = MemcachedClientHelper.create_value("*", 1024)
@@ -133,18 +133,18 @@ class SyncReplicationTest(unittest.TestCase):
             except MemcachedError as error:
                 self.log.error(error)
 
-    def some_invalid_keys(self):
+    def test_some_invalid_keys(self):
         pass
 
-    def some_not_your_vbucket(self):
+    def stest_ome_not_your_vbucket(self):
         pass
 
-    def some_large_values(self):
+    def test_some_large_values(self):
         pass
 
-    def too_many_keys(self):
+    def test_too_many_keys(self):
         pass
 
-    def singlenode(self):
+    def test_singlenode(self):
         pass
 

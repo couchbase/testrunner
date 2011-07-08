@@ -35,16 +35,16 @@ class BasicTests(unittest.TestCase):
         self.cleanup_dbs.append(name)
         return name
 
-    def create(self):
+    def test_create(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
 
-    def doccount(self):
+    def test_doccount(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
         self.assertTrue(self.server[db_name].info()['doc_count'] == 0)
 
-    def docsave(self):
+    def test_docsave(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
         doc = {"_id":"0","a":1,"b":1}
@@ -52,7 +52,7 @@ class BasicTests(unittest.TestCase):
         self.assertEquals(id,"0")
         self.assertTrue(rev)
 
-    def docdelete(self):
+    def test_docdelete(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
         doc = {"_id":"0","a":1,"b":1}
@@ -61,12 +61,12 @@ class BasicTests(unittest.TestCase):
         self.server[db_name].delete(fetched)
         self.assertFalse(self.server[db_name].get(id), msg="doc not found")
 
-    def delete(self):
+    def test_delete(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
         self.server.resource.delete(path="{0}".format(db_name))
 
-    def multiplecreate(self):
+    def test_multiplecreate(self):
         db_names = []
         for i in range(20):
             db_names.append(self._get_db_name())
@@ -96,7 +96,7 @@ class BasicTests(unittest.TestCase):
             docs.append(doc)
         return docs
 
-    def multipledocs(self):
+    def test_multipledocs(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
         docs = self._random_doc(10)
@@ -104,7 +104,7 @@ class BasicTests(unittest.TestCase):
             self.server[db_name].save(doc)
         self.assertTrue(self.server[db_name].info()['doc_count'] == len(docs))
 
-    def maponekey(self):
+    def test_maponekey(self):
         query = """function(doc) {
             if(doc.a == 4) {
                 emit(null, doc.b);
@@ -123,7 +123,7 @@ class BasicTests(unittest.TestCase):
 
 
 
-    def mapqueryafterupdate(self):
+    def test_mapqueryafterupdate(self):
         query = """function(doc) {
             if(doc.a == 4) {
                 emit(null, doc.b);
@@ -151,7 +151,7 @@ class BasicTests(unittest.TestCase):
         self.assertEquals(results.total_rows, 3)
         print results.total_rows
 
-    def mapqueryafterdelete(self):
+    def test_mapqueryafterdelete(self):
         query = """function(doc) {
             if(doc.a == 4) {
                 emit(null, doc.b);
@@ -183,7 +183,7 @@ class BasicTests(unittest.TestCase):
         results = self.server[db_name].query(query)
         self.assertEquals(results.total_rows, 2)
 
-    def reduceonekey(self):
+    def test_reduceonekey(self):
         map = """function(doc) {
             if(doc.a == 4) {
                 emit(null, doc.b);
@@ -204,7 +204,7 @@ class BasicTests(unittest.TestCase):
         self.assertEquals(results.total_rows, 1)
         self.assertEquals(results.rows[0].value, doc1["b"] + doc3["b"])
 
-    def get(self):
+    def test_get(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
         doc = {"_id":"0","a":1,"b":1}
@@ -212,7 +212,7 @@ class BasicTests(unittest.TestCase):
         fetched = self.server[db_name].get(id)
         self._doc_equals(doc,fetched)
 
-    def update(self):
+    def test_update(self):
         db_name = self._get_db_name()
         self.server.create(db_name)
         doc = {"_id":"0","a":1,"b":1}
@@ -242,7 +242,7 @@ class BasicTests(unittest.TestCase):
                     break
         return ok
 
-    def baddocs(self):
+    def test_baddocs(self):
         bad_docs = []
         bad_docs.append(["goldfish", {"_zing": 4}])
         bad_docs.append(["zebrafish", {"_zoom": "hello"}])

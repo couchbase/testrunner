@@ -100,150 +100,150 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                bucket.name, self)
 
 
-    def single_node_upgrade_s1_1_6_5_3(self):
+    def test_single_node_upgrade_s1_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=False,
                                   insert_data=False,
                                   create_buckets=False)
 
-    def single_node_upgrade_s1_1_6_5_2(self):
+    def test_single_node_upgrade_s1_1_6_5_2(self):
         self._install_and_upgrade(initial_version='1.6.5.2',
                                   initialize_cluster=False,
                                   insert_data=False,
                                   create_buckets=False)
 
-    def single_node_upgrade_s1_1_6_5_1(self):
+    def test_single_node_upgrade_s1_1_6_5_1(self):
         self._install_and_upgrade(initial_version='1.6.5.1',
                                   initialize_cluster=False,
                                   insert_data=False,
                                   create_buckets=False)
 
 
-    def single_node_upgrade_s1_1_6_5(self):
+    def test_single_node_upgrade_s1_1_6_5(self):
         self._install_and_upgrade(initial_version='1.6.5',
                                   initialize_cluster=False,
                                   insert_data=False,
                                   create_buckets=False)
 
 
-    def single_node_upgrade_s2_1_6_5_3(self):
+    def test_single_node_upgrade_s2_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=False)
 
-    def single_node_upgrade_s2_1_6_5_2(self):
+    def test_single_node_upgrade_s2_1_6_5_2(self):
         self._install_and_upgrade(initial_version='1.6.5.2',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=False)
 
-    def single_node_upgrade_s2_1_6_5_1(self):
+    def test_single_node_upgrade_s2_1_6_5_1(self):
         self._install_and_upgrade(initial_version='1.6.5.1',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=False)
 
-    def single_node_upgrade_s2_1_6_5(self):
+    def test_single_node_upgrade_s2_1_6_5(self):
         self._install_and_upgrade(initial_version='1.6.5',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=False)
 
 
-    def single_node_upgrade_s3_1_6_5_3(self):
+    def test_single_node_upgrade_s3_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=True)
 
-    def single_node_upgrade_s3_1_6_5_2(self):
+    def test_single_node_upgrade_s3_1_6_5_2(self):
         self._install_and_upgrade(initial_version='1.6.5.2',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=True)
 
-    def single_node_upgrade_s3_1_6_5_1(self):
+    def test_single_node_upgrade_s3_1_6_5_1(self):
         self._install_and_upgrade(initial_version='1.6.5.1',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=True)
 
-    def single_node_upgrade_s3_1_6_5(self):
+    def test_single_node_upgrade_s3_1_6_5(self):
         self._install_and_upgrade(initial_version='1.6.5',
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=True)
 
-    def single_node_upgrade_s5(self):
+    def test_single_node_upgrade_s5(self):
         self._install_and_upgrade(initial_version='1.6.5.2',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_5_3(self):
+    def test_single_node_upgrade_s4_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_5_3_1(self):
+    def test_single_node_upgrade_s4_1_6_5_3_1(self):
         self._install_and_upgrade(initial_version='1.6.5.3.1',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
 
-    def single_node_upgrade_s4_1_6_5_4(self):
+    def test_single_node_upgrade_s4_1_6_5_4(self):
         self._install_and_upgrade(initial_version='1.6.5.4',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_5_2_1(self):
+    def test_single_node_upgrade_s4_1_6_5_2_1(self):
         self._install_and_upgrade(initial_version='1.6.5.2.1',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
 
-    def single_node_upgrade_s4_1_6_5_1(self):
+    def test_single_node_upgrade_s4_1_6_5_1(self):
         self._install_and_upgrade(initial_version='1.6.5.1',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_5(self):
+    def test_single_node_upgrade_s4_1_6_5(self):
         self._install_and_upgrade(initial_version='1.6.5',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_4_1(self):
+    def test_single_node_upgrade_s4_1_6_4_1(self):
         self._install_and_upgrade(initial_version='1.6.4.1',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_4(self):
+    def test_single_node_upgrade_s4_1_6_4(self):
         self._install_and_upgrade(initial_version='1.6.4',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_3(self):
+    def test_single_node_upgrade_s4_1_6_3(self):
         self._install_and_upgrade(initial_version='1.6.3',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_1(self):
+    def test_single_node_upgrade_s4_1_6_1(self):
         self._install_and_upgrade(initial_version='1.6.1',
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
 
-    def single_node_upgrade_s4_1_6_0(self):
+    def test_single_node_upgrade_s4_1_6_0(self):
         self._install_and_upgrade(initial_version='1.6.0',
                                   initialize_cluster=True,
                                   insert_data=True,
@@ -262,7 +262,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
     #1.6.5.3.1
     #1.6.5.4
 
-    def single_node_upgrade_s5(self):
+    def test_single_node_upgrade_s5(self):
         #install the latest version and upgrade to itself
         input = TestInputSingleton.input
         servers = input.servers
@@ -287,14 +287,14 @@ class SingleNodeUpgradeTests(unittest.TestCase):
 class MultipleNodeUpgradeTests(unittest.TestCase):
     #in a 3 node cluster with no buckets shut down all the nodes update all
     # nodes one by one and then restart node(1),node(2) and node(3)
-    def multiple_node_upgrade_m1_1_6_5_3(self):
+    def test_multiple_node_upgrade_m1_1_6_5_3(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.3', False, False, True, len(servers))
 
     #in a 3 node cluster with default bucket without any keys shut down all the nodes update
     # all nodes one by one and then restart node(1),node(2) and node(3)
-    def multiple_node_upgrade_m2_1_6_5_3(self):
+    def test_multiple_node_upgrade_m2_1_6_5_3(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.3', True, False, len(servers))
@@ -303,67 +303,67 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         #in a 3 node cluster with default bucket with some keys shut down all the
         # nodes update all nodes one by one and then restart node(1),node(2) and node(3)
 
-    def multiple_node_upgrade_m3_1_6_5_3(self):
+    def test_multiple_node_upgrade_m3_1_6_5_3(self):
         self._install_and_upgrade('1.6.5.3', True, True)
 
     #m3 with 50% ram full ?
 
-    def m6_1_6_5_3_1(self):
+    def test_m6_1_6_5_3_1(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.3.1', True, True, len(servers), True, 10)
 
-    def m6_1_6_5_3(self):
+    def test_m6_1_6_5_3(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.3', True, True, len(servers), True, 10)
 
-    def  m6_1_6_5_4(self):
+    def test_m6_1_6_5_4(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.4', True, True, len(servers), True, 10)
 
-    def  m6_1_6_5_2_1(self):
+    def test_m6_1_6_5_2_1(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.2.1', True, True, len(servers), True, 10)
 
-    def  m6_1_6_4_1(self):
+    def test_m6_1_6_4_1(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.4.1', True, True, len(servers), True, 10)
 
-    def  m6_1_6_4(self):
+    def test_m6_1_6_4(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.4', True, True, len(servers), True, 10)
 
-    def  m6_1_6_3(self):
+    def test_m6_1_6_3(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.3', True, True, len(servers), True, 10)
 
-    def  m6_1_6_1(self):
+    def test_m6_1_6_1(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.1', True, True, len(servers), True, 10)
 
-    def  m6_1_6_0(self):
+    def test_m6_1_6_0(self):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.0', True, True, len(servers), True, 10)
 
 
-    def multiple_node_upgrade_m5_1_6_5_3(self):
+    def test_multiple_node_upgrade_m5_1_6_5_3(self):
         self._install_and_upgrade('1.6.5.3', True, False, 1, False)
 
-    def multiple_node_rolling_upgrade_1_6_5(self):
+    def test_multiple_node_rolling_upgrade_1_6_5(self):
         self._install_and_upgrade('1.6.5', True, True, 1, False, -1, 1)
 
-    def multiple_node_rolling_upgrade_1_6_5_1(self):
+    def test_multiple_node_rolling_upgrade_1_6_5_1(self):
         self._install_and_upgrade('1.6.5.1', True, True, 1, False, -1, 1)
 
-    def multiple_node_rolling_upgrade_1_6_5_2(self):
+    def test_multiple_node_rolling_upgrade_1_6_5_2(self):
         self._install_and_upgrade('1.6.5.2', True, True, 1, False, -1, 1)
 
 

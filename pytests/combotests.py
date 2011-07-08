@@ -69,7 +69,7 @@ class ComboTests(unittest.TestCase):
         ComboBaseTests.common_tearDown(self._servers, self)
 
 
-    def loop(self):
+    def test_loop(self):
         duration = 240
         replica = 1
         load_ratio = 5

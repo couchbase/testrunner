@@ -28,7 +28,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         pass
 
     # read each server's version number and compare it to self.version
-    def default_moxi(self):
+    def test_default_moxi(self):
         name = 'default'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -38,7 +38,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
 
-    def default_case_sensitive_dedicated(self):
+    def test_default_case_sensitive_dedicated(self):
         name = 'Default'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -66,7 +66,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
                 self.log.info('BucketCreationException was thrown as expected')
                 self.log.info(ex.message)
 
-    def default_on_non_default_port(self):
+    def test_default_on_non_default_port(self):
         name = 'default'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -80,7 +80,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
 
-    def non_default_moxi(self):
+    def test_non_default_moxi(self):
         name = 'test_non_default'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -91,7 +91,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
-    def default_case_sensitive_different_ports(self):
+    def test_default_case_sensitive_different_ports(self):
         name = 'default'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -113,7 +113,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
                 self.log.info(ex.message)
 
 
-    def non_default_case_sensitive_different_port(self):
+    def test_non_default_case_sensitive_different_port(self):
         postfix = uuid.uuid4()
         lowercase_name = 'uppercase_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -138,7 +138,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
                 self.log.info('BucketCreationException was thrown as expected')
                 self.log.info(ex.message)
 
-    def non_default_case_sensitive_same_port(self):
+    def test_non_default_case_sensitive_same_port(self):
         postfix = uuid.uuid4()
         name = 'uppercase_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -161,7 +161,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             except BucketCreationException as ex:
                 self.log.error(ex)
 
-    def less_than_minimum_memory_quota(self):
+    def test_less_than_minimum_memory_quota(self):
         postfix = uuid.uuid4()
         name = 'minmemquota_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -183,7 +183,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             except BucketCreationException as ex:
                 self.log.info(ex)
 
-    def max_memory_quota(self):
+    def test_max_memory_quota(self):
         postfix = uuid.uuid4()
         name = 'maxquota_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -203,7 +203,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             msg = 'failed to start up bucket with max ram per node'
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
-    def negative_replica(self):
+    def test_negative_replica(self):
         postfix = uuid.uuid4()
         name = '-1replica_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -219,7 +219,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             except BucketCreationException as ex:
                 self.log.info(ex)
 
-    def zero_replica(self):
+    def test_zero_replica(self):
         postfix = uuid.uuid4()
         name = '0replica_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -237,7 +237,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             msg = 'failed to start up bucket with 0 replicas'
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
-    def one_replica(self):
+    def test_one_replica(self):
         postfix = uuid.uuid4()
         name = '0replica_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -252,7 +252,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             msg = 'failed to start up bucket with 1 replicas'
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
-    def two_replica(self):
+    def test_two_replica(self):
         postfix = uuid.uuid4()
         name = '2replica_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -268,7 +268,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             msg = 'failed to start up bucket with 2 replicas'
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
-    def three_replica(self):
+    def test_three_replica(self):
         postfix = uuid.uuid4()
         name = '3replica_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -284,7 +284,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             msg = 'failed to start up bucket with 3 replicas'
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
 
-    def four_replica(self):
+    def test_four_replica(self):
         postfix = uuid.uuid4()
         name = '4replica_{0}'.format(postfix)
         for serverInfo in self.servers:
@@ -298,7 +298,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
                 self.log.info(ex)
 
     # Bucket name can only contain characters in range A-Z, a-z, 0-9 as well as underscore, period, dash & percent. Consult the documentation.
-    def valid_chars(self):
+    def test_valid_chars(self):
         name = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.%'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -315,7 +315,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
 
     # Bucket name can only contain characters in range A-Z, a-z, 0-9 as well as underscore, period, dash & percent. Consult the documentation.
     # only done on the first server
-    def invalid_chars(self):
+    def test_invalid_chars(self):
         postfix = uuid.uuid4()
         for char in ['~','!','@','#','$','^','&','*','(',')',':',',',';','"','\'','<','>','?','/']:
             name = '{0}invalid_{1}'.format(postfix,char)
@@ -331,7 +331,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
 
     # create maximum number of buckets (server memory / 100MB)
     # only done on the first server
-    def max_buckets(self):
+    def test_max_buckets(self):
         log = logger.Logger.get_logger()
         serverInfo = self.servers[0]
         log.info('picking server : {0} as the master'.format(serverInfo))
@@ -368,7 +368,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
     # create maximum number of buckets + 1 (server memory / 100MB)
     # only done on the first server
     # negative test
-    def more_than_max_buckets(self):
+    def test_more_than_max_buckets(self):
         log = logger.Logger.get_logger()
         serverInfo = self.servers[0]
         log.info('picking server : {0} as the master'.format(serverInfo))

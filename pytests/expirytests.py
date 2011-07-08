@@ -49,7 +49,7 @@ class ExpiryTests(unittest.TestCase):
 
     # test case to set 1000 keys and verify that those keys are stored
     #e1
-    def test1(self):
+    def test_expired_keys(self):
         for serverInfo in self._servers:
             client = MemcachedClientHelper.direct_client(serverInfo, self._bucket_name)
             expirations = [2, 5, 10]

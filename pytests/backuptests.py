@@ -450,11 +450,11 @@ class BackupRestoreTests(unittest.TestCase):
         self.common_setUp()
         self._test_backup_add_restore_bucket_body("default", 180, True, True)
 
-    def non_default_bucket(self):
+    def test_non_default_bucket(self):
         self.common_setUp()
         self._test_backup_add_restore_bucket_body(str(uuid.uuid4()), 60, True, True)
 
-    def default_bucket(self):
+    def test_default_bucket(self):
         self.common_setUp()
         self._test_backup_add_restore_bucket_body("default", 60, True, True)
 
@@ -479,15 +479,15 @@ class BackupRestoreTests(unittest.TestCase):
         self.common_setUp()
         self._test_backup_add_restore_bucket_body("default", 120, True, True)
 
-    def expired_keys_1_replica(self):
+    def test_expired_keys_1_replica(self):
         self.common_setUp()
         self._test_backup_add_restore_bucket_with_expiration_key(1)
 
-    def expired_keys_2_replica(self):
+    def test_expired_keys_2_replica(self):
         self.common_setUp()
         self._test_backup_add_restore_bucket_with_expiration_key(2)
 
-    def expired_keys_3_replica(self):
+    def test_expired_keys_3_replica(self):
         self.common_setUp()
         self._test_backup_add_restore_bucket_with_expiration_key(3)
 

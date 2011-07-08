@@ -297,28 +297,28 @@ class GetlTests(unittest.TestCase):
         flags_v, cas_v, get_v = mc.get(key)
         self.assertEquals(get_v, "*")
 
-    def getl_minus_one(self):
+    def test_getl_minus_one(self):
         self._getl_body("getl_-1", -1, 0)
 
-    def getl_zero(self):
+    def test_getl_zero(self):
         self._getl_body("getl_0", 0, 0)
 
-    def getl_five(self):
+    def test_getl_five(self):
         self._getl_body("getl_5", 15, 0)
 
-    def getl_ten(self):
+    def test_getl_ten(self):
         self._getl_body("getl_10", 10, 0)
 
-    def getl_fifteen(self):
+    def test_getl_fifteen(self):
         self._getl_body("getl_15", 15, 0)
 
-    def getl_thirty(self):
+    def test_getl_thirty(self):
         self._getl_body("getl_30", 30, 0)
 
-    def getl_sixty(self):
+    def test_getl_sixty(self):
         self._getl_body("getl_60", 60, 0)
 
-    def getl_expired_item(self):
+    def test_getl_expired_item(self):
         prefix = "getl_expired_item"
         expiration = 5
         getl_timeout = 15

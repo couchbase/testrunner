@@ -23,7 +23,7 @@ class DeleteMembaseBuckets(unittest.TestCase):
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
 
-    def default_moxi(self):
+    def test_default_moxi(self):
         name = 'default'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -47,7 +47,7 @@ class DeleteMembaseBuckets(unittest.TestCase):
                                                       remote_connection=remote,
                                                       rest=rest, timeout_in_seconds=20), msg=msg)
 
-    def non_default_moxi(self):
+    def test_non_default_moxi(self):
         name = 'new-bucket-{0}'.format(uuid.uuid4())
         for serverInfo in self.servers:
             replicas = [0, 1, 2, 3]

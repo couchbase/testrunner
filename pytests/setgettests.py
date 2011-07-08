@@ -102,15 +102,16 @@ class MembaseBucket(unittest.TestCase):
         self.simpleSetGetTestBase = SimpleSetGetTestBase()
         self.simpleSetGetTestBase.setUp_bucket(self)
 
-    def value_100b(self):
+    def test_value_100b(self):
         self.simpleSetGetTestBase.set_get_test(128, 4000)
 
-    def value_500kb(self):
+    def test_value_500kb(self):
         self.simpleSetGetTestBase.set_get_test(512 * 1024, 400)
-    def value_10mb(self):
+
+    def test_value_10mb(self):
         self.simpleSetGetTestBase.set_get_test(10 * 1024 * 1024, 10)
 
-    def value_1mb(self):
+    def test_value_1mb(self):
         self.simpleSetGetTestBase.set_get_test(1 * 1024 * 1024, 40)
 
     def tearDown(self):

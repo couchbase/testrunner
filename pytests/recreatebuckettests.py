@@ -24,7 +24,7 @@ class RecreateMembaseBuckets(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, test_case=self)
 
     #create bucket-load some keys-delete bucket-recreate bucket
-    def default_moxi(self):
+    def test_default_moxi(self):
         name = 'default'
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -60,7 +60,7 @@ class RecreateMembaseBuckets(unittest.TestCase):
             self.assertTrue(BucketOperationHelper.keys_dont_exist(serverInfo, inserted_keys, name),
                             msg='at least one key found in the bucket')
 
-    def default_dedicated(self):
+    def test_default_dedicated(self):
         name = 'recreate-non-default-{0}'.format(uuid.uuid4())
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
@@ -98,7 +98,7 @@ class RecreateMembaseBuckets(unittest.TestCase):
                             msg='at least one key found in the bucket')
 
 
-    def default_moxi_sasl(self):
+    def test_default_moxi_sasl(self):
         name = 'new-bucket-{0}'.format(uuid.uuid4())
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
