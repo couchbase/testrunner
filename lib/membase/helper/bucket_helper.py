@@ -126,8 +126,9 @@ class BucketOperationHelper():
                 rest.delete_bucket(bucket.name)
                 log.info('deleted bucket : {0} from {1}'.format(bucket.name,serverInfo.ip))
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
-                test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200)
-                                     , msg=msg)
+                if test_case:
+                    test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200)
+                                         , msg=msg)
 #        log.info('sleeping for 10 seconds because we want to :)')
 #        time.sleep(10)
 
