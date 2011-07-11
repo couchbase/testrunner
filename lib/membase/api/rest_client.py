@@ -741,36 +741,44 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
-    def enable_autofailover(self, age, max_nodes):
+    #return AutoFailoverSettings
+    def get_autofailover_settings(self):
         api = self.baseUrl + 'settings/autoFailover'
-        params = urllib.urlencode({'enabled': 'true',
-                                   'age': age,
-                                   'maxNodes': max_nodes})
-        log.info('settings/autoFailover params : {0}'.format(params))
-
         try:
-            response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
+            response, content = httplib2.Http().request(api, headers=self._create_headers())
             log.info("settings/autoFailover response {0} ,content {1}".format(response, content))
             if response['status'] == '400':
-                log.error('enable_autofailover error {0}'.format(content))
-                return False
+                log.error('settings/autoFailover error {0}'.format(content))
+                return None
             elif response['status'] == '200':
-                return True
+                parsed = json.loads(content)
+                settings = AutoFailoverSettings()
+                settings.enabled = parsed["enabled"]
+                settings.count = parsed["count"]
+                settings.timeout = parsed["timeout"]
+                return settings
         except socket.error:
             raise ServerUnavailableException(ip=self.ip)
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
-    def disable_autofailover(self, age, max_nodes):
+    def update_autofailover_settings(self, enabled, timeout, max_nodes):
+        if enabled:
+            params = urllib.urlencode({'enabled': 'true',
+                                       'timeout': timeout,
+                                       'maxNodes': max_nodes})
+        else:
+            params = urllib.urlencode({'enabled': 'false',
+                                       'timeout': timeout,
+                                       'maxNodes': max_nodes})
         api = self.baseUrl + 'settings/autoFailover'
-        params = urllib.urlencode({'enabled': 'false'})
         log.info('settings/autoFailover params : {0}'.format(params))
 
         try:
             response, content = httplib2.Http().request(api, 'POST', params, headers=self._create_headers())
-            log.info("settings/autoFailover response {0} ,content {1}".format(response, content))
+            log.info("settings/autoFailover response {0}".format(response, content))
             if response['status'] == '400':
-                log.error('enable_autofailover error {0}'.format(content))
+                log.error('settings/autoFailover error {0}'.format(content))
                 return False
             elif response['status'] == '200':
                 return True
@@ -956,6 +964,11 @@ class Node(object):
         self.rest_username = ""
         self.rest_password = ""
 
+class AutoFailoverSettings(object):
+    def __init__(self):
+        self.enabled = True
+        self.timeout = 0
+        self.count = 0
 
 class NodePort(object):
     def __init__(self):
