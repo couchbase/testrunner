@@ -112,15 +112,6 @@ class RemoteMachineShellConnection:
                     processes.append(process)
         return processes
 
-    def stop_couchbase(self):
-        info = self.extract_remote_info()
-        if info.type.lower() == 'windows':
-            o, r = self.execute_command("net stop membaseserver")
-            self.log_command_output(o, r)
-        if info.type.lower() == "linux":
-            o, r = self.execute_command("/etc/init.d/membase-server stop")
-            self.log_command_output(o, r)
-
 
     def stop_membase(self):
         info = self.extract_remote_info()
