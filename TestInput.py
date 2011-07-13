@@ -1,4 +1,5 @@
 import getopt
+import re
 from builds.build_query import BuildQuery
 import logger
 import ConfigParser
@@ -77,10 +78,30 @@ class TestInputParser():
                 has_ini = True
                 ini_file = argument
             if option == '-p':
-                pairs = argument.split(',')
-                for pair in pairs:
-                    key_value = pair.split('=')
-                    params[key_value[0]] = key_value[1]
+                # takes in a string of the form "p1=v1,v2,p2=v3,p3=v4,v5,v6"
+                # converts to a dictionary of the form {"p1":"v1,v2","p2":"v3","p3":"v4,v5,v6"}
+                argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", argument)[1:]]
+                pairs = dict(zip(argument_split[::2],argument_split[1::2]))
+                for pair in pairs.iteritems():
+                    if pair[0] == "vbuckets":
+                        # takes in a string of the form "1-100,140,150-160"
+                        # converts to an array with all those values inclusive
+                        vbuckets = set()
+                        for v in pair[1].split(","):
+                            r = v.split("-")
+                            vbuckets.update(range(int(r[0]),int(r[-1])+1))
+                        params[pair[0]] = sorted(vbuckets)
+                    else:
+                        argument_list = [a.strip() for a in pair[1].split(",")]
+                        if len(argument_list) > 1:
+                            # if the parameter had multiple entries seperated by comma
+                            # then store as a list
+                            # ex. {'vbuckets':[1,2,3,4,100]}
+                            params[pair[0]] = argument_list
+                        else:
+                            # if parameter only had one entry then store as a string
+                            # ex. {'product':'cb'}
+                            params[pair[0]] = argument_list[0]
 
         if has_ini:
             input = TestInputParser.parse_from_file(ini_file)
