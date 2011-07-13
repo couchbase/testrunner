@@ -404,7 +404,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
         RebalanceBaseTest.common_setup(self._input, self, replica=2)
         self.test_rebalance_out(1.0, replica=2)
 
-    def test_rebalance_out_small_load_2_replica(self):
+    def test_rebalance_out_small_load_3_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=3)
         self.test_rebalance_out(1.0, replica=3)
 
@@ -456,7 +456,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
             #pick a node that is not the master node
             toBeEjectedNode = RebalanceBaseTest.pick_node(master)
 
-            RebalanceBaseTest.load_data_for_buckets(rest,ram_ratio,distribution,rebalanced_servers,bucket_data,self)
+            RebalanceBaseTest.load_data_for_buckets(rest,ram_ratio,distribution,[master],bucket_data,self)
 
             otpNodeIds = RebalanceBaseTest.getOtpNodeIds(master)
             self.log.info("current nodes : {0}".format(otpNodeIds))
@@ -488,6 +488,15 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
     def stop_rebalance_1_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
         self._common_test_body(1.0, replica=1)
+
+    def stop_rebalance_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, self, replica=2)
+        self._common_test_body(1.0, replica=2)
+
+    def stop_rebalance_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, self, replica=3)
+        self._common_test_body(1.0, replica=3)
+
 
     def _common_test_body(self, ratio, replica):
         ram_ratio = (ratio / (len(self._servers)))
@@ -549,6 +558,16 @@ class StopRebalanceTests(unittest.TestCase):
     def stop_rebalance_1_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
         self._common_test_body(5.0, replica=1)
+
+    def stop_rebalance_2_replica(self):
+        RebalanceBaseTest.common_setup(self._input, self, replica=2)
+        self._common_test_body(5.0, replica=2)
+
+    def stop_rebalance_3_replica(self):
+        RebalanceBaseTest.common_setup(self._input, self, replica=3)
+        self._common_test_body(5.0, replica=3)
+
+
 
     def _common_test_body(self, ratio, replica):
         ram_ratio = (ratio / (len(self._servers)))
@@ -847,12 +866,12 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         self._common_test_body(1.5, distribution)
 
     def test_1_5x_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0, replica=2)
+        RebalanceBaseTest.common_setup(self._input, self, 1.0 / 3.0, replica=2)
         distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
         self._common_test_body(1.5, distribution, replica=2)
 
     def test_1_5x_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0, replica=3)
+        RebalanceBaseTest.common_setup(self._input, self, 1.0 / 3.0, replica=3)
         distribution = {1 * 512: 0.4, 1 * 1024: 0.5, 2 * 1024: 0.1}
         self._common_test_body(1.5, distribution, replica=3)
 
