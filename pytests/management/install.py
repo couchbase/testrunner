@@ -42,6 +42,14 @@ class InstallTest(unittest.TestCase):
             remote_client.disconnect()
         time.sleep(10)
 
+    def reset_couchbase(self):
+        for serverInfo in self.servers:
+            remote_client = RemoteMachineShellConnection(serverInfo)
+            remote_client.stop_couchbase()
+            remote_client.start_couchbase()
+            remote_client.disconnect()
+        time.sleep(10)
+
     def _test_install(self,serverInfo,version,builds):
         query = BuildQuery()
         info = self.machine_infos[serverInfo.ip]
