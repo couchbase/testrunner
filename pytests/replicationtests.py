@@ -3,7 +3,7 @@ import uuid
 from TestInput import TestInputSingleton
 import logger
 import crc32
-from mc_bin_client import MemcachedClient, MemcachedError
+from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -105,14 +105,15 @@ class ReplicationTests(unittest.TestCase):
 
     #update keys
     def _update_keys(self, version):
-        client = MemcachedClient(self.servers[0].ip, 11220)
+        client = MemcachedClientHelper.proxy_client(self.servers[0], self.bucket_name)
         rejected_keys = []
         #quit after updating max 100,000 keys
         self.updated_keys = []
+        vbucket_count = RestConnection(self.servers[0]).get_vbuckets(self.bucket_name)
         for key in self.keys:
             if len(self.updated_keys) > 10000:
                 break
-            vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+            vbucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
             client.vbucketId = vbucketId
             value = '{0}'.format(version)
             try:
@@ -159,15 +160,15 @@ class ReplicationTests(unittest.TestCase):
 
     def _verify_data(self, version):
         #verify all the keys
-        master = self.servers[0]
-        client = MemcachedClient(master.ip, 11220)
+        client = MemcachedClientHelper.proxy_client(self.servers[0], self.bucket_name)
+        vbucket_count = RestConnection(self.servers[0]).get_vbuckets(self.bucket_name)
         index = 0
         all_verified = True
         keys_failed = []
         for key in self.updated_keys:
             try:
                 index += 1
-                vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+                vbucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
                 client.vbucketId = vbucketId
                 flag, keyx, value = client.get(key=key)
                 self.assertTrue(value.endswith(version),

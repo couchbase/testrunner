@@ -256,11 +256,11 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         self._common_test_body(20.0, replica=3)
 
     def test_dgm_150(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self)
+        RebalanceBaseTest.common_setup(self._input, self)
         self._common_test_body(150.0)
 
     def test_dgm_300(self):
-        RebalanceBaseTest.common_setup(self._input, 'default', self)
+        RebalanceBaseTest.common_setup(self._input, self)
         self._common_test_body(300.0)
 
     def test_dgm_150_2_replica(self):

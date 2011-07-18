@@ -233,9 +233,13 @@ class MemcachedClientHelper(object):
 
     @staticmethod
     def direct_client(server,bucket):
-        node = RestConnection(server).get_nodes_self()
+        rest = RestConnection(server)
+        node = rest.get_nodes_self()
+        RestHelper(rest).vbucket_map_ready(bucket, 60)
+        vBuckets = RestConnection(server).get_vbuckets(bucket)
         client = MemcachedClient(server.ip,node.memcached)
-        bucket_info = RestConnection(server).get_bucket(bucket)
+        client.vbucket_count = len(vBuckets)
+        bucket_info = rest.get_bucket(bucket)
         #todo raise exception for not bucket_info
         client.sasl_auth_plain(bucket_info.name.encode('ascii'),
                                bucket_info.saslPassword.encode('ascii'))
@@ -249,7 +253,10 @@ class MemcachedClientHelper(object):
         nodes = bucket_info.nodes
         for node in nodes:
             if node.ip == server.ip and int(node.port) == int(server.port):
+                RestHelper(rest).vbucket_map_ready(bucket, 60)
+                vBuckets = rest.get_vbuckets(bucket)
                 client = MemcachedClient(server.ip,node.moxi)
+                client.vbucket_count = len(vBuckets)
                 if bucket_info.authType == "sasl":
                     client.sasl_auth_plain(bucket_info.name.encode('ascii'),
                                bucket_info.saslPassword.encode('ascii'))
@@ -283,9 +290,10 @@ class MemcachedClientHelper(object):
 class MutationThread(threading.Thread):
     def run(self):
         client = MemcachedClientHelper.proxy_client(self.serverInfo,self.name)
+        vbucket_count = len(RestConnection(self.serverInfo).get_vbuckets(self.name))
         for key in self.keys:
             #every two minutes print the status
-            vId = crc32.crc32_hash(key) & 1023
+            vId = crc32.crc32_hash(key) & (vbucket_count - 1)
             client.vbucketId = vId
             try:
                 if self.op == "set":
@@ -433,6 +441,7 @@ class WorkerThread(threading.Thread):
         msg = msg.format(self.write_only, self.async_write, self.moxi)
         self.log.info(msg)
         awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), self.name)
+        vbucket_count = len(RestConnection(self.serverInfo).get_vbuckets(self.name))
         client = None
         if self.moxi:
             try:
@@ -486,7 +495,7 @@ class WorkerThread(threading.Thread):
                 client = awareness.memcached(key)
                 if not client:
                     self.log.error("client should not be null")
-            vId = crc32.crc32_hash(key) & 1023
+            vId = crc32.crc32_hash(key) & (vbucket_count - 1)
             client.vbucketId = vId
             try:
                 if self.override_vBucketId >= 0:
@@ -543,7 +552,7 @@ class WorkerThread(threading.Thread):
             rejected_after_retry = []
             self._rejected_keys_count = 0
             for key in self._rejected_keys:
-                vId = crc32.crc32_hash(key) & 1023
+                vId = crc32.crc32_hash(key)(vbucket_count - 1)
                 client.vbucketId = vId
                 try:
                     if self.override_vBucketId >= 0:
@@ -612,7 +621,7 @@ class VBucketAwareMemcached(object):
 
 
     def memcached(self, key):
-        vBucketId = crc32.crc32_hash(key) & 1023
+        vBucketId = crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)
         if vBucketId not in self.vBucketMap:
             msg = "vbucket map does not have an entry for vb : {0}"
             raise Exception(msg.format(vBucketId))
@@ -622,7 +631,7 @@ class VBucketAwareMemcached(object):
         return self.memcacheds[self.vBucketMap[vBucketId]]
 
     def not_my_vbucket_memcached(self, key):
-        vBucketId = crc32.crc32_hash(key) & 1023
+        vBucketId = crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)
         which_mc = self.vBucketMap[vBucketId]
         for server in self.memcacheds:
             if server != which_mc:

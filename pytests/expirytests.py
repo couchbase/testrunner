@@ -58,8 +58,6 @@ class ExpiryTests(unittest.TestCase):
                 keys = ["key_%s_%d" % (testuuid, i) for i in range(500)]
                 self.log.info("pushing keys with expiry set to {0}".format(expiry))
                 for key in keys:
-                    vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-                    client.vbucketId = vBucketId
                     try:
                         client.set(key, expiry, 0, key)
                     except mc_bin_client.MemcachedError as error:
@@ -74,8 +72,6 @@ class ExpiryTests(unittest.TestCase):
                 self.log.info('verifying that all those keys have expired...')
                 for key in keys:
                     try:
-                        vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-                        client.vbucketId = vBucketId
                         client.get(key=key)
                         msg = "expiry was set to {0} but key: {1} did not expire after waiting for {2}+ seconds"
                         self.fail(msg.format(expiry, key, delay))

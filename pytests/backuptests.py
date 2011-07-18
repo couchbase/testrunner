@@ -207,13 +207,12 @@ class BackupRestoreTests(unittest.TestCase):
         self.add_nodes_and_rebalance()
 
         client = MemcachedClientHelper.direct_client(self.master.ip, "default")
+        vbucket_count = RestConnection(self.master,"default")
         expiry = 2400
         test_uuid = uuid.uuid4()
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(500)]
         self.log.info("pushing keys with expiry set to {0}".format(expiry))
         for key in keys:
-            vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-            client.vbucketId = vBucketId
             try:
                 client.set(key, expiry, 0, "1")
             except mc_bin_client.MemcachedError as error:
@@ -232,8 +231,6 @@ class BackupRestoreTests(unittest.TestCase):
         backupHelper.backup(bucket, node, self.remote_tmp_folder)
 
         for key in keys:
-            vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-            client.vbucketId = vBucketId
             try:
                 client.replace(key, expiry, 0, "2")
             except mc_bin_client.MemcachedError as error:
@@ -246,8 +243,6 @@ class BackupRestoreTests(unittest.TestCase):
 
         self.log.info('verifying that all those keys...')
         for key in keys:
-            vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-            client.vbucketId = vBucketId
             if overwrite_flag:
                 self.assertEqual("2", client.get(key=key), key + " should has value = 2")
             else:
@@ -325,8 +320,6 @@ class BackupRestoreTests(unittest.TestCase):
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(500)]
         self.log.info("pushing keys with expiry set to {0}".format(expiry))
         for key in keys:
-            vBucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
-            client.vbucketId = vBucketId
             try:
                 client.set(key, expiry, 0, "1")
             except mc_bin_client.MemcachedError as error:

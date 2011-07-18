@@ -43,6 +43,7 @@ class MemcachedClient(object):
         self.s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect_ex((host, port))
         self.r=random.Random()
+        self.vbucket_count = 1024
 
     def close(self):
         self.s.close()
@@ -130,7 +131,7 @@ class MemcachedClient(object):
 
     def set(self, key, exp, flags, val, vbucket=-1):
         if vbucket == -1:
-            self.vbucketId = crc32.crc32_hash(key) & 1023
+            self.vbucketId = crc32.crc32_hash(key) & (self.vbucket_count - 1)
         else:
             self.vbucketId = vbucket
         """Set a value in the memcached server."""
@@ -138,7 +139,7 @@ class MemcachedClient(object):
 
     def send_set(self, key, exp, flags, val):
         """Set a value in the memcached server without handling the response"""
-        self.vbucketId = crc32.crc32_hash(key) & 1023
+        self.vbucketId = crc32.crc32_hash(key) & (self.vbucket_count - 1)
         opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(memcacheConstants.CMD_SET, key, val, opaque, struct.pack(SET_PKT_FMT, flags, exp), 0)
 
@@ -158,7 +159,7 @@ class MemcachedClient(object):
     def get(self, key, vbucket=-1):
         """Get the value for a given key within the memcached server."""
         if vbucket == -1:
-            self.vbucketId = crc32.crc32_hash(key) & 1023
+            self.vbucketId = crc32.crc32_hash(key) & (self.vbucket_count - 1)
         else:
             self.vbucketId = vbucket
         parts=self._doCmd(memcacheConstants.CMD_GET, key, '')
@@ -316,7 +317,7 @@ class MemcachedClient(object):
 
     def delete(self, key, cas=0, vbucket=-1):
         if vbucket == -1:
-            self.vbucketId = crc32.crc32_hash(key) & 1023
+            self.vbucketId = crc32.crc32_hash(key) & (self.vbucket_count - 1)
         """Delete the value for a given key within the memcached server."""
         return self._doCmd(memcacheConstants.CMD_DELETE, key, '', '', cas)
 

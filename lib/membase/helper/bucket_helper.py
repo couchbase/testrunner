@@ -191,12 +191,15 @@ class BucketOperationHelper():
         end_time = start_time + 300
         client = None
         keys = {}
-        while len(keys) < 1024:
+        rest = RestConnection(node)
+        RestHelper(rest).vbucket_map_ready(bucket, 60)
+        vbucket_count = len(rest.get_vbuckets(bucket))
+        while len(keys) < vbucket_count:
             key = str(uuid.uuid4())
-            vBucketId = crc32.crc32_hash(key) & 1023
+            vBucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
             keys[vBucketId] = {'key': key, 'inserted': False}
         counter = 0
-        while time.time() < end_time and counter < 1024:
+        while time.time() < end_time and counter < (vbucket_count - 1):
             try:
                 if not client:
                     client = MemcachedClientHelper.direct_client(node, bucket)
@@ -219,7 +222,7 @@ class BucketOperationHelper():
                 client.close()
                 client = None
             time.sleep(5)
-        return counter == 1024
+        return counter == vbucket_count
 
     @staticmethod
     def verify_data(server, keys, value_equal_to_key, verify_flags, test, debug=False,bucket="default"):
@@ -227,6 +230,7 @@ class BucketOperationHelper():
         log_error_count = 0
         #verify all the keys
         client = MemcachedClientHelper.direct_client(server, bucket)
+        vbucket_count = len(RestConnection(server).get_vbuckets(bucket))
         #populate key
         index = 0
         all_verified = True
@@ -234,7 +238,7 @@ class BucketOperationHelper():
         for key in keys:
             try:
                 index += 1
-                vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+                vbucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
                 client.vbucketId = vbucketId
                 flag, keyx, value = client.get(key=key)
                 if value_equal_to_key:
@@ -263,10 +267,11 @@ class BucketOperationHelper():
         log = logger.Logger.get_logger()
         #verify all the keys
         client = MemcachedClientHelper.direct_client(server,bucket)
+        vbucket_count = len(RestConnection(server).get_vbuckets(bucket))
         #populate key
         for key in keys:
             try:
-                vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+                vbucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
                 client.vbucketId = vbucketId
                 client.get(key=key)
                 client.close()
@@ -331,6 +336,7 @@ class BucketOperationHelper():
         client = MemcachedClientHelper.direct_client(serverInfo,bucket_name)
         #populate key
         rest = RestConnection(serverInfo)
+        vbucket_count = rest.get_vbuckets(bucket_name)
         testuuid = uuid.uuid4()
         info = rest.get_bucket(bucket_name)
         emptySpace = info.stats.ram - info.stats.memUsed
@@ -346,7 +352,7 @@ class BucketOperationHelper():
         keys = ["key_%s_%d" % (testuuid, i) for i in range(number_of_buckets)]
         inserted_keys = []
         for key in keys:
-            vbucketId = crc32.crc32_hash(key) & 1023 # or & 0x3FF
+            vbucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
             client.vbucketId = vbucketId
             try:
                 client.set(key, 0, 0, key)
