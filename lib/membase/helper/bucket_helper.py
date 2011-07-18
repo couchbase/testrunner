@@ -8,7 +8,7 @@ import crc32
 import socket
 import ctypes
 from membase.api.rest_client import RestConnection, RestHelper
-from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 
 
 class BucketOperationHelper():
@@ -284,11 +284,11 @@ class BucketOperationHelper():
         return True
 
     @staticmethod
-    def keys_exist_or_assert(keys,server,name,test):
+    def keys_exist_or_assert(keys,rest,bucket_name,test):
         #we should try out at least three times
         log = logger.Logger.get_logger()
         #verify all the keys
-        client = MemcachedClientHelper.direct_client(server,name)
+        vbaware = VBucketAwareMemcached(rest, bucket_name)
         #populate key
         retry = 1
 
@@ -301,6 +301,7 @@ class BucketOperationHelper():
             keys_not_verified = []
             for key in keys_left_to_verify:
                 try:
+                    client = vbaware.memcached(key)
                     client.get(key=key)
                 except mc_bin_client.MemcachedError as error:
                     keys_not_verified.append(key)
@@ -309,7 +310,7 @@ class BucketOperationHelper():
                         log_count += 1
             retry += 1
             keys_left_to_verify = keys_not_verified
-        client.close()
+        vbaware.done()
         if len(keys_left_to_verify) > 0:
             log_count = 0
             for key in keys_left_to_verify:

@@ -148,7 +148,7 @@ class BackupRestoreTests(unittest.TestCase):
                                authType="sasl", saslPassword="password")
         BucketOperationHelper.wait_for_memcached(server, bucket)
         BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder, moxi_port=info.moxi)
-        keys_exist = BucketOperationHelper.keys_exist_or_assert(inserted_keys, self.master, bucket, self)
+        keys_exist = BucketOperationHelper.keys_exist_or_assert(inserted_keys, rest, bucket, self)
         self.assertTrue(keys_exist, msg="unable to verify keys after restore")
 
 

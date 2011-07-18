@@ -73,6 +73,19 @@ class BuildQuery(object):
                 return build
         return None
 
+    def find_membase_release_build(self, product, deliverable_type, os_architecture, build_version):
+        build = MembaseBuild()
+        build.deliverable_type = deliverable_type
+        build.time = '0'
+        build.size = '0'
+        build.product_version = build_version
+        build.architecture_type = os_architecture
+        build.product = product
+        build.name = '{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
+        build.build_number = 0
+        build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
+        return build
+
     def sort_builds_by_version(self, builds):
         membase_builds = list()
         for build in builds:
