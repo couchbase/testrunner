@@ -130,7 +130,6 @@ class RestHelper(object):
                 replicated = False
         return replicated
 
-
 class RestConnection(object):
     #port is always 8091
     def __init__(self, ip, username='Administrator', password='password'):
@@ -154,6 +153,124 @@ class RestConnection(object):
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
+
+    def create_view(self, bucket, view, function):
+        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
+        #check if this view exists and update the rev
+        try:
+            response, content = httplib2.Http().request(api, 'PUT', function, headers=self._create_capi_headers())
+            if response['status'] == '400':
+                json_parsed = json.loads(content)
+                if "error" in json_parsed:
+                    msg = "unable to create a view : {0} with function {1} reason {2}"
+                    log.error(msg.format(view, function, json_parsed["reason"]))
+                raise Exception("unable to create view")
+            elif response['status'] == '200':
+                json_parsed = json.loads(content)
+                return json_parsed
+        except socket.error as socket_error:
+            log.error(socket_error)
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    #http://10.1.6.108:8091/couchBase/bucket-0/_design/dev_6ca50/_view/dev_6ca50?limit=10&_=1311107815807
+
+    def view_results(self, bucket, view, limit=100):
+        view_query = 'couchBase/{0}/_design/{1}/_view/{2}'
+        api = self.baseUrl + view_query.format(bucket, view, view)
+        api += "?limit={0}".format(limit)
+        try:
+            response, content = httplib2.Http().request(api, headers=self._create_capi_headers())
+            if response['status'] == '400':
+                reason = "unknown"
+                json_parsed = json.loads(content)
+                if "error" in json_parsed:
+                    reason = json_parsed["reason"]
+                    msg = "unable to retrieve the view : {0} , reason {1}"
+                    log.error(msg.format(view, json_parsed["reason"]))
+                raise Exception("unable to obtain view results - reason : {0}".format(reason))
+            elif response['status'] == '400':
+                raise Exception("unable to obtain view results - status code 404")
+            elif response['status'] == '200':
+                json_parsed = json.loads(content)
+                return json_parsed
+        except socket.error as socket_error:
+            log.error(socket_error)
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+
+    def get_view(self,bucket,view):
+        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
+        try:
+            response, content = httplib2.Http().request(api, headers=self._create_capi_headers())
+            if response['status'] == '400':
+                json_parsed = json.loads(content)
+                if "error" in json_parsed:
+                    msg = "unable to retrieve the view : {0} , reason {1}"
+                    log.error(msg.format(view, json_parsed["reason"]))
+                raise Exception("unable to get the view definition")
+            elif response['status'] == '200':
+                json_parsed = json.loads(content)
+                return json_parsed
+        except socket.error as socket_error:
+            log.error(socket_error)
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+    def run_view(self,bucket,view,name):
+        api = self.baseUrl + 'couchBase/{0}/_design/{1}/_view/{2}'.format(bucket, view, name)
+        try:
+            response, content = httplib2.Http().request(api, headers=self._create_capi_headers())
+            if response['status'] == '400':
+                json_parsed = json.loads(content)
+                if "error" in json_parsed:
+                    msg = "unable to run the view : {0} with {1} , reason {2}"
+                    log.error(msg.format(view, name, json_parsed["reason"]))
+                raise Exception("unable to create view")
+            elif response['status'] == '200':
+                json_parsed = json.loads(content)
+                return json_parsed
+        except socket.error as socket_error:
+            log.error(socket_error)
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+
+    def delete_view(self,bucket,view):
+        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
+        get_view = self.get_view(bucket,view)
+        rev = get_view["_rev"]
+        #pass in the rev
+        api = api + "?rev={0}".format(rev)
+        try:
+            response, content = httplib2.Http().request(api, "DELETE", headers=self._create_capi_headers())
+            if response['status'] == '400':
+                json_parsed = json.loads(content)
+                if "error" in json_parsed:
+                    msg = "unable to delete the view : {0} , reason {1}"
+                    log.error(msg.format(view, json_parsed["reason"]))
+                raise Exception("unable to delete the view")
+            elif response['status'] == '200':
+                json_parsed = json.loads(content)
+                return json_parsed
+        except socket.error as socket_error:
+            log.error(socket_error)
+            raise ServerUnavailableException(ip=self.ip)
+        except httplib2.ServerNotFoundError:
+            raise ServerUnavailableException(ip=self.ip)
+
+
+
+
+
+    def _create_capi_headers(self):
+        return {'Content-Type': 'application/json',
+                'Accept': '*/*'}
 
 
     #authorization mut be a base64 string of username:password
@@ -408,6 +525,8 @@ class RestConnection(object):
                                 percentage = ns_1_dictionary['progress'] * 100
                                 log.info('rebalance percentage : {0} %' .format(percentage))
                                 break
+                        if percentage == -1:
+                            percentage = 0
                     else:
                         percentage = 100
             else:
