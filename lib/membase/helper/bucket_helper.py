@@ -336,7 +336,8 @@ class BucketOperationHelper():
         client = MemcachedClientHelper.direct_client(serverInfo,bucket_name)
         #populate key
         rest = RestConnection(serverInfo)
-        vbucket_count = rest.get_vbuckets(bucket_name)
+        RestHelper(rest).vbucket_map_ready(bucket_name, 60)
+        vbucket_count = len(rest.get_vbuckets(bucket_name))
         testuuid = uuid.uuid4()
         info = rest.get_bucket(bucket_name)
         emptySpace = info.stats.ram - info.stats.memUsed
