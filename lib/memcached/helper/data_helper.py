@@ -552,7 +552,7 @@ class WorkerThread(threading.Thread):
             rejected_after_retry = []
             self._rejected_keys_count = 0
             for key in self._rejected_keys:
-                vId = crc32.crc32_hash(key)(vbucket_count - 1)
+                vId = crc32.crc32_hash(key) & (vbucket_count - 1)
                 client.vbucketId = vId
                 try:
                     if self.override_vBucketId >= 0:
