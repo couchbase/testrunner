@@ -9,7 +9,6 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 
 import crc32
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection
 
 class SyncReplicationTest(unittest.TestCase):
     awareness = None

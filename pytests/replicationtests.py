@@ -2,13 +2,12 @@ import unittest
 import uuid
 from TestInput import TestInputSingleton
 import logger
-import crc32
 from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from rebalancetests import RebalanceBaseTest
 
 log = logger.Logger.get_logger()
@@ -105,16 +104,15 @@ class ReplicationTests(unittest.TestCase):
 
     #update keys
     def _update_keys(self, version):
-        client = MemcachedClientHelper.proxy_client(self.servers[0], self.bucket_name)
         rejected_keys = []
         #quit after updating max 100,000 keys
         self.updated_keys = []
-        vbucket_count = RestConnection(self.servers[0]).get_vbuckets(self.bucket_name)
+        rest = RestConnection(self.servers[0])
+        vbaware = VBucketAwareMemcached(rest, self.bucket_name)
         for key in self.keys:
             if len(self.updated_keys) > 10000:
                 break
-            vbucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
-            client.vbucketId = vbucketId
+            client = vbaware.memcached(key)
             value = '{0}'.format(version)
             try:
                 client.append(key, value)
@@ -123,10 +121,9 @@ class ReplicationTests(unittest.TestCase):
             #                self.log.error(error)
             #                self.log.error("unable to update key : {0} to bucket : {1}".format(key, client.vbucketId))
                 rejected_keys.append(key)
-        client.close()
         if len(rejected_keys) > 0:
             self.log.error("unable to update {0} keys".format(len(rejected_keys)))
-
+        vbaware.done()
 
     #verify
 
@@ -160,20 +157,19 @@ class ReplicationTests(unittest.TestCase):
 
     def _verify_data(self, version):
         #verify all the keys
-        client = MemcachedClientHelper.proxy_client(self.servers[0], self.bucket_name)
-        vbucket_count = RestConnection(self.servers[0]).get_vbuckets(self.bucket_name)
+        #let's use vbucketaware
+        rest = RestConnection(self.servers[0])
+        vbaware = VBucketAwareMemcached(rest, self.bucket_name)
         index = 0
         all_verified = True
         keys_failed = []
         for key in self.updated_keys:
             try:
+                client = vbaware.memcached(key)
                 index += 1
-                vbucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
-                client.vbucketId = vbucketId
                 flag, keyx, value = client.get(key=key)
                 self.assertTrue(value.endswith(version),
                                 msg='values do not match . key value should endwith {0}'.format(version))
-                #                self.log.info("verified key #{0} : {1} value : {2}".format(index,key,value))
             except MemcachedError as error:
                 self.log.error(error)
                 self.log.error(
@@ -185,7 +181,7 @@ class ReplicationTests(unittest.TestCase):
                 #                keys_failed.append(key)
                 #                all_verified = False
 
-        client.close()
+        vbaware.done()
         self.assertTrue(all_verified,
                         'unable to verify #{0} keys'.format(len(keys_failed)))
 
@@ -223,7 +219,6 @@ class ReplicationTests(unittest.TestCase):
 
     def _test_body(self, fill_ram_percentage, number_of_replicas):
         master = self.servers[0]
-        rest = RestConnection(master)
         self._verify_minimum_requirement(number_of_replicas)
         self._cleanup_cluster()
         self.log.info('cluster is setup')
@@ -234,7 +229,6 @@ class ReplicationTests(unittest.TestCase):
         self._create_bucket(number_of_replicas=number_of_replicas, bucket_name=bucket_name)
         self.log.info('created the bucket')
         distribution = RebalanceBaseTest.get_distribution(fill_ram_percentage)
-        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
         inserted_keys, rejected_keys =\
@@ -242,7 +236,7 @@ class ReplicationTests(unittest.TestCase):
                                                               name=self.bucket_name,
                                                               ram_load_ratio=fill_ram_percentage,
                                                               value_size_distribution=distribution,
-                                                              number_of_threads=40,
+                                                              number_of_threads=2,
                                                               write_only=True,
                                                               moxi=False)
         self.keys = inserted_keys
