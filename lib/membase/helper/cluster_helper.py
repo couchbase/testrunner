@@ -5,6 +5,27 @@ class ClusterOperationHelper(object):
     #the first ip is taken as the master ip
 
     @staticmethod
+    def add_and_rebalance(servers,rest_password):
+        log = logger.Logger.get_logger()
+        master = servers[0]
+        all_nodes_added = True
+        rebalanced = True
+        rest = RestConnection(master)
+        if len(servers) > 1:
+            for serverInfo in servers:
+                log.info('adding node : {0} to the cluster'.format(serverInfo.ip))
+                otpNode = rest.add_node("Administrator", rest_password, serverInfo.ip)
+                if otpNode:
+                    log.info('added node : {0} to the cluster'.format(otpNode.id))
+                else:
+                    all_nodes_added = False
+                    break
+            if all_nodes_added:
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+                rebalanced &= rest.monitorRebalance()
+        return all_nodes_added and rebalanced
+
+    @staticmethod
     def add_all_nodes_or_assert(master,all_servers,rest_settings,test_case):
         log = logger.Logger.get_logger()
         otpNodes = []
