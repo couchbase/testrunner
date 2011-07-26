@@ -126,11 +126,8 @@ class CreateMembaseBucketsTests(unittest.TestCase):
                                replicaNumber=replica,
                                authType='sasl',
                                saslPassword='')
-            BucketOperationHelper.wait_till_memcached_is_ready_or_assert(self.servers,
-                                                                         11211,
-                                                                         test=unittest,
-                                                                         bucket_name=bucket_name,
-                                                                         bucket_password='')
+            msg = 'create_bucket succeeded but bucket {0} does not exist'.format(bucket_name)
+            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
             load_info['memcached_info']['bucket_name'] = bucket_name
             loads.append(load_runner.LoadRunner(load_info, dryrun=False))
 

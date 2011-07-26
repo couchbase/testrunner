@@ -74,6 +74,7 @@ class InstallTest(unittest.TestCase):
         print 'for machine : ', info.architecture_type, info.distribution_type, 'relevant build : ', build
         remote_client = RemoteMachineShellConnection(serverInfo)
         remote_client.membase_uninstall()
+        remote_client.couchbase_uninstall()
         if 'amazon' in self.input.test_params:
             build.url = build.url.replace("http://builds.hq.northscale.net/latestbuilds/",
                                           "http://packages.northscale.com/latestbuilds/")
@@ -105,7 +106,8 @@ class InstallTest(unittest.TestCase):
         if not cluster_initialized:
             self.log.error("error happened while initializing the cluster @ {0}".format(serverInfo.ip))
             raise Exception("error happened while initializing the cluster @ {0}".format(serverInfo.ip))
-        rest.init_cluster_memoryQuota(256)
+        nodeinfo = rest.get_nodes_self()
+        rest.init_cluster_memoryQuota(memoryQuota=nodeinfo.mcdMemoryReserved)
 
     #this method should only be used for amazon tests
     def test_install_parallel(self):
