@@ -324,7 +324,7 @@ class RestConnection(object):
 
     def init_cluster_memoryQuota(self, username='Administrator',
                                  password='password',
-                                 memoryQuota=200):
+                                 memoryQuota=256):
         api = self.baseUrl + 'pools/default'
         params = urllib.urlencode({'memoryQuota': memoryQuota,
                                    'username': username,

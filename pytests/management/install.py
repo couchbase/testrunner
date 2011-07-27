@@ -105,7 +105,7 @@ class InstallTest(unittest.TestCase):
         if not cluster_initialized:
             self.log.error("error happened while initializing the cluster @ {0}".format(serverInfo.ip))
             raise Exception("error happened while initializing the cluster @ {0}".format(serverInfo.ip))
-        rest.init_cluster_memoryQuota(200)
+        rest.init_cluster_memoryQuota(256)
 
     #this method should only be used for amazon tests
     def test_install_parallel(self):
