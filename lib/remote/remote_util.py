@@ -173,10 +173,11 @@ class RemoteMachineShellConnection:
         #build.product has the full name
         #first remove the previous file if it exist ?
         #fix this :
-            log.info('removing previous binaries')
-            output, error = self.execute_command('rm -rf /tmp/*.{0}'.format(deliverable_type))
+            log.info('get md5 sum for local and remote')
+            output, error = self.execute_command('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url,filename))
             self.log_command_output(output, error)
-            output, error = self.execute_command('cd /tmp;wget -q {0};'.format(url))
+            log.info('comparing md5 sum and downloading if needed')
+            output, error = self.execute_command('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url));
             self.log_command_output(output, error)
             #check if the file exists there now ?
             return self.file_exists('/tmp', filename)
