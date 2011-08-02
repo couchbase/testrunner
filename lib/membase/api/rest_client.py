@@ -190,7 +190,7 @@ class RestConnection(object):
                     msg = "unable to retrieve the view : {0} , reason {1}"
                     log.error(msg.format(view, json_parsed["reason"]))
                 raise Exception("unable to obtain view results - reason : {0}".format(reason))
-            elif response['status'] == '400':
+            elif response['status'] == '404':
                 raise Exception("unable to obtain view results - status code 404")
             elif response['status'] == '200':
                 json_parsed = json.loads(content)
@@ -201,8 +201,39 @@ class RestConnection(object):
         except httplib2.ServerNotFoundError:
             raise ServerUnavailableException(ip=self.ip)
 
+    def get_views_per_vbucket(self, bucket, view):
+        vBuckets = self.get_vbuckets(bucket)
+        views_not_found = []
+        views_per_vbucket = {}
+        for vBucket in vBuckets:
+            masterIp = vBucket.master.split(":")[0]
+            vb = vBucket.id
+            api = "http://{0}:{1}/".format(masterIp, self.port)
+            api += 'couchBase/{0}%2F{1}/_design/{2}'.format(bucket, vb, view)
+            try:
+                response, content = httplib2.Http().request(api, headers=self._create_capi_headers())
+                if response['status'] == '404' or response['status'] == '400':
+                    json_parsed = json.loads(content)
+                    if "error" in json_parsed:
+                        msg = "unable to retrieve the view : {0} , reason {1}"
+                        log.error(msg.format(view, json_parsed["reason"]))
+                    raise Exception("unable to get the view definition")
+                elif response['status'] == '200':
+                    json_parsed = json.loads(content)
+                    views_per_vbucket[vb] = json_parsed
+                else:
+                    views_not_found.append(vb)
+            except socket.error as socket_error:
+                log.error(socket_error)
+                raise ServerUnavailableException(ip=self.ip)
+            except httplib2.ServerNotFoundError:
+                raise ServerUnavailableException(ip=self.ip)
+        if views_not_found:
+            log.error("unable to get view for vbucket : {0}".format(views_not_found))
+        return views_per_vbucket
 
-    def get_view(self,bucket,view):
+
+    def get_view(self, bucket, view):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
         try:
             response, content = httplib2.Http().request(api, headers=self._create_capi_headers())
