@@ -173,6 +173,8 @@ class RemoteMachineShellConnection:
         #build.product has the full name
         #first remove the previous file if it exist ?
         #fix this :
+            output, error = self.execute_command('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
+            self.log_command_output(output, error)
             log.info('get md5 sum for local and remote')
             output, error = self.execute_command('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url,filename))
             self.log_command_output(output, error)
