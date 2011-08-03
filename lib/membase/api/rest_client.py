@@ -180,16 +180,18 @@ class RestConnection(object):
 
 
     #http://10.1.6.108:8091/couchBase/bucket-0/_design/dev_6ca50/_view/dev_6ca50?limit=10&_=1311107815807
-    def view_results(self, bucket, view, limit=100):
+    def view_results(self, bucket, view, params, limit=100):
         view_query = 'couchBase/{0}/_design/{1}/_view/{2}'
         api = self.baseUrl + view_query.format(bucket, view, view)
         api += "?limit={0}".format(limit)
+        for param in params:
+            api += "&{0}={1}".format(param, params[param])
 
         status, content = self._http_request(api, headers=self._create_capi_headers())
 
         json_parsed = json.loads(content)
 
-        if status == False:
+        if not status:
             raise Exception("unable to obtain view results")
 
         return json_parsed
@@ -209,14 +211,12 @@ class RestConnection(object):
                 if response['status'] == '404' or response['status'] == '400':
                     json_parsed = json.loads(content)
                     if "error" in json_parsed:
-                        msg = "unable to retrieve the view : {0} , reason {1}"
-                        log.error(msg.format(view, json_parsed["reason"]))
-                    raise Exception("unable to get the view definition")
+#                        msg = "unable to retrieve the view : {0} , reason {1}"
+#                        log.error(msg.format(view, json_parsed["reason"]))
+                        views_not_found.append(vb)
                 elif response['status'] == '200':
                     json_parsed = json.loads(content)
                     views_per_vbucket[vb] = json_parsed
-                else:
-                    views_not_found.append(vb)
             except socket.error as socket_error:
                 log.error(socket_error)
                 raise ServerUnavailableException(ip=self.ip)

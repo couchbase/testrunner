@@ -134,7 +134,7 @@ class ViewTests(unittest.TestCase):
         for i in range(0, num_of_docs):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
-            rand = random.randint(0,20000)
+            rand = random.randint(0, 20000)
             value = {"name": doc_name, "age": rand}
             sum += rand
             vbaware.memcached(key).set(key, 0, 0, json.dumps(value))
@@ -241,7 +241,7 @@ class ViewTests(unittest.TestCase):
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + updated_view_prefix + "\") != -1) { emit(doc.name, doc);}}"
         function = self._create_function(rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
-        self._verify_views_replicated(bucket,view_name,map_fn)
+        self._verify_views_replicated(bucket, view_name, map_fn)
         results = self._get_view_results(rest, bucket, view_name, updated_num_of_docs)
         keys = self._get_keys(results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
@@ -349,15 +349,18 @@ class ViewTests(unittest.TestCase):
 
     def _create_function(self, rest, bucket, view, function, reduce=''):
         #if this view already exist then get the rev and embed it here ?
-        view_response = rest.get_view(bucket, view)
         dict = {"language": "javascript",
                 "_id": "_design/{0}".format(view)}
+        try:
+            view_response = rest.get_view(bucket, view)
+            if view_response:
+                dict["_rev"] = view_response["_rev"]
+        except:
+            pass
         if reduce:
             dict["views"] = {view: {"map": function, "reduce": reduce}}
         else:
             dict["views"] = {view: {"map": function}}
-        if view_response:
-            dict["_rev"] = view_response["_rev"]
         print dict
         return json.dumps(dict)
 
@@ -396,11 +399,17 @@ class ViewTests(unittest.TestCase):
             self.assertEquals(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn)
 
 
-    def _get_view_results(self, rest, bucket, view, limit=20):
+    def _get_view_results(self, rest, bucket, view, limit=20, full_set=True):
+        #if view name starts with "dev" then we should append the full_set
         for i in range(0, 20):
             try:
                 start = time.time()
-                results = rest.view_results(bucket, view, limit)
+                #full_set=true&connection_timeout=60000&limit=10&skip=0
+                params = {"connection_timeout": "60000"}
+                if view.find("dev_") == 0:
+                    params["full_set"] = "true"
+
+                results = rest.view_results(bucket, view, params, limit)
                 delta = time.time() - start
                 if results:
                     self.log.info("view returned in {0} seconds".format(delta))
@@ -436,7 +445,7 @@ class ViewTests(unittest.TestCase):
 
 
     def test_view_on_10k_docs_multiple_nodes(self):
-#        self._setup_cluster()
+        self._setup_cluster()
         self._test_view_on_multiple_docs(10000)
 
 
