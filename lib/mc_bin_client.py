@@ -36,12 +36,11 @@ class MemcachedClient(object):
     """Simple memcached client."""
 
     vbucketId = 0
-    def __init__(self, host='127.0.0.1', port=11211, timeout=10):
+    def __init__(self, host='127.0.0.1', port=11211):
         self.host = host
         self.port = port
         self.s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect_ex((host, port))
-        self.s.settimeout(timeout)
         self.r=random.Random()
         self.vbucket_count = 1024
 
