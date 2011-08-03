@@ -81,7 +81,7 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "$dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         reduce_fn = "_count"
         function = self._create_function(rest, bucket, view_name, map_fn, reduce_fn)
@@ -120,7 +120,7 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "$dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, age);}}"
         reduce_fn = "_sum"
         function = self._create_function(rest, bucket, view_name, map_fn, reduce_fn)
@@ -163,7 +163,7 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "$dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         function = self._create_function(rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
@@ -212,7 +212,7 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "$dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         function = self._create_function(rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
@@ -283,7 +283,7 @@ class ViewTests(unittest.TestCase):
         prefix = str(uuid.uuid4())
         bucket = "default"
 
-        view_names = ["$dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, 5)]
+        view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, 5)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, doc);}"
             function = self._create_function(rest, bucket, view, map_fn)
@@ -295,7 +295,7 @@ class ViewTests(unittest.TestCase):
             self.assertEquals(response["views"][view]["map"].encode("ascii", "ignore"), map_fn)
             #now let's update all those views ?
 
-        view_names = ["$dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, 5)]
+        view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, 5)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, null);}"
             function = self._create_function(rest, bucket, view, map_fn)
@@ -313,7 +313,7 @@ class ViewTests(unittest.TestCase):
         rest = RestConnection(master)
         #find the first bucket
         bucket = "default"
-        view_name = "$dev_" + str(uuid.uuid4())[:5]
+        view_name = "dev_" + str(uuid.uuid4())[:5]
         key = str(uuid.uuid4())
         doc_name = "test_create_view_{0}".format(key)
         mc = MemcachedClientHelper.direct_client(master, bucket)
