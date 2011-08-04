@@ -179,7 +179,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url,filename))
             self.log_command_output(output, error)
             log.info('comparing md5 sum and downloading if needed')
-            output, error = self.execute_command('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url));
+            output, error = self.execute_command('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
             self.log_command_output(output, error)
             #check if the file exists there now ?
             return self.file_exists('/tmp', filename)
@@ -205,7 +205,12 @@ class RemoteMachineShellConnection:
     def remove_directory(self,remote_path):
         sftp = self._ssh_client.open_sftp()
         try:
+            path_of_files_in_dir = remote_path + '/*'
             log.info("removing {0} directory...".format(remote_path))
+            files = self.list_files(remote_path)
+            for f in files:
+                sftp.remove("{0}/{1}".format(f["path"], f["file"]))
+                log.info("{0}/{1} is deleted".format(f["path"], f["file"]))
             sftp.rmdir(remote_path)
             sftp.close()
         except IOError:
@@ -216,9 +221,7 @@ class RemoteMachineShellConnection:
         sftp = self._ssh_client.open_sftp()
         files = []
         try:
-            print remote_path
             file_names = sftp.listdir(remote_path)
-            print files
             for name in file_names:
                 files.append({'path': remote_path, 'file': name})
             sftp.close()
@@ -256,6 +259,122 @@ class RemoteMachineShellConnection:
             return False
         except IOError:
             return False
+
+    def download_binary_in_win(self, url, name, version):
+        info = self.extract_remote_info()
+        self.execute_command('taskkill /F /T /IM msiexec32.exe')
+        self.execute_command('taskkill /F /T /IM msiexec.exe')
+        self.execute_command('taskkill /F /T IM setup.exe')
+        self.execute_command('taskkill /F /T /IM ISBEW64.*')
+        self.execute_command('taskkill /F /T /IM firefox.*')
+        self.execute_command('taskkill /F /T /IM iexplore.*')
+        self.execute_command('taskkill /F /T /IM WerFault.*')
+        output, error = self.execute_command(
+             "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe -q {0} -O {1}_{2}.exe';ls;".format(
+                url,name,version))
+        self.log_command_output(output, error)
+        return self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name,version))
+
+    def copy_file_local_to_remote(self,src_path, des_path):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            sftp.put(src_path, des_path)
+            sftp.close()
+        except IOError:
+            log.error('Can not copy file')
+
+    # copy multi files from local to remote server
+    def copy_files_local_to_remote(self,src_path, des_path):
+        files = os.listdir(src_path)
+        for file in files:
+            full_src_path = os.path.join(src_path, file)
+            full_des_path = os.path.join(des_path, file)
+            self.copy_file_local_to_remote(full_src_path, full_des_path)
+            log.info('file "{0}" is copied to {1}'.format(file,des_path))
+
+    def find_file(self, remote_path, file):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            #found = False
+            files = sftp.listdir(remote_path)
+            log.info('File(s) name in {0}'.format(remote_path))
+            for name in files:
+                log.info(name)
+                if name == file:
+                    found_it = os.path.join(remote_path, name)
+                    #found = True
+                    return found_it
+                    sftp.close()
+                    break
+            else:
+                log.error('Can not find {0}'.format(file))
+        except IOError:
+            pass
+
+    def find_build_version_in_win(self,path_to_version, version_file):
+        sftp = self._ssh_client.open_sftp()
+        ex_type = "exe"
+        try:
+            if path_to_version == "/cygdrive/c/Program Files/Couchbase/Server/":
+                product_name = 'cse'
+            elif path_to_version == "/cygdrive/c/Program Files (x86)/Couchbase/Server/":
+                product_name = 'csse'
+            log.info(path_to_version)
+            f = sftp.open(os.path.join(path_to_version, version_file), 'r+')
+            version = f.read().rstrip()
+            build_name = "{0}_{1}".format(product_name,version)
+            return build_name, version
+        except IOError:
+            log.error('Can not read version file')
+        sftp.close()
+
+    # this function used to modify bat file to run task schedule in windows
+    def modify_bat_file(self, remote_path, file_name, name, os_type, os_version, version, task):
+        found = self.find_file(remote_path, file_name)
+        sftp = self._ssh_client.open_sftp()
+        try:
+            f = sftp.open(found, 'w')
+            log.info('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}_{5}.iss'.format(name, version, name,
+                                                                                       os_type, os_version, task))
+            name = name.rstrip()
+            version = version.rstrip()
+            f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}_{5}.iss'.format(name, version, name,
+                                                                                       os_type, os_version, task))
+            log.info('Successful write to {0}'.format(found))
+            sftp.close()
+        except IOError:
+            log.error('Can not write build name file to bat file {0}'.format(found))
+
+    def create_directory(self, remote_path):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            sftp.stat(remote_path)
+        except IOError, e:
+            if e[0] == 2:
+                log.info("Directory at  {0} DOES NOT exist.  We will create on here".format(remote_path))
+                sftp.mkdir(remote_path)
+                sftp.close()
+                return False
+            raise
+        else:
+            log.error("Directory at  {0} DOES exist.  Fx returns True".format(remote_path))
+            return True
+
+    # this function will remove the automation directory in windows
+    def create_multiple_dir(self, dir_paths):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            for dir_path in dir_paths:
+                if dir_path != '/cygdrive/c/tmp':
+                    output = self.remove_directory('/cygdrive/c/automation')
+                    if output:
+                        log.info("{0} directory is removed.".format(dir_path))
+                    else:
+                        log.error("Can not delete {0} directory or directory {0} does not exist.".format(dir_path))
+                self.create_directory(dir_path)
+            sftp.close()
+        except IOError:
+            pass
 
     def membase_upgrade(self, build):
         #install membase server ?
@@ -505,6 +624,60 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.terminate_processes(info, ["beam", "memcached", "moxi", "vbucketmigrator", "couchdb"])
             self.remove_folders(linux_folders)
 
+    def couchbase_win_uninstall(self,product, version, os_name, query):
+        builds, changes = query.get_all_builds()
+        version_file = 'VERSION.txt'
+        bat_file = "uninstall.bat"
+        task = "uninstall"
+
+        info = self.extract_remote_info()
+        ex_type = info.deliverable_type
+        if info.architecture_type == "x86_64":
+            os_type = "64"
+        elif info.architecture_type == "x86":
+            os_type = "32"
+        if product == "cse":
+            name = "couchbase-server-enterprise"
+            version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
+
+        exist = self.file_exists(version_path, version_file)
+        if exist:
+            # call uninstall function to install couchbase server
+            # Need to detect csse or cse when uninstall.
+            log.info("Start uninstall cb server on this server")
+            build_name, rm_version = self.find_build_version_in_win(version_path, version_file)
+            log.info('build needed to do auto uninstall {0}'.format(build_name))
+            # find installed build in tmp directory to match with currently installed version
+            build_name = build_name.rstrip() + ".exe"
+            log.info('Check if {0} is in tmp directory'.format(build_name))
+            exist = self.file_exists("/cygdrive/c/tmp/", build_name)
+            if not exist:   # if not exist in tmp dir, start to download that verion build
+                build = query.find_build(builds, name, ex_type, info.architecture_type, rm_version)
+                downloaded = self.download_binary_in_win(build.url,product,rm_version)
+                if downloaded:
+                    log.info('Successful download {0}_{1}.exe'.format(product, rm_version))
+                else:
+                    log.error('Download {0}_{1}.exe failed'.format(product, rm_version))
+            # copy required files to automation directory
+            dir_paths = ['/cygdrive/c/automation','/cygdrive/c/tmp']
+            self.create_multiple_dir(dir_paths)
+            self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+            # modify bat file to run uninstall schedule task
+            self.modify_bat_file('/cygdrive/c/automation', bat_file,
+                                       product, os_type, os_name, rm_version, task)
+            log.info('sleep for 5 seconds before running task schedule uninstall')
+            time.sleep(5)
+            # run schedule task uninstall couchbase server
+            output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
+            self.log_command_output(output, error)
+            self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+            log.info('sleep 15 seconds before running the next job ...')
+            time.sleep(15)
+        else:
+            log.info('No couchbase server on this server')
+
+    def couchbase_win_uninstall_standalone(self):
+        pass
 
     def membase_uninstall(self):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
@@ -637,6 +810,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
             if system_type_response and system_type_response[0].find('x64') != -1:
                 arch = 'x86_64'
+            else:
+                arch = 'x86'
             os_name_response, error = self.execute_command("systeminfo | grep 'OS Name: '")
             if os_name_response:
                 log.info(os_name_response)
