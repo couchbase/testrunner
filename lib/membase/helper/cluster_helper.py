@@ -12,9 +12,9 @@ class ClusterOperationHelper(object):
         rebalanced = True
         rest = RestConnection(master)
         if len(servers) > 1:
-            for serverInfo in servers:
+            for serverInfo in servers[1:]:
                 log.info('adding node : {0} to the cluster'.format(serverInfo.ip))
-                otpNode = rest.add_node("Administrator", rest_password, serverInfo.ip)
+                otpNode = rest.add_node("Administrator", rest_password, serverInfo.ip, port=serverInfo.port)
                 if otpNode:
                     log.info('added node : {0} to the cluster'.format(otpNode.id))
                 else:
@@ -62,22 +62,12 @@ class ClusterOperationHelper(object):
     @staticmethod
     def cleanup_cluster(servers):
         log = logger.Logger.get_logger()
-        master = servers[0]
-#        for master in servers:
-        rest = RestConnection(master)
+        rest = RestConnection(servers[0])
         RestHelper(rest).is_ns_server_running(timeout_in_seconds=120)
         nodes = rest.node_statuses()
-        allNodes = []
-        toBeEjectedNodes = []
-        for node in nodes:
-            allNodes.append(node.id)
-            if "{0}:{1}".format(node.ip,node.port) != "{0}:{1}".format(master.ip,master.port):
-                toBeEjectedNodes.append(node.id)
-            #let's rebalance to remove all the nodes from the master
-                #this is not the master , let's remove it
-                #now load data into the main bucket
-        if len(allNodes) > len(toBeEjectedNodes) and toBeEjectedNodes:
-            log.info("rebalancing all nodes in order to remove nodes")
-            helper = RestHelper(rest)
-            removed = helper.remove_nodes(knownNodes=allNodes,ejectedNodes=toBeEjectedNodes)
-            log.info("removed all the nodes from cluster associated with {0} ? {1}".format(master.ip, removed))
+        if len(nodes) > 1:
+                log.info("rebalancing all nodes in order to remove nodes")
+                helper = RestHelper(rest)
+                removed = helper.remove_nodes(knownNodes=[node.id for node in rest.node_statuses()],
+                                              ejectedNodes=[node.id for node in nodes[1:]])
+                log.info("removed all the nodes from cluster associated with {0} ? {1}".format(nodes[0].id, removed))

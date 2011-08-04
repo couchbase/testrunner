@@ -252,15 +252,14 @@ class MemcachedClientHelper(object):
         bucket_info = rest.get_bucket(bucket)
         nodes = bucket_info.nodes
         for node in nodes:
-            if node.ip == server.ip and int(node.port) == int(server.port):
-                RestHelper(rest).vbucket_map_ready(bucket, 60)
-                vBuckets = rest.get_vbuckets(bucket)
-                client = MemcachedClient(server.ip,node.moxi)
-                client.vbucket_count = len(vBuckets)
-                if bucket_info.authType == "sasl":
-                    client.sasl_auth_plain(bucket_info.name.encode('ascii'),
-                               bucket_info.saslPassword.encode('ascii'))
-                return client
+            RestHelper(rest).vbucket_map_ready(bucket, 60)
+            vBuckets = rest.get_vbuckets(bucket)
+            client = MemcachedClient(server.ip,node.moxi)
+            client.vbucket_count = len(vBuckets)
+            if bucket_info.authType == "sasl":
+                client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                           bucket_info.saslPassword.encode('ascii'))
+            return client
         raise Exception("unable to find {0} in get_nodes()".format(server.ip))
 
 

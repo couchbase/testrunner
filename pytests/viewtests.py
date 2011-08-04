@@ -9,13 +9,19 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from memcached.helper.data_helper import MemcachedClientHelper
 
 class ViewTests(unittest.TestCase):
     #if we create a bucket and a view let's delete them in the end
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.servers = TestInputSingleton.input.servers
+        master = self.servers[0]
+        rest = RestConnection(self.servers[0])
+        node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
+        mem_quota = int(rest.get_nodes_self().mcdMemoryReserved * node_ram_ratio)
+        rest.init_cluster(master.rest_username,master.rest_password)
+        rest.init_cluster_memoryQuota(master.rest_username, master.rest_password,memoryQuota=mem_quota)
         ClusterOperationHelper.cleanup_cluster(self.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self._create_default_bucket()
@@ -56,7 +62,7 @@ class ViewTests(unittest.TestCase):
             self.assertTrue(response)
             self.assertEquals(response["_id"], "_design/{0}".format(view))
             self.log.info(response)
-            self._verify_views_replicated(bucket, view, map_fn)
+        #            self._verify_views_replicated(bucket, view, map_fn)
 
     def test_view_on_100_docs(self):
         self._test_view_on_multiple_docs(100)
@@ -87,7 +93,7 @@ class ViewTests(unittest.TestCase):
         function = self._create_function(rest, bucket, view_name, map_fn, reduce_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
-        vbaware = VBucketAwareMemcached(rest, bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         self.log.info("inserting {0} json objects".format(num_of_docs))
@@ -95,9 +101,9 @@ class ViewTests(unittest.TestCase):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
-            vbaware.memcached(key).set(key, 0, 0, json.dumps(value))
+            moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_of_docs))
-        self._verify_views_replicated(bucket, view_name, map_fn)
+        #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = self._get_view_results(rest, bucket, view_name, num_of_docs)
         value = self._get_built_in_reduce_results(results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
@@ -126,7 +132,7 @@ class ViewTests(unittest.TestCase):
         function = self._create_function(rest, bucket, view_name, map_fn, reduce_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
-        vbaware = VBucketAwareMemcached(rest, bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         sum = 0
@@ -137,9 +143,9 @@ class ViewTests(unittest.TestCase):
             rand = random.randint(0, 20000)
             value = {"name": doc_name, "age": rand}
             sum += rand
-            vbaware.memcached(key).set(key, 0, 0, json.dumps(value))
+            moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_of_docs))
-        self._verify_views_replicated(bucket, view_name, map_fn)
+        #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = self._get_view_results(rest, bucket, view_name, num_of_docs)
         value = self._get_built_in_reduce_results(results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
@@ -168,7 +174,7 @@ class ViewTests(unittest.TestCase):
         function = self._create_function(rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
-        vbaware = VBucketAwareMemcached(rest, bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         self.log.info("inserting {0} json objects".format(num_of_docs))
@@ -176,10 +182,11 @@ class ViewTests(unittest.TestCase):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
-            vbaware.memcached(key).set(key, 0, 0, json.dumps(value))
-        self.log.info("inserted {0} json documents".format(num_of_docs))
-        results = self._get_view_results(rest, bucket, view_name, num_of_docs)
-        self._verify_views_replicated(bucket, view_name, map_fn)
+            moxi.set(key, 0, 0, json.dumps(value))
+        self.log.info("inserted {0} json documents".format(len(doc_names)))
+        time.sleep(5)
+        results = self._get_view_results(rest, bucket, view_name, len(doc_names))
+        #        self._verify_views_replicated(bucket, view_name, map_fn)
         keys = self._get_keys(results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
         RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
@@ -192,11 +199,7 @@ class ViewTests(unittest.TestCase):
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(10)
             attempt += 1
-            results = self._get_view_results(rest, bucket, view_name, num_of_docs)
-            if results and num_of_docs < 10000:
-                for i in range(0, 60):
-                    results = self._get_view_results(rest, bucket, view_name, num_of_docs)
-                    self.log.info("repeat #{0}".format(i, len(results)))
+            results = self._get_view_results(rest, bucket, view_name, len(doc_names))
             keys = self._get_keys(results)
         keys = self._get_keys(results)
         not_found = []
@@ -217,7 +220,7 @@ class ViewTests(unittest.TestCase):
         function = self._create_function(rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
-        vbaware = VBucketAwareMemcached(rest, bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
         doc_names = []
         updated_doc_names = []
         updated_num_of_docs = num_of_docs + 100
@@ -227,21 +230,21 @@ class ViewTests(unittest.TestCase):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
-            vbaware.memcached(key).set(key, 0, 0, json.dumps(value))
+            moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_of_docs))
-        self._verify_views_replicated(bucket, view_name, map_fn)
+        #        self._verify_views_replicated(bucket, view_name, map_fn)
         updated_view_prefix = "{0}-{1}-updated".format(view_name, prefix)
         for i in range(0, updated_num_of_docs):
             key = updated_doc_name = "{0}-{1}-updated-{2}".format(view_name, prefix, i)
             updated_doc_names.append(updated_doc_name)
             value = {"name": updated_doc_name, "age": 1000}
-            vbaware.memcached(key).set(key, 0, 0, json.dumps(value))
+            moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(updated_num_of_docs))
 
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + updated_view_prefix + "\") != -1) { emit(doc.name, doc);}}"
         function = self._create_function(rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
-        self._verify_views_replicated(bucket, view_name, map_fn)
+        #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = self._get_view_results(rest, bucket, view_name, updated_num_of_docs)
         keys = self._get_keys(results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
@@ -449,6 +452,93 @@ class ViewTests(unittest.TestCase):
         self._test_view_on_multiple_docs(10000)
 
 
+    def test_load_10k_during_rebalance(self):
+        self._test_insert_json_during_rebalance(10000)
 
-        #more tests to run view after each incremental rebalance , add x items
-        #rebalance and get the view
+    def _insert_n_items(self, bucket, view_name, prefix, number_of_docs):
+        doc_names = []
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        for i in range(0, number_of_docs):
+            key = doc_name = "{0}-{1}-{2}-{3}".format(view_name, prefix, i, str(uuid.uuid4()))
+            doc_names.append(doc_name)
+            value = {"name": doc_name, "age": 1100}
+            try:
+                moxi.set(key, 0, 0, json.dumps(value))
+            except:
+                self.log.error("unable to set item , reinitialize the vbucket map")
+        self.log.info("inserted {0} json documents".format(len(doc_names)))
+        return doc_names
+
+
+    def _test_insert_json_during_rebalance(self, num_of_docs):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        bucket = "default"
+        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
+        function = self._create_function(rest, bucket, view_name, map_fn)
+        rest.create_view(bucket, view_name, function)
+        self.created_views[view_name] = bucket
+        doc_names = []
+        prefix = str(uuid.uuid4())[:7]
+        #load num_of_docs items into single node
+        self.log.info("inserting {0} json objects".format(num_of_docs))
+        doc_names.extend(self._insert_n_items(bucket, view_name, prefix, num_of_docs))
+
+        #grab view results while we still have only single node
+        self._get_view_results(rest, bucket, view_name, len(doc_names))
+
+        #now let's add a node and rebalance
+        added_nodes = [master]
+        for server in self.servers[1:]:
+            otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
+            added_nodes.append(server)
+            msg = "unable to add node {0}:{1} to the cluster"
+            self.assertTrue(otpNode, msg.format(server.ip, server.port))
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+            #mutate num_of_docs that we added before
+            #vbucket map is constantly changing so we need to catch the exception and
+            self.log.info("inserting {0} json objects".format(num_of_docs))
+            doc_names.extend(self._insert_n_items(bucket, view_name, prefix, num_of_docs))
+            #then monitor rebalance
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding nodes")
+
+        results = self._get_view_results(rest, bucket, view_name, len(doc_names))
+        keys = self._get_keys(results)
+
+        #TODO: we should extend this function to wait for disk_write_queue for all nodes
+        for node in added_nodes:
+            RebalanceHelper.wait_for_stats(node, bucket, 'ep_queue_size', 0)
+
+        # try this for maximum 3 minutes
+        attempt = 0
+        delay = 10
+        while attempt < 30 and len(keys) != len(doc_names):
+            msg = "view returned {0} items , expected to return {1} items"
+            self.log.info(msg.format(len(keys), len(doc_names)))
+            self.log.info("trying again in {0} seconds".format(delay))
+            time.sleep(10)
+            attempt += 1
+            results = self._get_view_results(rest, bucket, view_name, len(doc_names))
+            keys = self._get_keys(results)
+        keys = self._get_keys(results)
+        not_found = []
+        for name in doc_names:
+            if not name in keys:
+                not_found.append(name)
+        if not_found:
+            self._print_keys_not_found(not_found, 10)
+            self.fail("map function did not return docs for {0} keys".format(len(not_found)))
+
+            #add node
+            #create view
+            #load data
+            #get view
+
+
+
+            #more tests to run view after each incremental rebalance , add x items
+            #rebalance and get the view
+
+
