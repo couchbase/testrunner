@@ -11,7 +11,7 @@ log = logger.Logger.get_logger()
 class RebalanceHelper():
     @staticmethod
     #bucket is a json object that contains name,port,password
-    def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120):
+    def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2}".format(bucket, stat_key, stat_value))
         start = time.time()
         verified = False
@@ -24,8 +24,12 @@ class RebalanceHelper():
                 break
             else:
                 if stats and stat_key in stats:
-                    log.info("{0} : {1}".format(stat_key, stats[stat_key]))
-                time.sleep(2)
+                    if verbose:
+                        log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                if not verbose:
+                    time.sleep(0.1)
+                else:
+                    time.sleep(2)
         return verified
 
 
