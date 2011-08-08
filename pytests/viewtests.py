@@ -1,5 +1,6 @@
 import json
 import random
+from threading import Thread
 import unittest
 import uuid
 from TestInput import TestInputSingleton
@@ -16,6 +17,7 @@ class ViewTests(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.servers = TestInputSingleton.input.servers
+        self.params = TestInputSingleton.input.test_params
         master = self.servers[0]
         rest = RestConnection(self.servers[0])
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
@@ -541,4 +543,94 @@ class ViewTests(unittest.TestCase):
             #more tests to run view after each incremental rebalance , add x items
             #rebalance and get the view
 
+    def test_get_view_during_1_min_load_10k_working_set(self):
+        self._test_load_data_get_view_x_mins(1, 10000, 0)
 
+    def test_get_view_during_1_min_load_100k_working_set(self):
+        self._test_load_data_get_view_x_mins(1, 100000, 0)
+
+    def test_get_view_during_5_min_load_10k_working_set(self):
+        self._test_load_data_get_view_x_mins(5, 1000, 0)
+
+    def test_get_view_during_5_min_load_100k_working_set(self):
+        self._test_load_data_get_view_x_mins(5, 100000, 0)
+
+    def test_get_view_during_10_min_load_10k_working_set_1_min_after_load(self):
+        self._test_load_data_get_view_x_mins(10, 1000, 1)
+
+    #need to split this into two tests
+    def _test_load_data_get_view_x_mins(self, load_data_duration, number_of_items, run_view_duration):
+        desc = "description : this test will continuously load data and gets the view results for {0} minutes"
+        self.log.info(desc.format(load_data_duration))
+        master = self.servers[0]
+        rest = RestConnection(master)
+        bucket = "default"
+        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        prefix = str(uuid.uuid4())[:7]
+        map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
+        function = self._create_function(rest, bucket, view_name, map_fn)
+        rest.create_view(bucket, view_name, function)
+        self.created_views[view_name] = bucket
+        self.shutdown_load_data = False
+        self.docs_inserted = []
+        load_thread = Thread(target=self._insert_data_till_stopped, args=(bucket, view_name, prefix, number_of_items))
+        load_thread.start()
+        start = time.time()
+        delay = 5
+        while (time.time() - start) < load_data_duration * 60:
+            #limit can be a random number between 0,1000
+            limit = random.randint(0, 1000)
+            self.log.info("{0} seconds has passed ....".format((time.time() - start)))
+            results = self._get_view_results(rest, bucket, view_name, limit)
+            keys = self._get_keys(results)
+            self.log.info("view returned {0} rows".format(len(keys)))
+            time.sleep(delay)
+        self.shutdown_load_data = True
+        load_thread.join()
+        # try this for maximum 3 minutes
+        attempt = 0
+        delay = 10
+        limit = 10000
+        if len(self.docs_inserted) < limit:
+            limit = len(self.docs_inserted)
+        results = self._get_view_results(rest, bucket, view_name, limit)
+        keys = self._get_keys(results)
+        while attempt < 6 and len(keys) != limit:
+            msg = "view returned {0} items , expected to return {1} items"
+            self.log.info(msg.format(len(keys), limit))
+            self.log.info("trying again in {0} seconds".format(delay))
+            time.sleep(delay)
+            attempt += 1
+            results = self._get_view_results(rest, bucket, view_name, limit)
+            keys = self._get_keys(results)
+        #if user wants to keep getting view results
+        delay = 0.1
+        if run_view_duration > 0:
+            start = time.time()
+            while (time.time() - start) < run_view_duration * 60:
+                results = self._get_view_results(rest, bucket, view_name, limit)
+                keys = self._get_keys(results)
+                if len(keys) != limit:
+                    msg = "view returned {0} items , limit was set to {1}"
+                    self.log.info(msg.format(len(keys), limit))
+                    time.sleep(delay)
+                    self.log.info("retrieving view results again in {0} seconds".format(delay))
+                self.log.info(".")
+
+    def _insert_data_till_stopped(self, bucket, view_name, prefix, number_of_items):
+        self.docs_inserted = []
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        MemcachedClientHelper.direct_client(self.servers[0], bucket).flush()
+        inserted_index = []
+        while not self.shutdown_load_data:
+            for i in range(0, number_of_items):
+                key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
+                value = {"name": doc_name, "age": 1100}
+                try:
+                    moxi.set(key, 0, 0, json.dumps(value))
+                    if i not in inserted_index:
+                        inserted_index.append(i)
+                        self.docs_inserted.append(doc_name)
+                except Exception as ex:
+                    self.log.error("unable to set item , error {0}".format(ex))
+        self.log.info("inserted {0} json documents".format(len(self.docs_inserted)))
