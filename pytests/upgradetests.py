@@ -271,6 +271,30 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
+
+    def test_single_node_upgrade_s1_1_7_1(self):
+        self._install_and_upgrade(initial_version='1.7.1',
+                                  initialize_cluster=False,
+                                  insert_data=False,
+                                  create_buckets=False)
+
+    def test_single_node_upgrade_s2_1_7_1(self):
+        self._install_and_upgrade(initial_version='1.7.1',
+                                  initialize_cluster=True,
+                                  insert_data=False,
+                                  create_buckets=False)
+
+    def test_single_node_upgrade_s3_1_7_1(self):
+        self._install_and_upgrade(initial_version='1.7.1',
+                                  initialize_cluster=True,
+                                  insert_data=False,
+                                  create_buckets=True)
+
+    def test_single_node_upgrade_s4_1_7_1(self):
+        self._install_and_upgrade(initial_version='1.7.1',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
     #1.6.0
     #1.6.1
     #1.6.3
@@ -410,6 +434,30 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
     def test_multiple_node_rolling_upgrade_1_7_0(self):
         self._install_and_upgrade('1.7.0', True, True, False, -1, True)
+
+    def test_multiple_node_upgrade_m1_1_7_1(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.7.1', False, False, True)
+
+    def test_multiple_node_upgrade_m2_1_7_1(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.7.1', True, False)
+
+    def test_multiple_node_upgrade_m3_1_7_1(self):
+        self._install_and_upgrade('1.7.1', True, True)
+
+    def test_multiple_node_upgrade_m5_1_7_1(self):
+        self._install_and_upgrade('1.7.1', True, False, False)
+
+    def test_m6_1_7_1(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.7.1', True, True, True, 10)
+
+    def test_multiple_node_rolling_upgrade_1_7_1(self):
+        self._install_and_upgrade('1.7.1', True, True, False, -1, True)
 
 
 
