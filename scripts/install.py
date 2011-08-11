@@ -137,6 +137,7 @@ class MembaseServerInstaller(Installer):
             rest = RestConnection(server)
             try:
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
+		rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 cluster_initialized = True
                 break
             except ServerUnavailableException:
@@ -175,6 +176,7 @@ class CouchbaseServerInstaller(Installer):
             rest = RestConnection(server)
             try:
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
+		rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 cluster_initialized = True
                 break
             except ServerUnavailableException:

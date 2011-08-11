@@ -40,7 +40,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         bucket_data = {}
         
         if initialize_cluster:
-            rest.init_cluster_memoryQuota()
+	    rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             if create_buckets:
                 created = BucketOperationHelper.create_multiple_buckets(server, 1)
                 self.assertTrue(created, "unable to create multiple buckets")
@@ -499,7 +499,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             remote.membase_install(older_build)
             RestHelper(rest).is_ns_server_running(120)
             rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
-            rest.init_cluster_memoryQuota()
+	    rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             node_upgrade_status[server] = "installed"
             remote.disconnect()
 
@@ -647,7 +647,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 log.info("sleep for 10 seconds to wait for membase-server to start...")
                 time.sleep(10)
                 rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
-                rest.init_cluster_memoryQuota()
+		rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 remote.disconnect()
 
                 #readd this to the cluster
