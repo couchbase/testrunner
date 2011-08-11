@@ -18,6 +18,7 @@ class DrainRateTests(unittest.TestCase):
         self.number_of_items = -1
         self._create_default_bucket()
         self.drained_in_seconds = -1
+        self.reader_shutdown = False
 
     def _create_default_bucket(self):
         rest = RestConnection(self.master)
@@ -36,14 +37,29 @@ class DrainRateTests(unittest.TestCase):
         rest = RestConnection(self.master)
         buckets = rest.get_buckets()
         distribution = {512: 1.0}
+        self.bucket_data = {}
         for bucket in buckets:
-            MemcachedClientHelper.load_bucket(name=self.bucket,
-                                              servers=[self.master],
-                                              value_size_distribution=distribution,
-                                              number_of_threads=4,
-                                              number_of_items=self.number_of_items,
-                                              write_only=True,
-                                              moxi=False)
+            name = bucket.name.encode("ascii", "ignore")
+            self.bucket_data[name] = {}
+            self.bucket_data[name]["inserted_keys"], self.bucket_data[name]["rejected_keys"] =\
+            MemcachedClientHelper.load_bucket_and_return_the_keys(name=self.bucket,
+                                                                  servers=[self.master],
+                                                                  value_size_distribution=distribution,
+                                                                  number_of_threads=4,
+                                                                  number_of_items=self.number_of_items,
+                                                                  write_only=True,
+                                                                  moxi=False)
+
+    def _parallel_read(self):
+        rest = RestConnection(self.master)
+        buckets = rest.get_buckets()
+        while not self.reader_shutdown:
+            for bucket in buckets:
+                name = bucket.name.encode("ascii", "ignore")
+                mc = MemcachedClientHelper.direct_client(self.master, name)
+                for key in self.bucket_data[name]["inserted_keys"]:
+                    mc.get(key)
+
 
     def _monitor_drain_queue(self):
         #start whenever drain_queue is > 0
@@ -58,17 +74,27 @@ class DrainRateTests(unittest.TestCase):
                 self.drained_in_seconds = time.time() - start
                 break
 
-    def _test_drain(self):
+    def _test_drain(self, parallel_read=False):
+        reader = None
         loader = Thread(target=self._load_data_for_buckets)
         wait_for_queue = Thread(target=self._monitor_drain_queue)
         loader.start()
         wait_for_queue.start()
         self.log.info("waiting for loader thread to insert {0} items".format(self.number_of_items))
         loader.join()
+        if parallel_read:
+            reader = Thread(target=self._parallel_read)
+            reader.start()
         self.log.info("waiting for ep_queue == 0")
         wait_for_queue.join()
         self.log.info("took {0} seconds to drain {1} items".format(self.drained_in_seconds, self.number_of_items))
+        if parallel_read:
+            self.reader_shutdown = True
+            reader.join()
 
+    def test_drain_10k_items_parallel_read(self):
+        self.number_of_items = 10 * 1000
+        self._test_drain(True)
 
     def test_drain_10k_items(self):
         self.number_of_items = 10 * 1000
@@ -78,9 +104,15 @@ class DrainRateTests(unittest.TestCase):
         self.number_of_items = 100 * 1000
         self._test_drain()
 
+    def test_drain_100k_items_parallel_read(self):
+        self.number_of_items = 100 * 1000
+        self._test_drain(True)
 
     def test_drain_1M_items(self):
         self.number_of_items = 1 * 1000 * 1000
         self._test_drain()
 
+    def test_drain_1M_items_parallel_read(self):
+        self.number_of_items = 1 * 1000 * 1000
+        self._test_drain(True)
 
