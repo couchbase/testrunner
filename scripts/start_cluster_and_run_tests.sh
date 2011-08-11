@@ -27,9 +27,9 @@ pid=$!
 popd
 
 if [[ -f $conf ]] ; then
-    ./testrunner -c $conf -i $ini 2>&1 | tee make_test.log
+    ./testrunner -c $conf -i $ini 2>&1 -p makefile=True | tee make_test.log
 else
-    ./testrunner -t $conf -i $ini 2>&1 | tee make_test.log
+    ./testrunner -t $conf -i $ini 2>&1 -p makefile=True | tee make_test.log
 fi
 kill $pid
 wait

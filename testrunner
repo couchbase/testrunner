@@ -129,6 +129,7 @@ if __name__ == "__main__":
     os.environ["TEMP-FOLDER"] = tmp_folder_abs_path
     print os.environ["TEMP-FOLDER"]
 
+    results = []
     for name in names:
         #let's create temporary folder for logs and xml results
         start_time = time.time()
@@ -163,8 +164,24 @@ if __name__ == "__main__":
                 xunit.add_test(name=name, status='fail', time=time_taken,
                                errorType='membase.error', errorMessage=error_string)
                 break
+            results.append({"result": "fail", "name": name})
         else:
             xunit.add_test(name=name, time=time_taken)
+            results.append({"result": "pass", "name": name, "time": time_taken})
         xunit.write("{0}/report-{1}.xml".format(tmp_folder, str_time))
         xunit.print_summary()
         print "logs and results are available under {0}".format(tmp_folder)
+
+    if "makefile" in test_input.test_params:
+        #print out fail for those tests which failed and do sys.exit() error code
+        fail_count = 0
+        for result in results:
+            if result["result"] == "fail":
+                print result["name"]," fail "
+                fail_count += 1
+            else:
+               print result["name"]," pass"
+        if fail_count > 0:
+            sys.exit(1)
+
+
