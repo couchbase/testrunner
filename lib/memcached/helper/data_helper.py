@@ -63,7 +63,7 @@ class MemcachedClientHelper(object):
                 list.append({'size': size, 'value': payload, 'how_many': how_many})
 
         for item in list:
-            item['how_many'] /= number_of_threads
+            item['how_many'] /= int(number_of_threads)
             #at least one element for each value size
             if item['how_many'] < 1:
                 item['how_many'] = 1
@@ -71,7 +71,7 @@ class MemcachedClientHelper(object):
             log.info(msg.format(item['how_many'], item['size']))
 
         threads = []
-        for i in range(0, number_of_threads):
+        for i in range(0, int(number_of_threads)):
             #choose one of the servers random
             thread = WorkerThread(serverInfo=MemcachedClientHelper.random_pick(servers),
                                   name=name,
@@ -124,7 +124,7 @@ class MemcachedClientHelper(object):
                 list.append({'size': size, 'value': payload, 'how_many': how_many})
 
         for item in list:
-            item['how_many'] /= number_of_threads
+            item['how_many'] /= int(number_of_threads)
             #at least one element for each value size
             if item['how_many'] < 1:
                 item['how_many'] = 1
@@ -132,7 +132,7 @@ class MemcachedClientHelper(object):
             log.info(msg.format(item['how_many'], item['size']))
 
         threads = []
-        for i in range(0, number_of_threads):
+        for i in range(0, int(number_of_threads)):
             thread = WorkerThread(serverInfo=serverInfo,
                                   name=name,
                                   values_list=list,
