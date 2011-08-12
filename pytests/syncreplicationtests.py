@@ -1,5 +1,9 @@
+import json
+import random
+from threading import Thread
 import unittest
 import uuid
+import time
 from TestInput import TestInputSingleton
 import logger
 from mc_bin_client import MemcachedError
@@ -9,6 +13,88 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 
 import crc32
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+
+class SyncPersistenceOneNodeTest(unittest.TestCase):
+
+    def setUp(self):
+        self.log = logger.Logger.get_logger()
+        self.servers = TestInputSingleton.input.servers
+        self.params = TestInputSingleton.input.test_params
+        master = self.servers[0]
+        rest = RestConnection(self.servers[0])
+        rest.init_cluster(master.rest_username,master.rest_password)
+        rest.init_cluster_memoryQuota(master.rest_username, master.rest_password,memoryQuota=1000)
+        ClusterOperationHelper.cleanup_cluster(self.servers)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        self._create_default_bucket()
+        self.smartclient = MemcachedClientHelper.direct_client(master, "default")
+
+
+    def _create_default_bucket(self):
+        name = "default"
+        master = self.servers[0]
+        rest = RestConnection(master)
+        helper = RestHelper(RestConnection(master))
+        if not helper.bucket_exists(name):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
+            info = rest.get_nodes_self()
+            available_ram = info.mcdMemoryReserved * node_ram_ratio
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            ready = BucketOperationHelper.wait_for_memcached(master, name)
+            self.assertTrue(ready, msg="wait_for_memcached failed")
+        self.assertTrue(helper.bucket_exists(name),
+                        msg="unable to create {0} bucket".format(name))
+        self.load_thread = None
+        self.shutdown_load_data = False
+
+    def test_10k_items(self):
+        keys = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, 100)]
+        value = MemcachedClientHelper.create_value("*", 1024)
+        for k in keys:
+            mc = self.smartclient
+            vBucket = crc32.crc32_hash(k) & (mc.vbucket_count - 1)
+            mc.set(k, 0, 0, value)
+            mc.sync_persistence([{"key": k, "vbucket": vBucket}])
+
+    def test_10k_items_during_load(self):
+        keys = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, 100)]
+        value = MemcachedClientHelper.create_value("*", 1024)
+        prefix = str(uuid.uuid4())
+        working_set_size = 10 * 1000
+        self.load_thread = Thread(target=self._insert_data_till_stopped, args=("default", prefix, working_set_size))
+        self.load_thread.start()
+        for k in keys:
+            mc = self.smartclient
+            vBucket = crc32.crc32_hash(k) & (mc.vbucket_count - 1)
+            mc.set(k, 0, 0, value)
+            mc.sync_persistence([{"key": k, "vbucket": vBucket}])
+        self.shutdown_load_data = True
+        self.load_thread.join()
+
+    def tearDown(self):
+        self.shutdown_load_data = True
+        if self.load_thread:
+            self.load_thread.join()
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+
+
+    def _insert_data_till_stopped(self, bucket, prefix, number_of_items):
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        inserted_index = []
+        while not self.shutdown_load_data:
+            for i in range(0, number_of_items):
+                key = doc_name = "{0}-{1}".format(prefix, i)
+                value = {"name": doc_name, "age": random.randint(0, 5000)}
+                try:
+                    moxi.set(key, 0, 0, json.dumps(value))
+                    inserted_index.append(i)
+                except Exception as ex:
+                    self.log.error("unable to set item , error {0}".format(ex))
+        self.log.info("inserted {0} json documents".format(inserted_index))
+
+
+
+
 
 class SyncReplicationTest(unittest.TestCase):
     awareness = None
@@ -54,7 +140,6 @@ class SyncReplicationTest(unittest.TestCase):
             self.awareness.done()
             ClusterOperationHelper.cleanup_cluster(self._servers)
             BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
-
 
     def test_one_replica(self):
         self.common_setup(1)
