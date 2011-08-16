@@ -558,6 +558,16 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         sorted_builds = BuildQuery().sort_builds_by_version(filtered_builds)
         latest_version = sorted_builds[0].product_version
 
+        log.info("initial_version is {0}".format(initial_version))
+        #TODO: Use rest_client instead
+        if initial_version == "1.7.0" or initial_version == "1.7.1":
+           remote = RemoteMachineShellConnection(servers[0])
+           cmd = "wget -O- -q --post-data='rpc:eval_everywhere(ns_config, resave, []).' --user={0} --password={1} \
+                  http://localhost:8091/diag/eval".format(rest_settings.rest_username,rest_settings.rest_password)
+           log.info('Executing command to save config {0}'.format(cmd))
+           remote.execute_command(cmd,debug=True)
+           remote.disconnect()
+
         #if we dont want to do roll_upgrade ?
         if not roll_upgrade:
             for server in servers:
