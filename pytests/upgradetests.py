@@ -1,3 +1,5 @@
+import logger
+import time
 import unittest
 from TestInput import TestInputSingleton
 from builds.build_query import BuildQuery
@@ -7,8 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-import logger
-import time
+import testconstants
 
 class SingleNodeUpgradeTests(unittest.TestCase):
     #test descriptions are available http://techzone.couchbase.com/wiki/display/membase/Test+Plan+1.7.0+Upgrade
@@ -35,7 +36,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         remote.download_build(older_build)
         #now let's install ?
         remote.membase_install(older_build)
-        RestHelper(rest).is_ns_server_running(120)
+        RestHelper(rest).is_ns_server_running(testConstants.NS_SERVER_TIMEOUT)
         rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
         bucket_data = {}
         
@@ -77,7 +78,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         remote.download_build(appropriate_build)
         remote.membase_upgrade(appropriate_build)
         remote.disconnect()
-        RestHelper(rest).is_ns_server_running(120)
+        RestHelper(rest).is_ns_server_running(testConstants.NS_SERVER_TIMEOUT)
 
         pools_info = rest.get_pools_info()
 
@@ -497,7 +498,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             remote.download_build(older_build)
             #now let's install ?
             remote.membase_install(older_build)
-            RestHelper(rest).is_ns_server_running(120)
+            RestHelper(rest).is_ns_server_running(testConstants.NS_SERVER_TIMEOUT)
             rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
 	    rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             node_upgrade_status[server] = "installed"
@@ -577,7 +578,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                              version.strip())
                 remote.download_build(appropriate_build)
                 remote.membase_upgrade(appropriate_build)
-                RestHelper(RestConnection(server)).is_ns_server_running(120)
+                RestHelper(RestConnection(server)).is_ns_server_running(testConstants.NS_SERVER_TIMEOUT)
 
                 pools_info = RestConnection(server).get_pools_info()
 
@@ -643,7 +644,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 remote.download_build(appropriate_build)
 
                 remote.membase_install(appropriate_build)
-                RestHelper(rest).is_ns_server_running(120)
+                RestHelper(rest).is_ns_server_running(testConstants.NS_SERVER_TIMEOUT)
                 log.info("sleep for 10 seconds to wait for membase-server to start...")
                 time.sleep(10)
                 rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
