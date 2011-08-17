@@ -530,11 +530,13 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     #let's load 0.1 data
                     load_ratio = 0.1
                 distribution = {1024: 0.5, 20: 0.5}
+                #TODO: with write_only = False, sometimes the load hangs, debug this
                 inserted_keys, rejected_keys =\
                 MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
                                                                       ram_load_ratio=load_ratio,
                                                                       number_of_threads=1,
-                                                                      value_size_distribution=distribution)
+                                                                      value_size_distribution=distribution,
+                                                                      write_only=True)
                 log.info("wait until data is completely persisted on the disk")
 
         # cluster all the nodes together
