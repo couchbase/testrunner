@@ -345,7 +345,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         servers = input.servers
         self._install_and_upgrade('1.6.5.3', True, False)
 
-
         #in a 3 node cluster with default bucket with some keys shut down all the
         # nodes update all nodes one by one and then restart node(1),node(2) and node(3)
 
@@ -358,6 +357,11 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         input = TestInputSingleton.input
         servers = input.servers
         self._install_and_upgrade('1.6.5.3.1', True, True, True, 10)
+
+    def test_m6_1_6_5(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        self._install_and_upgrade('1.6.5', True, True, True, 10)
 
     def test_m6_1_6_5_3(self):
         input = TestInputSingleton.input
