@@ -462,10 +462,10 @@ class ViewTests(unittest.TestCase):
         moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
         for i in range(0, number_of_docs):
             key = doc_name = "{0}-{1}-{2}-{3}".format(view_name, prefix, i, str(uuid.uuid4()))
-            doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1100}
             try:
                 moxi.set(key, 0, 0, json.dumps(value))
+                doc_names.append(doc_name)
             except:
                 self.log.error("unable to set item , reinitialize the vbucket map")
         self.log.info("inserted {0} json documents".format(len(doc_names)))

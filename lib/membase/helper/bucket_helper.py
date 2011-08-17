@@ -8,6 +8,7 @@ import crc32
 import socket
 import ctypes
 from membase.api.rest_client import RestConnection, RestHelper
+import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 
 
@@ -180,6 +181,27 @@ class BucketOperationHelper():
                 time.sleep(2)
         return False
 
+    @staticmethod
+    def wait_for_vbuckets_ready_state(node, bucket,timeout_in_seconds=300):
+        log = logger.Logger.get_logger()
+        start_time = time.time()
+        end_time = start_time + timeout_in_seconds
+        ready_vbuckets = {}
+        rest = RestConnection(node)
+        RestHelper(rest).vbucket_map_ready(bucket, 60)
+        vbucket_count = len(rest.get_vbuckets(bucket))
+        client = MemcachedClientHelper.direct_client(node, bucket)
+        while time.time() < end_time and len(ready_vbuckets) < vbucket_count:
+            for i in range(0,vbucket_count):
+                (a, b, c) = client.get_vbucket_state(i)
+                if c == memcacheConstants.VB_STATE_ACTIVE:
+                    ready_vbuckets[i] = True
+                elif i in ready_vbuckets:
+                    log.warning("vbucket state changed from active to {0}".format(c))
+                    del ready_vbuckets[i]
+        return len(ready_vbuckets) == vbucket_count
+
+
     #try to insert key in all vbuckets before returning from this function
     #bucket { 'name' : 90,'password':,'port':1211'}
     @staticmethod
@@ -222,7 +244,9 @@ class BucketOperationHelper():
                 client.close()
                 client = None
             time.sleep(5)
-        return counter == vbucket_count
+        all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
+                                                                                 bucket, timeout_in_seconds)
+        return (counter == vbucket_count) and all_vbuckets_ready
 
     @staticmethod
     def verify_data(server, keys, value_equal_to_key, verify_flags, test, debug=False,bucket="default"):
@@ -259,7 +283,8 @@ class BucketOperationHelper():
                 keys_failed.append(key)
                 all_verified = False
         client.close()
-        log.error('unable to verify #{0} keys'.format(len(keys_failed)))
+        if len(keys_failed) > 0:
+            log.error('unable to verify #{0} keys'.format(len(keys_failed)))
         return all_verified
 
     @staticmethod

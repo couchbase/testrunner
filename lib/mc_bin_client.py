@@ -15,7 +15,6 @@ import crc32
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
-from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
 import memcacheConstants
 
 class MemcachedError(exceptions.Exception):
@@ -89,6 +88,12 @@ class MemcachedClient(object):
         assert myopaque is None or opaque == myopaque, \
             "expected opaque %x, got %x" % (myopaque, opaque)
         if errcode:
+            if errcode == 7:
+                try:
+                    a, b, vb_state = self.get_vbucket_state(self.vbucketId)
+                    rv += " when vbucket[{0}].state = {1}".format(self.vbucketId, vb_state)
+                except:
+                    pass
             raise MemcachedError(errcode,  rv)
         return cmd, opaque, cas, keylen, extralen, rv
 

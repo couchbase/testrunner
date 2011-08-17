@@ -1,10 +1,11 @@
+import random
 import unittest
 from TestInput import TestInputSingleton
 import mc_bin_client
 import time
 import uuid
 import logger
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -28,39 +29,28 @@ class MemcapableTestBase(object):
         self.bucket_name = bucket_name
         ClusterOperationHelper.cleanup_cluster(self.servers)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self.test)
+        self._create_default_bucket(unittest)
 
-        for serverInfo in self.servers:
-            rest = RestConnection(serverInfo)
+    def _create_default_bucket(self,unittest):
+        name = "default"
+        master = self.servers[0]
+        rest = RestConnection(master)
+        helper = RestHelper(RestConnection(master))
+        if not helper.bucket_exists(name):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
             info = rest.get_nodes_self()
-            rest.init_cluster(username=serverInfo.rest_username,
-                              password=serverInfo.rest_password)
-            rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
-            bucket_ram = info.mcdMemoryReserved * 2 / 3
-            if bucket_name != 'default' and self.bucket_port == 11211:
-                rest.create_bucket(bucket=bucket_name,
-                                   bucketType=bucket_type,
-                                   ramQuotaMB=bucket_ram,
-                                   proxyPort=self.bucket_port,
-                                   authType='sasl',
-                                   saslPassword='password')
-                msg = 'create_bucket succeeded but bucket "default" does not exist'
-                self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
-                ready = BucketOperationHelper.wait_for_memcached(serverInfo, self.bucket_name)
-                unittest.assertTrue(ready, "wait_for_memcached failed")
+            available_ram = info.mcdMemoryReserved * node_ram_ratio
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            ready = BucketOperationHelper.wait_for_memcached(master, name)
+            BucketOperationHelper.wait_for_vbuckets_ready_state(master,name)
+            unittest.assertTrue(ready, msg="wait_for_memcached failed")
+        unittest.assertTrue(helper.bucket_exists(name),
+                        msg="unable to create {0} bucket".format(name))
 
-            else:
-                rest.create_bucket(bucket=bucket_name,
-                                   bucketType=bucket_type,
-                                   ramQuotaMB=bucket_ram,
-                                   proxyPort=self.bucket_port)
-                msg = 'create_bucket succeeded but bucket "default" does not exist'
-                self.test.assertTrue(BucketOperationHelper.wait_for_bucket_creation(bucket_name, rest), msg=msg)
-                ready = BucketOperationHelper.wait_for_memcached(serverInfo, self.bucket_name)
-                unittest.assertTrue(ready, "wait_for_memcached failed")
 
     def set_test(self, key, exp, flags, values):
         for serverInfo in self.servers:
-            client = MemcachedClientHelper.proxy_client(serverInfo,self.bucket_name,)
+            client = MemcachedClientHelper.proxy_client(serverInfo, self.bucket_name, )
             #            self.log.info('Waitting 15 seconds for memcached started')
             #            time.sleep(15)
             for v in values:
@@ -85,7 +75,7 @@ class MemcapableTestBase(object):
     def incr_test(self, key, exp, flags, value, incr_amt, decr_amt, incr_time):
         global update_value
         for serverInfo in self.servers:
-            client = MemcachedClientHelper.proxy_client(serverInfo,self.bucket_name)
+            client = MemcachedClientHelper.proxy_client(serverInfo, self.bucket_name)
             #            self.log.info('Waitting 15 seconds for memcached started')
             #            time.sleep(15)
             if key != 'no_key':
@@ -111,7 +101,7 @@ class MemcapableTestBase(object):
     def decr_test(self, key, exp, flags, value, incr_amt, decr_amt, decr_time):
         global update_value
         for serverInfo in self.servers:
-            client = MemcachedClientHelper.proxy_client(serverInfo,self.bucket_name)
+            client = MemcachedClientHelper.proxy_client(serverInfo, self.bucket_name)
             if key != 'no_key':
                 client.set(key, exp, flags, value)
             if exp:
@@ -259,7 +249,7 @@ class GetlTests(unittest.TestCase):
 
     def _getl_body(self, prefix, getl_timeout, expiration):
         node = self.memcapableTestBase.servers[0]
-        mc = MemcachedClientHelper.direct_client(node,"default")
+        mc = MemcachedClientHelper.direct_client(node, "default")
         key = "{0}_{1}".format(prefix, str(uuid.uuid4()))
         self.log.info("setting key {0} with expiration {1}".format(key, expiration))
         mc.set(key, expiration, 0, key)
@@ -323,7 +313,7 @@ class GetlTests(unittest.TestCase):
         expiration = 5
         getl_timeout = 15
         node = self.memcapableTestBase.servers[0]
-        mc = MemcachedClientHelper.direct_client(node,"default")
+        mc = MemcachedClientHelper.direct_client(node, "default")
         key = "{0}_{1}".format(prefix, str(uuid.uuid4()))
         self.log.info("setting key {0} with expiration {1}".format(key, expiration))
         mc.set(key, expiration, 0, key)
@@ -421,3 +411,74 @@ class SimpleDecrMembaseBucketDefaultPort(unittest.TestCase):
         else:
             self.fail(
                 "Expected value %d.  Test result %d" % (int(value) + incr_amt - decr_amt * decr_time, update_v))
+
+
+class AppendTests(unittest.TestCase):
+    def setUp(self):
+        self.log = logger.Logger.get_logger()
+        self.servers = TestInputSingleton.input.servers
+        self.params = TestInputSingleton.input.test_params
+        master = self.servers[0]
+        rest = RestConnection(self.servers[0])
+        rest.init_cluster(master.rest_username, master.rest_password)
+        info = rest.get_nodes_self()
+        rest.init_cluster_memoryQuota(master.rest_username, master.rest_password, memoryQuota=info.mcdMemoryReserved)
+        ClusterOperationHelper.cleanup_cluster(self.servers)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        self._create_default_bucket()
+        self.onenodemc = MemcachedClientHelper.direct_client(master, "default")
+
+    def _create_default_bucket(self):
+        name = "default"
+        master = self.servers[0]
+        rest = RestConnection(master)
+        helper = RestHelper(RestConnection(master))
+        if not helper.bucket_exists(name):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
+            info = rest.get_nodes_self()
+            available_ram = info.mcdMemoryReserved * node_ram_ratio
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            ready = BucketOperationHelper.wait_for_memcached(master, name)
+            self.assertTrue(ready, msg="wait_for_memcached failed")
+        self.assertTrue(helper.bucket_exists(name),
+                        msg="unable to create {0} bucket".format(name))
+        self.load_thread = None
+        self.shutdown_load_data = False
+
+    def test_append_wrong_cas(self):
+        #monitor the memory usage , it should not go beyond
+        #doing append 20,000 times ( each 5k) mem_used should not increase more than
+        #10 percent
+        #
+        stats = self.onenodemc.stats()
+        initial_mem_used = -1
+        if "mem_used" in stats:
+            initial_mem_used = int(stats["mem_used"])
+            self.assertTrue(initial_mem_used > 0)
+        key = str(uuid.uuid4())
+        size = 5 * 1024
+        value = MemcachedClientHelper.create_value("*", size)
+        self.onenodemc.set(key, 0, 0, value)
+        flags_v, cas_v, get_v = self.onenodemc.get(key)
+        self.onenodemc.append(key, value, cas_v)
+        iteration = 50000
+        for i in range(0, iteration):
+            try:
+                self.onenodemc.append(key, value, random.randint(0, 1000))
+            except:
+                #ignoring the error here
+                pass
+        stats = self.onenodemc.stats()
+        if "mem_used" in stats:
+            delta = int(stats["mem_used"]) - initial_mem_used
+            self.log.info("initial mem_used {0}, current mem_used {1}".format(initial_mem_used, stats["mem_used"]))
+            self.log.info(delta)
+
+
+    def tearDown(self):
+        self.shutdown_load_data = True
+        if self.load_thread:
+            self.load_thread.join()
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+
+
