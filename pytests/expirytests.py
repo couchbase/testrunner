@@ -23,62 +23,60 @@ class ExpiryTests(unittest.TestCase):
 
     def setUp(self):
         self.log = logger.Logger.get_logger()
-        self._servers = TestInputSingleton.input.servers
-        ClusterOperationHelper.cleanup_cluster(self._servers)
-        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
+        self.master = TestInputSingleton.input.servers[0]
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
 
         self._bucket_name = 'default'
-        # get moxi port
 
-
-        for serverInfo in self._servers:
-            rest = RestConnection(serverInfo)
-            info = rest.get_nodes_self()
-            self._bucket_port = info.moxi
-            rest.init_cluster(username=serverInfo.rest_username,
-                              password=serverInfo.rest_password)
-            rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
-            bucket_ram = info.mcdMemoryReserved * 2 / 3
-            rest.create_bucket(bucket=self._bucket_name,
-                               ramQuotaMB=bucket_ram,
-                               proxyPort=info.memcached)
-            msg = 'create_bucket succeeded but bucket "default" does not exist'
-            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self._bucket_name, rest), msg=msg)
-            ready = BucketOperationHelper.wait_for_memcached(serverInfo,self._bucket_name)
-            self.assertTrue(ready, "wait_for_memcached failed")
+        serverInfo = self.master
+        rest = RestConnection(serverInfo)
+        info = rest.get_nodes_self()
+        self._bucket_port = info.moxi
+        rest.init_cluster(username=serverInfo.rest_username,
+                          password=serverInfo.rest_password)
+        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
+        bucket_ram = info.memoryQuota * 2 / 3
+        rest.create_bucket(bucket=self._bucket_name,
+                           ramQuotaMB=bucket_ram,
+                           proxyPort=info.memcached)
+        msg = 'create_bucket succeeded but bucket "default" does not exist'
+        self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self._bucket_name, rest), msg=msg)
+        ready = BucketOperationHelper.wait_for_memcached(serverInfo,self._bucket_name)
+        self.assertTrue(ready, "wait_for_memcached failed")
 
     # test case to set 1000 keys and verify that those keys are stored
     #e1
     def test_expired_keys(self):
-        for serverInfo in self._servers:
-            client = MemcachedClientHelper.direct_client(serverInfo, self._bucket_name)
-            expirations = [2, 5, 10]
-            for expiry in expirations:
-                testuuid = uuid.uuid4()
-                keys = ["key_%s_%d" % (testuuid, i) for i in range(500)]
-                self.log.info("pushing keys with expiry set to {0}".format(expiry))
-                for key in keys:
-                    try:
-                        client.set(key, expiry, 0, key)
-                    except mc_bin_client.MemcachedError as error:
-                        msg = "unable to push key : {0} to bucket : {1} error : {2}"
-                        self.log.error(msg.format(key, client.vbucketId, error.status))
-                        self.fail(msg.format(key, client.vbucketId, error.status))
-                self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
-                delay = expiry + 5
-                msg = "sleeping for {0} seconds to wait for those items with expiry set to {1} to expire"
-                self.log.info(msg.format(delay, expiry))
-                time.sleep(delay)
-                self.log.info('verifying that all those keys have expired...')
-                for key in keys:
-                    try:
-                        client.get(key=key)
-                        msg = "expiry was set to {0} but key: {1} did not expire after waiting for {2}+ seconds"
-                        self.fail(msg.format(expiry, key, delay))
-                    except mc_bin_client.MemcachedError as error:
-                        self.assertEquals(error.status, 1,
-                                          msg="expected error code {0} but saw error code {1}".format(1, error.status))
-                self.log.info("verified that those keys inserted with expiry set to {0} have expired".format(expiry))
+        serverInfo = self.master
+        client = MemcachedClientHelper.direct_client(serverInfo, self._bucket_name)
+        expirations = [2, 5, 10]
+        for expiry in expirations:
+            testuuid = uuid.uuid4()
+            keys = ["key_%s_%d" % (testuuid, i) for i in range(500)]
+            self.log.info("pushing keys with expiry set to {0}".format(expiry))
+            for key in keys:
+                try:
+                    client.set(key, expiry, 0, key)
+                except mc_bin_client.MemcachedError as error:
+                    msg = "unable to push key : {0} to bucket : {1} error : {2}"
+                    self.log.error(msg.format(key, client.vbucketId, error.status))
+                    self.fail(msg.format(key, client.vbucketId, error.status))
+            self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
+            delay = expiry + 5
+            msg = "sleeping for {0} seconds to wait for those items with expiry set to {1} to expire"
+            self.log.info(msg.format(delay, expiry))
+            time.sleep(delay)
+            self.log.info('verifying that all those keys have expired...')
+            for key in keys:
+                try:
+                    client.get(key=key)
+                    msg = "expiry was set to {0} but key: {1} did not expire after waiting for {2}+ seconds"
+                    self.fail(msg.format(expiry, key, delay))
+                except mc_bin_client.MemcachedError as error:
+                    self.assertEquals(error.status, 1,
+                                      msg="expected error code {0} but saw error code {1}".format(1, error.status))
+            self.log.info("verified that those keys inserted with expiry set to {0} have expired".format(expiry))
 
 
     # MB-3964
@@ -88,7 +86,7 @@ class ExpiryTests(unittest.TestCase):
     # 4) do a dump with tap.py and count number of deletes sent (should be 0)
     def test_expired_keys_tap(self):
 
-        server = self._servers[0]
+        server = self.master
         # callback to track deletes
         queue = Queue(maxsize=10000)
         listener = TapListener(queue,server,"CMD_TAP_DELETE")
@@ -138,7 +136,7 @@ class ExpiryTests(unittest.TestCase):
 
 
     def tearDown(self):
-        BucketOperationHelper.delete_all_buckets_or_assert(servers=self._servers, test_case=self)
+        BucketOperationHelper.delete_all_buckets_or_assert(servers=[self.master], test_case=self)
 
 
 class TapListener(Thread):

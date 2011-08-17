@@ -24,7 +24,12 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         self.assertTrue(self.input, msg="input parameters missing...")
         self.servers = self.input.servers
         self.master = self.servers[0]
-
+        rest = RestConnection(self.master)
+        rest.init_cluster(username=self.master.rest_username,
+                          password=self.master.rest_password)
+        info = rest.get_nodes_self()
+        node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
+        rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
         BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
         ClusterOperationHelper.cleanup_cluster(servers=self.servers)
         credentials = self.input.membase_settings
@@ -80,16 +85,10 @@ class CreateMembaseBucketsTests(unittest.TestCase):
     # if buckets = 0 then the test will create max number of buckets
     # if ops = 0 then no load is run against the system
     def test_buckets(self, bucket_count=0, ops=0, max_time=0, replicas=[1]):
-        rest = RestConnection(self.master)
-        info = rest.get_nodes_self()
-        rest.init_cluster(username=self.master.rest_username,
-                          password=self.master.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         bucket_ram = 100
-
         if not bucket_count:
-            bucket_count = info.mcdMemoryReserved / bucket_ram
-        if bucket_count > info.mcdMemoryReserved / bucket_ram:
+            bucket_count = info.memoryQuota / bucket_ram
+        if bucket_count > info.memoryQuota / bucket_ram:
             self.log.error('node does not have enough capacity for {0} buckets, exiting test'.format(bucket_count))
             return
 

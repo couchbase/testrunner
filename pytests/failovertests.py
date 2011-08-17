@@ -164,7 +164,7 @@ class FailoverTests(unittest.TestCase):
         rest.init_cluster(username=master.rest_username,
                           password=master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
-        bucket_ram = info.mcdMemoryReserved * 2 / 3
+        bucket_ram = info.memoryQuota * 2 / 3
         rest.create_bucket(bucket='default',
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,

@@ -138,7 +138,7 @@ class ReplicationTests(unittest.TestCase):
         self.bucket_name = bucket_name
         ip_rest = RestConnection(self.servers[0])
         info = ip_rest.get_nodes_self()
-        bucket_ram = info.mcdMemoryReserved * 2 / 3
+        bucket_ram = info.memoryQuota * 2 / 3
         self.log.info('creating bucket : {0}'.format(self.bucket_name))
         ip_rest.create_bucket(bucket=self.bucket_name,
                               ramQuotaMB=bucket_ram,

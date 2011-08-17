@@ -20,16 +20,19 @@ class SimpleSetGetTestBase(object):
         self.input = TestInputSingleton.input
         unittest.assertTrue(self.input, msg="input parameters missing...")
         self.test = unittest
-        self.servers = self.input.servers
-        ClusterOperationHelper.cleanup_cluster(self.servers)
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self.test)
+        self.master = self.input.servers[0]
+        rest = RestConnection(self.master)
+        rest.init_cluster(username=self.master.rest_username, password=self.master.rest_password)
+        rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self.test)
 
-        for serverInfo in self.servers:
-            rest = RestConnection(serverInfo)
-            info = rest.get_nodes_self()
-            rest.init_cluster(username=serverInfo.rest_username,
-                              password=serverInfo.rest_password)
-            rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
+        serverInfo = self.master
+        rest = RestConnection(serverInfo)
+        info = rest.get_nodes_self()
+        rest.init_cluster(username=serverInfo.rest_username,
+                          password=serverInfo.rest_password)
+        rest.init_cluster_memoryQuota(memoryQuota=info.memoryQuota)
 
     def set_get_test(self, value_size, number_of_items):
         fixed_value = MemcachedClientHelper.create_value("S", value_size)
@@ -37,62 +40,61 @@ class SimpleSetGetTestBase(object):
                 ("set-get-bucket-replica-1", 1),
                 ("set-get-bucket-replica-2", 2),
                 ("set-get-bucket-replica-3", 3)]
+        serverInfo = self.master
+        rest = RestConnection(serverInfo)
+        bucket_ram = int(rest.get_nodes_self().memoryQuota / 4)
 
-        for serverInfo in self.servers:
-            rest = RestConnection(serverInfo)
-            bucket_ram = int(rest.get_nodes_self().mcdMemoryReserved / 4)
+        mcport = rest.get_nodes_self().memcached
+        for name, replica in specs:
+            rest.create_bucket(name, bucket_ram, "sasl", "password", replica, mcport)
 
-            mcport = rest.get_nodes_self().memcached
-            for name, replica in specs:
-                rest.create_bucket(name, bucket_ram, "sasl", "password", replica, mcport)
+        bucket_data = {}
+        buckets = RestConnection(serverInfo).get_buckets()
+        for bucket in buckets:
+            bucket_data[bucket.name] = {}
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket.name)
+            self.test.assertTrue(ready, "wait_for_memcached failed")
 
-            bucket_data = {}
-            buckets = RestConnection(serverInfo).get_buckets()
-            for bucket in buckets:
-                bucket_data[bucket.name] = {}
-                ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket.name)
-                self.test.assertTrue(ready, "wait_for_memcached failed")
+            client = MemcachedClientHelper.direct_client(serverInfo, bucket.name)
+            inserted = []
+            rejected = []
+            while len(inserted) <= number_of_items and len(rejected) <= number_of_items:
+                try:
+                    key = str(uuid.uuid4())
+                    client.set(key, 0, 0, fixed_value)
+                    inserted.append(key)
+                except mc_bin_client.MemcachedError:
+                    pass
 
-                client = MemcachedClientHelper.direct_client(serverInfo, bucket.name)
-                inserted = []
-                rejected = []
-                while len(inserted) <= number_of_items and len(rejected) <= number_of_items:
-                    try:
-                        key = str(uuid.uuid4())
-                        client.set(key, 0, 0, fixed_value)
-                        inserted.append(key)
-                    except mc_bin_client.MemcachedError:
-                        pass
-
-                retry = 0
-                remaining_items = []
-                remaining_items.extend(inserted)
-                msg = "memcachedError : {0} - unable to get a pre-inserted key : {1}"
-                while retry < 10 and len(remaining_items) > 0:
-                    verified_keys = []
-                    for key in remaining_items:
-                        try:
-                            flag, keyx, value = client.get(key=key)
-                            if not value == fixed_value:
-                                self.test.fail("value mismatch for key {0}".format(key))
-                            verified_keys.append(key)
-                        except mc_bin_client.MemcachedError as error:
-                            self.log.error(msg.format(error.status, key))
-                        retry += 1
-                    [remaining_items.remove(x) for x in verified_keys]
-
-                print_count = 0
+            retry = 0
+            remaining_items = []
+            remaining_items.extend(inserted)
+            msg = "memcachedError : {0} - unable to get a pre-inserted key : {1}"
+            while retry < 10 and len(remaining_items) > 0:
+                verified_keys = []
                 for key in remaining_items:
-                    if print_count > 100:
-                        break
-                    print_count += 1
-                    self.log.error("unable to verify key : {0}".format(key))
-                if remaining_items:
-                    self.test.fail("unable to verify {0} keys".format(len(remaining_items)))
+                    try:
+                        flag, keyx, value = client.get(key=key)
+                        if not value == fixed_value:
+                            self.test.fail("value mismatch for key {0}".format(key))
+                        verified_keys.append(key)
+                    except mc_bin_client.MemcachedError as error:
+                        self.log.error(msg.format(error.status, key))
+                    retry += 1
+                [remaining_items.remove(x) for x in verified_keys]
+
+            print_count = 0
+            for key in remaining_items:
+                if print_count > 100:
+                    break
+                print_count += 1
+                self.log.error("unable to verify key : {0}".format(key))
+            if remaining_items:
+                self.test.fail("unable to verify {0} keys".format(len(remaining_items)))
 
 
     def tearDown_bucket(self):
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self.test)
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self.test)
 
 
 class MembaseBucket(unittest.TestCase):

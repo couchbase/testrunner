@@ -21,7 +21,7 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(self.servers[0])
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
-        mem_quota = int(rest.get_nodes_self().mcdMemoryReserved * node_ram_ratio)
+        mem_quota = int(rest.get_nodes_self().memoryQuota * node_ram_ratio)
         rest.init_cluster(master.rest_username,master.rest_password)
         rest.init_cluster_memoryQuota(master.rest_username, master.rest_password,memoryQuota=mem_quota)
         ClusterOperationHelper.cleanup_cluster(self.servers)
@@ -40,7 +40,7 @@ class ViewTests(unittest.TestCase):
         if not helper.bucket_exists(name):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
             info = rest.get_nodes_self()
-            available_ram = info.mcdMemoryReserved * node_ram_ratio
+            available_ram = info.memoryQuota * node_ram_ratio
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
             ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")

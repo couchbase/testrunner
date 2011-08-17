@@ -70,9 +70,6 @@ class RebalanceHelper():
                 tap_stats = client.stats('tap')
                 if tap_stats:
                     RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
-                tap_stats = client.stats()
-                if tap_stats:
-                    RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
                 client.close()
             except Exception as ex:
                 log.error("error {0} while getting stats...".format(ex))

@@ -37,11 +37,11 @@ class BucketOperationHelper():
         log = logger.Logger.get_logger()
         rest = RestConnection(server)
         info = rest.get_nodes_self()
-        if info.mcdMemoryReserved < 450.0:
-            log.error("at least need 450MB mcdMemoryReserved")
+        if info.memoryQuota < 450.0:
+            log.error("at least need 450MB memoryQuota")
             success = False
         else:
-            available_ram = info.mcdMemoryReserved * bucket_ram_ratio
+            available_ram = info.memoryQuota * bucket_ram_ratio
             if available_ram / howmany > 100:
                 bucket_ram = int(available_ram / howmany)
             else:
@@ -87,7 +87,7 @@ class BucketOperationHelper():
         rest = RestConnection(serverInfo)
         if bucket_ram < 0:
             info = rest.get_nodes_self()
-            bucket_ram = info.mcdMemoryReserved * 2 / 3
+            bucket_ram = info.memoryQuota * 2 / 3
 
         if password:
             authType = "sasl"
@@ -139,9 +139,9 @@ class BucketOperationHelper():
         log.info('deleting existing buckets on {0}'.format(serverInfo))
 
         rest = RestConnection(serverInfo)
-        rest.delete_bucket(bucket)
-
-        log.info('deleted bucket : {0} from {1}'.format(bucket,serverInfo.ip))
+        if RestHelper(rest).bucket_exists(bucket):
+            rest.delete_bucket(bucket)
+            log.info('deleted bucket : {0} from {1}'.format(bucket, serverInfo.ip))
         msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket)
         if test_case:
             test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200), msg=msg)

@@ -175,7 +175,7 @@ class AutoFailoverSettingsTests(unittest.TestCase):
                           password=master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         rest.reset_autofailover()
-        bucket_ram = info.mcdMemoryReserved * 2 / 3
+        bucket_ram = info.memoryQuota * 2 / 3
         rest.create_bucket(bucket=bucket_name,
                            ramQuotaMB=bucket_ram,
                            proxyPort=info.moxi)
@@ -239,7 +239,7 @@ class AutoFailoverTests(unittest.TestCase):
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         rest.update_autofailover_settings(True, age, max_nodes)
         rest.reset_autofailover()
-        bucket_ram = info.mcdMemoryReserved * 2 / 3
+        bucket_ram = info.memoryQuota * 2 / 3
         rest.create_bucket(bucket=bucket_name,
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,

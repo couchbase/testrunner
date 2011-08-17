@@ -90,7 +90,7 @@ class BackupRestoreTests(unittest.TestCase):
         server = self.master
         rest = RestConnection(server)
         info = rest.get_nodes_self()
-        size = int(info.mcdMemoryReserved * 2.0 / 3.0)
+        size = int(info.memoryQuota * 2.0 / 3.0)
         if bucket == "default":
             rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi)
         else:
@@ -156,7 +156,7 @@ class BackupRestoreTests(unittest.TestCase):
         bucket = "default"
         rest = RestConnection(self.master)
         info = rest.get_nodes_self()
-        size = int(info.mcdMemoryReserved * 2.0 / 3.0)
+        size = int(info.memoryQuota * 2.0 / 3.0)
         rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi, replicaNumber=replica)
         BucketOperationHelper.wait_for_memcached(self.master, bucket)
         client = MemcachedClientHelper.direct_client(self.master.ip, "default")
