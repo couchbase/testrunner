@@ -158,9 +158,6 @@ class RebalanceBaseTest(unittest.TestCase):
         rest = RestConnection(master)
         nodes = rest.node_statuses()
         otpNodeIds = [node.id for node in nodes]
-        #        if 'ns_1@127.0.0.1' in otpNodeIds:
-        #            otpNodeIds.remove('ns_1@127.0.0.1')
-        #            otpNodeIds.append('ns_1@{0}'.format(master.ip))
         return otpNodeIds
 
 
@@ -195,17 +192,16 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
         for server in self._servers[1:]:
-            otpNodeIds = RebalanceBaseTest.getOtpNodeIds(master)
-            self.log.info("current nodes : {0}".format(otpNodeIds))
+            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
             otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster {1}"
             self.assertTrue(otpNode, msg.format(server.ip, master.ip))
-            otpNodeIds.append(otpNode.id)
             distribution = RebalanceBaseTest.get_distribution(load_ratio)
             RebalanceBaseTest.load_data_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data,
                                                     self)
-            rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
+
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
             rebalanced_servers.append(server)
@@ -300,20 +296,18 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         rebalanced_servers = [master]
 
         for server in self._servers[1:]:
-            otpNodeIds = RebalanceBaseTest.getOtpNodeIds(master)
-            self.log.info("current nodes : {0}".format(otpNodeIds))
+            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
             self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
             otpNode = rest.add_node(creds.rest_username,
                                     creds.rest_password,
                                     server.ip)
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
-            otpNodeIds.append(otpNode.id)
             distribution = RebalanceBaseTest.get_distribution(load_ratio)
             bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers,
                                                                 bucket_data)
 
-            rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
             rebalanced_servers.append(server)
@@ -457,10 +451,9 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
             RebalanceBaseTest.load_data_for_buckets(rest, ram_ratio, distribution, [master], bucket_data, self)
 
-            otpNodeIds = RebalanceBaseTest.getOtpNodeIds(master)
-            self.log.info("current nodes : {0}".format(otpNodeIds))
+            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
             self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
-            rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[toBeEjectedNode.id])
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
 
@@ -527,7 +520,6 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
             time.sleep(10)
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
                            ejectedNodes=[toBeEjectedNode.id])
-            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
             expected_progress = 30
             reached = RestHelper(rest).rebalance_reached(expected_progress)
             self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
@@ -630,13 +622,11 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
         for server in self._servers[1:]:
-            otpNodeIds = RebalanceBaseTest.getOtpNodeIds(master)
-            self.log.info("current nodes : {0}".format(otpNodeIds))
+            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
             self.log.info("adding node {0}:{1} and rebalance afterwards".format(server.ip,server.port))
             otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster {1}"
             self.assertTrue(otpNode, msg.format(server.ip, master.ip))
-            otpNodeIds.append(otpNode.id)
             distribution = RebalanceBaseTest.get_distribution(items)
             for name in bucket_data:
                 inserted_keys, rejected_keys =\
@@ -646,7 +636,7 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                                                                       number_of_items=items,
                                                                       value_size_distribution=distribution,
                                                                       number_of_threads=1)
-                rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
                 self._reader_thread(inserted_keys, bucket_data, moxi=moxi)
                 self.assertTrue(rest.monitorRebalance(),
                                 msg="rebalance operation failed after adding node {0}".format(server.ip))
@@ -712,8 +702,7 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
                 bucket_data[name]["items_inserted_count"] += thread.inserted_keys_count()
 
         for server in self._servers[1:]:
-            otpNodeIds = RebalanceBaseTest.getOtpNodeIds(master)
-            self.log.info("current nodes : {0}".format(otpNodeIds))
+            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
             #do this 3 times , start rebalance , failover the node , remove the node and rebalance
             for i in range(0, 5):
                 distribution = RebalanceBaseTest.get_distribution(load_ratio)
@@ -812,7 +801,7 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
             thread = MutationThread(serverInfo=server, keys=inserted_keys, seed=mutation, op="set")
             thread.start()
 
-            rest.rebalance(otpNodes=otpNodeIds, ejectedNodes=[])
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
 
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
