@@ -314,7 +314,7 @@ class RestConnection(object):
 
     def init_cluster(self, username='Administrator', password='password'):
         api = self.baseUrl + 'settings/web'
-        params = urllib.urlencode({'port': '8091',
+        params = urllib.urlencode({'port': str(self.port),
                                    'username': username,
                                    'password': password})
 

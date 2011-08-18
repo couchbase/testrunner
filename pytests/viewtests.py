@@ -24,8 +24,8 @@ class ViewTests(unittest.TestCase):
         mem_quota = int(rest.get_nodes_self().memoryQuota * node_ram_ratio)
         rest.init_cluster(master.rest_username,master.rest_password)
         rest.init_cluster_memoryQuota(master.rest_username, master.rest_password,memoryQuota=mem_quota)
-        ClusterOperationHelper.cleanup_cluster(self.servers)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        ClusterOperationHelper.cleanup_cluster([self.servers[0]])
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[0]], self)
         self._create_default_bucket()
         self.created_views = {}
 
@@ -433,7 +433,7 @@ class ViewTests(unittest.TestCase):
                 rest.delete_view(bucket, view)
                 self.log.info("deleted view {0} from bucket {1}".format(view, bucket))
             if len(rest.node_statuses()) > 1:
-                ClusterOperationHelper.cleanup_cluster(self.servers)
+                ClusterOperationHelper.cleanup_cluster([self.servers[0]])
 
     def _setup_cluster(self):
         master = self.servers[0]
