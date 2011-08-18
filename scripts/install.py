@@ -176,14 +176,13 @@ class CouchbaseServerInstaller(Installer):
             rest = RestConnection(server)
             try:
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
-		rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+                rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 cluster_initialized = True
                 break
             except ServerUnavailableException:
                 log.error("error happened while initializing the cluster @ {0}".format(server.ip))
             log.info('sleep for 5 seconds before trying again ...')
             time.sleep(5)
-            log.error()
         if not cluster_initialized:
             raise Exception("unable to initialize membase node")
 
