@@ -191,7 +191,8 @@ class FailoverTests(unittest.TestCase):
                                           ram_load_ratio=load_ratio,
                                           value_size_distribution=distribution,
                                           number_of_threads=20,
-                                          moxi=False)
+                                          moxi=False,
+                                          write_only=True)
         log.info('inserted {0} keys'.format(inserted_count))
         nodes = rest.node_statuses()
         #while len(node) > replica * 2
