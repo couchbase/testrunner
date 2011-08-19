@@ -63,6 +63,11 @@ class BucketOperationHelper():
                     log.error(msg.format(name))
                     success = False
                     break
+                wait_for_memcached_timeout = 120
+                ready = BucketOperationHelper.wait_for_memcached(server, name, wait_for_memcached_timeout)
+                if not ready:
+                    log.error(
+                        "memcached is not ready yet after waiting for {0} seconds".format(wait_for_memcached_timeout))
         return success
 
     @staticmethod
