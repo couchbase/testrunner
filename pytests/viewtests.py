@@ -21,10 +21,11 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(self.servers[0])
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
-        mem_quota = int(rest.get_nodes_self().memoryQuota * node_ram_ratio)
+        mem_quota = int(rest.get_nodes_self().mcdMemoryReserved * node_ram_ratio)
         rest.init_cluster(master.rest_username,master.rest_password)
         rest.init_cluster_memoryQuota(master.rest_username, master.rest_password,memoryQuota=mem_quota)
-        ClusterOperationHelper.cleanup_cluster([self.servers[0]])
+        for server in self.servers:
+            ClusterOperationHelper.cleanup_cluster([server])
         ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[0]], self)
         self._create_default_bucket()
         self.created_views = {}
@@ -74,6 +75,10 @@ class ViewTests(unittest.TestCase):
 
     def test_view_on_100k_docs(self):
         self._test_view_on_multiple_docs(100000)
+
+
+    def test_count_sum_10k_docs(self):
+        self._test_sum_reduce_multiple_docs(10000)
 
     def test_count_reduce_100_docs(self):
         self._test_count_reduce_multiple_docs(100)
@@ -433,9 +438,12 @@ class ViewTests(unittest.TestCase):
                 rest.delete_view(bucket, view)
                 self.log.info("deleted view {0} from bucket {1}".format(view, bucket))
             if len(rest.node_statuses()) > 1:
-                ClusterOperationHelper.cleanup_cluster([self.servers[0]])
+                for server in self.servers:
+                    ClusterOperationHelper.cleanup_cluster([server])
 
     def _setup_cluster(self):
+        for server in self.servers:
+            ClusterOperationHelper.cleanup_cluster([server])
         master = self.servers[0]
         rebalanced = ClusterOperationHelper.add_and_rebalance(self.servers, master.rest_password)
         self.assertTrue(rebalanced, msg="cluster is not rebalanced")
@@ -565,6 +573,10 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
+        #let's flush the bucket
+        MemcachedClientHelper.direct_client(master, bucket).flush()
+        self.log.info("sleeping for 5 seconds")
+        time.sleep(5)
         view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
         prefix = str(uuid.uuid4())[:7]
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
