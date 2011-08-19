@@ -27,7 +27,7 @@ class RebalanceBaseTest(unittest.TestCase):
         info = rest.get_nodes_self()
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved * node_ram_ratio)
+        rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
         BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1)
 
     @staticmethod
@@ -773,32 +773,32 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
         elif load_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
         rebalanced_servers = [master]
+        #let's run this only for the first bucket
+        bucket0 = rest.get_buckets()[0].name
         inserted_keys, rejected_keys =\
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=rebalanced_servers,
                                                               ram_load_ratio=load_ratio,
                                                               number_of_items=-1,
+                                                              name=bucket0,
                                                               value_size_distribution=distribution,
-                                                              number_of_threads=20)
+                                                              number_of_threads=20,
+                                                              write_only=True)
         items_inserted_count += len(inserted_keys)
 
         #let's mutate all those keys
         for server in self._servers[1:]:
             nodes = rest.node_statuses()
             otpNodeIds = [node.id for node in nodes]
-            #            if 'ns_1@127.0.0.1' in otpNodeIds:
-            #                otpNodeIds.remove('ns_1@127.0.0.1')
-            #                otpNodeIds.append('ns_1@{0}'.format(master.ip))
             self.log.info("current nodes : {0}".format(otpNodeIds))
             self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
             otpNode = rest.add_node(creds.rest_username,
                                     creds.rest_password,
-                                    server.ip)
+                                    server.ip, server.port)
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
-            otpNodeIds.append(otpNode.id)
 
             mutation = "{0}".format(uuid.uuid4())
-            thread = MutationThread(serverInfo=server, keys=inserted_keys, seed=mutation, op="set")
+            thread = MutationThread(serverInfo=server, keys=inserted_keys, seed=mutation, op="set", name=bucket0)
             thread.start()
 
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
@@ -811,9 +811,9 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
             thread.join()
 
             rejected = thread._rejected_keys
-            client = MemcachedClientHelper.direct_client(master, "default")
+            client = MemcachedClientHelper.proxy_client(master, bucket0)
             self.log.info("printing tap stats before verifying mutations...")
-            RebalanceHelper.print_taps_from_all_nodes(rest)
+            RebalanceHelper.print_taps_from_all_nodes(rest, bucket0)
             did_not_mutate_keys = []
             for key in inserted_keys:
                 if key not in rejected:
@@ -839,19 +839,19 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
                 msg = "replication state after waiting for up to 10 minutes : {0}"
                 self.log.info(msg.format(final_replication_state))
                 self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
-                                                                              bucket='default',
+                                                                              bucket=bucket0,
                                                                               timeout_in_seconds=600),
                                 msg="replication was completed but sum(curr_items) dont match the curr_items_total")
 
             start_time = time.time()
-            stats = rest.get_bucket_stats()
+            stats = rest.get_bucket_stats(bucket0)
             while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
                 self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
                 time.sleep(5)
                 stats = rest.get_bucket_stats()
                 #loop over all keys and verify
 
-            RebalanceHelper.print_taps_from_all_nodes(rest)
+            RebalanceHelper.print_taps_from_all_nodes(rest,bucket0)
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats()
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
