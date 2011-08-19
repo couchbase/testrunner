@@ -21,7 +21,10 @@ class FailoverBaseTest(unittest.TestCase):
         servers = input.servers
         for server in servers:
             shell = RemoteMachineShellConnection(server)
-            shell.start_membase()
+            if RestConnection(server).get_nodes_self().version.find("2.0") != -1:
+                shell.start_couchbase()
+            else:
+                shell.stop_membase()
             o, r = shell.execute_command("iptables -F")
             shell.log_command_output(o, r)
             shell.disconnect()
@@ -34,7 +37,10 @@ class FailoverBaseTest(unittest.TestCase):
     def common_tearDown(servers, testcase):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
-            shell.start_membase()
+            if RestConnection(server).get_nodes_self().version.find("2.0") != -1:
+                shell.start_couchbase()
+            else:
+                shell.start_couchbase()
             o, r = shell.execute_command("iptables -F")
             shell.log_command_output(o, r)
             shell.disconnect()
@@ -260,12 +266,15 @@ class FailoverTests(unittest.TestCase):
         for server in self._servers:
             if server.ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
-                shell.stop_membase()
+                if RestConnection(server).get_nodes_self().version.find("2.0") != -1:
+                    shell.stop_couchbase()
+                else:
+                    shell.stop_membase()
                 shell.disconnect()
                 log.info("stopped membase server on {0}".format(server))
                 break
 
-#iptables -A INPUT -p tcp -i eth0 --dport 1000:20000 -j REJECT
+            #iptables -A INPUT -p tcp -i eth0 --dport 1000:20000 -j REJECT
 
     def enable_firewall(self,node):
         log = logger.Logger.get_logger()
