@@ -3,6 +3,8 @@ import uuid
 import paramiko
 import logger
 import time
+from builds.build_query import BuildQuery
+
 
 log = logger.Logger.get_logger()
 
@@ -311,19 +313,21 @@ class RemoteMachineShellConnection:
         except IOError:
             pass
 
-    def find_build_version_in_win(self,path_to_version, version_file):
+    def find_build_version(self,path_to_version, version_file):
         sftp = self._ssh_client.open_sftp()
         ex_type = "exe"
         try:
             if path_to_version == "/cygdrive/c/Program Files/Couchbase/Server/":
-                product_name = 'cse'
+                product_name = 'cb'
             elif path_to_version == "/cygdrive/c/Program Files (x86)/Couchbase/Server/":
-                product_name = 'csse'
+                product_name = 'css'
             log.info(path_to_version)
             f = sftp.open(os.path.join(path_to_version, version_file), 'r+')
-            version = f.read().rstrip()
-            build_name = "{0}_{1}".format(product_name,version)
-            return build_name, version
+            full_version = f.read().rstrip()
+            tmp = full_version.split("-")
+            build_name = "{0}_{1}-{2}".format(product_name, tmp[0], tmp[1])
+            short_version = "{0}-{1}".format(tmp[0], tmp[1])
+            return build_name, short_version, full_version
         except IOError:
             log.error('Can not read version file')
         sftp.close()
@@ -579,32 +583,56 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.terminate_processes(info, ["beam", "couchdb"])
             self.remove_folders(linux_folders)
 
-    def couchbase_uninstall(self):
+    def couchbase_uninstall(self, product):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase"]
-
+        version_file = "VERSION.txt"
         info = self.extract_remote_info()
-        log.info(info.distribution_type)
-        type = info.distribution_type.lower()
+        type = info.type.lower()
         if type == 'windows':
-            exists = self.file_exists("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt')
-            log.info("exists ? {0}".format(exists))
-            install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > /cygdrive/c/automation/install.bat"
-            output, error = self.execute_command(install_command)
-            uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat"
-            self.log_command_output(output, error)
-            output, error = self.execute_command(uninstall_command)
-            self.log_command_output(output, error)
-            win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
-                             "firefox.*", "WerFault.*", "iexplore.*"]
-            self.terminate_processes(info, win_processes)
-            self.remove_folders([" /cygdrive/c/Program Files/Membase/Server/"])
-            output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
-            self.log_command_output(output, error)
-            self.wait_till_file_deleted("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
-                                        timeout_in_seconds=120)
-            time.sleep(60)
+            query = BuildQuery()
+            builds, changes = query.get_all_builds()
+            os_type = "exe"
+            task = "uninstall"
+            bat_file = "uninstall.bat"
+
+            if product == "cb":
+                product_name = "couchbase-server-enterprise"
+                version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
+
+            exist = self.file_exists(version_path, version_file)
+            log.info("Is VERSION file existed? {0}".format(exist))
+            if exist:
+                log.info("VERSION file exists.  Start to uninstall {0} server".format(product))
+                build_name, short_version, full_version = self.find_build_version(version_path, version_file)
+                log.info('Build name: {0}'.format(build_name))
+                build_name = build_name.rstrip() + ".exe"
+                log.info('Check if {0} is in tmp directory'.format(build_name))
+                exist = self.file_exists("/cygdrive/c/tmp/", build_name)
+                if not exist:   # if not exist in tmp dir, start to download that verion build
+                    build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
+                    downloaded = self.download_binary_in_win(build.url,product,short_version)
+                    if downloaded:
+                        log.info('Successful download {0}_{1}.exe'.format(product, short_version))
+                    else:
+                        log.error('Download {0}_{1}.exe failed'.format(product, short_version))
+                dir_paths = ['/cygdrive/c/automation','/cygdrive/c/tmp']
+                self.create_multiple_dir(dir_paths)
+                self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+                # modify bat file to run uninstall schedule task
+                self.modify_bat_file('/cygdrive/c/automation', bat_file,
+                                       product, info.architecture_type, info.windows_name, short_version, task)
+                log.info('sleep for 5 seconds before running task schedule uninstall')
+                time.sleep(5)
+                # run schedule task uninstall couchbase server
+                output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
+                self.log_command_output(output, error)
+                self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+                log.info('sleep 30 seconds before running the next job ...')
+                time.sleep(30)
+            else:
+                log.info('No {0} on this server'.format(product_name))
         elif type in ["ubuntu", "centos", "red hat"]:
             #uninstallation command is different
             if type == "ubuntu":
@@ -645,7 +673,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             # call uninstall function to install couchbase server
             # Need to detect csse or cse when uninstall.
             log.info("Start uninstall cb server on this server")
-            build_name, rm_version = self.find_build_version_in_win(version_path, version_file)
+            build_name, rm_version = self.find_build_version(version_path, version_file)
             log.info('build needed to do auto uninstall {0}'.format(build_name))
             # find installed build in tmp directory to match with currently installed version
             build_name = build_name.rstrip() + ".exe"
@@ -675,9 +703,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             time.sleep(15)
         else:
             log.info('No couchbase server on this server')
-
-    def couchbase_win_uninstall_standalone(self):
-        pass
 
     def membase_uninstall(self):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
@@ -816,6 +841,14 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             else:
                 arch = 'x86'
             os_name_response, error = self.execute_command("systeminfo | grep 'OS Name: '")
+            os_name_type = os_name_response[0].split(" ")
+            for name in os_name_type:
+                if name == "2008":
+                    windows_name = "2k8"
+                    break
+                elif name == "7":
+                    windows_name = "7"
+                    break
             if os_name_response:
                 log.info(os_name_response)
                 first_item = os_name_response[0]
@@ -824,6 +857,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 #let's run 'systeminfo grep 'OS Name: '
             info = RemoteMachineInfo()
             info.type = "Windows"
+            info.windows_name = windows_name
             info.distribution_type = os_distro
             info.architecture_type = arch
             info.ip = self.ip

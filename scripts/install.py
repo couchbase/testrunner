@@ -29,8 +29,6 @@ errors = {"UNREACHABLE": "",
 def installer_factory(params):
     mb_alias = ["membase", "membase-server", "mbs", "mb"]
     cb_alias = ["couchbase", "couchbase-server", "cb"]
-    cb_win_alias = ["couchbase-windows", "cse"]
-    cbs_win_alias = ["couchbase-single-windows","csse"]
     css_alias = ["couchbase-single", "couchbase-single-server", "css"]
     if params["product"] in mb_alias:
         return MembaseServerInstaller()
@@ -38,8 +36,6 @@ def installer_factory(params):
         return CouchbaseServerInstaller()
     elif params["product"] in css_alias:
         return CouchbaseSingleServerInstaller()
-    elif params["product"] in cb_win_alias:
-        return CouchbaseServerWindowsInstaller()
 
 
 class Installer(object):
@@ -52,14 +48,9 @@ class Installer(object):
 
     def uninstall(self, params):
         remote_client = RemoteMachineShellConnection(params["server"])
-        cb_win_alias = ["cse"]
-        if params["product"] not in cb_win_alias:
-            remote_client.membase_uninstall()
-            remote_client.couchbase_uninstall()
-            remote_client.couchbase_single_uninstall()
-        elif params["product"] == "cse":
-            query = BuildQuery()
-            remote_client.couchbase_win_uninstall(params["product"],params["version"],params["win"],query)
+        remote_client.membase_uninstall()
+        remote_client.couchbase_uninstall(params["product"])
+        remote_client.couchbase_single_uninstall()
 
     def build_url(self, params):
         errors = []
@@ -103,7 +94,6 @@ class Installer(object):
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
-            cb_win_alias = ["couchbase-windows","cse"]
 
             if params["product"] in mb_alias:
                 names = ['membase-server-enterprise', 'membase-server-community']
@@ -111,8 +101,6 @@ class Installer(object):
                 names = ['couchbase-server-enterprise', 'couchbase-server-community']
             elif params["product"] in css_alias:
                 names = ['couchbase-single-server-enterprise', 'couchbase-single-server-community']
-            elif params["product"] in cb_win_alias:
-                names = ['couchbase-server-enterprise', 'couchbase-server-community']
             else:
                 ok = False
                 errors.append(errors["INVALID-PARAMS"])
@@ -204,13 +192,43 @@ class CouchbaseServerInstaller(Installer):
         log = logger.new_logger("Installer")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
-        downloaded = remote_client.download_build(build)
-        if not downloaded:
-            log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        #TODO: need separate methods in remote_util for couchbase and membase install
-        remote_client.membase_install(build)
-        log.info('wait 5 seconds for membase server to start')
-        time.sleep(5)
+        info = remote_client.extract_remote_info()
+        type = info.type.lower()
+        if type == "windows":
+            os_type = "exe"
+            task = "install"
+            bat_file = "install.bat"
+            server_path = "/cygdrive/c/Program Files/Couchbase/Server/"
+            dir_paths = ['/cygdrive/c/automation','/cygdrive/c/tmp']
+
+            log = logger.new_logger("Installer")
+            build = self.build_url(params)
+            remote_client.create_multiple_dir(dir_paths)
+            remote_client.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+            downloaded = remote_client.download_binary_in_win(build.url, params["product"], params["version"])
+            if downloaded:
+                log.info('Successful download {0}_{1}.exe'.format( params["product"], params["version"]))
+            else:
+                log.error('Download {0}_{1}.exe failed'.format( params["product"], params["version"]))
+            # modify bat file to update new build version
+            remote_client.modify_bat_file('/cygdrive/c/automation', bat_file, params["product"],
+                                           info.architecture_type, info.windows_name, params["version"], task)
+            log.info('sleep for 5 seconds before running task schedule install me')
+            time.sleep(5)
+            # run task schedule to install couchbase server
+            output, error = remote_client.execute_command("cmd /c schtasks /run /tn installme")
+            remote_client.log_command_output(output, error)
+            remote_client.wait_till_file_added(server_path, "VERSION.txt", timeout_in_seconds=600)
+            log.info('wait 30 seconds for server to start up completely')
+            time.sleep(30)
+        else:
+            downloaded = remote_client.download_build(build)
+            if not downloaded:
+                log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
+            #TODO: need separate methods in remote_util for couchbase and membase install
+            remote_client.membase_install(build)
+            log.info('wait 5 seconds for membase server to start')
+            time.sleep(5)
 
 
 class CouchbaseSingleServerInstaller(Installer):

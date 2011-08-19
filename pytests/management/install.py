@@ -242,7 +242,7 @@ class InstallTest(unittest.TestCase):
             server_path = "/cygdrive/c/Program Files (x86)/Couchbase/Server/"
 
         info = remote_client.extract_remote_info()
-        build_name, version = remote_client.find_build_version_in_win(server_path, version_file)
+        build_name, version = remote_client.find_build_version(server_path, version_file)
         self.log.info('build needed to do auto uninstall {0}'.format(build_name))
         # find installed build in tmp directory
         build_name = build_name.rstrip() + ".exe"
@@ -313,7 +313,7 @@ class InstallTest(unittest.TestCase):
 
                 exist = remote_client.file_exists(server_path, version_file)
                 if exist:
-                    build_name, version = remote_client.find_build_version_in_win(server_path, version_file)
+                    build_name, version = remote_client.find_build_version(server_path, version_file)
                     self.log.info('build needed to do auto uninstall {0}'.format(build_name))
                     # find installed build in tmp directory
                     build_name = build_name.rstrip() + ".exe"
