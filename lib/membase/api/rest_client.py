@@ -647,14 +647,14 @@ class RestConnection(object):
         return buckets
 
 
-    def get_bucket_stats_for_node(self, bucket='default', node_ip=None):
-        if not Node:
+    def get_bucket_stats_for_node(self, bucket='default', node=None):
+        if not node:
             log.error('node_ip not specified')
             return None
 
         stats = {}
-        api = "{0}{1}{2}{3}{4}{5}".format(self.baseUrl, 'pools/default/buckets/',
-                                          bucket, "/nodes/", node_ip, ":8091/stats")
+        api = "{0}{1}{2}{3}{4}:{5}{6}".format(self.baseUrl, 'pools/default/buckets/',
+                                     bucket, "/nodes/", node.ip, node.port, "/stats")
 
         status, content = self._http_request(api)
 
@@ -683,7 +683,6 @@ class RestConnection(object):
                     node = RestParser().parse_get_nodes_response(json_node)
                     node.rest_username = self.username
                     node.rest_password = self.password
-                    node.port = self.port
                     if node.ip == "127.0.0.1":
                         node.ip = self.ip
                     nodes.append(node)
@@ -952,6 +951,7 @@ class Node(object):
         self.ip = ""
         self.rest_username = ""
         self.rest_password = ""
+        self.port = 8091
 
 
 class AutoFailoverSettings(object):
@@ -997,6 +997,7 @@ class RestParser(object):
         node.hostname = parsed['hostname']
         node.clusterCompatibility = parsed['clusterCompatibility']
         node.version = parsed['version']
+        node.port = parsed["hostname"][parsed["hostname"].find(":") + 1:]
         node.os = parsed['os']
         if "otpNode" in parsed:
             node.id = parsed["otpNode"]

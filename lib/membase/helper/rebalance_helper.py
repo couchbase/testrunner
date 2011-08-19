@@ -103,9 +103,9 @@ class RebalanceHelper():
         nodes = rest.get_nodes()
         for server in nodes:
             #get the stats
-            server_stats = rest.get_bucket_stats_for_node(bucket, server.ip)
+            server_stats = rest.get_bucket_stats_for_node(bucket, server)
             if not server_stats:
-                log.info("unable to get stats from {0}".format(server.ip))
+                log.info("unable to get stats from {0}:{1}".format(server.ip,server.port))
             else:
                 stats_received += 1
             all_server_stats.append((server, server_stats))
@@ -116,16 +116,19 @@ class RebalanceHelper():
             if not single_stats or "curr_items" not in single_stats:
                 continue
             sum += single_stats["curr_items"]
-            log.info("curr_items from {0} : {1}".format(server.ip, single_stats["curr_items"]))
+            log.info("curr_items from {0}:{1} : {2}".format(server.ip, server.port, single_stats["curr_items"]))
             if 'vb_pending_num' in single_stats:
                 vbucket_pending_sum += single_stats['vb_pending_num']
-                log.info("vb_pending_num from {0} : {1}".format(server.ip, single_stats["vb_pending_num"]))
+                log.info(
+                    "vb_pending_num from {0}:{1} : {2}".format(server.ip, server.port, single_stats["vb_pending_num"]))
             if 'vb_active_num' in single_stats:
                 vbucket_active_sum += single_stats['vb_active_num']
-                log.info("vb_active_num from {0} : {1}".format(server.ip, single_stats["vb_active_num"]))
+                log.info(
+                    "vb_active_num from {0}:{1} : {2}".format(server.ip, server.port, single_stats["vb_active_num"]))
             if 'vb_replica_num' in single_stats:
                 vbucket_replica_sum += single_stats['vb_replica_num']
-                log.info("vb_replica_num from {0} : {1}".format(server.ip, single_stats["vb_replica_num"]))
+                log.info(
+                    "vb_replica_num from {0}:{1} : {2}".format(server.ip, server.port, single_stats["vb_replica_num"]))
 
         msg = "summation of vb_active_num : {0} vb_pending_num : {1} vb_replica_num : {2}"
         log.info(msg.format(vbucket_active_sum, vbucket_pending_sum, vbucket_replica_sum))
@@ -159,7 +162,6 @@ class RebalanceHelper():
             rest = RestConnection(ip=ip)
             buckets = rest.get_buckets()
             for bucket in buckets:
-                print bucket.name
                 rest.delete_bucket(bucket.name)
                 log.info('deleted bucket : {0}'.format(bucket.name))
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
