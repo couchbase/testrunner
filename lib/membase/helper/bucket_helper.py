@@ -242,7 +242,7 @@ class BucketOperationHelper():
                 log.error("{0} while setting key ".format(ex))
             if client:
                 try:
-                    client.flush()
+                    client.flush(5)
                     client.stats('reset')
                 except Exception:
                     pass

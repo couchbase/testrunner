@@ -26,6 +26,14 @@ class ReplicationTests(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
+        serverInfo = self.servers[0]
+        rest = RestConnection(serverInfo)
+        info = rest.get_nodes_self()
+        node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
+        rest.init_cluster(username=serverInfo.rest_username,
+                          password=serverInfo.rest_password)
+        rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
+
         #make sure the master node does not have any other node
         #loop through all nodes and remove those nodes left over
         #from previous test runs
@@ -108,14 +116,13 @@ class ReplicationTests(unittest.TestCase):
         #quit after updating max 100,000 keys
         self.updated_keys = []
         rest = RestConnection(self.servers[0])
-        vbaware = VBucketAwareMemcached(rest, self.bucket_name)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], self.bucket_name)
         for key in self.keys:
             if len(self.updated_keys) > 10000:
                 break
-            client = vbaware.memcached(key)
             value = '{0}'.format(version)
             try:
-                client.append(key, value)
+                moxi.append(key, value)
                 self.updated_keys.append(key)
             except MemcachedError:
             #                self.log.error(error)
@@ -159,15 +166,14 @@ class ReplicationTests(unittest.TestCase):
         #verify all the keys
         #let's use vbucketaware
         rest = RestConnection(self.servers[0])
-        vbaware = VBucketAwareMemcached(rest, self.bucket_name)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], self.bucket_name)
         index = 0
         all_verified = True
         keys_failed = []
         for key in self.updated_keys:
             try:
-                client = vbaware.memcached(key)
                 index += 1
-                flag, keyx, value = client.get(key=key)
+                flag, keyx, value = moxi.get(key=key)
                 self.assertTrue(value.endswith(version),
                                 msg='values do not match . key value should endwith {0}'.format(version))
             except MemcachedError as error:
@@ -181,7 +187,6 @@ class ReplicationTests(unittest.TestCase):
                 #                keys_failed.append(key)
                 #                all_verified = False
 
-        vbaware.done()
         self.assertTrue(all_verified,
                         'unable to verify #{0} keys'.format(len(keys_failed)))
 
