@@ -534,12 +534,15 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
 
         info = self.extract_remote_info()
         log.info(info.distribution_type)
-        type = info.type.lower()
+        type = info.distribution_type.lower()
         if type == 'windows':
-            exists = self.file_exists("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt')
+            if info.architecture_type == "x86_64":
+                exists = self.file_exists("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt')
+            elif info.architecture_type == "x86":
+                exists = self.file_exists("/cygdrive/c/Program Files/Couchbase/Server/", 'VERSION.txt')
             log.info("exists ? {0}".format(exists))
-
-            uninstall_init_command = "echo '[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-DlgOrder]\r\n\
+            if exists:
+                uninstall_init_command = "echo '[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-DlgOrder]\r\n\
 Dlg0={95137A8D-0896-4BB8-85B3-9D7723BA6811}-MessageBox-0\r\n\
 Count=2\r\n\
 Dlg1={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0\r\n\
@@ -549,21 +552,24 @@ Result=6\r\n\
 Result=1\r\n\
 bOpt1=0\r\n\
 bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
-            output, error = self.execute_command(uninstall_init_command)
-            self.log_command_output(output, error)
-            uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\css_win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat"
-            self.log_command_output(output, error)
-            output, error = self.execute_command(uninstall_command)
-            self.log_command_output(output, error)
-            win_processes = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
-                             "WerFault.*"]
-            self.terminate_processes(info, win_processes)
-            self.remove_folders(["/cygdrive/c/Program Files (x86)/Couchbase/Server/"])
-            output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
-            self.log_command_output(output, error)
-            self.wait_till_file_deleted("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
-                                        timeout_in_seconds=120)
-            time.sleep(60)
+                output, error = self.execute_command(uninstall_init_command)
+                self.log_command_output(output, error)
+                uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\css_win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat"
+                self.log_command_output(output, error)
+                output, error = self.execute_command(uninstall_command)
+                self.log_command_output(output, error)
+                win_processes = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
+                                 "WerFault.*"]
+                self.terminate_processes(info, win_processes)
+                self.remove_folders(["/cygdrive/c/Program Files (x86)/Couchbase/Server/"])
+                output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
+                self.log_command_output(output, error)
+                self.wait_till_file_deleted("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
+                                            timeout_in_seconds=120)
+                log.info("Wait for 30 seconds before doing something else")
+                time.sleep(30)
+            else:
+                log.info("No couchbase single server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
             #uninstallation command is different
             if type == "ubuntu":
@@ -589,7 +595,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                          "/opt/couchbase"]
         version_file = "VERSION.txt"
         info = self.extract_remote_info()
-        type = info.type.lower()
+        log.info(info.distribution_type)
+        type = info.distribution_type.lower()
         if type == 'windows':
             query = BuildQuery()
             builds, changes = query.get_all_builds()
@@ -715,23 +722,27 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if type == 'windows':
             exists = self.file_exists("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt')
             log.info("exists ? {0}".format(exists))
-            install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > \
-                               /cygdrive/c/automation/install.bat"
-            output, error = self.execute_command(install_command)
-            uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > \
-                                /cygdrive/c/automation/uninstall.bat"
-            self.log_command_output(output, error)
-            output, error = self.execute_command(uninstall_command)
-            self.log_command_output(output, error)
-            win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
-                             "firefox.*", "WerFault.*", "iexplore.*"]
-            self.terminate_processes(info, win_processes)
-            self.remove_folders([" /cygdrive/c/Program Files/Membase/Server/"])
-            output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
-            self.log_command_output(output, error)
-            self.wait_till_file_deleted("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
-                                        timeout_in_seconds=120)
-            time.sleep(60)
+            if exists:
+                log.info("start to uninstall membase server")
+                install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > \
+                                   /cygdrive/c/automation/install.bat"
+                output, error = self.execute_command(install_command)
+                uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > \
+                                    /cygdrive/c/automation/uninstall.bat"
+                self.log_command_output(output, error)
+                output, error = self.execute_command(uninstall_command)
+                self.log_command_output(output, error)
+                win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
+                                 "firefox.*", "WerFault.*", "iexplore.*"]
+                self.terminate_processes(info, win_processes)
+                self.remove_folders([" /cygdrive/c/Program Files/Membase/Server/"])
+                output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
+                self.log_command_output(output, error)
+                self.wait_till_file_deleted("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
+                                            timeout_in_seconds=120)
+                time.sleep(60)
+            else:
+                log.info("No membase server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
             #uninstallation command is different
             if type == "ubuntu":
@@ -858,7 +869,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info = RemoteMachineInfo()
             info.type = "Windows"
             info.windows_name = windows_name
-            info.distribution_type = os_distro
+            info.distribution_type = "Windows"
             info.architecture_type = arch
             info.ip = self.ip
             info.distribution_version = os_version
