@@ -48,14 +48,14 @@ class BucketOperationHelper():
                 bucket_ram = 100
                 #choose a port that is not taken by this ns server
             port = info.memcached
-#            type = ["membase" for i in range(0, howmany)]
             for i in range(0,howmany):
                 name = "bucket-{0}".format(i)
                 rest.create_bucket(bucket=name,
                                    ramQuotaMB=bucket_ram,
                                    replicaNumber=replica,
                                    authType="sasl",
-                                   saslPassword="password")
+                                   saslPassword="password",
+                                   proxyPort=port)
                 port += 1
                 msg = "create_bucket succeeded but bucket \"{0}\" does not exist"
                 bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
@@ -63,11 +63,6 @@ class BucketOperationHelper():
                     log.error(msg.format(name))
                     success = False
                     break
-                wait_for_memcached_timeout = 120
-                ready = BucketOperationHelper.wait_for_memcached(server, name, wait_for_memcached_timeout)
-                if not ready:
-                    log.error(
-                        "memcached is not ready yet after waiting for {0} seconds".format(wait_for_memcached_timeout))
         return success
 
     @staticmethod

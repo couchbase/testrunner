@@ -41,12 +41,11 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         bucket_data = {}
         
         if initialize_cluster:
-	    rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+            rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             if create_buckets:
                 created = BucketOperationHelper.create_multiple_buckets(server, 1,howmany=2)
                 self.assertTrue(created, "unable to create multiple buckets")
                 buckets = rest.get_buckets()
-
                 for bucket in buckets:
                     bucket_data[bucket.name] = {}
                     ready = BucketOperationHelper.wait_for_memcached(server, bucket.name)
