@@ -682,16 +682,19 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
     def membase_uninstall(self):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*"]
-
+        terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
+                                  "couchdb", "epmd"]
         info = self.extract_remote_info()
         log.info(info.distribution_type)
         type = info.distribution_type.lower()
         if type == 'windows':
             exists = self.file_exists("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt')
             log.info("exists ? {0}".format(exists))
-            install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > /cygdrive/c/automation/install.bat"
+            install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > \
+                               /cygdrive/c/automation/install.bat"
             output, error = self.execute_command(install_command)
-            uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat"
+            uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > \
+                                /cygdrive/c/automation/uninstall.bat"
             self.log_command_output(output, error)
             output, error = self.execute_command(uninstall_command)
             self.log_command_output(output, error)
@@ -720,7 +723,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 log.info('running rpm -e to remove membase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            self.terminate_processes(info, ["beam", "memcached", "moxi", "vbucketmigrator", "couchdb"])
+            self.terminate_processes(info, terminate_process_list)
             self.remove_folders(linux_folders)
 
 
