@@ -635,7 +635,8 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                                                                       ram_load_ratio=-1,
                                                                       number_of_items=items,
                                                                       value_size_distribution=distribution,
-                                                                      number_of_threads=1)
+                                                                      number_of_threads=1,
+                                                                      write_only=True)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
                 self._reader_thread(inserted_keys, bucket_data, moxi=moxi)
                 self.assertTrue(rest.monitorRebalance(),

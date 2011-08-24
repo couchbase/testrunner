@@ -1,5 +1,6 @@
 from membase.api.rest_client import RestConnection, RestHelper
 import logger
+import testconstants
 
 class ClusterOperationHelper(object):
     #the first ip is taken as the master ip
@@ -63,11 +64,12 @@ class ClusterOperationHelper(object):
     def cleanup_cluster(servers):
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
-        RestHelper(rest).is_ns_server_running(timeout_in_seconds=120)
+        RestHelper(rest).is_ns_server_running(timeout_in_seconds=testconstants.NS_SERVER_TIMEOUT)
         nodes = rest.node_statuses()
+        master_id = rest.get_nodes_self().id
         if len(nodes) > 1:
                 log.info("rebalancing all nodes in order to remove nodes")
                 helper = RestHelper(rest)
-                removed = helper.remove_nodes(knownNodes=[node.id for node in rest.node_statuses()],
-                                              ejectedNodes=[node.id for node in nodes[1:]])
-                log.info("removed all the nodes from cluster associated with {0} ? {1}".format(nodes[0].id, removed))
+                removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
+                                              ejectedNodes=[node.id for node in nodes if node.id != master_id])
+                log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], removed))
