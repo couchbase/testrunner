@@ -9,12 +9,14 @@ from threading import Thread
 
 sys.path.append(".")
 sys.path.append("lib")
+import testconstants
+import couchdb
+import time
 from builds.build_query import BuildQuery
 import logger
 from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
-import time
 import TestInput
 
 product = "membase-server(ms),couchbase-single-server(css),couchbase-server(cs),zynga(z)"
@@ -53,12 +55,11 @@ class Installer(object):
         remote_client.couchbase_single_uninstall()
 
     def build_url(self, params):
-        errors = []
+        _errors = []
         #vars
         version = ''
         server = ''
         names = []
-        win = ''
 
         #replace "v" with version
         #replace p with product
@@ -74,18 +75,18 @@ class Installer(object):
         params = tmp
         ok = True
         if not "version" in params:
-            errors.append(errors["INVALID-PARAMS"])
+            _errors.append(errors["INVALID-PARAMS"])
             ok = False
         else:
             version = params["version"]
 
         if ok:
             if not "product" in params:
-                errors.append(errors["INVALID-PARAMS"])
+                _errors.append(errors["INVALID-PARAMS"])
                 ok = False
         if ok:
             if not "server" in params:
-                errors.append(errors["INVALID-PARAMS"])
+                _errors.append(errors["INVALID-PARAMS"])
                 ok = False
             else:
                 server = params["server"]
@@ -103,7 +104,7 @@ class Installer(object):
                 names = ['couchbase-single-server-enterprise', 'couchbase-single-server-community']
             else:
                 ok = False
-                errors.append(errors["INVALID-PARAMS"])
+                _errors.append(errors["INVALID-PARAMS"])
 
         if ok:
             info = RemoteMachineShellConnection(server).extract_remote_info()
@@ -111,7 +112,10 @@ class Installer(object):
             for name in names:
                 build = BuildQuery().find_build(builds, name, info.deliverable_type,
                                                 info.architecture_type, version)
-                if build:
+                if not build:
+                    msg = "unable to find a build for product {0} version {1} for package_type {2}"
+                    raise Exception(msg.format(name, version, info.deliverable_type))
+                else:
                     if 'amazon' in params:
                         build.url = build.url.replace("http://builds.hq.northscale.net",
                                                       "http://packages.northscale.com")
@@ -119,8 +123,7 @@ class Installer(object):
                         build.name = build.name.replace("enterprise", "community")
                     return build
 
-            errors.append(errors["BUILD-NOT-FOUND"])
-            ok = False
+            _errors.append(errors["BUILD-NOT-FOUND"])
 
         raise Exception("unable to find a build...")
 
@@ -138,7 +141,7 @@ class MembaseServerInstaller(Installer):
             rest = RestConnection(server)
             try:
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
-		rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+                rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 cluster_initialized = True
                 break
             except ServerUnavailableException:
@@ -195,7 +198,6 @@ class CouchbaseServerInstaller(Installer):
         info = remote_client.extract_remote_info()
         type = info.type.lower()
         if type == "windows":
-            os_type = "exe"
             task = "install"
             bat_file = "install.bat"
             server_path = "/cygdrive/c/Program Files/Couchbase/Server/"
@@ -235,9 +237,8 @@ class CouchbaseSingleServerInstaller(Installer):
     def __init__(self):
         Installer.__init__(self)
 
-
     def install(self, params):
-        log = logger.new_logger("Installer")
+        log = logger.new_logger("CouchbaseSingleServerInstaller")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
         downloaded = remote_client.download_build(build)
@@ -247,70 +248,35 @@ class CouchbaseSingleServerInstaller(Installer):
         log.info('wait 5 seconds for couchbase-single server to start')
         time.sleep(5)
 
-
-class CouchbaseServerWindowsInstaller(Installer):
-
-    def __init__(self):
-        Installer.__init__(self)
-
     def initialize(self, params):
-        log = logger.new_logger("Installer")
+        log = logger.new_logger("CouchbaseSingleServerInstaller")
         start_time = time.time()
-        cluster_initialized = False
         server = params["server"]
-        while time.time() < (start_time + (10 * 60)):
-            rest = RestConnection(server)
+        remote_client = RemoteMachineShellConnection(params["server"])
+        replace_127_0_0_1_cmd = "sed -i 's/127.0.0.1/0.0.0.0/g' {0}".format(
+            testconstants.COUCHBASE_SINGLE_DEFAULT_INI_PATH)
+        o, r = remote_client.execute_command(replace_127_0_0_1_cmd)
+        remote_client.log_command_output(o, r)
+        remote_client.stop_couchbase()
+        remote_client.start_couchbase()
+        couchdb_ok = False
+
+        while time.time() < (start_time + (1 * 60)):
             try:
-                rest.init_cluster(username=server.rest_username, password=server.rest_password)
-                cluster_initialized = True
+                couch_ip = "http://{0}:5984/".format(server.ip)
+                log.info("connecting to couch @ {0}".format(couch_ip))
+                couch = couchdb.Server(couch_ip)
+                couch.config()
+                #TODO: verify version number and other properties
+                couchdb_ok = True
                 break
-            except ServerUnavailableException:
-                log.error("error happened while initializing the cluster @ {0}".format(server.ip))
+            except Exception as ex:
+                msg = "error happened while creating connection to couchbase single server @ {0} , error : {1}"
+                log.error(msg.format(server.ip, ex))
             log.info('sleep for 5 seconds before trying again ...')
             time.sleep(5)
-            log.error()
-        if not cluster_initialized:
-            raise Exception("unable to initialize membase node")
-
-    def install(self, params):
-        version = params["version"]
-        abbr_pro = params["product"]
-        task = 'install'
-        ex_type = 'exe'
-        bat_file = 'install.bat'
-        os_name = params["win"]
-        if abbr_pro == 'cse':
-            server_path = "/cygdrive/c/Program Files/Couchbase/Server/"
-        log = logger.new_logger("Installer")
-        build = self.build_url(params)
-        remote_client = RemoteMachineShellConnection(params["server"])
-        info = remote_client.extract_remote_info()
-        if info.architecture_type == "x86_64":
-            os_type = "64"
-        else:
-            os_type = "32"
-        # remove and recreate automaion directory
-        dir_paths = ['/cygdrive/c/automation','/cygdrive/c/tmp']
-        remote_client.create_multiple_dir(dir_paths)
-        remote_client.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
-        # download required build to install on this server
-        log.info('build url {0}'.format(build.url))
-        downloaded = remote_client.download_binary_in_win(build.url, abbr_pro, version)
-        if downloaded:
-            log.info('Successful download {0}_{1}.exe'.format( abbr_pro, version))
-        else:
-            log.error('Download {0}_{1}.exe failed'.format( abbr_pro, version))
-        # modify bat file to update new build version
-        remote_client.modify_bat_file('/cygdrive/c/automation', bat_file,
-                                        abbr_pro, os_type, os_name, version, task)
-        log.info('sleep for 5 seconds before running task schedule install me')
-        time.sleep(5)
-        # run task schedule to install couchbase server
-        output, error = remote_client.execute_command("cmd /c schtasks /run /tn installme")
-        remote_client.log_command_output(output, error)
-        remote_client.wait_till_file_added(server_path, "VERSION.txt", timeout_in_seconds=600)
-        log.info('wait 30 seconds for server to start up completely')
-        time.sleep(30)
+        if not couchdb_ok:
+            raise Exception("unable to initialize couchbase single server")
 
 class InstallerJob(object):
     def sequential_install(self, params):
