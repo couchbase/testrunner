@@ -112,10 +112,8 @@ class Installer(object):
             for name in names:
                 build = BuildQuery().find_build(builds, name, info.deliverable_type,
                                                 info.architecture_type, version)
-                if not build:
-                    msg = "unable to find a build for product {0} version {1} for package_type {2}"
-                    raise Exception(msg.format(name, version, info.deliverable_type))
-                else:
+
+                if build:
                     if 'amazon' in params:
                         build.url = build.url.replace("http://builds.hq.northscale.net",
                                                       "http://packages.northscale.com")
@@ -124,8 +122,9 @@ class Installer(object):
                     return build
 
             _errors.append(errors["BUILD-NOT-FOUND"])
-
-        raise Exception("unable to find a build...")
+        msg = "unable to find a build for product {0} version {1} for package_type {2}"
+        info = RemoteMachineShellConnection(server).extract_remote_info()
+        raise Exception(msg.format(names, version, info.deliverable_type))
 
 class MembaseServerInstaller(Installer):
     def __init__(self):
