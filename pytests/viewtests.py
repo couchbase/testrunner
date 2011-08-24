@@ -437,9 +437,9 @@ class ViewTests(unittest.TestCase):
                 bucket = self.created_views[view]
                 rest.delete_view(bucket, view)
                 self.log.info("deleted view {0} from bucket {1}".format(view, bucket))
-            if len(rest.node_statuses()) > 1:
-                for server in self.servers:
-                    ClusterOperationHelper.cleanup_cluster([server])
+            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+            ClusterOperationHelper.cleanup_cluster(self.servers)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
     def _setup_cluster(self):
         for server in self.servers:
