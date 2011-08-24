@@ -531,6 +531,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
 
     def couchbase_single_uninstall(self):
         linux_folders = ["/opt/couchbase"]
+        terminate_process_list = ["beam", "couchdb"]
 
         info = self.extract_remote_info()
         log.info(info.distribution_type)
@@ -586,13 +587,15 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 log.info('running rpm -e to remove couchbase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            self.terminate_processes(info, ["beam", "couchdb"])
+            self.terminate_processes(info, terminate_process_list)
             self.remove_folders(linux_folders)
 
     def couchbase_uninstall(self, product):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase"]
+        terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
+                                  "couchdb", "epmd"]
         version_file = "VERSION.txt"
         info = self.extract_remote_info()
         log.info(info.distribution_type)
@@ -656,7 +659,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 log.info('running rpm -e to remove couchbase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            self.terminate_processes(info, ["beam", "memcached", "moxi", "vbucketmigrator", "couchdb"])
+            self.terminate_processes(info, terminate_process_list)
             self.remove_folders(linux_folders)
 
     def couchbase_win_uninstall(self,product, version, os_name, query):
