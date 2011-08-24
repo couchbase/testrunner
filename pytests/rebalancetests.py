@@ -638,7 +638,8 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                                                                       number_of_threads=1,
                                                                       write_only=True)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
-                rest.monitorRebalance()
+                self.assertTrue(rest.monitorRebalance(),
+                                msg="rebalance operation failed after adding node {0}".format(server.ip))
                 self.log.info("completed rebalancing in server {0}".format(server))
                 self._reader_thread(inserted_keys, bucket_data, moxi=moxi)
                 self.assertTrue(rest.monitorRebalance(),
