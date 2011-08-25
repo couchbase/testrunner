@@ -848,16 +848,16 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
                                 msg="replication was completed but sum(curr_items) dont match the curr_items_total")
 
             start_time = time.time()
-            stats = rest.get_bucket_stats(bucket0)
+            stats = rest.get_bucket_stats(bucket=bucket0)
             while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
                 self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
                 time.sleep(5)
-                stats = rest.get_bucket_stats()
+                stats = rest.get_bucket_stats(bucket=bucket0)
                 #loop over all keys and verify
 
             RebalanceHelper.print_taps_from_all_nodes(rest,bucket0)
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
-            stats = rest.get_bucket_stats()
+            stats = rest.get_bucket_stats(bucket=bucket0)
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
             self.assertEquals(stats["curr_items"], items_inserted_count,
                               msg=msg.format(stats["curr_items"], items_inserted_count))
