@@ -107,8 +107,9 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              name=bucket,
                                                                                              ram_load_ratio=30,
                                                                                              value_size_distribution=distribution,
-                                                                                             moxi=False,
-                                                                                             number_of_threads=40)
+                                                                                             moxi=True,
+                                                                                             write_only=True,
+                                                                                             number_of_threads=2)
 
         if not single_node:
             rest = RestConnection(self.master)
@@ -159,7 +160,7 @@ class BackupRestoreTests(unittest.TestCase):
         size = int(info.memoryQuota * 2.0 / 3.0)
         rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi, replicaNumber=replica)
         BucketOperationHelper.wait_for_memcached(self.master, bucket)
-        client = MemcachedClientHelper.direct_client(self.master.ip, "default")
+        client = MemcachedClientHelper.direct_client(self.master, "default")
         expiry = 60
         test_uuid = uuid.uuid4()
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(5000)]
@@ -203,11 +204,11 @@ class BackupRestoreTests(unittest.TestCase):
     def _test_backup_and_restore_bucket_overwriting_body(self, overwrite_flag=True):
         bucket = "default"
         BucketOperationHelper.create_bucket(serverInfo=self.master, test_case=self)
-        BucketOperationHelper.wait_for_memcached(self.master,bucket)
+        BucketOperationHelper.wait_for_memcached(self.master, bucket)
         self.add_nodes_and_rebalance()
 
-        client = MemcachedClientHelper.direct_client(self.master.ip, "default")
-        vbucket_count = RestConnection(self.master,"default")
+        client = MemcachedClientHelper.direct_client(self.master, "default")
+        vbucket_count = RestConnection(self.master, "default")
         expiry = 2400
         test_uuid = uuid.uuid4()
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(500)]
@@ -264,8 +265,9 @@ class BackupRestoreTests(unittest.TestCase):
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
-                                                                                             moxi=False,
-                                                                                             number_of_threads=40)
+                                                                                             moxi=True,
+                                                                                             write_only=True,
+                                                                                             number_of_threads=2)
 
         self.assertTrue(RestHelper(rest).wait_for_replication(180), msg="replication did not complete")
 
@@ -303,7 +305,7 @@ class BackupRestoreTests(unittest.TestCase):
         BackupHelper(self.master, self).restore(self.remote_tmp_folder)
         time.sleep(10)
 
-        BucketOperationHelper.verify_data(self.master.ip, inserted_keys, False, False, 11210, self)
+        BucketOperationHelper.verify_data(self.master, inserted_keys, False, False, 11210, self)
 
 
     def _test_delete_key_and_backup_and_restore_body(self):
@@ -314,7 +316,7 @@ class BackupRestoreTests(unittest.TestCase):
 
         self.add_nodes_and_rebalance()
 
-        client = MemcachedClientHelper.direct_client(self.master.ip, "default")
+        client = MemcachedClientHelper.direct_client(self.master, "default")
         expiry = 2400
         test_uuid = uuid.uuid4()
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(500)]
@@ -354,7 +356,7 @@ class BackupRestoreTests(unittest.TestCase):
 
         self.assertTrue(BucketOperationHelper.keys_dont_exist(self.master, missing_keys, self),
                         "Keys are not empty")
-        self.assertTrue(BucketOperationHelper.verify_data(self.master.ip, verify_keys, False, False, 11210, self),
+        self.assertTrue(BucketOperationHelper.verify_data(self.master, verify_keys, False, False, 11210, self),
                         "Missing keys")
 
 
@@ -371,8 +373,9 @@ class BackupRestoreTests(unittest.TestCase):
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
-                                                                                             moxi=False,
-                                                                                             number_of_threads=40)
+                                                                                             write_only=True,
+                                                                                             moxi=True,
+                                                                                             number_of_threads=2)
 
         rest = RestConnection(self.master)
         self.assertTrue(RestHelper(rest).wait_for_replication(180), msg="replication did not complete")
@@ -382,7 +385,6 @@ class BackupRestoreTests(unittest.TestCase):
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-
 
         node = RestConnection(self.master).get_nodes_self()
         BackupHelper(self.master, self).backup(bucket, node, self.remote_tmp_folder)
@@ -394,7 +396,7 @@ class BackupRestoreTests(unittest.TestCase):
         self.assertTrue(ready, "wait_for_memcached failed")
 
         BackupHelper(self.master, self).restore(self.remote_tmp_folder, moxi_port=11213)
-        self.assertTrue(BucketOperationHelper.verify_data(self.master.ip, inserted_keys, False, False, 11213, self),
+        self.assertTrue(BucketOperationHelper.verify_data(self.master, inserted_keys, False, False, 11213, self),
                         "Missing keys")
 
 
@@ -411,8 +413,9 @@ class BackupRestoreTests(unittest.TestCase):
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
-                                                                                             moxi=False,
-                                                                                             number_of_threads=40)
+                                                                                             write_only=True,
+                                                                                             moxi=True,
+                                                                                             number_of_threads=2)
 
         rest = RestConnection(self.master)
         self.assertTrue(RestHelper(rest).wait_for_replication(180), msg="replication did not complete")
@@ -422,7 +425,6 @@ class BackupRestoreTests(unittest.TestCase):
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_flusher_todo', 0)
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-
 
         node = RestConnection(self.master).get_nodes_self()
         BackupHelper(self.master, self).backup(bucket, node, self.remote_tmp_folder)
@@ -435,7 +437,7 @@ class BackupRestoreTests(unittest.TestCase):
         BackupHelper(self.master, self).restore(self.remote_tmp_folder, moxi_port=11212)
         time.sleep(10)
 
-        self.assertTrue(BucketOperationHelper.verify_data(self.master.ip, inserted_keys, False, False, 11212, self),
+        self.assertTrue(BucketOperationHelper.verify_data(self.master, inserted_keys, False, False, 11212, self),
                         "Missing keys")
 
 
