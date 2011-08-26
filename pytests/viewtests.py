@@ -354,7 +354,11 @@ class ViewTests(unittest.TestCase):
     def _get_built_in_reduce_results(self, results):
         self.assertTrue(results, "results are null")
         rows = results["rows"]
-        return rows[0]["value"]
+        try:
+            value = rows[0]["value"]
+        except IndexError:
+            value = None
+        return value
 
 
     def _create_function(self, rest, bucket, view, function, reduce=''):
@@ -418,7 +422,6 @@ class ViewTests(unittest.TestCase):
                 params = {"connection_timeout": "60000"}
                 if view.find("dev_") == 0:
                     params["full_set"] = "true"
-
                 results = rest.view_results(bucket, view, params, limit)
                 delta = time.time() - start
                 if results:
