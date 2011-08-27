@@ -160,7 +160,7 @@ class BackupRestoreTests(unittest.TestCase):
         size = int(info.memoryQuota * 2.0 / 3.0)
         rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=info.moxi, replicaNumber=replica)
         BucketOperationHelper.wait_for_memcached(self.master, bucket)
-        client = MemcachedClientHelper.direct_client(self.master, "default")
+        client = MemcachedClientHelper.direct_client(self.master, bucket)
         expiry = 60
         test_uuid = uuid.uuid4()
         keys = ["key_%s_%d" % (test_uuid, i) for i in range(5000)]
@@ -172,6 +172,7 @@ class BackupRestoreTests(unittest.TestCase):
                 msg = "unable to push key : {0} to bucket : {1} error : {2}"
                 self.log.error(msg.format(key, client.vbucketId, error.status))
                 self.fail(msg.format(key, client.vbucketId, error.status))
+        client.close()
         self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
         ready = RebalanceHelper.wait_for_stats(self.master, bucket, 'ep_queue_size', 0)
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
@@ -188,7 +189,7 @@ class BackupRestoreTests(unittest.TestCase):
         BucketOperationHelper.wait_for_memcached(self.master, bucket)
         backupHelper.restore(self.remote_tmp_folder)
         time.sleep(60)
-
+        client = MemcachedClientHelper.direct_client(self.master, bucket)
         self.log.info('verifying that all those keys have expired...')
         for key in keys:
             try:
@@ -198,6 +199,7 @@ class BackupRestoreTests(unittest.TestCase):
             except mc_bin_client.MemcachedError as error:
                 self.assertEquals(error.status, 1,
                                   msg="expected error code {0} but saw error code {1}".format(1, error.status))
+        client.close()
         self.log.info("verified that those keys inserted with expiry set to {0} have expired".format(expiry))
 
 
