@@ -7,6 +7,7 @@ Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 
 import hmac
 import socket
+import select
 import random
 import struct
 import exceptions
@@ -35,10 +36,13 @@ class MemcachedClient(object):
     """Simple memcached client."""
 
     vbucketId = 0
-    def __init__(self, host='127.0.0.1', port=11211):
+    def __init__(self, host='127.0.0.1', port=11211, timeout=30):
         self.host = host
         self.port = port
         self.s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.timeout = timeout
+        if timeout:
+            self.s.setblocking(0)
         self.s.connect_ex((host, port))
         self.r=random.Random()
         self.vbucket_count = 1024
@@ -59,26 +63,38 @@ class MemcachedClient(object):
         msg=struct.pack(fmt, magic,
             cmd, len(key), len(extraHeader), dtype, vbucketId,
                 len(key) + len(extraHeader) + len(val), opaque, cas)
-        self.s.send(msg + extraHeader + key + val)
+        _, w, _ = select.select([], [self.s], [], self.timeout)
+        if w:
+            self.s.send(msg + extraHeader + key + val)
+        else:
+            raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
 
     def _recvMsg(self):
         response = ""
         while len(response) < MIN_RECV_PACKET:
-            data = self.s.recv(MIN_RECV_PACKET - len(response))
-            if data == '':
-                raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
-            response += data
+            r, _, _ = select.select([self.s], [], [], self.timeout)
+            if r:
+                data = self.s.recv(MIN_RECV_PACKET - len(response))
+                if data == '':
+                    raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
+                response += data
+            else:
+                raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
         assert len(response) == MIN_RECV_PACKET
         magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas=\
             struct.unpack(RES_PKT_FMT, response)
 
         rv = ""
         while remaining > 0:
-            data = self.s.recv(remaining)
-            if data == '':
-                raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
-            rv += data
-            remaining -= len(data)
+            r, _, _ = select.select([self.s], [], [], self.timeout)
+            if r:
+                data = self.s.recv(remaining)
+                if data == '':
+                    raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
+                rv += data
+                remaining -= len(data)
+            else:
+                raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
         assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE)), "Got magic: %d" % magic
         return cmd, errcode, opaque, cas, keylen, extralen, rv
