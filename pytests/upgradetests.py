@@ -11,6 +11,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 import testconstants
 
+
 class SingleNodeUpgradeTests(unittest.TestCase):
     #test descriptions are available http://techzone.couchbase.com/wiki/display/membase/Test+Plan+1.7.0+Upgrade
 
@@ -39,11 +40,10 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
         rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
         bucket_data = {}
-        
         if initialize_cluster:
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             if create_buckets:
-                created = BucketOperationHelper.create_multiple_buckets(server, 1,howmany=2)
+                created = BucketOperationHelper.create_multiple_buckets(server, 1, howmany=2)
                 self.assertTrue(created, "unable to create multiple buckets")
                 buckets = rest.get_buckets()
                 for bucket in buckets:
@@ -63,8 +63,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                               moxi=False)
                         RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_queue_size', 0)
                         RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_flusher_todo', 0)
-
-
 
         version = input.test_params['version']
         #pick the first one in the list
@@ -98,7 +96,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                                rest,
                                                                bucket.name, self)
 
-
     def test_single_node_upgrade_s1_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
                                   initialize_cluster=False,
@@ -117,13 +114,11 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   insert_data=False,
                                   create_buckets=False)
 
-
     def test_single_node_upgrade_s1_1_6_5(self):
         self._install_and_upgrade(initial_version='1.6.5',
                                   initialize_cluster=False,
                                   insert_data=False,
                                   create_buckets=False)
-
 
     def test_single_node_upgrade_s2_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
@@ -148,7 +143,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   initialize_cluster=True,
                                   insert_data=False,
                                   create_buckets=False)
-
 
     def test_single_node_upgrade_s3_1_6_5_3(self):
         self._install_and_upgrade(initial_version='1.6.5.3',
@@ -192,7 +186,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   insert_data=True,
                                   create_buckets=True)
 
-
     def test_single_node_upgrade_s4_1_6_5_4(self):
         self._install_and_upgrade(initial_version='1.6.5.4',
                                   initialize_cluster=True,
@@ -204,7 +197,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
-
 
     def test_single_node_upgrade_s4_1_6_5_1(self):
         self._install_and_upgrade(initial_version='1.6.5.1',
@@ -402,7 +394,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         servers = input.servers
         self._install_and_upgrade('1.6.0', True, True, True, 10)
 
-
     def test_multiple_node_upgrade_m5_1_6_5_3(self):
         self._install_and_upgrade('1.6.5.3', True, False, False)
 
@@ -463,8 +454,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_multiple_node_rolling_upgrade_1_7_1(self):
         self._install_and_upgrade('1.7.1', True, True, False, -1, True)
 
-
-
     #do some bucket/init related operation
     #now only option x nodes
     #power on upgraded ones first and then the non-upgraded ones
@@ -503,7 +492,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             remote.membase_install(older_build)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
             rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
-	    rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+            rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             node_upgrade_status[server] = "installed"
             remote.disconnect()
 
@@ -517,9 +506,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             BucketOperationHelper.create_default_buckets(servers=[master],
                                                          assert_on_test=self)
 
-
-            RebalanceHelper.wait_for_stats(master, "default", 'ep_queue_size', 0)
-            RebalanceHelper.wait_for_stats(master, "default", 'ep_flusher_todo', 0)
             ready = BucketOperationHelper.wait_for_memcached(master, "default")
             self.assertTrue(ready, "wait_for_memcached failed")
 
@@ -537,6 +523,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                                                       value_size_distribution=distribution,
                                                                       write_only=True)
                 log.info("wait until data is completely persisted on the disk")
+                RebalanceHelper.wait_for_stats(master, "default", 'ep_queue_size', 0)
+                RebalanceHelper.wait_for_stats(master, "default", 'ep_flusher_todo', 0)
 
         # cluster all the nodes together
         ClusterOperationHelper.add_all_nodes_or_assert(master,
@@ -566,12 +554,12 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         log.info("initial_version is {0}".format(initial_version))
         #TODO: Use rest_client instead
         if initial_version == "1.7.0" or initial_version == "1.7.1":
-           remote = RemoteMachineShellConnection(servers[0])
-           cmd = "wget -O- -q --post-data='rpc:eval_everywhere(ns_config, resave, []).' --user={0} --password={1} \
-                  http://localhost:8091/diag/eval".format(rest_settings.rest_username,rest_settings.rest_password)
-           log.info('Executing command to save config {0}'.format(cmd))
-           remote.execute_command(cmd,debug=True)
-           remote.disconnect()
+            remote = RemoteMachineShellConnection(servers[0])
+            cmd = "wget -O- -q --post-data='rpc:eval_everywhere(ns_config, resave, []).' --user={0} --password={1} \
+                  http://localhost:8091/diag/eval".format(rest_settings.rest_username, rest_settings.rest_password)
+            log.info('Executing command to save config {0}'.format(cmd))
+            remote.execute_command(cmd, debug=True)
+            remote.disconnect()
 
         #if we dont want to do roll_upgrade ?
         if not roll_upgrade:
@@ -631,7 +619,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             # rebalance it back into the cluster
             for server_index in range(len(servers)):
                 server = servers[server_index]
-                master = servers[server_index-1]
+                master = servers[server_index - 1]
                 log.info("current master is {0}, rolling node is {1}".format(master, server))
 
                 remote = RemoteMachineShellConnection(server)
@@ -650,10 +638,10 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 toBeEjectedNodes = []
                 for node in nodes:
                     allNodes.append(node.id)
-                    if "{0}:{1}".format(node.ip,node.port) == "{0}:{1}".format(server.ip,server.port):
+                    if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
                         toBeEjectedNodes.append(node.id)
                 helper = RestHelper(rest)
-                removed = helper.remove_nodes(knownNodes=allNodes,ejectedNodes=toBeEjectedNodes)
+                removed = helper.remove_nodes(knownNodes=allNodes, ejectedNodes=toBeEjectedNodes)
 
                 remote.membase_uninstall()
                 remote.download_build(appropriate_build)
@@ -663,7 +651,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 log.info("sleep for 10 seconds to wait for membase-server to start...")
                 time.sleep(10)
                 rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
-		rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+                rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 remote.disconnect()
 
                 #readd this to the cluster
@@ -679,7 +667,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 rebalanceSucceeded = rest.monitorRebalance()
                 self.assertTrue(rebalanceSucceeded,
                                 "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
-
 
         #TODO: how can i verify that the cluster init config is preserved
         # verify data on upgraded nodes
