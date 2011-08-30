@@ -302,6 +302,8 @@ class RestConnection(object):
         end_time = time.time() + timeout
         while True:
             try:
+                default_socket_timeout = socket.getdefaulttimeout()
+                socket.setdefaulttimeout(timeout)
                 response, content = httplib2.Http().request(api, method, params, headers)
 #                log.info("{0} response {1} ,content {2}".format(api, response, content))
                 if response['status'] in ['200', '201', '202']:
@@ -321,6 +323,8 @@ class RestConnection(object):
                 log.error(e)
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
+            finally:
+                socket.setdefaulttimeout(default_socket_timeout)
             time.sleep(1)
 
 
