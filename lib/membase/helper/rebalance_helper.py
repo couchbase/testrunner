@@ -8,11 +8,13 @@ import threading
 
 log = logger.Logger.get_logger()
 
+
 class RebalanceHelper():
     @staticmethod
     #bucket is a json object that contains name,port,password
     def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
-        log.info("waiting for bucket {0} stat : {1} to match {2}".format(bucket, stat_key, stat_value))
+        log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
+                                                                                stat_value, master.ip))
         start = time.time()
         verified = False
         while (time.time() - start) <= timeout_in_seconds:
@@ -32,6 +34,21 @@ class RebalanceHelper():
                     time.sleep(2)
         return verified
 
+    @staticmethod
+    #bucket is a json object that contains name,port,password
+    def wait_for_stats_on_all(master, bucket, stat_key, stat_value, timeout_in_seconds=120):
+        rest = RestConnection(master)
+        servers = rest.get_nodes()
+        verified = False
+        for server in servers:
+            verified = RebalanceHelper.wait_for_stats(server, bucket, stat_key, stat_value, \
+                                                      timeout_in_seconds=timeout_in_seconds)
+            if not verified:
+                log.info("bucket {0}: stat_key {1} for server {2} timed out in {3}".format(bucket, stat_key, \
+                                                                                           server.ip, timeout_in_seconds))
+                break
+
+        return verified
 
     @staticmethod
     def wait_till_total_numbers_match(master,
@@ -43,7 +60,7 @@ class RebalanceHelper():
         verified = False
         while (time.time() - start) <= timeout_in_seconds:
             try:
-                if RebalanceHelper.verify_items_count(master,bucket):
+                if RebalanceHelper.verify_items_count(master, bucket):
                     verified = True
                     break
                 else:
@@ -60,7 +77,7 @@ class RebalanceHelper():
     #TODO: add password and port
     def print_taps_from_all_nodes(rest, bucket='default'):
         #get the port number from rest ?
-        
+
         log = logger.Logger.get_logger()
         nodes_for_stats = rest.get_nodes()
         for node_for_stat in nodes_for_stats:
@@ -74,7 +91,6 @@ class RebalanceHelper():
             except Exception as ex:
                 log.error("error {0} while getting stats...".format(ex))
 
-
     @staticmethod
     def log_interesting_taps(node, tap_stats, logger):
         interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
@@ -86,9 +102,8 @@ class RebalanceHelper():
                     logger.info("TAP {0} :{1}   {2}".format(node.id, name, tap_stats[name]))
                     break
 
-
     @staticmethod
-    def verify_items_count(master,bucket):
+    def verify_items_count(master, bucket):
         #get the #of buckets from rest
         rest = RestConnection(master)
         bucket_info = rest.get_bucket(bucket)
@@ -105,7 +120,7 @@ class RebalanceHelper():
             #get the stats
             server_stats = rest.get_bucket_stats_for_node(bucket, server)
             if not server_stats:
-                log.info("unable to get stats from {0}:{1}".format(server.ip,server.port))
+                log.info("unable to get stats from {0}:{1}".format(server.ip, server.port))
             else:
                 stats_received += 1
             all_server_stats.append((server, server_stats))
@@ -137,7 +152,6 @@ class RebalanceHelper():
         log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
         return (sum * (replica_factor + 1)) == master_stats["curr_items_tot"]
 
-
     @staticmethod
     def verify_maps(vbucket_map_before, vbucket_map_after):
         #for each bucket check the replicas
@@ -165,8 +179,7 @@ class RebalanceHelper():
                 rest.delete_bucket(bucket.name)
                 log.info('deleted bucket : {0}'.format(bucket.name))
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
-                test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200)
-                                     , msg=msg)
+                test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200), msg=msg)
 
     @staticmethod
     def wait_for_bucket_deletion(bucket,
