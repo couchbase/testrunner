@@ -8,6 +8,7 @@ from builds.build_query import BuildQuery
 
 log = logger.Logger.get_logger()
 
+
 class RemoteMachineInfo(object):
     def __init__(self):
         self.type = ''
@@ -17,10 +18,12 @@ class RemoteMachineInfo(object):
         self.distribution_version = ''
         self.deliverable_type = ''
 
+
 class RemoteMachineProcess(object):
     def __init__(self):
         self.pid = ''
         self.name = ''
+
 
 class RemoteMachineHelper(object):
     remote_shell = None
@@ -53,7 +56,6 @@ class RemoteMachineHelper(object):
             time.sleep(1)
         #            log.info('process {0} is running'.format(process_name))
         return True
-
 
     def is_process_running(self, process_name):
         processes = self.remote_shell.get_running_processes()
@@ -114,7 +116,6 @@ class RemoteMachineShellConnection:
                     processes.append(process)
         return processes
 
-
     def stop_membase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
@@ -133,7 +134,6 @@ class RemoteMachineShellConnection:
         if info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/membase-server start")
             self.log_command_output(o, r)
-
 
     def is_membase_installed(self):
         sftp = self._ssh_client.open_sftp()
@@ -178,7 +178,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
             self.log_command_output(output, error)
             log.info('get md5 sum for local and remote')
-            output, error = self.execute_command('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url,filename))
+            output, error = self.execute_command('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
             self.log_command_output(output, error)
             log.info('comparing md5 sum and downloading if needed')
             output, error = self.execute_command('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
@@ -204,7 +204,7 @@ class RemoteMachineShellConnection:
             except IOError:
                 return False
 
-    def remove_directory(self,remote_path):
+    def remove_directory(self, remote_path):
         sftp = self._ssh_client.open_sftp()
         try:
             path_of_files_in_dir = remote_path + '/*'
@@ -219,7 +219,7 @@ class RemoteMachineShellConnection:
             return False
         return True
 
-    def list_files(self,remote_path):
+    def list_files(self, remote_path):
         sftp = self._ssh_client.open_sftp()
         files = []
         try:
@@ -240,7 +240,7 @@ class RemoteMachineShellConnection:
             file_names = sftp.listdir(remotepath)
             for name in file_names:
                 if name.startswith(pattern):
-                    files_matched.append("{0}/{1}".format(remotepath,name))
+                    files_matched.append("{0}/{1}".format(remotepath, name))
         except IOError:
             #ignore this error
             pass
@@ -273,11 +273,11 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM WerFault.*')
         output, error = self.execute_command(
              "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe -q {0} -O {1}_{2}.exe';ls;".format(
-                url,name,version))
+                url, name, version))
         self.log_command_output(output, error)
-        return self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name,version))
+        return self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name, version))
 
-    def copy_file_local_to_remote(self,src_path, des_path):
+    def copy_file_local_to_remote(self, src_path, des_path):
         sftp = self._ssh_client.open_sftp()
         try:
             sftp.put(src_path, des_path)
@@ -286,13 +286,13 @@ class RemoteMachineShellConnection:
             log.error('Can not copy file')
 
     # copy multi files from local to remote server
-    def copy_files_local_to_remote(self,src_path, des_path):
+    def copy_files_local_to_remote(self, src_path, des_path):
         files = os.listdir(src_path)
         for file in files:
             full_src_path = os.path.join(src_path, file)
             full_des_path = os.path.join(des_path, file)
             self.copy_file_local_to_remote(full_src_path, full_des_path)
-            log.info('file "{0}" is copied to {1}'.format(file,des_path))
+            log.info('file "{0}" is copied to {1}'.format(file, des_path))
 
     def find_file(self, remote_path, file):
         sftp = self._ssh_client.open_sftp()
@@ -313,7 +313,7 @@ class RemoteMachineShellConnection:
         except IOError:
             pass
 
-    def find_build_version(self,path_to_version, version_file):
+    def find_build_version(self, path_to_version, version_file):
         sftp = self._ssh_client.open_sftp()
         ex_type = "exe"
         try:
@@ -397,7 +397,6 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
             self.log_command_output(output, error)
 
-
     def couchbase_single_install(self, build):
         is_couchbase_single = False
         if build.name.lower().find("couchbase-single") != -1:
@@ -411,7 +410,7 @@ class RemoteMachineShellConnection:
         if type == 'windows':
             win_processes = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
                              "WerFault.*"]
-            self.terminate_processes(info,win_processes)
+            self.terminate_processes(info, win_processes)
             install_init_command = "echo '[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-DlgOrder]\r\n\
 Dlg0={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdWelcome-0\r\n\
 Count=4\r\n\
@@ -438,7 +437,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             self.log_command_output(output, error)
             self.wait_till_file_added("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
                                           timeout_in_seconds=600)
-        elif info.deliverable_type in ["rpm","deb"]:
+        elif info.deliverable_type in ["rpm", "deb"]:
             if info.deliverable_type == 'rpm':
                 log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
                 output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
@@ -446,7 +445,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             elif info.deliverable_type == 'deb':
                 output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
                 self.log_command_output(output, error)
-
 
     def membase_install(self, build):
         is_membase = False
@@ -463,7 +461,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
         if info.type.lower() == 'windows':
             win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
                              "firefox.*", "WerFault.*", "iexplore.*"]
-            self.terminate_processes(info,win_processes)
+            self.terminate_processes(info, win_processes)
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             self.log_command_output(output, error)
             if is_membase:
@@ -472,7 +470,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             else:
                 self.wait_till_file_added("/cygdrive/c/Program Files/Couchbase/Server/", 'VERSION.txt',
                                           timeout_in_seconds=600)
-        elif info.deliverable_type in ["rpm","deb"]:
+        elif info.deliverable_type in ["rpm", "deb"]:
             if info.deliverable_type == 'rpm':
                 log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
                 output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
@@ -515,7 +513,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 added = True
         return added
 
-    def terminate_processes(self,info,list):
+    def terminate_processes(self, info, list):
         for process in list:
             type = info.distribution_type.lower()
             if type == "windows":
@@ -523,11 +521,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             elif type in ["ubuntu", "centos", "red hat"]:
                 self.terminate_process(info, process)
 
-    def remove_folders(self,list):
+    def remove_folders(self, list):
         for folder in list:
             output, error = self.execute_command("rm -rf {0}".format(folder))
             self.log_command_output(output, error)
-
 
     def couchbase_single_uninstall(self):
         linux_folders = ["/opt/couchbase"]
@@ -594,8 +591,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase"]
-        terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
-                                  "couchdb", "epmd"]
+        terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
+                                  "couchdb", "epmd", "memsup", "cpu_sup"]
         version_file = "VERSION.txt"
         info = self.extract_remote_info()
         log.info(info.distribution_type)
@@ -622,12 +619,12 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:   # if not exist in tmp dir, start to download that verion build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
-                    downloaded = self.download_binary_in_win(build.url,product,short_version)
+                    downloaded = self.download_binary_in_win(build.url, product, short_version)
                     if downloaded:
                         log.info('Successful download {0}_{1}.exe'.format(product, short_version))
                     else:
                         log.error('Download {0}_{1}.exe failed'.format(product, short_version))
-                dir_paths = ['/cygdrive/c/automation','/cygdrive/c/tmp']
+                dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
                 self.create_multiple_dir(dir_paths)
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
                 # modify bat file to run uninstall schedule task
@@ -662,7 +659,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.terminate_processes(info, terminate_process_list)
             self.remove_folders(linux_folders)
 
-    def couchbase_win_uninstall(self,product, version, os_name, query):
+    def couchbase_win_uninstall(self, product, version, os_name, query):
         builds, changes = query.get_all_builds()
         version_file = 'VERSION.txt'
         bat_file = "uninstall.bat"
@@ -691,13 +688,13 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             exist = self.file_exists("/cygdrive/c/tmp/", build_name)
             if not exist:   # if not exist in tmp dir, start to download that verion build
                 build = query.find_build(builds, name, ex_type, info.architecture_type, rm_version)
-                downloaded = self.download_binary_in_win(build.url,product,rm_version)
+                downloaded = self.download_binary_in_win(build.url, product, rm_version)
                 if downloaded:
                     log.info('Successful download {0}_{1}.exe'.format(product, rm_version))
                 else:
                     log.error('Download {0}_{1}.exe failed'.format(product, rm_version))
             # copy required files to automation directory
-            dir_paths = ['/cygdrive/c/automation','/cygdrive/c/tmp']
+            dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
             self.create_multiple_dir(dir_paths)
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             # modify bat file to run uninstall schedule task
@@ -765,7 +762,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.terminate_processes(info, terminate_process_list)
             self.remove_folders(linux_folders)
 
-
     def log_command_output(self, output, error):
         for line in error:
             log.error(line)
@@ -793,10 +789,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if info is None:
             info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            o,r = self.execute_command("taskkill /F /T /IM {0}*".format(process_name))
+            o, r = self.execute_command("taskkill /F /T /IM {0}*".format(process_name))
             self.log_command_output(o, r)
         else:
-            o,r = self.execute_command("killall -9 {0}".format(process_name))
+            o, r = self.execute_command("killall -9 {0}".format(process_name))
             self.log_command_output(o, r)
 
     def disconnect(self):
@@ -896,7 +892,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.distribution_version = os_version
             info.deliverable_type = ext
             return info
-        
+
     def stop_couchbase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
