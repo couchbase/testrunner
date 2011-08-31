@@ -9,6 +9,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached
+NUM_REBALANCE=2
 
 class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
@@ -70,7 +71,6 @@ class RebalanceBaseTest(unittest.TestCase):
                 test.log.error(msg)
             test.assertTrue(len(asserts) == 0, msg=asserts)
 
-
     @staticmethod
     def get_distribution(load_ratio):
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
@@ -79,7 +79,6 @@ class RebalanceBaseTest(unittest.TestCase):
         elif load_ratio > 10:
             distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
         return distribution
-
 
     @staticmethod
     def rebalance_in(servers, how_many):
@@ -160,7 +159,6 @@ class RebalanceBaseTest(unittest.TestCase):
         otpNodeIds = [node.id for node in nodes]
         return otpNodeIds
 
-
     @staticmethod
     def pick_node(master):
         rest = RestConnection(master)
@@ -212,7 +210,6 @@ class IncrementalRebalanceInTests(unittest.TestCase):
     def test_small_load_replica_0(self):
         RebalanceBaseTest.common_setup(self._input, self)
         self._common_test_body(0.1)
-
 
     def test_small_load(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
@@ -381,13 +378,13 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         self._common_test_body(300.0, replica=3)
 
 #this test case will add all the nodes and then start removing them one by one
-#
+
+
 class IncrementalRebalanceOut(unittest.TestCase):
     def setUp(self):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-
 
     def test_rebalance_out_small_load(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
@@ -412,7 +409,6 @@ class IncrementalRebalanceOut(unittest.TestCase):
     def test_rebalance_out_medium_load_3_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=3)
         self.test_rebalance_out(15.0, replica=3)
-
 
     def test_rebalance_out_dgm(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
@@ -476,7 +472,6 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
 
-
     def stop_rebalance_1_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
         self._common_test_body(1.0, replica=1)
@@ -488,7 +483,6 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
     def stop_rebalance_3_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=3)
         self._common_test_body(1.0, replica=3)
-
 
     def _common_test_body(self, ratio, replica):
         ram_ratio = (ratio / (len(self._servers)))
@@ -546,7 +540,6 @@ class StopRebalanceTests(unittest.TestCase):
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
 
-
     def stop_rebalance_1_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
         self._common_test_body(5.0, replica=1)
@@ -558,7 +551,6 @@ class StopRebalanceTests(unittest.TestCase):
     def stop_rebalance_3_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=3)
         self._common_test_body(5.0, replica=3)
-
 
     def _common_test_body(self, ratio, replica):
         ram_ratio = (ratio / (len(self._servers)))
@@ -584,7 +576,7 @@ class StopRebalanceTests(unittest.TestCase):
             RebalanceBaseTest.load_data_for_buckets(rest, ram_ratio, distribution, [master], bucket_data, self)
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             #let's start/step rebalance three times
-            for i in range(0, 3):
+            for i in range(0, NUM_REBALANCE):
                 self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
                 expected_progress = 30
@@ -623,7 +615,7 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
 
         for server in self._servers[1:]:
             self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
-            self.log.info("adding node {0}:{1} and rebalance afterwards".format(server.ip,server.port))
+            self.log.info("adding node {0}:{1} and rebalance afterwards".format(server.ip, server.port))
             otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster {1}"
             self.assertTrue(otpNode, msg.format(server.ip, master.ip))
@@ -655,7 +647,7 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
         for name in bucket_data:
             for key in inserted_keys:
                 if moxi:
-                    moxi = MemcachedClientHelper.proxy_client(self._servers[0],name)
+                    moxi = MemcachedClientHelper.proxy_client(self._servers[0], name)
                 else:
                     smartclient = VBucketAwareMemcached(rest, name)
                 try:
@@ -677,7 +669,6 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
     def test_10k_memcached(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
         self._common_test_body(10 * 1000)
-
 
 
 class FailoverRebalanceRepeatTests(unittest.TestCase):
@@ -707,8 +698,8 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
 
         for server in self._servers[1:]:
             self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
-            #do this 3 times , start rebalance , failover the node , remove the node and rebalance
-            for i in range(0, 5):
+            #do this 2 times , start rebalance , failover the node , remove the node and rebalance
+            for i in range(0, NUM_REBALANCE):
                 distribution = RebalanceBaseTest.get_distribution(load_ratio)
 
                 RebalanceBaseTest.load_data_for_buckets(rest, load_ratio, distribution, [master], bucket_data, self)
@@ -855,7 +846,7 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
                 stats = rest.get_bucket_stats(bucket=bucket0)
                 #loop over all keys and verify
 
-            RebalanceHelper.print_taps_from_all_nodes(rest,bucket0)
+            RebalanceHelper.print_taps_from_all_nodes(rest, bucket0)
             self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
             stats = rest.get_bucket_stats(bucket=bucket0)
             msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
@@ -875,7 +866,6 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
         RebalanceBaseTest.common_setup(self._input, self, replica=3)
         self._common_test_body(1.0, replica=3)
 
-
     def test_medium_load(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
         self._common_test_body(10.0, replica=1)
@@ -887,7 +877,6 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
     def test_medium_load_3_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=3)
         self._common_test_body(10.0, replica=3)
-
 
     def test_heavy_load(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
@@ -959,7 +948,6 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         distribution = {2 * 1024: 0.9}
         self._common_test_body(1.5, distribution, len(self._servers) / 2, replica=3)
 
-
     def test_1_5x_cluster_half(self):
         RebalanceBaseTest.common_setup(self._input, self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
@@ -979,7 +967,6 @@ class IncrementalRebalanceInDgmTests(unittest.TestCase):
         RebalanceBaseTest.common_setup(self._input, self, 1.0 / 3.0)
         distribution = {2 * 1024: 0.9}
         self._common_test_body(5, distribution, len(self._servers) / 3)
-
 
     def test_1_5x_large_values(self):
         RebalanceBaseTest.common_setup(self._input, 'default', self, 1.0 / 3.0)
@@ -1108,7 +1095,6 @@ class RebalanceSwapTests(unittest.TestCase):
         msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
         self.assertEquals(stats["curr_items"], items_inserted_count,
                           msg=msg.format(stats["curr_items"], items_inserted_count))
-
 
     def test_swap_1(self):
         self._common_test_body(1)
