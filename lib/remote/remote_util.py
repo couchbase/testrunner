@@ -4,7 +4,7 @@ import paramiko
 import logger
 import time
 from builds.build_query import BuildQuery
-
+import testconstants
 
 log = logger.Logger.get_logger()
 
@@ -136,18 +136,14 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
 
     def is_membase_installed(self):
-        sftp = self._ssh_client.open_sftp()
-        filenames = sftp.listdir('/opt/membase')
-        for name in filenames:
-            #if the name version is correct
-            installed_files = sftp.listdir('/opt/membase{0}'.format(name))
-            #check for maybe bin folder or sth
-            for file in installed_files:
-                log.info(file)
+        info = self.extract_remote_info()
+        if info.type.lower() == 'windows':
+            if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
+                return False
+        elif info.type.lower() == "linux":
+            if self.file_exists(testconstants.LINUX_CB_PATH, testconstants.VERSION_FILE):
+                return False
         return True
-        #depending on the os_info
-        #look for installation folder
-        #or use rpm -? to figure out if its installed
 
     def download_build(self, build):
         return self.download_binary(build.url, build.deliverable_type, build.name)

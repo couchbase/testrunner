@@ -21,10 +21,10 @@ class FailoverBaseTest(unittest.TestCase):
         servers = input.servers
         for server in servers:
             shell = RemoteMachineShellConnection(server)
-            if RestConnection(server).get_nodes_self().version.find("2.0") != -1:
-                shell.start_couchbase()
+            if shell.is_membase_installed():
+                shell.start_membase()
             else:
-                shell.stop_membase()
+                shell.start_couchbase()
             o, r = shell.execute_command("iptables -F")
             shell.log_command_output(o, r)
             shell.disconnect()
@@ -37,8 +37,8 @@ class FailoverBaseTest(unittest.TestCase):
     def common_tearDown(servers, testcase):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
-            if RestConnection(server).get_nodes_self().version.find("2.0") != -1:
-                shell.start_couchbase()
+            if shell.is_membase_installed():
+                shell.start_membase()
             else:
                 shell.start_couchbase()
             o, r = shell.execute_command("iptables -F")
@@ -91,7 +91,6 @@ class FailoverTests(unittest.TestCase):
     def test_failover_firewall_1_replica_10_percent(self):
         self.common_test_body(1, 'firewall', 10)
 
-
     def test_failover_firewall_2_replica_1_percent(self):
         self.common_test_body(2, 'firewall', 1)
 
@@ -100,7 +99,6 @@ class FailoverTests(unittest.TestCase):
 
     def test_failover_firewall_3_replica_10_percent(self):
         self.common_test_body(3, 'firewall', 10)
-
 
     def test_failover_normal_1_replica_1_percent(self):
         self.common_test_body(1, 'normal', 1)
@@ -129,7 +127,6 @@ class FailoverTests(unittest.TestCase):
     def test_failover_normal_3_replica_30_percent(self):
         self.common_test_body(3, 'normal', 30)
 
-
     def test_failover_stop_membase_1_replica_1_percent(self):
         self.common_test_body(1, 'stop_membase', 1)
 
@@ -157,7 +154,6 @@ class FailoverTests(unittest.TestCase):
     def test_failover_stop_membase_3_replica_30_percent(self):
         self.common_test_body(3, 'stop_membase', 30)
 
-
     def common_test_body(self, replica, failover_reason, load_ratio):
         log = logger.Logger.get_logger()
         log.info("replica : {0}".format(replica))
@@ -175,9 +171,8 @@ class FailoverTests(unittest.TestCase):
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,
                            proxyPort=info.moxi)
-        ready = BucketOperationHelper.wait_for_memcached(master,"default")
-        self.assertTrue(ready,"wait_for_memcached_failed")
-
+        ready = BucketOperationHelper.wait_for_memcached(master, "default")
+        self.assertTrue(ready, "wait_for_memcached_failed")
         credentials = self._input.membase_settings
 
         log.info("inserting some items in the master before adding any nodes")
@@ -190,7 +185,6 @@ class FailoverTests(unittest.TestCase):
         rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
         msg = "rebalance failed after adding these nodes {0}".format(nodes)
         self.assertTrue(rest.monitorRebalance(), msg=msg)
-
 
         inserted_count, rejected_count =\
         MemcachedClientHelper.load_bucket(servers=[master],
@@ -233,9 +227,8 @@ class FailoverTests(unittest.TestCase):
             time.sleep(10)
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=[node.id for node in chosen])
-            msg="rebalance failed while removing failover nodes {0}".format(chosen)
+            msg = "rebalance failed while removing failover nodes {0}".format(chosen)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
-
 
             nodes = rest.node_statuses()
             if len(nodes) / (1 + replica) >= 1:
@@ -261,7 +254,7 @@ class FailoverTests(unittest.TestCase):
                                   msg=msg.format(stats["curr_items"], inserted_count))
             nodes = rest.node_statuses()
 
-    def stop_membase(self,node):
+    def stop_membase(self, node):
         log = logger.Logger.get_logger()
         for server in self._servers:
             if server.ip == node.ip:
@@ -276,15 +269,15 @@ class FailoverTests(unittest.TestCase):
 
             #iptables -A INPUT -p tcp -i eth0 --dport 1000:20000 -j REJECT
 
-    def enable_firewall(self,node):
+    def enable_firewall(self, node):
         log = logger.Logger.get_logger()
         for server in self._servers:
             if server.ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
-                o,r = shell.execute_command("iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+                o, r = shell.execute_command("iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
                 shell.log_command_output(o, r)
                 log.info("enabled firewall on {0}".format(server))
-                o,r = shell.execute_command("iptables --list")
+                o, r = shell.execute_command("iptables --list")
                 shell.log_command_output(o, r)
                 shell.disconnect()
                 break
