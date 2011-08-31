@@ -16,3 +16,9 @@ testrunner:
 
 clean:
 	rm -rf ${DIST_DIR}
+
+test:
+	./start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
+
+test-quick:
+	./start_cluster_and_run_tests.sh b/resources/dev.ini conf/dev-quick.conf
