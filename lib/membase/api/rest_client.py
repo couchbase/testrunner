@@ -165,6 +165,18 @@ class RestConnection(object):
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
 
 
+    def active_tasks(self, serverInfo):
+        api = self.baseUrl + 'couchBase/_active_tasks'
+
+        try:
+            status, content = self._http_request(api, 'GET', headers=self._create_capi_headers())
+            json_parsed = json.loads(content)
+        except ValueError:
+            return ""
+
+        return json_parsed
+
+
     def create_view(self, bucket, view, function):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
         #check if this view exists and update the rev

@@ -1,4 +1,7 @@
+import json
+import os
 import random
+from threading import Thread
 import unittest
 from TestInput import TestInputSingleton
 import mc_bin_client
@@ -6,9 +9,11 @@ import time
 import uuid
 import logger
 from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 
 class MemcapableTestBase(object):
     log = None
@@ -24,14 +29,14 @@ class MemcapableTestBase(object):
         self.input = TestInputSingleton.input
         unittest.assertTrue(self.input, msg="input parameters missing...")
         self.test = unittest
-        self.master= self.input.servers[0]
+        self.master = self.input.servers[0]
         self.bucket_port = port
         self.bucket_name = bucket_name
         ClusterOperationHelper.cleanup_cluster([self.master])
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self.test)
         self._create_default_bucket(unittest)
 
-    def _create_default_bucket(self,unittest):
+    def _create_default_bucket(self, unittest):
         name = "default"
         master = self.master
         rest = RestConnection(master)
@@ -42,10 +47,10 @@ class MemcapableTestBase(object):
             available_ram = info.memoryQuota * node_ram_ratio
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
             ready = BucketOperationHelper.wait_for_memcached(master, name)
-            BucketOperationHelper.wait_for_vbuckets_ready_state(master,name)
+            BucketOperationHelper.wait_for_vbuckets_ready_state(master, name)
             unittest.assertTrue(ready, msg="wait_for_memcached failed")
         unittest.assertTrue(helper.bucket_exists(name),
-                        msg="unable to create {0} bucket".format(name))
+                            msg="unable to create {0} bucket".format(name))
 
 
     def set_test(self, key, exp, flags, values):
@@ -411,15 +416,188 @@ class SimpleDecrMembaseBucketDefaultPort(unittest.TestCase):
                 "Expected value %d.  Test result %d" % (int(value) + incr_amt - decr_amt * decr_time, update_v))
 
 
+class StatsAggregationDuringMemcachedOps(unittest.TestCase):
+    def setUp(self):
+        self.log = logger.Logger.get_logger()
+        self.params = TestInputSingleton.input.test_params
+        self.master = TestInputSingleton.input.servers[0]
+        rest = RestConnection(self.master)
+        rest.init_cluster(self.master.rest_username, self.master.rest_password)
+        info = rest.get_nodes_self()
+        rest.init_cluster_memoryQuota(self.master.rest_username, self.master.rest_password,
+                                      memoryQuota=info.mcdMemoryReserved)
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([self.master], self)
+        self._create_default_bucket()
+        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
+        self.shutdown_load_data = False
+
+    def _create_default_bucket(self):
+        name = "default"
+        master = self.master
+        rest = RestConnection(master)
+        helper = RestHelper(RestConnection(master))
+        if not helper.bucket_exists(name):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
+            info = rest.get_nodes_self()
+            available_ram = info.memoryQuota * node_ram_ratio
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            ready = BucketOperationHelper.wait_for_memcached(master, name)
+            self.assertTrue(ready, msg="wait_for_memcached failed")
+        self.assertTrue(helper.bucket_exists(name),
+                        msg="unable to create {0} bucket".format(name))
+        self.threads = []
+        self.shutdown_load_data = False
+
+
+
+    def test_stats_during_load(self):
+        #how many items
+        #how many iterations
+        #couchdb url
+        #which stats
+        if "items" in self.params:
+            items = int(self.params["items"])
+        else:
+            items = 100 * 1000
+
+        if "iterations" in self.params:
+            iterations = int(self.params["iterations"])
+        else:
+            iterations = -1
+        self.onenodemc.flush(1)
+        time.sleep(2)
+        rest = RestConnection(self.master)
+        tasks = rest.active_tasks(self.master)
+        while tasks:
+            self.log.info("found active tasks, waiting for them to complete. {0}".format(tasks))
+            time.sleep(10)
+        self.log.info("set, items {0} , iterations {1}".format(items, iterations))
+        t = Thread(name="loader-thread", target=self._load_data, args=(items, iterations))
+        t.daemon = True
+        start = time.time()
+        t.start()
+#        shell = RemoteMachineShellConnection(self.master)
+#        mc_pid = RemoteMachineHelper(shell).is_process_running("memcached").pid
+#        beam_pid = RemoteMachineHelper(shell).is_process_running("beam.smp").pid
+#        m = Thread(name="cpu-stat-memcached", target=self._extract_proc_info, args=(shell,mc_pid,60))
+#        b = Thread(name="cpu-stat-beam", target=self._extract_proc_info, args=(shell,beam_pid,60))
+#        m.start()
+#        b.start()
+#        self.threads.extend([t, b, m])
+#        time.sleep(1000)
+        t.join()
+        end = time.time()
+        msg = "set took {0} seconds to iterate over {1} items {2} times"
+        self.log.info(msg.format((end - start), items, iterations))
+
+    def test_stats_during_get(self):
+        #how many items
+        #how many iterations
+        #couchdb url
+        #which stats
+        if "items" in self.params:
+            items = int(self.params["items"])
+        else:
+            items = 100 * 1000
+
+        if "iterations" in self.params:
+            iterations = int(self.params["iterations"])
+        else:
+            iterations = -1
+
+        self.onenodemc.flush(1)
+        time.sleep(2)
+        self.log.info("preloading {0} items".format(items))
+        keys = [str(uuid.uuid4()) for i in range(0, items)]
+        value = MemcachedClientHelper.create_value("*", 256)
+        for key in keys:
+            self.onenodemc.set(key, 0, 0, value)
+        RebalanceHelper.wait_for_stats(self.master, 'default', 'curr_items', len(keys))
+        RebalanceHelper.wait_for_stats(self.master, 'default', 'ep_queue_size', 0)
+        rest = RestConnection(self.master)
+        tasks = rest.active_tasks(self.master)
+        while tasks:
+            self.log.info("found active tasks, waiting for them to complete. {0}".format(tasks))
+            time.sleep(10)
+        self.log.info("get items {0} , iterations {1}".format(items, iterations))
+        t = Thread(name="getter-thread", target=self._get_data, args=(keys, iterations))
+        t.daemon = True
+        start = time.time()
+        t.start()
+#        shell = RemoteMachineShellConnection(self.master)
+#        mc_pid = RemoteMachineHelper(shell).is_process_running("memcached").pid
+#        beam_pid = RemoteMachineHelper(shell).is_process_running("beam.smp").pid
+#        m = Thread(name="cpu-stat-memcached", target=self._extract_proc_info, args=(shell,mc_pid,60))
+#        b = Thread(name="cpu-stat-beam", target=self._extract_proc_info, args=(shell,beam_pid,60))
+#        m.start()
+#        b.start()
+#        self.threads.extend([t, b, m])
+#        time.sleep(1000)
+        t.join()
+        end = time.time()
+        msg = "get took {0} seconds to iterate over {1} items {2} times"
+        self.log.info(msg.format((end - start), items, iterations))
+
+
+    def tearDown(self):
+        self.shutdown_load_data = True
+        if self.threads:
+            for t in self.threads:
+                t.join()
+
+
+    def _extract_proc_info(self, shell, pid, frequency):
+        while not self.shutdown_load_data:
+            time.sleep(frequency)
+            o, r = shell.execute_command("cat /proc/{0}/stat".format(pid))
+#            shell.log_command_output(o, r)
+            fields = ('pid comm state ppid pgrp session tty_nr tpgid flags minflt '
+                      'cminflt majflt cmajflt utime stime cutime cstime priority '
+                      'nice num_threads itrealvalue starttime vsize rss rsslim '
+                      'startcode endcode startstack kstkesp kstkeip signal blocked '
+                      'sigignore sigcatch wchan nswap cnswap exit_signal '
+                      'processor rt_priority policy delayacct_blkio_ticks '
+                      'guest_time cguest_time ').split(' ')
+
+            d = dict(zip(fields, o[0].split(' ')))
+            print d
+
+    def _load_data(self, items, iterations):
+        iteration = 0
+        keys = [str(uuid.uuid4()) for i in range(0, items)]
+        value = MemcachedClientHelper.create_value("*", 256)
+        while iteration < iterations:
+            start = time.time()
+            for key in keys:
+                self.onenodemc.set(key, 0, 0, value)
+            iteration += 1
+            end = time.time()
+            msg = "set iteration #{0} took {1} seconds to iterate over {2} items"
+            self.log.info(msg.format(iteration, (end - start), items))
+
+    def _get_data(self, keys, iterations):
+        iteration = 0
+        while iteration < iterations:
+            start = time.time()
+            for key in keys:
+                self.onenodemc.get(key)
+            iteration += 1
+            end = time.time()
+            msg = "get iteration #{0} took {1} seconds to iterate over {2} items"
+            self.log.info(msg.format(iteration, (end - start), len(keys)))
+
+
 class AppendTests(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.params = TestInputSingleton.input.test_params
-        self.master = TestInputSingleton.input.servers
+        self.master = TestInputSingleton.input.servers[0]
         rest = RestConnection(self.master)
         rest.init_cluster(self.master.rest_username, self.master.rest_password)
         info = rest.get_nodes_self()
-        rest.init_cluster_memoryQuota(self.master.rest_username, self.master.rest_password, memoryQuota=info.mcdMemoryReserved)
+        rest.init_cluster_memoryQuota(self.master.rest_username, self.master.rest_password,
+                                      memoryQuota=info.mcdMemoryReserved)
         ClusterOperationHelper.cleanup_cluster([self.master])
         ClusterOperationHelper.wait_for_ns_servers_or_assert([self.master], self)
         self._create_default_bucket()
@@ -471,11 +649,73 @@ class AppendTests(unittest.TestCase):
             self.log.info("initial mem_used {0}, current mem_used {1}".format(initial_mem_used, stats["mem_used"]))
             self.log.info(delta)
 
+    def test_append_with_delete(self):
+        #monitor the memory usage , it should not go beyond
+        #doing append 20,000 times ( each 5k) mem_used should not increase more than
+        #10 percent
+        #
+        if "iteration" in self.params:
+            iteration = int(self.params["iteration"])
+        else:
+            iteration = 50000
+        if "items" in self.params:
+            items = int(self.params["items"])
+        else:
+            items = 10000
+        if "append_size" in self.params:
+            append_size = int(self.params["append_size"])
+        else:
+            append_size = 5 * 1024
+        append_iteration_before_delete = 100
+        keys = [str(uuid.uuid4()) for i in range(0, items)]
+        size = 5 * 1024
+        stats = self.onenodemc.stats()
+        initial_mem_used = -1
+        self.log.info("items : {0} , iteration : {1} ".format(items, iteration))
+        if "mem_used" in stats:
+            initial_mem_used = int(stats["mem_used"])
+            self.assertTrue(initial_mem_used > 0)
+        for i in range(0, iteration):
+            for key in keys:
+                self.onenodemc.set(key, 0, 0, os.urandom(size))
+            try:
+                for append_iteration in range(0, append_iteration_before_delete):
+                    appened_value = MemcachedClientHelper.create_value("*", append_size)
+                    for key in keys:
+                        self.onenodemc.append(key, appened_value)
+                        self.onenodemc.get(key)
+            except:
+                #ignoring the error here
+                pass
+            stats = None
+            for t in range(0, 10):
+                try:
+                    stats = self.onenodemc.stats()
+                    break
+                except:
+                    pass
+
+            if stats and "mem_used" in stats:
+                delta = int(stats["mem_used"]) - initial_mem_used
+                #only print out if delta is more than 20% than it should be
+                # delta ahould be #items * size + #items * append
+                expected_delta = items * (size + append_iteration_before_delete * append_size * 1.0)
+                msg = "initial mem_used {0}, current mem_used {1} , delta : {2} , expected delta : {3} , increase percentage {4}"
+                self.log.info(
+                    msg.format(initial_mem_used, stats["mem_used"], delta, expected_delta, delta / expected_delta))
+                #                if delta > (1.2 * expected_delta):
+                #                    self.fail("too much memory..")
+
+                #            for key in keys:
+                #                self.onenodemc.delete(key)
+
 
     def tearDown(self):
         self.shutdown_load_data = True
         if self.load_thread:
             self.load_thread.join()
-        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+
+#        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+
 
 
