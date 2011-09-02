@@ -139,7 +139,8 @@ class BackupRestoreTests(unittest.TestCase):
             proxyPort = info.moxi + 500
             rest.create_bucket(bucket, ramQuotaMB=size, proxyPort=proxyPort,
                                authType="sasl", saslPassword="password")
-        BucketOperationHelper.wait_for_memcached(server, bucket)
+        BucketOperationHelper.wait_for_memcached(self.master, bucket)
+
         if bucket == "default":
             BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder, moxi_port=info.moxi)
         else:
