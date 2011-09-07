@@ -566,6 +566,9 @@ class ViewTests(unittest.TestCase):
     def test_get_view_during_5_min_load_100k_working_set(self):
         self._test_load_data_get_view_x_mins(5, 100000, 0)
 
+    def test_get_view_during_30_min_load_100k_working_set(self):
+        self._test_load_data_get_view_x_mins(30, 100000, 0)
+
     def test_get_view_during_10_min_load_10k_working_set_1_min_after_load(self):
         self._test_load_data_get_view_x_mins(10, 1000, 1)
 
