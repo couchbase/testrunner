@@ -450,7 +450,6 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         self.shutdown_load_data = False
 
 
-
     def test_stats_during_load(self):
         #how many items
         #how many iterations
@@ -477,15 +476,15 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         t.daemon = True
         start = time.time()
         t.start()
-#        shell = RemoteMachineShellConnection(self.master)
-#        mc_pid = RemoteMachineHelper(shell).is_process_running("memcached").pid
-#        beam_pid = RemoteMachineHelper(shell).is_process_running("beam.smp").pid
-#        m = Thread(name="cpu-stat-memcached", target=self._extract_proc_info, args=(shell,mc_pid,60))
-#        b = Thread(name="cpu-stat-beam", target=self._extract_proc_info, args=(shell,beam_pid,60))
-#        m.start()
-#        b.start()
-#        self.threads.extend([t, b, m])
-#        time.sleep(1000)
+        #        shell = RemoteMachineShellConnection(self.master)
+        #        mc_pid = RemoteMachineHelper(shell).is_process_running("memcached").pid
+        #        beam_pid = RemoteMachineHelper(shell).is_process_running("beam.smp").pid
+        #        m = Thread(name="cpu-stat-memcached", target=self._extract_proc_info, args=(shell,mc_pid,60))
+        #        b = Thread(name="cpu-stat-beam", target=self._extract_proc_info, args=(shell,beam_pid,60))
+        #        m.start()
+        #        b.start()
+        #        self.threads.extend([t, b, m])
+        #        time.sleep(1000)
         t.join()
         end = time.time()
         msg = "set took {0} seconds to iterate over {1} items {2} times"
@@ -525,15 +524,15 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         t.daemon = True
         start = time.time()
         t.start()
-#        shell = RemoteMachineShellConnection(self.master)
-#        mc_pid = RemoteMachineHelper(shell).is_process_running("memcached").pid
-#        beam_pid = RemoteMachineHelper(shell).is_process_running("beam.smp").pid
-#        m = Thread(name="cpu-stat-memcached", target=self._extract_proc_info, args=(shell,mc_pid,60))
-#        b = Thread(name="cpu-stat-beam", target=self._extract_proc_info, args=(shell,beam_pid,60))
-#        m.start()
-#        b.start()
-#        self.threads.extend([t, b, m])
-#        time.sleep(1000)
+        #        shell = RemoteMachineShellConnection(self.master)
+        #        mc_pid = RemoteMachineHelper(shell).is_process_running("memcached").pid
+        #        beam_pid = RemoteMachineHelper(shell).is_process_running("beam.smp").pid
+        #        m = Thread(name="cpu-stat-memcached", target=self._extract_proc_info, args=(shell,mc_pid,60))
+        #        b = Thread(name="cpu-stat-beam", target=self._extract_proc_info, args=(shell,beam_pid,60))
+        #        m.start()
+        #        b.start()
+        #        self.threads.extend([t, b, m])
+        #        time.sleep(1000)
         t.join()
         end = time.time()
         msg = "get took {0} seconds to iterate over {1} items {2} times"
@@ -551,7 +550,7 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         while not self.shutdown_load_data:
             time.sleep(frequency)
             o, r = shell.execute_command("cat /proc/{0}/stat".format(pid))
-#            shell.log_command_output(o, r)
+            #            shell.log_command_output(o, r)
             fields = ('pid comm state ppid pgrp session tty_nr tpgid flags minflt '
                       'cminflt majflt cmajflt utime stime cutime cstime priority '
                       'nice num_threads itrealvalue starttime vsize rss rsslim '
@@ -717,5 +716,102 @@ class AppendTests(unittest.TestCase):
 
 #        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
 
+class WarmUpMemcachedTest(unittest.TestCase):
+    def setUp(self):
+        self.log = logger.Logger.get_logger()
+        self.params = TestInputSingleton.input.test_params
+        self.master = TestInputSingleton.input.servers[0]
+        rest = RestConnection(self.master)
+        rest.init_cluster(self.master.rest_username, self.master.rest_password)
+        info = rest.get_nodes_self()
+        rest.init_cluster_memoryQuota(self.master.rest_username, self.master.rest_password,
+                                      memoryQuota=info.mcdMemoryReserved)
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([self.master], self)
+        self._create_default_bucket()
+        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
 
+    def _create_default_bucket(self):
+        name = "default"
+        master = self.master
+        rest = RestConnection(master)
+        helper = RestHelper(RestConnection(master))
+        if not helper.bucket_exists(name):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
+            info = rest.get_nodes_self()
+            available_ram = info.memoryQuota * node_ram_ratio
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            ready = BucketOperationHelper.wait_for_memcached(master, name)
+            self.assertTrue(ready, msg="wait_for_memcached failed")
+        self.assertTrue(helper.bucket_exists(name),
+                        msg="unable to create {0} bucket".format(name))
+        self.load_thread = None
+        self.shutdown_load_data = False
+
+    def _insert_data(self, howmany):
+    #        prefix = str(uuid.uuid4())
+        items = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, howmany)]
+        for item in items:
+            self.onenodemc.set(item, 0, 0, item)
+        self.log.info("inserted {0} items".format(howmany))
+
+    def _measure_warmup(self, howmany, max_time):
+        #flush the bucket
+        self.onenodemc.flush()
+        self._insert_data(howmany)
+        curr_items = int(self.onenodemc.stats()["curr_items"])
+        uptime = int(self.onenodemc.stats()["uptime"])
+        RebalanceHelper.wait_for_stats(self.master, "default", 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_stats(self.master, "default", 'ep_flusher_todo', 0)
+        self.log.info(curr_items)
+        rest = RestConnection(self.master)
+        command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
+        memcached_restarted = rest.diag_eval(command)
+        #wait until memcached starts
+        self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
+        start = time.time()
+        memcached_restarted = False
+        while time.time() - start < 60:
+            try:
+                self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
+                value = int(self.onenodemc.stats()["uptime"])
+                if value < uptime:
+                    self.log.info("memcached restarted...")
+                    memcached_restarted = True
+                    break
+                self.onenodemc.close()
+            except Exception:
+                time.sleep(1)
+
+        self.assertTrue(memcached_restarted, "memcached restarted and uptime is now reset")
+        RebalanceHelper.wait_for_stats(self.master, "default", "curr_items", curr_items, 600)
+        RebalanceHelper.wait_for_stats(self.master, "default", "curr_items", curr_items, 600)
+        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
+        for i in range(0, 100):
+            stats = self.onenodemc.stats()
+            if "ep_warmup_time" in stats:
+                self.log.info("{1} ep_warmup_time : {0}".format(stats["ep_warmup_time"], i))
+                break
+            else:
+                time.sleep(1)
+        stats = self.onenodemc.stats()
+        warmup_time = int(stats["ep_warmup_time"])
+        self.assertTrue(warmup_time <= max_time)
+        #put n items
+        #restart memcached
+        #look at warmup time
+        #loo
+
+    def measure_warmup_10k(self):
+        warmup_max_time = 200 * 1000
+        self._measure_warmup(10000, warmup_max_time)
+
+
+    def measure_warmup_100k(self):
+        warmup_max_time = 600 * 1000
+        self._measure_warmup(100000, warmup_max_time)
+
+    def measure_warmup_1M(self):
+        warmup_max_time = 6000 * 1000
+        self._measure_warmup(1000000, warmup_max_time)
 

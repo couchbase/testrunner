@@ -36,6 +36,43 @@ class RebalanceHelper():
 
     @staticmethod
     #bucket is a json object that contains name,port,password
+    def wait_for_stats_int_value(master, bucket, stat_key, stat_value, option="==",timeout_in_seconds=120, verbose=True):
+        log.info("waiting for bucket {0} stat : {1} to {2} {3} on {4}".format(bucket, stat_key,option, \
+                                                                                stat_value, master.ip))
+        start = time.time()
+        verified = False
+        while (time.time() - start) <= timeout_in_seconds:
+            rest = RestConnection(master)
+            stats = rest.get_bucket_stats(bucket)
+            #some stats are in memcached
+            if stats and stat_key in stats:
+                actual = int(stats[stat_key])
+                log.info("{0} : {1}".format(stat_key, actual))
+                if option == "==":
+                    verified = actual == stat_value
+                elif option == ">":
+                    verified = stat_value > actual
+                elif option == "<":
+                    verified = stat_value < actual
+                elif option == ">=":
+                    verified = stat_value >= actual
+                elif option == "<=":
+                    verified = stat_value <= actual
+                if verified:
+                    log.info("{0} : {1}".format(stat_key, actual))
+                    break
+            else:
+                if stats and stat_key in stats:
+                    if verbose:
+                        log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                if not verbose:
+                    time.sleep(0.1)
+                else:
+                    time.sleep(2)
+        return verified
+
+    @staticmethod
+    #bucket is a json object that contains name,port,password
     def wait_for_stats_on_all(master, bucket, stat_key, stat_value, timeout_in_seconds=120):
         rest = RestConnection(master)
         servers = rest.get_nodes()
