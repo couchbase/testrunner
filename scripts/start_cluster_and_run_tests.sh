@@ -25,7 +25,12 @@ cd ../ns_server
 ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
 pid=$!
 popd
-./testrunner -c $conf -i $ini 2>&1 | tee make_test.log
+
+if [[ -f $conf ]] ; then
+    ./testrunner -c $conf -i $ini 2>&1 | tee make_test.log
+else
+    ./testrunner -t $conf -i $ini 2>&1 | tee make_test.log
+fi
 kill $pid
 wait
 ! grep FAILED make_test.log &> /dev/null
