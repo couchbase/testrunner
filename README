@@ -9,7 +9,7 @@ Options:
  -p key=value     key,value pairs                   example : version=xyz,key1=value1 : example  : -p version=1.7.0,amazon=true
 
 
-Requirements :
+Requirements:
  Python >= 2.6
  Paramiko (http://www.lag.net/paramiko/)
  pycrypto https://www.dlitz.net/software/pycrypto/
@@ -38,6 +38,7 @@ Ini files represents the ns_server information which is accessible to the tests.
 
 [global] section defines the rest username,password that tests use to login to ns_server
 
+Example:
 
 [global]
 username:Administrator
@@ -52,7 +53,7 @@ is required for small subset of tests where test needs to perform installation,b
 If ns_server instances are started using ns_server/cluster_run script then you only need to define ip and port
 for those nodes.
 
-example:
+Example:
 
 [servers]
 1:10.1.6.104_1
@@ -63,7 +64,6 @@ example:
 [10.1.6.104_1]
 ip:10.1.6.104
 port:9000
-
 
 [10.1.6.104_2]
 ip:10.1.6.104
@@ -76,7 +76,6 @@ port:9002
 [10.1.6.104_4]
 ip:10.1.6.104
 port:9003
-
 
 Test Execution and Reporting:
 
@@ -92,4 +91,14 @@ logs and results are available under tmp-12-11-47
 
 ls  tmp-12-11-47/
 report-12-11-47.xml-setgettests.MembaseBucket.xml	value_100b.log
+
+Development:
+
+When using git on Linux/OSX systems, you might run into issues where
+git incorrectly believes Windows-related files have been modified.
+In reality, git is merely mis-treating CRLF line endings.
+Try the following...
+
+    cd testrunner
+    git config core.autocrlf false
 
