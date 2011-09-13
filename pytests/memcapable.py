@@ -14,6 +14,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
+from results_helper import ResultsHelper
 
 class MemcapableTestBase(object):
     log = None
@@ -431,6 +432,8 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         self._create_default_bucket()
         self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
         self.shutdown_load_data = False
+        if "results" in self.params:
+            self.results = ResultsHelper(self.params["results"])
 
     def _create_default_bucket(self):
         name = "default"
@@ -490,6 +493,35 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         msg = "set took {0} seconds to iterate over {1} items {2} times"
         self.log.info(msg.format((end - start), items, iterations))
 
+        result_data = {
+            "version":self.params["version"],
+            "product":"couchbase",
+            "nodes":1,
+            "operation":"set",
+            "items":items,
+            "value_size":256,
+            "key_size":36,
+            "json":False,
+            "active_task":None,
+            "ops_per_second":self.ops_per_second,
+            }
+        if self.results:
+            percent_change = self.results.compare_perf(result_data,
+                                                       limit=1,
+                                                       same_keys=["product",
+                                                                  "nodes",
+                                                                  "operation",
+                                                                  "value_size",
+                                                                  "key_size",
+                                                                  "json",
+                                                              "active_task"],
+                                                       different_keys={},
+                                                       result_key="ops_per_second")
+            self.results.add_perf(result_data)
+            for change in percent_change:
+                unittest.assertTrue(change >= 0.9, msg="test performace is less than 90% of previous run")
+
+
     def test_stats_during_get(self):
         #how many items
         #how many iterations
@@ -538,6 +570,34 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         msg = "get took {0} seconds to iterate over {1} items {2} times"
         self.log.info(msg.format((end - start), items, iterations))
 
+        result_data = {
+            "version":self.params["version"],
+            "product":"couchbase",
+            "nodes":1,
+            "operation":"get",
+            "items":items,
+            "value_size":256,
+            "key_size":36,
+            "json":False,
+            "active_task":None,
+            "ops_per_second":self.ops_per_second,
+            }
+        if self.results:
+            percent_change = self.results.compare_perf(result_data,
+                                                       limit=1,
+                                                       same_keys=["product",
+                                                                  "nodes",
+                                                                  "operation",
+                                                                  "value_size",
+                                                                  "key_size",
+                                                                  "json",
+                                                                  "active_task"],
+                                                       different_keys={},
+                                                       result_key="ops_per_second")
+            self.results.add_perf(result_data)
+            for change in percent_change:
+                unittest.assertTrue(change >= 0.9, msg="test performace is less than 90% of previous run")
+
 
     def tearDown(self):
         self.shutdown_load_data = True
@@ -564,6 +624,8 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
 
     def _load_data(self, items, iterations):
         iteration = 0
+        self.ops_per_second = 0
+        ops_per_second = []
         keys = [str(uuid.uuid4()) for i in range(0, items)]
         value = MemcachedClientHelper.create_value("*", 256)
         while iteration < iterations:
@@ -574,9 +636,13 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
             end = time.time()
             msg = "set iteration #{0} took {1} seconds to iterate over {2} items"
             self.log.info(msg.format(iteration, (end - start), items))
+            ops_per_second.append(len(keys)/float(end-start))
+        self.ops_per_second = sum(ops_per_second)/float(iterations)
 
     def _get_data(self, keys, iterations):
         iteration = 0
+        self.ops_per_second = 0
+        ops_per_second = []
         while iteration < iterations:
             start = time.time()
             for key in keys:
@@ -585,7 +651,8 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
             end = time.time()
             msg = "get iteration #{0} took {1} seconds to iterate over {2} items"
             self.log.info(msg.format(iteration, (end - start), len(keys)))
-
+            ops_per_second.append(len(keys)/float(end-start))
+        self.ops_per_second = sum(ops_per_second)/float(iterations)
 
 class AppendTests(unittest.TestCase):
     def setUp(self):
