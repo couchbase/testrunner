@@ -51,10 +51,7 @@ def parse_args(argv):
             if o == "-h":
                 usage()
             elif o == "-c":
-                if find_runlist(a):
-                    for line in find_runlist(a):
-                        if not line.startswith("#"):
-                            tests.append(Testcase(line.strip()))
+                parse_runlist(tests, a)
             elif o == "-t":
                 tests.append(Testcase(a))
         test_input = TestInputParser.get_test_input(argv)
@@ -75,6 +72,24 @@ def find_runlist(filename):
     if os.path.exists("conf/" + filename):
         return file("conf/" + filename)
     return None
+
+def parse_runlist(tests, filename):
+    f = find_runlist(filename)
+    if not f:
+        usage("bad conf: " + filename)
+    prefix = None
+    for line in f:
+        stripped = line.strip()
+        if stripped.startswith("#") or len(stripped) <= 0:
+            continue
+        if stripped.endswith(":"):
+            prefix = stripped.split(":")[0]
+            continue
+        name = stripped
+        if line.startswith(" ") and prefix:
+            name = prefix + "." + name
+        tests.append(Testcase(name))
+        prefix = ".".join(name.split(".")[0:-1])
 
 if __name__ == "__main__":
     str_time = time.strftime("%H:%M:%S", time.localtime()).replace(":", "-")
