@@ -509,7 +509,29 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 added = True
         return added
 
-    def terminate_processes(self, info, list):
+    def wait_till_compaction_end(self, rest, bucket, timeout_in_seconds=60):
+        end_time = time.time() + float(timeout_in_seconds)
+        ended = False
+        while time.time() < end_time and not ended:
+            status = rest.check_compaction_status(bucket)
+            if status:
+                status, pre = rest.get_database_disk_size()
+                time.sleep(1)
+                status, post = rest.get_database_disk_size()
+                while pre != post and not ended:
+                    log.info("auto compaction's running.")
+                    status, pre = rest.get_database_disk_size()
+                    time.sleep(1)
+                    status, post = rest.get_database_disk_size()
+                    if post == pre:
+                        log.info("auto compaction's ended.")
+                        ended = True
+            else:
+                log.error("auto compaction does not start yet.")
+                time.sleep(1)
+        return ended
+
+    def terminate_processes(self,info,list):
         for process in list:
             type = info.distribution_type.lower()
             if type == "windows":
