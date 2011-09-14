@@ -76,8 +76,12 @@ def parse_runlist(tests, filename):
         name = stripped
         if line.startswith(" ") and prefix:
             name = prefix + "." + name
-        tests.append(name)
         prefix = ".".join(name.split(".")[0:-1])
+        if name.find('*') > 0:
+            for t in unittest.TestLoader().loadTestsFromName(name.rstrip('.*')):
+                tests.append(prefix + '.' + t._testMethodName)
+        else:
+            tests.append(name)
 
 if __name__ == "__main__":
     str_time = time.strftime("%H:%M:%S", time.localtime()).replace(":", "-")
