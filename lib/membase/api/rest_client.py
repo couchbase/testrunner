@@ -887,6 +887,40 @@ class RestConnection(object):
         status, content = self._http_request(api, 'POST', params)
         return status
 
+    def get_database_disk_size(self):
+        api = self.baseUrl + "pools/default/buckets"
+        status, content = self._http_request(api)
+        json_parsed = json.loads(content)
+        # disk_size in kB
+        disk_size = (json_parsed[0]["basicStats"]["diskUsed"])/1024
+        return status, disk_size
+
+    def check_compaction_status(self, bucket):
+        vbucket = self.get_vbuckets(bucket)
+        for i in range(len(vbucket)):
+            api = self.baseUrl + "couchBase/{0}%2F{1}".format(bucket, i)
+            status, content = httplib2.Http().request(api, "GET")
+            data = json.loads(content)
+        return data["compact_running"]
+
+    def _reset_auto_compaction(self):
+        api = self.baseUrl + "controller/setAutoCompaction"
+        params = urllib.urlencode({"just_validate":"1",
+                                   "parallelDBAndViewCompaction":"false",
+                                   "databaseFragmemtationThreshold":""})
+        status, content = self._http_request(api, "POST", params)
+        return status
+
+    def set_autoCompaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 100,
+                           viewFragmntThreshold = 100):
+        api = self.baseUrl + "controller/setAutoCompaction"
+        params = urllib.urlencode({"just_validate": "1",
+                                   "parallelDBAndViewCompaction": parallelDBAndVC,
+                                   "databaseFragmentationThreshold": dbFragmentThreshold,
+                                   "viewFragmentationThreshold": viewFragmntThreshold})
+        status, content = self._http_request(api, "POST", params)
+        return status
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
