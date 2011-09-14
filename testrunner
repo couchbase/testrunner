@@ -10,18 +10,6 @@ import logger
 from xunit import XUnitTestResult
 from TestInput import TestInputParser, TestInputSingleton
 
-class Testcase(object):
-    def __init__(self, name):
-        self.name = name
-        self.description = name
-        self.log = ""
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return self.name
-
 
 def usage(err=None):
     if err:
@@ -53,7 +41,7 @@ def parse_args(argv):
             elif o == "-c":
                 parse_runlist(tests, a)
             elif o == "-t":
-                tests.append(Testcase(a))
+                tests.append(a)
         test_input = TestInputParser.get_test_input(argv)
         if not test_input.servers:
             usage("no servers specified")
@@ -88,14 +76,12 @@ def parse_runlist(tests, filename):
         name = stripped
         if line.startswith(" ") and prefix:
             name = prefix + "." + name
-        tests.append(Testcase(name))
+        tests.append(name)
         prefix = ".".join(name.split(".")[0:-1])
 
 if __name__ == "__main__":
     str_time = time.strftime("%H:%M:%S", time.localtime()).replace(":", "-")
-    tests, test_input = parse_args(sys.argv)
-
-    names = [test.name for test in tests]
+    names, test_input = parse_args(sys.argv)
 
     xunit = XUnitTestResult()
 
