@@ -95,7 +95,7 @@ def next_cmd(cfg, cur, store):
                                      cur.get('cur-sets', 0))
 
         key_str = prepare_key(key_num, cfg.get('prefix', ''))
-        itm_val = store.gen_doc(key_num, key_str, cfg.get('min-value-size', 0))
+        itm_val = store.gen_doc(key_num, key_str, cfg.get('min-value-size', 10))
 
         return (cmd, key_num, key_str, itm_val)
     else:
@@ -109,7 +109,7 @@ def next_cmd(cfg, cur, store):
                                      cfg.get('ratio-hot-gets', 0),
                                      cur.get('cur-gets', 0))
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
-            itm_val = store.gen_doc(key_num, key_str, cfg.get('min-value-size', 0))
+            itm_val = store.gen_doc(key_num, key_str, cfg.get('min-value-size', 10))
 
             return (cmd, key_num, key_str, itm_val)
         else:
@@ -142,7 +142,7 @@ def prepare_key(key_num, prefix):
 class Store:
 
     def connect(self, target, user, pswd, cfg):
-        pass
+        self.cfg = cfg
 
     def command(self, c):
         log.info("%s %s %s %s" % c)
@@ -154,7 +154,9 @@ class Store:
         return cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
     def gen_doc(self, key_num, key_str, min_value_size):
-        return gen_doc_string(key_num, key_str, min_value_size)
+        return gen_doc_string(key_num, key_str, min_value_size,
+                              self.cfg.get('suffix', None),
+                              self.cfg.get('json', 1) > 0)
 
     def cmd_line_get(self, key_num, key_str):
         return key_str
@@ -185,7 +187,7 @@ class StoreMemcachedBinary(Store):
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > self.cfg.get('batch', 0):
+        if len(self.queue) > self.cfg.get('batch', 100):
             self.flush()
 
     def header(self, op, key, val, opaque=0, extra='', cas=0,
@@ -246,7 +248,7 @@ class StoreMemcachedAscii(Store):
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > self.cfg.get('batch', 0):
+        if len(self.queue) > self.cfg.get('batch', 100):
             self.flush()
 
     def command_send(self, cmd, key_num, key_str, data):
@@ -299,7 +301,7 @@ class StoreMemcachedAscii(Store):
 
 # --------------------------------------------------------
 
-def gen_doc_obj(key_num, key_str, min_value_size):
+def gen_doc_obj(key_num, key_str, min_value_size, body):
     return { "_id": key_str,
              "key_num": key_num,
              "mid": key_str[-8:-1],
@@ -307,7 +309,8 @@ def gen_doc_obj(key_num, key_str, min_value_size):
              "body": body
            }
 
-def gen_doc_string(key_num, key_str, min_value_size, key_name="key", json=True):
+def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
+                   key_name="key"):
     c = "{"
     if not json:
         c = "*"
@@ -454,10 +457,10 @@ if __name__ == "__main__":
      for k in sorted(o.iterkeys()):
         log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
 
-  body = 'x'
-  while len(body) < cfg.get('min-value-size', 0):
-     body = body + md5(str(len(body))).hexdigest()
-  suffix = "\"body\":\"" + body + "\"}"
+  cur['body'] = 'x'
+  while len(cur['body']) < cfg.get('min-value-size', 10):
+     cur['body'] = cur['body'] + md5(str(len(cur['body']))).hexdigest()
+  cur['suffix'] = "\"body\":\"" + cur['body'] + "\"}"
 
   protocol = (["memcached"] + sys.argv[1].split("://"))[-2] + "-binary"
   host_port = ('@' + sys.argv[1].split("://")[-1]).split('@')[-1] + ":11211"
