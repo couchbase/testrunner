@@ -25,6 +25,12 @@ Options:
  -c <file>        Config file name (located in the conf subdirectory)
  -i <file>        Path to .ini file containing server information
  -t <test>        Test name (multiple -t options add more tests)
+
+The config file can have a list of test names.
+
+Examples:
+  ./testrunner -i tmp/local.ini -t performance.perf.DiskDrainRate
+  ./testrunner -i tmp/local.ini -t performance.perf.DiskDrainRate.test_9M
 """
     sys.exit(r)
 
