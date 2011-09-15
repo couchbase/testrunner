@@ -25,6 +25,8 @@ Options:
  -c <file>        Config file name (located in the conf subdirectory)
  -i <file>        Path to .ini file containing server information
  -t <test>        Test name (multiple -t options add more tests)
+ -n               NO-OP - emit test names, but don't actually run them
+ -h               Show this help message
 
 The config file can have a list of test names.
 
@@ -36,13 +38,14 @@ Examples:
 
 
 def parse_args(argv):
+    noop  = False
     tests = []
     arg_i = None
     arg_p = None
 
     try:
         (opts, args) = getopt.getopt(argv[1:],
-                                     'h:t:c:v:i:p:', [])
+                                     'c:hi:np:t:v:', [])
         for o, a in opts:
             if o == "-h":
                 usage()
@@ -54,6 +57,13 @@ def parse_args(argv):
                 arg_i = o + " " + a
             elif o == "-p":
                 arg_p = o + " " + a
+            elif o == "-n":
+                noop = True
+
+        if noop:
+            print("\n".join(tests))
+            exit(0)
+
         test_input = TestInputParser.get_test_input(argv)
         if not test_input.servers:
             usage("no servers specified")
