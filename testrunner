@@ -31,6 +31,8 @@ Options:
 
 def parse_args(argv):
     tests = []
+    arg_i = None
+    arg_p = None
 
     try:
         (opts, args) = getopt.getopt(argv[1:],
@@ -42,12 +44,16 @@ def parse_args(argv):
                 parse_runlist(tests, a)
             elif o == "-t":
                 tests.append(a)
+            elif o == "-i":
+                arg_i = o + " " + a
+            elif o == "-p":
+                arg_p = o + " " + a
         test_input = TestInputParser.get_test_input(argv)
         if not test_input.servers:
             usage("no servers specified")
         if not tests:
             usage("no tests specified")
-        return tests, test_input
+        return tests, test_input, arg_i, arg_p
 
     except IndexError:
         usage()
@@ -85,7 +91,7 @@ def parse_runlist(tests, filename):
 
 if __name__ == "__main__":
     str_time = time.strftime("%H:%M:%S", time.localtime()).replace(":", "-")
-    names, test_input = parse_args(sys.argv)
+    names, test_input, arg_i, arg_p = parse_args(sys.argv)
 
     xunit = XUnitTestResult()
 
@@ -101,6 +107,9 @@ if __name__ == "__main__":
         dotnames = name.split('.')
         log_name = dotnames[len(dotnames) - 1]
         logger.Logger.start_logger(log_name)
+
+        print("  ./testrunner {0} {1} -t {2}".format(arg_i or "", arg_p or "", name))
+
         TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
         suite = unittest.TestLoader().loadTestsFromName(name)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
