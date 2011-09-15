@@ -47,7 +47,7 @@ class Logger:
         logger.addHandler(consoleHandler)
         logger.addHandler(fileHandler)
         Logger._logger = logger
-        print 'start logging to {0}.log'.format(filename)
+        print 'start logging to {0}'.format(filename)
         return Logger._logger
 
 
