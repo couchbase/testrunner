@@ -1,8 +1,8 @@
-# example : python scripts/install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
-# example : python scripts/install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38
+#!/usr/bin/python
 
-# TODO: add installer support for membasez 
+# TODO: add installer support for membasez
 
+import getopt
 import copy
 import sys
 from threading import Thread
@@ -18,6 +18,27 @@ from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
 import TestInput
+
+
+def usage(err=None):
+    print """\
+Syntax: install.py [options]
+
+Options:
+ -p <key=val,...> Comma-separated key=value info.
+ -i <file>        Path to .ini file containing cluster information.
+
+Available keys:
+ product=cb|mb           Used to specify couchbase or membase.
+ version=SHORT_VERSION   Example: "2.0.0r-71".
+ parallel=false          Useful when you're installing a cluster.
+
+Examples:
+ install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
+ install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true
+"""
+    sys.exit(err)
+
 
 product = "membase-server(ms),couchbase-single-server(css),couchbase-server(cs),zynga(z)"
 
@@ -334,7 +355,20 @@ params = {"ini": "resources/jenkins/fusion.ini",
           "product": "ms", "version": "1.7.1r-31", "amazon": "false"}
 
 if __name__ == "__main__":
-    input = TestInput.TestInputParser.get_test_input(sys.argv)
+    try:
+        (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
+        for o, a in opts:
+            if o == "-h":
+                usage()
+
+        input = TestInput.TestInputParser.get_test_input(sys.argv)
+        if not input.servers:
+            usage("ERROR: no servers specified. Please use the -i parameter.")
+    except IndexError:
+        usage()
+    except getopt.GetoptError, err:
+        usage("ERROR: " + str(err))
+
     if "parallel" in input.test_params:
         InstallerJob().parallel_install(input.servers, input.test_params)
     else:
