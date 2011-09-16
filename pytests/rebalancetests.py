@@ -137,8 +137,7 @@ class RebalanceBaseTest(unittest.TestCase):
                                                            name=bucket.name,
                                                            ram_load_ratio=load_ratio,
                                                            value_size_distribution=distribution,
-                                                           number_of_threads=20,
-                                                           moxi=False)
+                                                           number_of_threads=2)
             [t.start() for t in threads]
             bucket_data[bucket.name]["threads"] = threads
         return bucket_data
@@ -311,6 +310,7 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
 
             for name in bucket_data:
                 for thread in bucket_data[name]["threads"]:
+                    thread.join()
                     bucket_data[name]["items_inserted_count"] += thread.inserted_keys_count()
 
             RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
