@@ -187,7 +187,16 @@ class RebalanceHelper():
         msg = 'sum : {0} and sum * replica_factor ({1}) : {2}'
         log.info(msg.format(sum, replica_factor, (sum * (replica_factor + 1))))
         log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
-        return (sum * (replica_factor + 1)) == master_stats["curr_items_tot"]
+        delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
+        delta = abs(delta)
+        missing_percentage = delta * 1.0 / sum * (replica_factor + 1)
+        log.info("delta : {0} missing_percentage : {1} replica_factor : {2}".format(delta,missing_percentage,replica_factor))
+        if replica_factor > 1:
+           if delta == 0 or missing_percentage < 0.005:
+              return True
+           return False
+        else:
+           return (sum * (replica_factor + 1)) == master_stats["curr_items_tot"]
 
     @staticmethod
     def verify_maps(vbucket_map_before, vbucket_map_after):
