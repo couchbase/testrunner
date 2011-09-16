@@ -882,3 +882,230 @@ class WarmUpMemcachedTest(unittest.TestCase):
         warmup_max_time = 6000 * 1000
         self._measure_warmup(1000000, warmup_max_time)
 
+
+class MultiGetNegativeTest(unittest.TestCase):
+    def setUp(self):
+        self.log = logger.Logger.get_logger()
+        self.params = TestInputSingleton.input.test_params
+        self.master = TestInputSingleton.input.servers[0]
+        rest = RestConnection(self.master)
+        rest.init_cluster(self.master.rest_username, self.master.rest_password)
+        info = rest.get_nodes_self()
+        rest.init_cluster_memoryQuota(self.master.rest_username, self.master.rest_password,
+                                      memoryQuota=info.mcdMemoryReserved)
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([self.master], self)
+        self._create_default_bucket()
+        self.keys_cleanup = []
+        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default", timeout=600)
+        self.onenodemoxi = MemcachedClientHelper.direct_client(self.master, "default", timeout=600)
+
+
+    def tearDown(self):
+        if self.onenodemc:
+            #delete the keys
+            for key in self.keys_cleanup:
+                try:
+                    self.onenodemc.delete(key)
+                except Exception:
+                    pass
+
+    def _create_default_bucket(self):
+        name = "default"
+        master = self.master
+        rest = RestConnection(master)
+        helper = RestHelper(RestConnection(master))
+        if not helper.bucket_exists(name):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
+            info = rest.get_nodes_self()
+            available_ram = info.memoryQuota * node_ram_ratio
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            ready = BucketOperationHelper.wait_for_memcached(master, name)
+            self.assertTrue(ready, msg="wait_for_memcached failed")
+        self.assertTrue(helper.bucket_exists(name),
+                        msg="unable to create {0} bucket".format(name))
+
+    def _insert_data(self, client, howmany):
+        prefix = str(uuid.uuid4())
+        keys = ["{0}-{1}".format(prefix, i) for i in range(0, howmany)]
+        value = MemcachedClientHelper.create_value("*", 1024)
+        for key in keys:
+            client.set(key, 0, 0, value)
+        self.log.info("inserted {0} items".format(howmany))
+        return keys
+
+
+    def test_mc_multi_get(self):
+        self._test_multi_get(self.onenodemc, 10)
+        self._test_multi_get(self.onenodemc, 100)
+        self._test_multi_get(self.onenodemc, 1000)
+        self._test_multi_get(self.onenodemc, 10 * 1000)
+        self._test_multi_get(self.onenodemc, 20 * 1000)
+        self._test_multi_get(self.onenodemc, 30 * 1000)
+        self._test_multi_get(self.onenodemc, 40 * 1000)
+
+    def test_mx_multi_get(self):
+        self._test_multi_get(self.onenodemoxi, 10)
+        self._test_multi_get(self.onenodemoxi, 100)
+        self._test_multi_get(self.onenodemoxi, 1000)
+        self._test_multi_get(self.onenodemoxi, 10 * 1000)
+        self._test_multi_get(self.onenodemoxi, 20 * 1000)
+        self._test_multi_get(self.onenodemoxi, 30 * 1000)
+        self._test_multi_get(self.onenodemoxi, 40 * 1000)
+
+
+    def _test_multi_get(self, client, howmany):
+        mc_message = "memcached virt memory size {0} : resident memory size : {1}"
+        mx_message = "moxi virt memory size {0} : resident memory size : {1}"
+        shell = RemoteMachineShellConnection(self.master)
+        moxi_pid = RemoteMachineHelper(shell).is_process_running("moxi").pid
+        mc_pid = RemoteMachineHelper(shell).is_process_running("memcached").pid
+        keys = self._insert_data(client, howmany)
+        self.keys_cleanup.extend(keys)
+        self.log.info("printing moxi and memcached stats before running multi-get")
+        moxi_sys_stats = self._extract_proc_info(shell, moxi_pid)
+        memcached_sys_stats = self._extract_proc_info(shell, mc_pid)
+        self.log.info(mc_message.format(int(memcached_sys_stats["rss"]) * 4096,
+                                        memcached_sys_stats["vsize"]))
+        self.log.info(mx_message.format(int(moxi_sys_stats["rss"]) * 4096,
+                                        moxi_sys_stats["vsize"]))
+
+        self.log.info("running multiget to get {0} keys".format(howmany))
+        gets = client.getMulti(keys)
+        self.log.info("recieved {0} keys".format(len(gets)))
+
+        self.log.info(gets)
+        self.assertEquals(len(gets), len(keys))
+
+        self.log.info("printing moxi and memcached stats after running multi-get")
+        moxi_sys_stats = self._extract_proc_info(shell, moxi_pid)
+        memcached_sys_stats = self._extract_proc_info(shell, mc_pid)
+        self.log.info(mc_message.format(int(memcached_sys_stats["rss"]) * 4096,
+                                        memcached_sys_stats["vsize"]))
+        self.log.info(mx_message.format(int(moxi_sys_stats["rss"]) * 4096,
+                                        moxi_sys_stats["vsize"]))
+
+
+    def _extract_proc_info(self, shell, pid):
+        o, r = shell.execute_command("cat /proc/{0}/stat".format(pid))
+        fields = ('pid comm state ppid pgrp session tty_nr tpgid flags minflt '
+                  'cminflt majflt cmajflt utime stime cutime cstime priority '
+                  'nice num_threads itrealvalue starttime vsize rss rsslim '
+                  'startcode endcode startstack kstkesp kstkeip signal blocked '
+                  'sigignore sigcatch wchan nswap cnswap exit_signal '
+                  'processor rt_priority policy delayacct_blkio_ticks '
+                  'guest_time cguest_time ').split(' ')
+        d = dict(zip(fields, o[0].split(' ')))
+        return d
+
+
+class MemcachedValueSizeLimitTest(unittest.TestCase):
+    def setUp(self):
+        self.log = logger.Logger.get_logger()
+        self.params = TestInputSingleton.input.test_params
+        self.master = TestInputSingleton.input.servers[0]
+        rest = RestConnection(self.master)
+        rest.init_cluster(self.master.rest_username, self.master.rest_password)
+        info = rest.get_nodes_self()
+        rest.init_cluster_memoryQuota(self.master.rest_username, self.master.rest_password,
+                                      memoryQuota=info.mcdMemoryReserved)
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([self.master], self)
+        self._create_default_bucket()
+        self.keys_cleanup = []
+        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
+
+
+    def tearDown(self):
+        if self.onenodemc:
+            #delete the keys
+            for key in self.keys_cleanup:
+                try:
+                    self.onenodemc.delete(key)
+                except Exception:
+                    pass
+
+    def _create_default_bucket(self):
+        name = "default"
+        master = self.master
+        rest = RestConnection(master)
+        helper = RestHelper(RestConnection(master))
+        if not helper.bucket_exists(name):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
+            info = rest.get_nodes_self()
+            available_ram = info.memoryQuota * node_ram_ratio
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            ready = BucketOperationHelper.wait_for_memcached(master, name)
+            self.assertTrue(ready, msg="wait_for_memcached failed")
+        self.assertTrue(helper.bucket_exists(name),
+                        msg="unable to create {0} bucket".format(name))
+
+
+    def test_append_till_20_mb(self):
+        initial_value = "12345678"
+        key = str(uuid.uuid4())
+        self.keys_cleanup.append(key)
+        self.onenodemc.set(key, 0, 0, initial_value)
+        #for 20 * 1024 times append 1024 chars each time
+        value = MemcachedClientHelper.create_value("*", 1024 * 20)
+        for i in range(0, (1024 - 1)):
+            self.onenodemc.append(key, value)
+        try:
+            self.onenodemc.append(key, value)
+            self.fail("memcached did not raise an error")
+        except mc_bin_client.MemcachedError as err:
+            self.assertEquals(err.status, 5)
+
+
+    def test_prepend_till_20_mb(self):
+        initial_value = "12345678"
+        key = str(uuid.uuid4())
+        self.keys_cleanup.append(key)
+        self.onenodemc.set(key, 0, 0, initial_value)
+        #for 20 * 1024 times append 1024 chars each time
+        value = MemcachedClientHelper.create_value("*", 1024 * 20)
+        for i in range(0, (1024 - 1)):
+            self.onenodemc.prepend(key, value)
+        try:
+            self.onenodemc.prepend(key, value)
+            self.fail("memcached did not raise an error")
+        except mc_bin_client.MemcachedError as err:
+            self.assertEquals(err.status, 5)
+
+#    def test_incr_till_max(self):
+#        initial_value = '0'
+#        max_value = pow(2, 64)
+#        step = max_value / 1024
+#        self.log.info("step : {0}")
+#        key = str(uuid.uuid4())
+#        self.keys_cleanup.append(key)
+#        self.onenodemc.set(key, 0, 0, initial_value)
+#        for i in range(0, (2 * 1024 - 1)):
+#            self.onenodemc.incr(key, amt=step)
+#            a, b, c = self.onenodemc.get(key)
+#            delta = long(c) - max_value
+#            self.log.info("delta = value - pow(2,64) = {0}".format(delta))
+#        a, b, c = self.onenodemc.get(key)
+#        self.log.info("key : {0} value {1}".format(key, c))
+#        try:
+#            self.onenodemc.incr(key, step)
+#            self.fail("memcached did not raise an error")
+#        except mc_bin_client.MemcachedError as err:
+#            self.assertEquals(err.status, 5)
+#
+#    def test_decr_till_max(self):
+#        initial_value = '1'
+#        max_value = pow(2, 64)
+#        step = max_value / 1024
+#        key = str(uuid.uuid4())
+#        self.keys_cleanup.append(key)
+#        self.onenodemc.set(key, 0, 0, initial_value)
+#        for i in range(0, (1024 - 1)):
+#            self.onenodemc.decr(key, amt=step)
+#        a, b, c = self.onenodemc.get(key)
+#        self.log.info("key : {0} value {1}".format(key, c))
+#        try:
+#            self.onenodemc.incr(key, step)
+#            self.fail("memcached did not raise an error")
+#        except mc_bin_client.MemcachedError as err:
+#            self.assertEquals(err.status, 5)
