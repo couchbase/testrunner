@@ -52,7 +52,7 @@ def parse_args(argv):
             elif o == "-c":
                 parse_runlist(tests, a)
             elif o == "-t":
-                tests.append(a)
+                append_test(tests, a)
             elif o == "-i":
                 arg_i = o + " " + a
             elif o == "-p":
@@ -99,11 +99,15 @@ def parse_runlist(tests, filename):
         if line.startswith(" ") and prefix:
             name = prefix + "." + name
         prefix = ".".join(name.split(".")[0:-1])
-        if name.find('*') > 0:
-            for t in unittest.TestLoader().loadTestsFromName(name.rstrip('.*')):
-                tests.append(prefix + '.' + t._testMethodName)
-        else:
-            tests.append(name)
+        append_test(tests, name)
+
+def append_test(tests, name):
+    prefix = ".".join(name.split(".")[0:-1])
+    if name.find('*') > 0:
+        for t in unittest.TestLoader().loadTestsFromName(name.rstrip('.*')):
+            tests.append(prefix + '.' + t._testMethodName)
+    else:
+        tests.append(name)
 
 if __name__ == "__main__":
     str_time = time.strftime("%H:%M:%S", time.localtime()).replace(":", "-")
