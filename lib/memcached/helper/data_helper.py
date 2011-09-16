@@ -232,12 +232,12 @@ class MemcachedClientHelper(object):
         return None
 
     @staticmethod
-    def direct_client(server,bucket):
+    def direct_client(server, bucket, timeout=30):
         rest = RestConnection(server)
         node = rest.get_nodes_self()
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vBuckets = RestConnection(server).get_vbuckets(bucket)
-        client = MemcachedClient(server.ip,node.memcached)
+        client = MemcachedClient(server.ip, node.memcached, timeout=timeout)
         client.vbucket_count = len(vBuckets)
         bucket_info = rest.get_bucket(bucket)
         #todo raise exception for not bucket_info
@@ -246,7 +246,7 @@ class MemcachedClientHelper(object):
         return client
 
     @staticmethod
-    def proxy_client(server,bucket):
+    def proxy_client(server, bucket, timeout=30):
         #for this bucket on this node what is the proxy ?
         rest = RestConnection(server)
         bucket_info = rest.get_bucket(bucket)
@@ -254,7 +254,7 @@ class MemcachedClientHelper(object):
         for node in nodes:
             RestHelper(rest).vbucket_map_ready(bucket, 60)
             vBuckets = rest.get_vbuckets(bucket)
-            client = MemcachedClient(server.ip,node.moxi)
+            client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
             client.vbucket_count = len(vBuckets)
             if bucket_info.authType == "sasl":
                 client.sasl_auth_plain(bucket_info.name.encode('ascii'),
