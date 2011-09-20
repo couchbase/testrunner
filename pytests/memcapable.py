@@ -519,7 +519,7 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
                                                        result_key="ops_per_second")
             self.results.add_perf(result_data)
             for change in percent_change:
-                unittest.assertTrue(change >= 0.9, msg="test performace is less than 90% of previous run")
+                self.assertTrue(change >= 0.9, msg="test performace is less than 90% of previous run")
 
 
     def test_stats_during_get(self):
@@ -596,7 +596,7 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
                                                        result_key="ops_per_second")
             self.results.add_perf(result_data)
             for change in percent_change:
-                unittest.assertTrue(change >= 0.9, msg="test performace is less than 90% of previous run")
+                self.assertTrue(change >= 0.9, msg="test performace is less than 90% of previous run")
 
 
     def tearDown(self):
