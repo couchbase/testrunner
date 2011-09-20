@@ -517,10 +517,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         if not roll_upgrade:
             for version in upgrade_path:
                 if version is not initial_version:
-                    log.info("initial_version is {0}".format(initial_version))
-                    if version == "1.7.0" or version == "1.7.1":
-                        self._save_config(rest_settings, master)
-
+                    log.info("Upgrading to version {0}".format(version))
                     self._stop_membase_servers(servers)
 
                     for server in servers:
@@ -561,6 +558,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                         self._start_membase_servers(servers)
 
                     time.sleep(10)
+                    if version == "1.7.0" or version == "1.7.1":
+                        self._save_config(rest_settings, master)
+
                     if create_buckets:
                         self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('default', RestConnection(master)),
                                         msg="bucket 'default' does not exist..")
