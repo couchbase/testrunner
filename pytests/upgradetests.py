@@ -326,15 +326,11 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     #in a 3 node cluster with no buckets shut down all the nodes update all
     # nodes one by one and then restart node(1),node(2) and node(3)
     def test_multiple_node_upgrade_m1_1_6_5_3(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.5.3', False, False, True)
 
     #in a 3 node cluster with default bucket without any keys shut down all the nodes update
     # all nodes one by one and then restart node(1),node(2) and node(3)
     def test_multiple_node_upgrade_m2_1_6_5_3(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.5.3', True, False)
 
         #in a 3 node cluster with default bucket with some keys shut down all the
@@ -346,53 +342,33 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     #m3 with 50% ram full ?
 
     def test_m6_1_6_5_3_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.5.3.1', True, True, True, 10)
 
     def test_m6_1_6_5(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.5', True, True, True, 10)
 
     def test_m6_1_6_5_3(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.5.3', True, True, True, 10)
 
     def test_m6_1_6_5_4(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.5.4', True, True, True, 10)
 
     def test_m6_1_6_5_2_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.5.2.1', True, True, True, 10)
 
     def test_m6_1_6_4_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.4.1', True, True, True, 10)
 
     def test_m6_1_6_4(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.4', True, True, True, 10)
 
     def test_m6_1_6_3(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.3', True, True, True, 10)
 
     def test_m6_1_6_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.1', True, True, True, 10)
 
     def test_m6_1_6_0(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.6.0', True, True, True, 10)
 
     def test_multiple_node_upgrade_m5_1_6_5_3(self):
@@ -408,13 +384,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self._install_and_upgrade('1.6.5.2', True, True, False, -1, True)
 
     def test_multiple_node_upgrade_m1_1_7_0(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.7.0', False, False, True)
 
     def test_multiple_node_upgrade_m2_1_7_0(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.7.0', True, False)
 
     def test_multiple_node_upgrade_m3_1_7_0(self):
@@ -424,21 +396,15 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self._install_and_upgrade('1.7.0', True, False, False)
 
     def test_m6_1_7_0(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.7.0', True, True, True, 10)
 
     def test_multiple_node_rolling_upgrade_1_7_0(self):
         self._install_and_upgrade('1.7.0', True, True, False, -1, True)
 
     def test_multiple_node_upgrade_m1_1_7_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.7.1', False, False, True)
 
     def test_multiple_node_upgrade_m2_1_7_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.7.1', True, False)
 
     def test_multiple_node_upgrade_m3_1_7_1(self):
@@ -448,34 +414,27 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self._install_and_upgrade('1.7.1', True, False, False)
 
     def test_m6_1_7_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         self._install_and_upgrade('1.7.1', True, True, True, 10)
 
     def test_multiple_node_rolling_upgrade_1_7_1(self):
         self._install_and_upgrade('1.7.1', True, True, False, -1, True)
 
+    def test_m6_1_7_1_1(self):
+        self._install_and_upgrade('1.7.1.1', True, True, True, 10)
+
     def test_multiple_version_upgrade_start_one_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         upgrade_path = ['1.7.0', '1.7.1.1']
         self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_all_1(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         upgrade_path = ['1.7.0', '1.7.1.1']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_one_2(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         upgrade_path = ['1.7.1.1']
         self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_all_2(self):
-        input = TestInputSingleton.input
-        servers = input.servers
         upgrade_path = ['1.7.1.1']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
