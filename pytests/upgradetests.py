@@ -1,4 +1,5 @@
 import logger
+import re
 import time
 import unittest
 from TestInput import TestInputSingleton
@@ -454,6 +455,30 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_multiple_node_rolling_upgrade_1_7_1(self):
         self._install_and_upgrade('1.7.1', True, True, False, -1, True)
 
+    def test_multiple_version_upgrade_start_one_1(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        upgrade_path = ['1.7.0', '1.7.1.1']
+        self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_1(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        upgrade_path = ['1.7.0', '1.7.1.1']
+        self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_2(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        upgrade_path = ['1.7.1.1']
+        self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_2(self):
+        input = TestInputSingleton.input
+        servers = input.servers
+        upgrade_path = ['1.7.1.1']
+        self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
+
     #do some bucket/init related operation
     #now only option x nodes
     #power on upgraded ones first and then the non-upgraded ones
@@ -463,7 +488,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                              insert_data=False,
                              start_upgraded_first=True,
                              load_ratio=-1,
-                             roll_upgrade=False):
+                             roll_upgrade=False,
+                             upgrade_path=[]):
         node_upgrade_status = {}
         #then start them in whatever order you want
         inserted_keys = []
@@ -502,29 +528,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             #wait for the bucket
             #bucket port should also be configurable , pass it as the
             #parameter to this test ? later
-
-            BucketOperationHelper.create_default_buckets(servers=[master],
-                                                         assert_on_test=self)
-
-            ready = BucketOperationHelper.wait_for_memcached(master, "default")
-            self.assertTrue(ready, "wait_for_memcached failed")
-
+            self._create_default_bucket(master)
             if insert_data:
-                #let's insert some data
-                if load_ratio == -1:
-                    #let's load 0.1 data
-                    load_ratio = 0.1
-                distribution = {1024: 0.5, 20: 0.5}
-                #TODO: with write_only = False, sometimes the load hangs, debug this
-                inserted_keys, rejected_keys =\
-                MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
-                                                                      ram_load_ratio=load_ratio,
-                                                                      number_of_threads=1,
-                                                                      value_size_distribution=distribution,
-                                                                      write_only=True)
-                log.info("wait until data is completely persisted on the disk")
-                RebalanceHelper.wait_for_stats(master, "default", 'ep_queue_size', 0)
-                RebalanceHelper.wait_for_stats(master, "default", 'ep_flusher_todo', 0)
+                inserted_keys = self._load_data(master, load_ratio)
 
         # cluster all the nodes together
         ClusterOperationHelper.add_all_nodes_or_assert(master,
@@ -543,76 +549,68 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self.assertTrue(rebalanceSucceeded,
                         "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
 
-        filtered_builds = []
-        for build in builds:
-            if build.deliverable_type == info.deliverable_type and\
-               build.architecture_type == info.architecture_type:
-                filtered_builds.append(build)
-        sorted_builds = BuildQuery().sort_builds_by_version(filtered_builds)
-        latest_version = sorted_builds[0].product_version
-
-        log.info("initial_version is {0}".format(initial_version))
-        #TODO: Use rest_client instead
         if initial_version == "1.7.0" or initial_version == "1.7.1":
-            remote = RemoteMachineShellConnection(servers[0])
-            cmd = "wget -O- -q --post-data='rpc:eval_everywhere(ns_config, resave, []).' --user={0} --password={1} \
-                  http://localhost:8091/diag/eval".format(rest_settings.rest_username, rest_settings.rest_password)
-            log.info('Executing command to save config {0}'.format(cmd))
-            remote.execute_command(cmd, debug=True)
-            remote.disconnect()
+            self._save_config(rest_settings, master)
 
+        input_version = input.test_params['version']
+        upgrade_path.append(input_version)
         #if we dont want to do roll_upgrade ?
         if not roll_upgrade:
-            for server in servers:
-                remote = RemoteMachineShellConnection(server)
-                remote.stop_membase()
-                remote.disconnect()
-            count = 0
-            for server in servers:
-                remote = RemoteMachineShellConnection(server)
-                info = remote.extract_remote_info()
-                log.info("finding build {0} for machine {1}".format(latest_version, server))
-                version = input.test_params['version']
-                #pick the first one in the list
-                appropriate_build = BuildQuery().find_membase_build(builds,
-                                             'membase-server-enterprise',
-                                             info.deliverable_type,
-                                             info.architecture_type,
-                                             version.strip())
-                remote.download_build(appropriate_build)
-                remote.membase_upgrade(appropriate_build)
-                RestHelper(RestConnection(server)).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
+            for version in upgrade_path:
+                if version is not initial_version:
+                    log.info("initial_version is {0}".format(initial_version))
+                    if version == "1.7.0" or version == "1.7.1":
+                        self._save_config(rest_settings, master)
 
-                pools_info = RestConnection(server).get_pools_info()
+                    self._stop_membase_servers(servers)
 
-                node_upgrade_status[server] = "upgraded"
-                count += 1
-                remote.disconnect()
-
-                #verify admin_creds still set
-
-                self.assertTrue(pools_info['implementationVersion'], appropriate_build.product_version)
-
-            if start_upgraded_first:
-                for server in node_upgrade_status:
-                    if node_upgrade_status[server] == "upgraded":
+                    for server in servers:
                         remote = RemoteMachineShellConnection(server)
-                        remote.start_membase()
-                        remote.disconnect()
-            else:
-                for server in node_upgrade_status:
-                    if node_upgrade_status[server] == "installed":
-                        remote = RemoteMachineShellConnection(server)
-                        remote.start_membase()
+                        info = remote.extract_remote_info()
+                        log.info("finding build {0} for machine {1}".format(version, server))
+                        result = re.search('r', version)
+                        if result is None:
+                            appropriate_build = BuildQuery().find_membase_release_build('membase-server-enterprise',
+                                                         info.deliverable_type,
+                                                         info.architecture_type,
+                                                         version.strip())
+                        else:
+                            appropriate_build = BuildQuery().find_membase_build(builds,
+                                                         'membase-server-enterprise',
+                                                         info.deliverable_type,
+                                                         info.architecture_type,
+                                                         version.strip())
+
+                        remote.download_build(appropriate_build)
+                        remote.membase_upgrade(appropriate_build)
+                        RestHelper(RestConnection(server)).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
+
+                        #verify admin_creds still set
+                        pools_info = RestConnection(server).get_pools_info()
+                        self.assertTrue(pools_info['implementationVersion'], appropriate_build.product_version)
+
+                        if start_upgraded_first:
+                            log.info("Starting server {0} post upgrade".format(server))
+                            remote.start_membase()
+                        else:
+                            remote.stop_membase()
+
                         remote.disconnect()
 
-            for server in servers:
-                remote = RemoteMachineShellConnection(server)
-                remote.start_membase()
-                remote.disconnect()
+                    if not start_upgraded_first:
+                        log.info("Starting all servers together")
+                        self._start_membase_servers(servers)
+
+                    time.sleep(10)
+                    if create_buckets:
+                        self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('default', RestConnection(master)),
+                                        msg="bucket 'default' does not exist..")
+                    if insert_data:
+                        self._verify_data(master, rest, inserted_keys)
 
         # rolling upgrade
         else:
+            latest_version = input.test_params['version']
             # rebalance node out
             # remove membase from node
             # install destination version onto node
@@ -668,14 +666,65 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 self.assertTrue(rebalanceSucceeded,
                                 "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
 
-        #TODO: how can i verify that the cluster init config is preserved
-        # verify data on upgraded nodes
-        if create_buckets:
-            self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('default', RestConnection(master)),
-                            msg="bucket 'default' does not exist..")
-        if insert_data:
-            BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys,
-                                                       rest=rest,
-                                                       bucket_name='default',
-                                                       test=self)
-        return node_upgrade_status
+            #TODO: how can i verify that the cluster init config is preserved
+            # verify data on upgraded nodes
+            if create_buckets:
+                self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('default', RestConnection(master)),
+                                msg="bucket 'default' does not exist..")
+            if insert_data:
+                self._verify_data(master, rest, inserted_keys)
+
+    def _save_config(self, rest_settings, server):
+        log = logger.Logger.get_logger()
+        #TODO: Use rest_client instead
+        remote = RemoteMachineShellConnection(server)
+        cmd = "wget -O- -q --post-data='rpc:eval_everywhere(ns_config, resave, []).' --user={0} --password={1} \
+        http://localhost:8091/diag/eval".format(rest_settings.rest_username, rest_settings.rest_password)
+        log.info('Executing command to save config {0}'.format(cmd))
+        remote.execute_command(cmd, debug=True)
+        remote.disconnect()
+
+    def _start_membase_servers(self, servers):
+        for server in servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.start_membase()
+            remote.disconnect()
+
+    def _stop_membase_servers(self, servers):
+        for server in servers:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_membase()
+            remote.disconnect()
+
+    def _load_data(self, master, load_ratio):
+        log = logger.Logger.get_logger()
+        if load_ratio == -1:
+            #let's load 0.1 data
+            load_ratio = 0.1
+        distribution = {1024: 0.5, 20: 0.5}
+        #TODO: with write_only = False, sometimes the load hangs, debug this
+        inserted_keys, rejected_keys =\
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
+                                                              ram_load_ratio=load_ratio,
+                                                              number_of_threads=1,
+                                                              value_size_distribution=distribution,
+                                                              write_only=True)
+        log.info("wait until data is completely persisted on the disk")
+        RebalanceHelper.wait_for_stats(master, "default", 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_stats(master, "default", 'ep_flusher_todo', 0)
+        return inserted_keys
+
+    def _create_default_bucket(self, master):
+        BucketOperationHelper.create_default_buckets(servers=[master], assert_on_test=self)
+        ready = BucketOperationHelper.wait_for_memcached(master, "default")
+        self.assertTrue(ready, "wait_for_memcached failed")
+
+    def _verify_data(self, master, rest, inserted_keys):
+        log = logger.Logger.get_logger()
+        log.info("Verifying data")
+        ready = RebalanceHelper.wait_for_stats_on_all(master, 'default', 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats_on_all(master, 'default', 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys, rest=rest, bucket_name='default',
+                                                                   test=self)
