@@ -6,6 +6,7 @@ import getopt
 import copy
 import sys
 from threading import Thread
+from datetime import datetime
 
 sys.path.append(".")
 sys.path.append("lib")
@@ -370,6 +371,8 @@ if __name__ == "__main__":
         usage("ERROR: " + str(err))
 
     if "parallel" in input.test_params:
+        # workaround for a python2.6 bug of using strptime with threads
+        datetime.strptime("30 Nov 00", "%d %b %y")
         InstallerJob().parallel_install(input.servers, input.test_params)
     else:
         InstallerJob().sequential_install(input.test_params)
