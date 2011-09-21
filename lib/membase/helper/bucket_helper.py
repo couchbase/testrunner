@@ -313,7 +313,7 @@ class BucketOperationHelper():
         #we should try out at least three times
         log = logger.Logger.get_logger()
         #verify all the keys
-        client = MemcahcedClientHelper.proxy_client(server,bucket_name)
+        client = MemcachedClientHelper.proxy_client(server,bucket_name)
         #populate key
         retry = 1
 
