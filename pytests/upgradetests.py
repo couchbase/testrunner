@@ -449,7 +449,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                              load_ratio=-1,
                              roll_upgrade=False,
                              upgrade_path=[]):
-        node_upgrade_status = {}
+        node_upgrade_path = []
+        node_upgrade_path.extend(upgrade_path)
         #then start them in whatever order you want
         inserted_keys = []
         log = logger.Logger.get_logger()
@@ -478,7 +479,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
             rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
-            node_upgrade_status[server] = "installed"
             remote.disconnect()
 
         master = servers[0]
@@ -512,12 +512,12 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             self._save_config(rest_settings, master)
 
         input_version = input.test_params['version']
-        upgrade_path.append(input_version)
+        node_upgrade_path.append(input_version)
         #if we dont want to do roll_upgrade ?
-        log.info("Upgrade path: {0} -> {1}".format(initial_version, upgrade_path))
+        log.info("Upgrade path: {0} -> {1}".format(initial_version, node_upgrade_path))
         log.info("List of servers {0}".format(servers))
         if not roll_upgrade:
-            for version in upgrade_path:
+            for version in node_upgrade_path:
                 if version is not initial_version:
                     log.info("Upgrading to version {0}".format(version))
                     self._stop_membase_servers(servers)
@@ -554,11 +554,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                             remote.stop_membase()
 
                         remote.disconnect()
-
                     if not start_upgraded_first:
                         log.info("Starting all servers together")
                         self._start_membase_servers(servers)
-
                     time.sleep(30)
                     if version == "1.7.0" or version == "1.7.1":
                         self._save_config(rest_settings, master)
