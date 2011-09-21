@@ -514,6 +514,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         input_version = input.test_params['version']
         upgrade_path.append(input_version)
         #if we dont want to do roll_upgrade ?
+        log.info("Upgrade path: {0} -> {1}".format(initial_version, upgrade_path))
+        log.info("List of servers {0}".format(servers))
         if not roll_upgrade:
             for version in upgrade_path:
                 if version is not initial_version:
@@ -557,7 +559,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                         log.info("Starting all servers together")
                         self._start_membase_servers(servers)
 
-                    time.sleep(10)
+                    time.sleep(30)
                     if version == "1.7.0" or version == "1.7.1":
                         self._save_config(rest_settings, master)
 
