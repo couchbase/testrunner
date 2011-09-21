@@ -10,13 +10,16 @@ import ConfigParser
 # which tests
 # ideally should accept a regular expression
 
+
 class TestInputSingleton():
     input = None
+
 
 class TestInput(object):
 
     def __init__(self):
         self.servers = []
+        self.clusters = {}
         self.membase_settings = None
         self.test_params = {}
         #servers , each server can have u,p,port,directory
@@ -51,26 +54,27 @@ class TestInputMembaseSetting(object):
         self.rest_username = ''
         self.rest_password = ''
 
+
 class TestInputBuild(object):
     def __init__(self):
         self.version = ''
         self.url = ''
 
+
 # we parse this and then pass it on to all the test case
 class TestInputParser():
-
 
     @staticmethod
     def get_test_input(argv):
         #if file is given use parse_from_file
         #if its from command line
-        (opts, args) = getopt.getopt(argv[1:],'ht:c:v:s:i:p:', [])
+        (opts, args) = getopt.getopt(argv[1:], 'ht:c:v:s:i:p:', [])
         #first let's loop over and find out if user has asked for help
         #if it has i
         params = {}
         has_ini = False
         ini_file = ''
-        for option,argument in opts:
+        for option, argument in opts:
             if option == '-h':
                 print 'usage'
                 return
@@ -81,7 +85,7 @@ class TestInputParser():
                 # takes in a string of the form "p1=v1,v2,p2=v3,p3=v4,v5,v6"
                 # converts to a dictionary of the form {"p1":"v1,v2","p2":"v3","p3":"v4,v5,v6"}
                 argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", argument)[1:]]
-                pairs = dict(zip(argument_split[::2],argument_split[1::2]))
+                pairs = dict(zip(argument_split[::2], argument_split[1::2]))
                 for pair in pairs.iteritems():
                     if pair[0] == "vbuckets":
                         # takes in a string of the form "1-100,140,150-160"
@@ -89,7 +93,7 @@ class TestInputParser():
                         vbuckets = set()
                         for v in pair[1].split(","):
                             r = v.split("-")
-                            vbuckets.update(range(int(r[0]),int(r[-1])+1))
+                            vbuckets.update(range(int(r[0]), int(r[-1]) + 1))
                         params[pair[0]] = sorted(vbuckets)
                     else:
                         argument_list = [a.strip() for a in pair[1].split(",")]
@@ -120,53 +124,76 @@ class TestInputParser():
         config.read(file)
         sections = config.sections()
         global_properties = {}
+        count = 0
+        start = 0
+        end = 0
+        cluster_ips = []
+        clusters = {}
         for section in sections:
+            result = re.search('^cluster', section)
             if section == 'servers':
-                ips = TestInputParser.get_server_ips(config,section)
+                ips = TestInputParser.get_server_ips(config, section)
             elif section == 'membase':
-                input.membase_settings = TestInputParser.get_membase_settings(config,section)
+                input.membase_settings = TestInputParser.get_membase_settings(config, section)
             elif  section == 'global':
                 #get global stuff and override for those unset
                 for option in config.options(section):
-                    global_properties[option] = config.get(section,option)
-        #create one server object per ip
+                    global_properties[option] = config.get(section, option)
+            elif result is not None:
+                cluster_list = TestInputParser.get_server_ips(config, section)
+                cluster_ips.extend(cluster_list)
+                clusters[count] = len(cluster_list)
+                count += 1
 
+        # Setup 'cluster#' tag as dict
+        # input.clusters -> {0: [ip:10.1.6.210 ssh_username:root, ip:10.1.6.211 ssh_username:root]}
+        for cluster_ip in cluster_ips:
+            servers.append(TestInputParser.get_server(cluster_ip, config))
+        servers = TestInputParser.get_server_options(servers, input.membase_settings, global_properties)
+        for key, value in clusters.items():
+            end += value
+            input.clusters[key] = servers[start:end]
+            start = value
+
+        # Setting up 'servers' tag
+        servers = []
         for ip in ips:
-            servers.append(TestInputParser.get_server(ip,config))
+            servers.append(TestInputParser.get_server(ip, config))
+        input.servers = TestInputParser.get_server_options(servers, input.membase_settings, global_properties)
 
-        for server in servers:
-            if server.ssh_username == '' and 'username' in global_properties:
-                server.ssh_username = global_properties['username']
-            if server.ssh_password == '' and 'password' in global_properties:
-                server.ssh_password = global_properties['password']
-            if server.ssh_key == '' and 'ssh_key' in global_properties:
-                server.ssh_key = global_properties['ssh_key']
-            if not server.port and 'port' in global_properties:
-                server.port = global_properties['port']
-            if server.cli_path == '' and 'cli' in global_properties:
-                server.cli_path = global_properties['cli']
-            if server.rest_username == '' and input.membase_settings.rest_username != '':
-                server.rest_username = input.membase_settings.rest_username
-            if server.rest_password == '' and input.membase_settings.rest_password != '':
-                server.rest_password = input.membase_settings.rest_password
-            if server.data_path == '' and 'data_path' in global_properties:
-                server.data_path = global_properties['data_path']
-
-
-        input.servers = servers
         return input
 
     @staticmethod
-    def get_server_ips(config,section):
+    def get_server_options(servers, membase_settings, global_properties):
+        for server in servers:
+                if server.ssh_username == '' and 'username' in global_properties:
+                    server.ssh_username = global_properties['username']
+                if server.ssh_password == '' and 'password' in global_properties:
+                    server.ssh_password = global_properties['password']
+                if server.ssh_key == '' and 'ssh_key' in global_properties:
+                    server.ssh_key = global_properties['ssh_key']
+                if not server.port and 'port' in global_properties:
+                    server.port = global_properties['port']
+                if server.cli_path == '' and 'cli' in global_properties:
+                    server.cli_path = global_properties['cli']
+                if server.rest_username == '' and membase_settings.rest_username != '':
+                    server.rest_username = membase_settings.rest_username
+                if server.rest_password == '' and membase_settings.rest_password != '':
+                    server.rest_password = membase_settings.rest_password
+                if server.data_path == '' and 'data_path' in global_properties:
+                    server.data_path = global_properties['data_path']
+        return servers
+
+    @staticmethod
+    def get_server_ips(config, section):
         ips = []
         options = config.options(section)
         for option in options:
-            ips.append(config.get(section,option))
+            ips.append(config.get(section, option))
         return ips
 
-
     @staticmethod
-    def get_server(ip,config):
+    def get_server(ip, config):
         server = TestInputServer()
         server.ip = ip
         for section in config.sections():
@@ -174,17 +201,17 @@ class TestInputParser():
                 options = config.options(section)
                 for option in options:
                     if option == 'username':
-                        server.ssh_username = config.get(section,option)
+                        server.ssh_username = config.get(section, option)
                     if option == 'password':
-                        server.ssh_password = config.get(section,option)
+                        server.ssh_password = config.get(section, option)
                     if option == 'cli':
-                        server.cli_path = config.get(section,option)
+                        server.cli_path = config.get(section, option)
                     if option == 'ssh_key':
-                        server.ssh_key = config.get(section,option)
+                        server.ssh_key = config.get(section, option)
                     if option == 'port':
-                        server.port = config.get(section,option)
+                        server.port = config.get(section, option)
                     if option == 'ip':
-                        server.ip = config.get(section,option)
+                        server.ip = config.get(section, option)
                 break
                 #get username
                 #get password
@@ -194,7 +221,7 @@ class TestInputParser():
         return server
 
     @staticmethod
-    def get_membase_build(config,section):
+    def get_membase_build(config, section):
         membase_build = TestInputBuild()
         for option in config.options(section):
             if option == 'version':
@@ -204,18 +231,14 @@ class TestInputParser():
         return membase_build
 
     @staticmethod
-    def get_membase_settings(config,section):
+    def get_membase_settings(config, section):
         membase_settings = TestInputMembaseSetting()
         for option in config.options(section):
             if option == 'rest_username':
-                membase_settings.rest_username = config.get(section,option)
+                membase_settings.rest_username = config.get(section, option)
             if option == 'rest_password':
-                membase_settings.rest_password = config.get(section,option)
+                membase_settings.rest_password = config.get(section, option)
         return membase_settings
-
-
-        
-
 
     @staticmethod
     def parse_from_command_line(argv):
@@ -234,28 +257,26 @@ class TestInputParser():
             # -o : taken care of by jenkins
             servers = []
             membase_setting = None
-            (opts, args) = getopt.getopt(argv[1:],'h:t:c:i:p:', [])
+            (opts, args) = getopt.getopt(argv[1:], 'h:t:c:i:p:', [])
             #first let's loop over and find out if user has asked for help
             need_help = False
-            for option,argument in opts:
+            for option, argument in opts:
                 if option == "-h":
                     print 'usage...'
                     need_help = True
                     break
             if need_help:
                 return
-
-
             #first let's populate the server list and the version number
-            for option,argument in opts:
+            for option, argument in opts:
                 if option == "-s":
                     #handle server list
                     servers = TestInputParser.handle_command_line_s(argument)
                 elif option == "-u" or option == "-v":
-                    input_build = TestInputParser.handle_command_line_u_or_v(option,argument)
+                    input_build = TestInputParser.handle_command_line_u_or_v(option, argument)
 
             #now we can override the username pass and cli_path info
-            for option,argument in opts:
+            for option, argument in opts:
                 if option == "-k":
                     #handle server list
                     for server in servers:
@@ -287,7 +308,7 @@ class TestInputParser():
                     server.cli_path = '/opt/membase/bin/'
                 if not server.port:
                     server.port = 8091
-            input.servers  = servers
+            input.servers = servers
             input.membase_settings = membase_setting
             return input
         except Exception:
@@ -296,7 +317,7 @@ class TestInputParser():
             raise
 
     @staticmethod
-    def handle_command_line_u_or_v(option,argument):
+    def handle_command_line_u_or_v(option, argument):
         input_build = TestInputBuild()
         if option == "-u":
             # let's check whether this url exists or not
@@ -310,7 +331,6 @@ class TestInputParser():
                     input_build.version = argument
                     break
         return input_build
-
 
     #returns list of server objects
     @staticmethod
