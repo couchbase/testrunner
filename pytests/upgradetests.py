@@ -94,7 +94,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                 buckets = rest.get_buckets()
                 for bucket in buckets:
                     BucketOperationHelper.keys_exist_or_assert(bucket_data[bucket.name]["inserted_keys"],
-                                                               rest,
+                                                               server,
                                                                bucket.name, self)
 
     def test_single_node_upgrade_s1_1_6_5_3(self):
@@ -687,5 +687,5 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         ready = RebalanceHelper.wait_for_stats_on_all(master, 'default', 'ep_flusher_todo', 0)
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys, rest=rest, bucket_name='default',
+        BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys, server=master, bucket_name='default',
                                                                    test=self)

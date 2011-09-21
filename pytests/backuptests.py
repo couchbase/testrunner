@@ -146,7 +146,7 @@ class BackupRestoreTests(unittest.TestCase):
         else:
             BackupHelper(self.master, self).restore(backup_location=self.remote_tmp_folder, moxi_port=info.moxi, username=bucket, password='password')
 
-        keys_exist = BucketOperationHelper.keys_exist_or_assert(inserted_keys, rest, bucket, self)
+        keys_exist = BucketOperationHelper.keys_exist_or_assert(inserted_keys, self.master, bucket, self)
         self.assertTrue(keys_exist, msg="unable to verify keys after restore")
 
     def _test_backup_add_restore_bucket_with_expiration_key(self, replica):
