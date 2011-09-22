@@ -90,7 +90,12 @@ class ViewTests(unittest.TestCase):
         self._test_count_reduce_multiple_docs(100000)
 
     def test_delete_doc(self):
-        self._test_delete_docs(100, 1)
+        prefix = str(uuid.uuid4())[:7]
+        num_of_docs = 100
+        self._create_view_doc_name(prefix)
+        self._load_docs(num_of_docs, prefix)
+        doc_names = self._delete_docs(num_of_docs, 1, prefix)
+        self._verify_docs_doc_name(doc_names, prefix)
 
 
     def _test_count_reduce_multiple_docs(self, num_of_docs):
@@ -279,80 +284,6 @@ class ViewTests(unittest.TestCase):
         if not_found:
             self._print_keys_not_found(not_found, 10)
             self.fail("map function did not return docs for {0} keys".format(len(not_found)))
-
-
-    def _test_delete_docs(self, num_of_docs, num_of_deleted_docs):
-        self.log.info("description : create a view on {0} documents".format(num_of_docs))
-        master = self.servers[0]
-        rest = RestConnection(master)
-        bucket = "default"
-        view_name = "dev_test_view-{0}".format(str(uuid.uuid4())[:7])
-        map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        function = self._create_function(rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
-        self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
-        doc_names = []
-        updated_doc_names = []
-        updated_num_of_docs = num_of_docs + 100
-        prefix = str(uuid.uuid4())[:7]
-        for i in range(0, num_of_docs):
-            key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
-            doc_names.append(doc_name)
-            value = {"name": doc_name, "age": 1000}
-            moxi.set(key, 0, 0, json.dumps(value))
-        self.log.info("inserted {0} json documents".format(num_of_docs))
-
-        map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "\") != -1) { emit(doc.name, doc);}}"
-        function = self._create_function(rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
-        #        self._verify_views_replicated(bucket, view_name, map_fn)
-        results = self._get_view_results(rest, bucket, view_name, num_of_docs)
-        keys = self._get_keys(results)
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
-        # try this for maximum 1 minute
-        attempt = 0
-        delay = 10
-        # first verify all keys get reported in the view
-        while attempt < 6 and len(keys) != (num_of_docs):
-            msg = "view returned {0} items , expected to return {1} items"
-            self.log.info(msg.format(len(keys), len(doc_names)))
-            self.log.info("trying again in {0} seconds".format(delay))
-            time.sleep(delay)
-            attempt += 1
-            results = self._get_view_results(rest, bucket, view_name, num_of_docs)
-            keys = self._get_keys(results)
-        if len(keys) != num_of_docs:
-            self.fail("not all keys set are in the view")
-        # delete the docs
-        self.log.info("deleting {0} json objects".format(num_of_deleted_docs))
-        deleted_docs = []
-        for i in range(0, num_of_deleted_docs):
-            key = "{0}-{1}-{2}".format(view_name, prefix, i)
-            moxi.delete(key)
-            deleted_docs.append(key)
-        # try this for maximum 1 minute
-        attempt = 0
-        delay = 10
-        # then verify the deleted key is gone
-        while attempt < 6 and len(keys) != (num_of_docs - num_of_deleted_docs):
-            msg = "view returned {0} items , expected to return {1} items"
-            self.log.info(msg.format(len(keys), len(doc_names) - num_of_deleted_docs))
-            self.log.info("trying again in {0} seconds".format(delay))
-            time.sleep(delay)
-            attempt += 1
-            results = self._get_view_results(rest, bucket, view_name, num_of_docs)
-            keys = self._get_keys(results)
-        keys = self._get_keys(results)
-        not_found = []
-        for i in range(0, num_of_docs):
-            key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
-            if not key in keys:
-                not_found.append(key)
-        if not_found != deleted_docs:
-            print not_found
-            print deleted_docs
-            self.fail("deleted docs does not equal missing docs")
 
 
     def _print_keys_not_found(self, keys_not_found, how_many):
@@ -730,3 +661,91 @@ class ViewTests(unittest.TestCase):
                 except Exception as ex:
                     self.log.error("unable to set item , error {0}".format(ex))
         self.log.info("inserted {0} json documents".format(len(self.docs_inserted)))
+
+
+    def _create_view_doc_name(self, prefix):
+        self.log.info("description : create a view")
+        master = self.servers[0]
+        rest = RestConnection(master)
+        bucket = "default"
+        view_name = "dev_test_view-{0}".format(prefix)
+        map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "-\") != -1) { emit(doc.name, doc);}}"
+        function = self._create_function(rest, bucket, view_name, map_fn)
+        rest.create_view(bucket, view_name, function)
+        self.created_views[view_name] = bucket
+
+    def _load_docs(self, num_of_docs, prefix):
+        bucket = "default"
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        doc_names = []
+        for i in range(0, num_of_docs):
+            key = doc_name = "{0}-{1}".format(prefix, i)
+            doc_names.append(doc_name)
+            value = {"name": doc_name, "age": 1000}
+            moxi.set(key, 0, 0, json.dumps(value))
+        self.log.info("inserted {0} json documents".format(num_of_docs))
+        self._verify_docs_doc_name(doc_names, prefix)
+        return doc_names
+
+
+    def _update_docs(self, num_of_docs, num_of_updated_docs, prefix):
+        bucket = "default"
+        view_name = "dev_test_view-{0}".format(prefix)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        doc_names = []
+        for i in range(0, num_of_docs):
+            key = "{0}-{1}".format(prefix, i)
+            if i < num_of_updated_docs:
+                doc_name = key + "updated"
+            else:
+                doc_name = key
+            doc_names.append(doc_name)
+            value = {"name": doc_name, "age": 1000}
+            if i < num_of_updated_docs:
+                moxi.set(key, 0, 0, json.dumps(value))
+        self.log.info("inserted {0} json documents".format(num_of_updated_docs))
+        self._verify_docs_doc_name(doc_names, prefix)
+        return doc_names
+
+
+    def _delete_docs(self, num_of_docs, num_of_deleted_docs, prefix):
+        bucket = "default"
+        view_name = "dev_test_view-{0}".format(prefix)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        doc_names = []
+        for i in range(0, num_of_docs):
+            key = doc_name = "{0}-{1}".format(prefix, i)
+            value = {"name": doc_name, "age": 1000}
+            if i < num_of_deleted_docs:
+                moxi.delete(key)
+            else:
+                doc_names.append(doc_name)
+        self.log.info("deleted {0} json documents".format(num_of_deleted_docs))
+        self._verify_docs_doc_name(doc_names, prefix)
+        return doc_names
+
+
+    def _verify_docs_doc_name(self, doc_names, prefix):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        bucket = "default"
+        view_name = "dev_test_view-{0}".format(prefix)
+
+        results = self._get_view_results(rest, bucket, view_name, limit=2*len(doc_names))
+        keys = self._get_keys(results)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
+        # try this for maximum 1 minute
+        attempt = 0
+        delay = 10
+        # first verify all keys get reported in the view
+        while attempt < 6 and len(keys) != len(doc_names):
+            msg = "view returned {0} items , expected to return {1} items"
+            self.log.info(msg.format(len(keys), len(doc_names)))
+            self.log.info("trying again in {0} seconds".format(delay))
+            time.sleep(delay)
+            attempt += 1
+            results = self._get_view_results(rest, bucket, view_name, limit=2*len(doc_names))
+            keys = self._get_keys(results)
+        if sorted(keys) != sorted(doc_names):
+            self.fail("returned keys have different values that expected keys")
+
