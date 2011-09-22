@@ -97,6 +97,16 @@ class ViewTests(unittest.TestCase):
         doc_names = self._delete_docs(num_of_docs, 1, prefix)
         self._verify_docs_doc_name(doc_names, prefix)
 
+    def test_readd_docs(self):
+        prefix = str(uuid.uuid4())[:7]
+        num_of_docs = 10000
+        self._create_view_doc_name(prefix)
+        self._load_docs(num_of_docs, prefix)
+        doc_names = self._delete_docs(num_of_docs, 100, prefix)
+        self._verify_docs_doc_name(doc_names, prefix)
+        doc_names = self._update_docs(num_of_docs, 100, prefix)
+        self._verify_docs_doc_name(doc_names, prefix)
+
 
     def _test_count_reduce_multiple_docs(self, num_of_docs):
         self.log.info("description : create a view on 10 thousand documents")
@@ -748,4 +758,3 @@ class ViewTests(unittest.TestCase):
             keys = self._get_keys(results)
         if sorted(keys) != sorted(doc_names):
             self.fail("returned keys have different values that expected keys")
-
