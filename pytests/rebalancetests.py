@@ -9,7 +9,8 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached
-NUM_REBALANCE=2
+NUM_REBALANCE = 2
+
 
 class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
@@ -17,7 +18,8 @@ class RebalanceBaseTest(unittest.TestCase):
         log = logger.Logger.get_logger()
         servers = input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
-        ClusterHelper.cleanup_cluster(servers)
+        for server in servers:
+            ClusterOperationHelper.cleanup_cluster([server])
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
         serverInfo = servers[0]
 
