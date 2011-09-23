@@ -12,6 +12,8 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 import testconstants
 
+TIMEOUT_SECS = 30
+
 
 class SingleNodeUpgradeTests(unittest.TestCase):
     #test descriptions are available http://techzone.couchbase.com/wiki/display/membase/Test+Plan+1.7.0+Upgrade
@@ -81,7 +83,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         pools_info = rest.get_pools_info()
 
         rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
-        time.sleep(10)
+        time.sleep(TIMEOUT_SECS)
         #verify admin_creds still set
 
         self.assertTrue(pools_info['implementationVersion'], appropriate_build.product_version)
@@ -288,17 +290,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   initialize_cluster=True,
                                   insert_data=True,
                                   create_buckets=True)
-    #1.6.0
-    #1.6.1
-    #1.6.3
-    #1.6.4
-    #1.6.4.1
-    #1.6.5
-    #1.6.5.1
-    #1.6.5.2.1
-    #1.6.5.3
-    #1.6.5.3.1
-    #1.6.5.4
 
     def test_single_node_upgrade_s5(self):
         #install the latest version and upgrade to itself
@@ -374,15 +365,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_multiple_node_upgrade_m5_1_6_5_3(self):
         self._install_and_upgrade('1.6.5.3', True, False, False)
 
-    def test_multiple_node_rolling_upgrade_1_6_5(self):
-        self._install_and_upgrade('1.6.5', True, True, False, -1, True)
-
-    def test_multiple_node_rolling_upgrade_1_6_5_1(self):
-        self._install_and_upgrade('1.6.5.1', True, True, False, -1, True)
-
-    def test_multiple_node_rolling_upgrade_1_6_5_2(self):
-        self._install_and_upgrade('1.6.5.2', True, True, False, -1, True)
-
     def test_multiple_node_upgrade_m1_1_7_0(self):
         self._install_and_upgrade('1.7.0', False, False, True)
 
@@ -397,9 +379,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
     def test_m6_1_7_0(self):
         self._install_and_upgrade('1.7.0', True, True, True, 10)
-
-    def test_multiple_node_rolling_upgrade_1_7_0(self):
-        self._install_and_upgrade('1.7.0', True, True, False, -1, True)
 
     def test_multiple_node_upgrade_m1_1_7_1(self):
         self._install_and_upgrade('1.7.1', False, False, True)
@@ -416,12 +395,17 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_m6_1_7_1(self):
         self._install_and_upgrade('1.7.1', True, True, True, 10)
 
-    def test_multiple_node_rolling_upgrade_1_7_1(self):
-        self._install_and_upgrade('1.7.1', True, True, False, -1, True)
-
     def test_m6_1_7_1_1(self):
         self._install_and_upgrade('1.7.1.1', True, True, True, 10)
 
+    # Rolling Upgrades
+    def test_multiple_node_rolling_upgrade_1_7_0(self):
+        self._install_and_upgrade('1.7.0', True, True, False, -1, True)
+
+    def test_multiple_node_rolling_upgrade_1_7_1(self):
+        self._install_and_upgrade('1.7.1', True, True, False, -1, True)
+
+    # Multiple Version Upgrades
     def test_multiple_version_upgrade_start_one_1(self):
         upgrade_path = ['1.7.0', '1.7.1.1']
         self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
@@ -467,7 +451,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         input = TestInputSingleton.input
         rest_settings = input.membase_settings
         servers = input.servers
-        builds, changes = BuildQuery().get_all_builds()
 
         # install older build on all nodes
         for server in servers:
@@ -529,24 +512,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 if version is not initial_version:
                     log.info("Upgrading to version {0}".format(version))
                     self._stop_membase_servers(servers)
-
+                    appropriate_build = self._get_build(servers[0], version)
                     for server in servers:
                         remote = RemoteMachineShellConnection(server)
-                        info = remote.extract_remote_info()
-                        log.info("finding build {0} for machine {1}".format(version, server))
-                        result = re.search('r', version)
-                        if result is None:
-                            appropriate_build = BuildQuery().find_membase_release_build('membase-server-enterprise',
-                                                         info.deliverable_type,
-                                                         info.architecture_type,
-                                                         version.strip())
-                        else:
-                            appropriate_build = BuildQuery().find_membase_build(builds,
-                                                         'membase-server-enterprise',
-                                                         info.deliverable_type,
-                                                         info.architecture_type,
-                                                         version.strip())
-
                         remote.download_build(appropriate_build)
                         remote.membase_upgrade(appropriate_build)
                         RestHelper(RestConnection(server)).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
@@ -565,7 +533,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     if not start_upgraded_first:
                         log.info("Starting all servers together")
                         self._start_membase_servers(servers)
-                    time.sleep(30)
+                    time.sleep(TIMEOUT_SECS)
                     if version == "1.7.0" or version == "1.7.1":
                         self._save_config(rest_settings, master)
 
@@ -577,7 +545,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
         # rolling upgrade
         else:
-            latest_version = input.test_params['version']
+            version = input.test_params['version']
+            appropriate_build = self._get_build(servers[0], version)
             # rebalance node out
             # remove membase from node
             # install destination version onto node
@@ -586,16 +555,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 server = servers[server_index]
                 master = servers[server_index - 1]
                 log.info("current master is {0}, rolling node is {1}".format(master, server))
-
-                remote = RemoteMachineShellConnection(server)
-                info = remote.extract_remote_info()
-                log.info("finding build {0} for machine {1}".format(latest_version, server))
-                appropriate_build = BuildQuery().find_membase_build(builds=builds,
-                                                                    product='membase-server-enterprise',
-                                                                    build_version=latest_version,
-                                                                    deliverable_type=info.deliverable_type,
-                                                                    os_architecture=info.architecture_type)
-                self.assertTrue(appropriate_build.url, msg="unable to find build for this machine {0}".format(server))
 
                 rest = RestConnection(master)
                 nodes = rest.node_statuses()
@@ -607,14 +566,13 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                         toBeEjectedNodes.append(node.id)
                 helper = RestHelper(rest)
                 removed = helper.remove_nodes(knownNodes=allNodes, ejectedNodes=toBeEjectedNodes)
-
+                remote = RemoteMachineShellConnection(server)
                 remote.membase_uninstall()
                 remote.download_build(appropriate_build)
-
                 remote.membase_install(appropriate_build)
                 RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
                 log.info("sleep for 10 seconds to wait for membase-server to start...")
-                time.sleep(10)
+                time.sleep(TIMEOUT_SECS)
                 rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 remote.disconnect()
@@ -695,3 +653,26 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys, server=master, bucket_name='default',
                                                                    test=self)
+
+    def _get_build(self, master, version):
+        log = logger.Logger.get_logger()
+        remote = RemoteMachineShellConnection(master)
+        info = remote.extract_remote_info()
+        remote.disconnect()
+        builds, changes = BuildQuery().get_all_builds()
+        log.info("finding build {0} for machine {1}".format(version, master))
+        result = re.search('r', version)
+        if result is None:
+            appropriate_build = BuildQuery().find_membase_release_build('membase-server-enterprise',
+                                                                        info.deliverable_type,
+                                                                        info.architecture_type,
+                                                                        version.strip())
+        else:
+            appropriate_build = BuildQuery().find_membase_build(builds, 'membase-server-enterprise',
+                                                                info.deliverable_type,
+                                                                info.architecture_type,
+                                                                version.strip())
+
+        self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
+
+        return appropriate_build
