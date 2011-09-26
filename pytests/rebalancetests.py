@@ -9,6 +9,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached
+
 NUM_REBALANCE = 2
 
 
@@ -32,6 +33,10 @@ class RebalanceBaseTest(unittest.TestCase):
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
         BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1)
+        buckets = rest.get_buckets()
+        for bucket in buckets:
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket.name)
+            testcase.assertTrue(ready, "wait_for_memcached failed")
 
     @staticmethod
     def common_tearDown(servers, testcase):
