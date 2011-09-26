@@ -901,7 +901,9 @@ class RestConnection(object):
             api = self.baseUrl + "couchBase/{0}%2F{1}".format(bucket, i)
             status, content = httplib2.Http().request(api, "GET")
             data = json.loads(content)
-        return data["compact_running"]
+            if data["compact_running"] == True:
+                return True, i
+        return False, i
 
     def _reset_auto_compaction(self):
         api = self.baseUrl + "controller/setAutoCompaction"

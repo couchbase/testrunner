@@ -513,18 +513,16 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
         end_time = time.time() + float(timeout_in_seconds)
         ended = False
         while time.time() < end_time and not ended:
-            status = rest.check_compaction_status(bucket)
+            status, vBucket = rest.check_compaction_status(bucket)
             if status:
-                status, pre = rest.get_database_disk_size()
+                log.info("compacting vBucket {0}".format(vBucket))
                 time.sleep(1)
-                status, post = rest.get_database_disk_size()
-                while pre != post and not ended:
-                    log.info("auto compaction's running.")
-                    status, pre = rest.get_database_disk_size()
+                compacting, vBucket = rest.check_compaction_status(bucket)
+                while compacting:
+                    log.info("compacting vBucket {0}".format(vBucket))
                     time.sleep(1)
-                    status, post = rest.get_database_disk_size()
-                    if post == pre:
-                        log.info("auto compaction's ended.")
+                    compacting, vBucket = rest.check_compaction_status(bucket)
+                    if compacting and vBucket == 0:
                         ended = True
             else:
                 log.error("auto compaction does not start yet.")
