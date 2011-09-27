@@ -291,6 +291,12 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   insert_data=True,
                                   create_buckets=True)
 
+    def test_single_node_upgrade_s4_1_7_1_1(self):
+        self._install_and_upgrade(initial_version='1.7.1.1',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
     def test_single_node_upgrade_s5(self):
         #install the latest version and upgrade to itself
         input = TestInputSingleton.input
@@ -404,6 +410,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
     def test_multiple_node_rolling_upgrade_1_7_1(self):
         self._install_and_upgrade('1.7.1', True, True, False, -1, True)
+
+    def test_multiple_node_rolling_upgrade_1_7_1_1(self):
+        self._install_and_upgrade('1.7.1.1', True, True, False, -1, True)
 
     # Multiple Version Upgrades
     def test_multiple_version_upgrade_start_one_1(self):
