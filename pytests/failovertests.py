@@ -5,16 +5,16 @@ import time
 import unittest
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 
+DEFAULT_LOAD_RATIO = 5
+DEFAULT_REPLICA = 1
+
 
 class FailoverBaseTest(unittest.TestCase):
-    # start from 1..n
-    # then from no failover x node and rebalance and
-    # verify we did not lose items
 
     @staticmethod
     def common_setup(input, testcase):
@@ -29,9 +29,10 @@ class FailoverBaseTest(unittest.TestCase):
             shell.log_command_output(o, r)
             shell.disconnect()
         time.sleep(10)
-        ClusterOperationHelper.cleanup_cluster(servers)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
+        for server in servers:
+            ClusterOperationHelper.cleanup_cluster([server])
+        ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
 
     @staticmethod
     def common_tearDown(servers, testcase):
@@ -48,14 +49,10 @@ class FailoverBaseTest(unittest.TestCase):
         log = logger.Logger.get_logger()
         log.info("10 seconds delay to wait for membase-server to start")
         time.sleep(10)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
-        try:
-            MemcachedClientHelper.flush_bucket(servers[0], 'default')
-        except Exception:
-            pass
+
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
+        ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
 
     @staticmethod
     def choose_nodes(master, nodes, howmany):
@@ -74,6 +71,79 @@ class FailoverBaseTest(unittest.TestCase):
             return string1.find(string2) != -1
         return False
 
+    @staticmethod
+    def replication_verification(master, bucket, replica, inserted_count, test):
+        rest = RestConnection(master)
+        nodes = rest.node_statuses()
+
+        if len(nodes) / (1 + replica) >= 1:
+                    final_replication_state = RestHelper(rest).wait_for_replication(900)
+                    msg = "replication state after waiting for up to 15 minutes : {0}"
+                    test.log.info(msg.format(final_replication_state))
+                    test.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
+                                                                                  bucket=bucket,
+                                                                                  timeout_in_seconds=600),
+                                    msg="replication was completed but sum(curr_items) dont match the curr_items_total")
+
+                    start_time = time.time()
+                    stats = rest.get_bucket_stats()
+                    while time.time() < (start_time + 120) and stats["curr_items"] != inserted_count:
+                        test.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], inserted_count))
+                        time.sleep(5)
+                        stats = rest.get_bucket_stats()
+                    RebalanceHelper.print_taps_from_all_nodes(rest, bucket)
+                    test.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], inserted_count))
+                    stats = rest.get_bucket_stats()
+                    msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
+                    test.assertEquals(stats["curr_items"], inserted_count,
+                                      msg=msg.format(stats["curr_items"], inserted_count))
+
+    @staticmethod
+    def load_data(master, bucket, keys_count=-1, load_ratio=-1):
+        log = logger.Logger.get_logger()
+        inserted_keys, rejected_keys =\
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
+                                                              name=bucket,
+                                                              ram_load_ratio=load_ratio,
+                                                              number_of_items=keys_count,
+                                                              number_of_threads=2,
+                                                              write_only=True)
+        log.info("wait until data is completely persisted on the disk")
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        return inserted_keys
+
+    @staticmethod
+    def verify_data(master, inserted_keys, bucket, test):
+        log = logger.Logger.get_logger()
+        log.info("Verifying data")
+        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
+        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, bucket_name=bucket,
+                                                                   test=test, concurrency=4)
+
+    @staticmethod
+    def get_test_params(input):
+        _keys_count = -1
+        _replica = -1
+        _load_ratio = -1
+
+        try:
+            _keys_count = int(input.test_params['keys_count'])
+        except KeyError:
+            try:
+                _load_ratio = float(input.test_params['load_ratio'])
+            except KeyError:
+                _load_ratio = DEFAULT_LOAD_RATIO
+
+        try:
+            _replica = int(input.test_params['replica'])
+        except  KeyError:
+            _replica = 1
+        return _keys_count, _replica, _load_ratio
+
 
 class FailoverTests(unittest.TestCase):
     def setUp(self):
@@ -85,80 +155,24 @@ class FailoverTests(unittest.TestCase):
     def tearDown(self):
         FailoverBaseTest.common_tearDown(self._servers, self)
 
-    def test_failover_firewall_1_replica_1_percent(self):
-        self.common_test_body(1, 'firewall', 1)
+    def test_failover_firewall(self):
+        keys_count, replica, load_ratio = FailoverBaseTest.get_test_params(self._input)
+        self.common_test_body(keys_count, replica, load_ratio, 'firewall')
 
-    def test_failover_firewall_1_replica_10_percent(self):
-        self.common_test_body(1, 'firewall', 10)
+    def test_failover_normal(self):
+        keys_count, replica, load_ratio = FailoverBaseTest.get_test_params(self._input)
+        self.common_test_body(keys_count, replica, load_ratio, 'normal')
 
-    def test_failover_firewall_2_replica_1_percent(self):
-        self.common_test_body(2, 'firewall', 1)
+    def test_failover_stop_server(self):
+        keys_count, replica, load_ratio = FailoverBaseTest.get_test_params(self._input)
+        self.common_test_body(keys_count, replica, load_ratio, 'stop_server')
 
-    def test_failover_firewall_3_replica_1_percent(self):
-        self.common_test_body(3, 'firewall', 1)
-
-    def test_failover_firewall_3_replica_10_percent(self):
-        self.common_test_body(3, 'firewall', 10)
-
-    def test_failover_normal_1_replica_1_percent(self):
-        self.common_test_body(1, 'normal', 1)
-
-    def test_failover_normal_2_replica_1_percent(self):
-        self.common_test_body(2, 'normal', 1)
-
-    def test_failover_normal_3_replica_1_percent(self):
-        self.common_test_body(3, 'normal', 1)
-
-    def test_failover_normal_1_replica_10_percent(self):
-        self.common_test_body(1, 'normal', 10)
-
-    def test_failover_normal_2_replica_10_percent(self):
-        self.common_test_body(2, 'normal', 10)
-
-    def test_failover_normal_3_replica_10_percent(self):
-        self.common_test_body(3, 'normal', 10)
-
-    def test_failover_normal_1_replica_30_percent(self):
-        self.common_test_body(1, 'normal', 30)
-
-    def test_failover_normal_2_replica_30_percent(self):
-        self.common_test_body(2, 'normal', 30)
-
-    def test_failover_normal_3_replica_30_percent(self):
-        self.common_test_body(3, 'normal', 30)
-
-    def test_failover_stop_membase_1_replica_1_percent(self):
-        self.common_test_body(1, 'stop_membase', 1)
-
-    def test_failover_stop_membase_2_replica_1_percent(self):
-        self.common_test_body(2, 'stop_membase', 1)
-
-    def test_failover_stop_membase_3_replica_1_percent(self):
-        self.common_test_body(3, 'stop_membase', 1)
-
-    def test_failover_stop_membase_1_replica_10_percent(self):
-        self.common_test_body(1, 'stop_membase', 10)
-
-    def test_failover_stop_membase_2_replica_10_percent(self):
-        self.common_test_body(2, 'stop_membase', 10)
-
-    def test_failover_stop_membase_3_replica_10_percent(self):
-        self.common_test_body(3, 'stop_membase', 10)
-
-    def test_failover_stop_membase_1_replica_30_percent(self):
-        self.common_test_body(1, 'stop_membase', 30)
-
-    def test_failover_stop_membase_2_replica_30_percent(self):
-        self.common_test_body(2, 'stop_membase', 30)
-
-    def test_failover_stop_membase_3_replica_30_percent(self):
-        self.common_test_body(3, 'stop_membase', 30)
-
-    def common_test_body(self, replica, failover_reason, load_ratio):
+    def common_test_body(self, keys_count, replica, load_ratio, failover_reason):
         log = logger.Logger.get_logger()
+        log.info("keys_count : {0}".format(keys_count))
         log.info("replica : {0}".format(replica))
-        log.info("failover_reason : {0}".format(failover_reason))
         log.info("load_ratio : {0}".format(load_ratio))
+        log.info("failover_reason : {0}".format(failover_reason))
         master = self._servers[0]
         log.info('picking server : {0} as the master'.format(master))
         rest = RestConnection(master)
@@ -167,18 +181,14 @@ class FailoverTests(unittest.TestCase):
                           password=master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         bucket_ram = info.memoryQuota * 2 / 3
-        rest.create_bucket(bucket='default',
+        bucket = 'default'
+        rest.create_bucket(bucket=bucket,
                            ramQuotaMB=bucket_ram,
                            replicaNumber=replica,
                            proxyPort=info.moxi)
-        ready = BucketOperationHelper.wait_for_memcached(master, "default")
+        ready = BucketOperationHelper.wait_for_memcached(master, bucket)
         self.assertTrue(ready, "wait_for_memcached_failed")
         credentials = self._input.membase_settings
-
-        log.info("inserting some items in the master before adding any nodes")
-        distribution = {512: 0.4, 1 * 1024: 0.59, 5 * 1024: 0.01}
-        if load_ratio > 10:
-            distribution = {5 * 1024: 0.4, 10 * 1024: 0.5, 20 * 1024: 0.1}
 
         ClusterOperationHelper.add_all_nodes_or_assert(master, self._servers, credentials, self)
         nodes = rest.node_statuses()
@@ -186,16 +196,11 @@ class FailoverTests(unittest.TestCase):
         msg = "rebalance failed after adding these nodes {0}".format(nodes)
         self.assertTrue(rest.monitorRebalance(), msg=msg)
 
-        inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(servers=[master],
-                                          ram_load_ratio=load_ratio,
-                                          value_size_distribution=distribution,
-                                          number_of_threads=20,
-                                          moxi=False,
-                                          write_only=True)
+        inserted_keys = FailoverBaseTest.load_data(master, bucket, keys_count, load_ratio)
+        inserted_count = len(inserted_keys)
         log.info('inserted {0} keys'.format(inserted_count))
+
         nodes = rest.node_statuses()
-        #while len(node) > replica * 2
         while (len(nodes) - replica) >= 1:
             final_replication_state = RestHelper(rest).wait_for_replication(900)
             msg = "replication state after waiting for up to 15 minutes : {0}"
@@ -203,8 +208,8 @@ class FailoverTests(unittest.TestCase):
             chosen = FailoverBaseTest.choose_nodes(master, nodes, replica)
             for node in chosen:
                 #let's do op
-                if failover_reason == 'stop_membase':
-                    self.stop_membase(node)
+                if failover_reason == 'stop_server':
+                    self.stop_server(node)
                     log.info("10 seconds delay to wait for membase-server to shutdown")
                     #wait for 5 minutes until node is down
                     self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
@@ -229,45 +234,23 @@ class FailoverTests(unittest.TestCase):
                            ejectedNodes=[node.id for node in chosen])
             msg = "rebalance failed while removing failover nodes {0}".format(chosen)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
+            FailoverBaseTest.replication_verification(master, bucket, replica, inserted_count, self)
 
             nodes = rest.node_statuses()
-            if len(nodes) / (1 + replica) >= 1:
-                final_replication_state = RestHelper(rest).wait_for_replication(900)
-                msg = "replication state after waiting for up to 15 minutes : {0}"
-                self.log.info(msg.format(final_replication_state))
-                self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
-                                                                              bucket='default',
-                                                                              timeout_in_seconds=600),
-                                msg="replication was completed but sum(curr_items) dont match the curr_items_total")
+        FailoverBaseTest.verify_data(master, inserted_keys, bucket, self)
 
-                start_time = time.time()
-                stats = rest.get_bucket_stats()
-                while time.time() < (start_time + 120) and stats["curr_items"] != inserted_count:
-                    self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], inserted_count))
-                    time.sleep(5)
-                    stats = rest.get_bucket_stats()
-                RebalanceHelper.print_taps_from_all_nodes(rest, 'default')
-                self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], inserted_count))
-                stats = rest.get_bucket_stats()
-                msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
-                self.assertEquals(stats["curr_items"], inserted_count,
-                                  msg=msg.format(stats["curr_items"], inserted_count))
-            nodes = rest.node_statuses()
-
-    def stop_membase(self, node):
+    def stop_server(self, node):
         log = logger.Logger.get_logger()
         for server in self._servers:
             if server.ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
-                if RestConnection(server).get_nodes_self().version.find("2.0") != -1:
-                    shell.stop_couchbase()
-                else:
+                if shell.is_membase_installed():
                     shell.stop_membase()
+                else:
+                    shell.stop_couchbase()
                 shell.disconnect()
                 log.info("stopped membase server on {0}".format(server))
                 break
-
-            #iptables -A INPUT -p tcp -i eth0 --dport 1000:20000 -j REJECT
 
     def enable_firewall(self, node):
         log = logger.Logger.get_logger()

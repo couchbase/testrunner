@@ -215,7 +215,7 @@ class RebalanceBaseTest(unittest.TestCase):
             _keys_count = int(input.test_params['keys_count'])
         except KeyError:
             try:
-                _load_ratio = int(input.test_params['load_ratio'])
+                _load_ratio = float(input.test_params['load_ratio'])
             except KeyError:
                 _load_ratio = DEFAULT_LOAD_RATIO
 
