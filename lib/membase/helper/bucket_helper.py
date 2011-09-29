@@ -10,6 +10,7 @@ import ctypes
 from membase.api.rest_client import RestConnection, RestHelper
 import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from threading import Thread
 
 
 class BucketOperationHelper():
@@ -299,6 +300,31 @@ class BucketOperationHelper():
                 log.error("expected memcachedError : {0} - unable to get a pre-inserted key : {1}".format(error.status, key))
         client.close()
         return True
+
+    @staticmethod
+    def chunks(l, n):
+        keys_chunks = {}
+        index = 0
+        for i in range(0, len(l), n):
+            keys_chunks[index] = l[i:i + n]
+            index += 1
+        return keys_chunks
+
+    @staticmethod
+    def keys_exist_or_assert_in_parallel(keys, server, bucket_name, test, concurrency=2):
+        verification_threads = []
+        for i in range(concurrency):
+            keys_chunk = BucketOperationHelper.chunks(keys, len(keys) / concurrency)
+            t = Thread(target=BucketOperationHelper.keys_exist_or_assert,
+                       name="verification-thread-{0}".format(i),
+                       args=(keys_chunk.get(i), server, bucket_name, test))
+            verification_threads.append(t)
+
+        for t in verification_threads:
+            t.start()
+        for t in verification_threads:
+            print "thread {0} finished".format(t.name)
+            t.join()
 
     @staticmethod
     def keys_exist_or_assert(keys, server, bucket_name, test):

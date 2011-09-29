@@ -202,8 +202,8 @@ class RebalanceBaseTest(unittest.TestCase):
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys, server=master, bucket_name=bucket,
-                                                                   test=test)
+        BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, bucket_name=bucket,
+                                                                   test=test, concurrency=4)
 
     @staticmethod
     def get_test_params(input):
