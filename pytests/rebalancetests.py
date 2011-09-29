@@ -157,7 +157,8 @@ class RebalanceBaseTest(unittest.TestCase):
         buckets = rest.get_buckets()
         for bucket in buckets:
             bucket_data[bucket.name] = {}
-            bucket_data[bucket.name]["items_inserted_count"] = 0
+            bucket_data[bucket.name]['items_inserted_count'] = 0
+            bucket_data[bucket.name]['inserted_keys'] = []
         return bucket_data
 
     @staticmethod
@@ -186,7 +187,7 @@ class RebalanceBaseTest(unittest.TestCase):
                                                               name=bucket,
                                                               ram_load_ratio=load_ratio,
                                                               number_of_items=keys_count,
-                                                              number_of_threads=1,
+                                                              number_of_threads=2,
                                                               write_only=True)
         log.info("wait until data is completely persisted on the disk")
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
@@ -247,6 +248,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             buckets = rest.get_buckets()
             for bucket in buckets:
                 inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, keys_count, load_ratio)
+                bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
                 bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
 
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
@@ -259,6 +261,9 @@ class IncrementalRebalanceInTests(unittest.TestCase):
                             msg="rebalance operation failed after adding node {0}".format(server.ip))
             rebalanced_servers.append(server)
             RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+
+            for bucket in buckets:
+                RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
 
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
