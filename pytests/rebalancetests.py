@@ -9,7 +9,11 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached
-NUM_REBALANCE=2
+
+NUM_REBALANCE = 2
+DEFAULT_LOAD_RATIO = 5
+DEFAULT_REPLICA = 1
+
 
 class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
@@ -17,7 +21,8 @@ class RebalanceBaseTest(unittest.TestCase):
         log = logger.Logger.get_logger()
         servers = input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
-        ClusterHelper.cleanup_cluster(servers)
+        for server in servers:
+            ClusterOperationHelper.cleanup_cluster([server])
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
         serverInfo = servers[0]
 
@@ -30,6 +35,10 @@ class RebalanceBaseTest(unittest.TestCase):
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
         BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1)
+        buckets = rest.get_buckets()
+        for bucket in buckets:
+            ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket.name)
+            testcase.assertTrue(ready, "wait_for_memcached failed")
 
     @staticmethod
     def common_tearDown(servers, testcase):
@@ -148,7 +157,8 @@ class RebalanceBaseTest(unittest.TestCase):
         buckets = rest.get_buckets()
         for bucket in buckets:
             bucket_data[bucket.name] = {}
-            bucket_data[bucket.name]["items_inserted_count"] = 0
+            bucket_data[bucket.name]['items_inserted_count'] = 0
+            bucket_data[bucket.name]['inserted_keys'] = []
         return bucket_data
 
     @staticmethod
@@ -169,6 +179,52 @@ class RebalanceBaseTest(unittest.TestCase):
                 break
         return picked
 
+    @staticmethod
+    def load_data(master, bucket, keys_count=-1, load_ratio=-1):
+        log = logger.Logger.get_logger()
+        inserted_keys, rejected_keys =\
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
+                                                              name=bucket,
+                                                              ram_load_ratio=load_ratio,
+                                                              number_of_items=keys_count,
+                                                              number_of_threads=2,
+                                                              write_only=True)
+        log.info("wait until data is completely persisted on the disk")
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        return inserted_keys
+
+    @staticmethod
+    def verify_data(master, inserted_keys, bucket, test):
+        log = logger.Logger.get_logger()
+        log.info("Verifying data")
+        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
+        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, bucket_name=bucket,
+                                                                   test=test, concurrency=4)
+
+    @staticmethod
+    def get_test_params(input):
+        _keys_count = -1
+        _replica = -1
+        _load_ratio = -1
+
+        try:
+            _keys_count = int(input.test_params['keys_count'])
+        except KeyError:
+            try:
+                _load_ratio = float(input.test_params['load_ratio'])
+            except KeyError:
+                _load_ratio = DEFAULT_LOAD_RATIO
+
+        try:
+            _replica = int(input.test_params['replica'])
+        except  KeyError:
+            _replica = 1
+        return _keys_count, _replica, _load_ratio
+
 
 #load data. add one node rebalance , rebalance out
 class IncrementalRebalanceInTests(unittest.TestCase):
@@ -181,17 +237,19 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, load_ratio, replica=1):
+    def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1):
         master = self._servers[0]
-        rest = RestConnection(master)
         creds = self._input.membase_settings
+        rest = RestConnection(master)
         rebalanced_servers = [master]
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
         for server in self._servers[1:]:
-            distribution = RebalanceBaseTest.get_distribution(load_ratio)
-            RebalanceBaseTest.load_data_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data,
-                                                    self)
+            buckets = rest.get_buckets()
+            for bucket in buckets:
+                inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, keys_count, load_ratio)
+                bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
+                bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
 
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
@@ -204,76 +262,17 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             rebalanced_servers.append(server)
             RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
 
+            for bucket in buckets:
+                RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
+
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
-    def test_small_load_replica_0(self):
-        RebalanceBaseTest.common_setup(self._input, self)
-        self._common_test_body(0.1)
-
-    def test_small_load(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(0.1)
-
-    def test_small_load_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(0.1, replica=2)
-
-    def test_small_load_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(0.1, replica=3)
-
-    def test_medium_load(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(10.0)
-
-    def test_medium_load_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(10.0, replica=2)
-
-    def test_medium_load_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(10.0, replica=3)
-
-    def test_heavy_load(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(20.0)
-
-    def test_heavy_load_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(20.0, replica=2)
-
-    def test_heavy_load_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(20.0, replica=3)
-
-    def test_dgm_150(self):
-        RebalanceBaseTest.common_setup(self._input, self)
-        self._common_test_body(150.0)
-
-    def test_dgm_300(self):
-        RebalanceBaseTest.common_setup(self._input, self)
-        self._common_test_body(300.0)
-
-    def test_dgm_150_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(150.0, replica=2)
-
-    def test_dgm_150_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(150.0, replica=3)
-
-    def test_dgm_300_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(300.0, replica=2)
-
-    def test_dgm_300_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(300.0, replica=3)
+    def test_load(self):
+        keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        RebalanceBaseTest.common_setup(self._input, self, replica)
+        self._common_test_body(keys_count, load_ratio, replica)
 
 
-#disk greater than memory
-#class IncrementalRebalanceInAndOutTests(unittest.TestCase):
-#    pass
 class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
     def setUp(self):
         self._input = TestInputSingleton.input

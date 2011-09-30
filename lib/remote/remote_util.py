@@ -290,6 +290,10 @@ class RemoteMachineShellConnection:
             self.copy_file_local_to_remote(full_src_path, full_des_path)
             log.info('file "{0}" is copied to {1}'.format(file, des_path))
 
+    # create a remote file from input string
+    def create_file(self, remote_path, file_data):
+        output, error = self.execute_command("echo '{0}' > {1}".format(file_data, remote_path))
+
     def find_file(self, remote_path, file):
         sftp = self._ssh_client.open_sftp()
         try:
@@ -442,7 +446,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
                 self.log_command_output(output, error)
 
-    def membase_install(self, build):
+    def membase_install(self, build, startserver=True):
         is_membase = False
         is_couchbase = False
         if build.name.lower().find("membase") != -1:
@@ -467,12 +471,16 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 self.wait_till_file_added("/cygdrive/c/Program Files/Couchbase/Server/", 'VERSION.txt',
                                           timeout_in_seconds=600)
         elif info.deliverable_type in ["rpm", "deb"]:
+            if startserver:
+                environment = ""
+            else:
+                environment = "INSTALL_DONT_START_SERVER=1 "
             if info.deliverable_type == 'rpm':
                 log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
-                output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
+                output, error = self.execute_command('{0}rpm -i /tmp/{1}'.format(environment, build.name))
                 self.log_command_output(output, error)
             elif info.deliverable_type == 'deb':
-                output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
+                output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
                 self.log_command_output(output, error)
             if is_membase:
                 output, error = self.execute_command('/opt/membase/bin/mbenable_core_dumps.sh  /tmp')

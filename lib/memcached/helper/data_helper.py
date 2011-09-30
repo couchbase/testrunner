@@ -11,6 +11,7 @@ import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
 
+
 class MemcachedClientHelperExcetion(Exception):
     def __init__(self, errorcode, message):
         Exception.__init__(self, errorcode, message)
@@ -41,7 +42,7 @@ class MemcachedClientHelper(object):
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
                                                 message="ram_load_ration or number_of_items must be specified")
         if not value_size_distribution:
-            value_size_distribution = {16: 0.33, 128: 0.33, 1024: 0.33}
+            value_size_distribution = {16: 0.25, 128: 0.25, 512: 0.25, 1024: 0.25}
 
         list = []
 
@@ -83,7 +84,6 @@ class MemcachedClientHelper(object):
             threads.append(thread)
 
         return threads
-
 
     @staticmethod
     def create_threads_for_load_bucket(serverInfo=None,
@@ -262,15 +262,11 @@ class MemcachedClientHelper(object):
             return client
         raise Exception("unable to find {0} in get_nodes()".format(server.ip))
 
-
-
-
-
     @staticmethod
     def flush_bucket(server, bucket):
         #if memcached throws OOM error try again ?
         log = logger.Logger.get_logger()
-        client = MemcachedClientHelper.direct_client(server,bucket)
+        client = MemcachedClientHelper.direct_client(server, bucket)
         retry_attempt = 5
         while retry_attempt > 0:
             try:
@@ -288,7 +284,7 @@ class MemcachedClientHelper(object):
 
 class MutationThread(threading.Thread):
     def run(self):
-        client = MemcachedClientHelper.proxy_client(self.serverInfo,self.name)
+        client = MemcachedClientHelper.proxy_client(self.serverInfo, self.name)
         vbucket_count = len(RestConnection(self.serverInfo).get_vbuckets(self.name))
         for key in self.keys:
             #every two minutes print the status
@@ -308,11 +304,10 @@ class MutationThread(threading.Thread):
                 self._rejected_keys.append(key)
                 #                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
                 client.close()
-                client = MemcachedClientHelper.proxy_client(self.serverInfo,self.name)
+                client = MemcachedClientHelper.proxy_client(self.serverInfo, self.name)
         self.log.info("mutation failed {0} times".format(self._rejected_count))
         #print some of those rejected keys...
         client.close()
-
 
     def __init__(self, serverInfo,
                  keys,
@@ -351,9 +346,8 @@ class ReaderThread(object):
     #        if self.error_seen < 500:
     #            self.log.error(error_msg.format(key))
 
-
     def start(self):
-        client = MemcachedClientHelper.direct_client(self.info["server"],self.info['name'])
+        client = MemcachedClientHelper.direct_client(self.info["server"], self.info['name'])
         time.sleep(5)
         while self.queue.empty() and self.keyset:
             selected = MemcachedClientHelper.random_pick(self.keyset)
@@ -369,6 +363,7 @@ class ReaderThread(object):
                 self._saw_error(key)
                 #        self.log.warn("attempted to get {0} keys before they are set".format(self.error_seen))
         client.close()
+
 
 #mutation ? let' do two cycles , first run and then try to mutate all those itesm
 #and return
@@ -432,7 +427,6 @@ class WorkerThread(threading.Thread):
                 if len(inserted_keys) > 2 * 1024 * 1024:
                     break
         return inserted_keys, self._rejected_keys
-
 
     def run(self):
         msg = "starting a thread to set keys mixed set-get ? {0} and using async_set ? {1}"
@@ -576,8 +570,10 @@ class WorkerThread(threading.Thread):
 
     def _initialize_memcached(self):
         pass
+
     def _set(self):
         pass
+
     def _handle_error(self):
         pass
         #if error is memcached error oom related let's do a sleep
@@ -591,7 +587,7 @@ class VBucketAwareMemcached(object):
         self.log = logger.Logger.get_logger()
         self.memcacheds = {}
         self.vBucketMap = {}
-        vb_ready = RestHelper(rest).vbucket_map_ready(bucket,60)
+        vb_ready = RestHelper(rest).vbucket_map_ready(bucket, 60)
         if not vb_ready:
             raise Exception("vbucket map is not ready for bucket {0}".format(bucket))
         vBuckets = rest.get_vbuckets(bucket)
@@ -618,7 +614,6 @@ class VBucketAwareMemcached(object):
                     self.done()
                     raise ex
 
-
     def memcached(self, key):
         vBucketId = crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)
         if vBucketId not in self.vBucketMap:
@@ -635,7 +630,6 @@ class VBucketAwareMemcached(object):
         for server in self.memcacheds:
             if server != which_mc:
                 return self.memcacheds[server]
-
 
     def done(self):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
