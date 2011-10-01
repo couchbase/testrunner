@@ -153,7 +153,8 @@ class FailoverTests(unittest.TestCase):
         FailoverBaseTest.common_setup(self._input, self)
 
     def tearDown(self):
-        FailoverBaseTest.common_tearDown(self._servers, self)
+        #FailoverBaseTest.common_tearDown(self._servers, self)
+        pass
 
     def test_failover_firewall(self):
         keys_count, replica, load_ratio = FailoverBaseTest.get_test_params(self._input)
@@ -205,7 +206,7 @@ class FailoverTests(unittest.TestCase):
             final_replication_state = RestHelper(rest).wait_for_replication(900)
             msg = "replication state after waiting for up to 15 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
-            chosen = FailoverBaseTest.choose_nodes(master, nodes, replica)
+            chosen = FailoverBaseTest.choose_nodes(info, nodes, replica)
             for node in chosen:
                 #let's do op
                 if failover_reason == 'stop_server':
@@ -246,10 +247,11 @@ class FailoverTests(unittest.TestCase):
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_membase_installed():
                     shell.stop_membase()
+                    log.info("Membase stopped")
                 else:
                     shell.stop_couchbase()
+                    log.info("Couchbase stopped")
                 shell.disconnect()
-                log.info("stopped membase server on {0}".format(server))
                 break
 
     def enable_firewall(self, node):
