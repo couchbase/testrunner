@@ -243,7 +243,9 @@ class FailoverTests(unittest.TestCase):
     def stop_server(self, node):
         log = logger.Logger.get_logger()
         for server in self._servers:
-            if server.ip == node.ip:
+            rest = RestConnection(server)
+            server_ip = rest.get_nodes_self().ip
+            if server_ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_membase_installed():
                     shell.stop_membase()
@@ -257,7 +259,9 @@ class FailoverTests(unittest.TestCase):
     def enable_firewall(self, node):
         log = logger.Logger.get_logger()
         for server in self._servers:
-            if server.ip == node.ip:
+            rest = RestConnection(server)
+            server_ip = rest.get_nodes_self().ip
+            if server_ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
                 o, r = shell.execute_command("iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
                 shell.log_command_output(o, r)
