@@ -153,8 +153,7 @@ class FailoverTests(unittest.TestCase):
         FailoverBaseTest.common_setup(self._input, self)
 
     def tearDown(self):
-        #FailoverBaseTest.common_tearDown(self._servers, self)
-        pass
+        FailoverBaseTest.common_tearDown(self._servers, self)
 
     def test_failover_firewall(self):
         keys_count, replica, load_ratio = FailoverBaseTest.get_test_params(self._input)
