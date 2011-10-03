@@ -243,6 +243,8 @@ class FailoverTests(unittest.TestCase):
         log = logger.Logger.get_logger()
         for server in self._servers:
             rest = RestConnection(server)
+            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
+                continue
             server_ip = rest.get_nodes_self().ip
             if server_ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
@@ -259,6 +261,8 @@ class FailoverTests(unittest.TestCase):
         log = logger.Logger.get_logger()
         for server in self._servers:
             rest = RestConnection(server)
+            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
+                continue
             server_ip = rest.get_nodes_self().ip
             if server_ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
