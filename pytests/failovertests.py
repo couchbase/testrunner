@@ -205,7 +205,7 @@ class FailoverTests(unittest.TestCase):
             final_replication_state = RestHelper(rest).wait_for_replication(900)
             msg = "replication state after waiting for up to 15 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
-            chosen = FailoverBaseTest.choose_nodes(master, nodes, replica)
+            chosen = FailoverBaseTest.choose_nodes(info, nodes, replica)
             for node in chosen:
                 #let's do op
                 if failover_reason == 'stop_server':
@@ -242,20 +242,29 @@ class FailoverTests(unittest.TestCase):
     def stop_server(self, node):
         log = logger.Logger.get_logger()
         for server in self._servers:
-            if server.ip == node.ip:
+            rest = RestConnection(server)
+            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
+                continue
+            server_ip = rest.get_nodes_self().ip
+            if server_ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_membase_installed():
                     shell.stop_membase()
+                    log.info("Membase stopped")
                 else:
                     shell.stop_couchbase()
+                    log.info("Couchbase stopped")
                 shell.disconnect()
-                log.info("stopped membase server on {0}".format(server))
                 break
 
     def enable_firewall(self, node):
         log = logger.Logger.get_logger()
         for server in self._servers:
-            if server.ip == node.ip:
+            rest = RestConnection(server)
+            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
+                continue
+            server_ip = rest.get_nodes_self().ip
+            if server_ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
                 o, r = shell.execute_command("iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
                 shell.log_command_output(o, r)
