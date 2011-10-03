@@ -11,6 +11,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from threading import Thread
+import Queue
 
 
 class BucketOperationHelper():
@@ -123,7 +124,6 @@ class BucketOperationHelper():
                 time.sleep(15)
                 buckets = rest.get_buckets()
             for bucket in buckets:
-                print bucket.name
                 rest.delete_bucket(bucket.name)
                 log.info('deleted bucket : {0} from {1}'.format(bucket.name, serverInfo.ip))
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
@@ -312,22 +312,28 @@ class BucketOperationHelper():
 
     @staticmethod
     def keys_exist_or_assert_in_parallel(keys, server, bucket_name, test, concurrency=2):
+        log = logger.Logger.get_logger()
         verification_threads = []
+        queue = Queue.Queue()
         for i in range(concurrency):
             keys_chunk = BucketOperationHelper.chunks(keys, len(keys) / concurrency)
             t = Thread(target=BucketOperationHelper.keys_exist_or_assert,
                        name="verification-thread-{0}".format(i),
-                       args=(keys_chunk.get(i), server, bucket_name, test))
+                       args=(keys_chunk.get(i), server, bucket_name, test, queue))
             verification_threads.append(t)
-
         for t in verification_threads:
             t.start()
         for t in verification_threads:
-            print "thread {0} finished".format(t.name)
+            log.info("thread {0} finished".format(t.name))
             t.join()
+        while not queue.empty():
+            item = queue.get()
+            if item is False:
+                return False
+        return True
 
     @staticmethod
-    def keys_exist_or_assert(keys, server, bucket_name, test):
+    def keys_exist_or_assert(keys, server, bucket_name, test, queue=None):
         #we should try out at least three times
         log = logger.Logger.get_logger()
         #verify all the keys
@@ -363,9 +369,15 @@ class BucketOperationHelper():
             log.error(msg)
             if test:
                 test.fail(msg=msg)
-            return False
+            if queue is None:
+                return False
+            else:
+                queue.put(False)
         log.info("verified that {0} keys exist".format(len(keys)))
-        return True
+        if queue is None:
+            return True
+        else:
+            queue.put(True)
 
     @staticmethod
     def load_some_data(serverInfo,
