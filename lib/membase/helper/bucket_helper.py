@@ -188,7 +188,7 @@ class BucketOperationHelper():
         while time.time() < end_time and len(ready_vbuckets) < vbucket_count:
             for i in range(0, vbucket_count):
                 (a, b, c) = client.get_vbucket_state(i)
-                if c == memcacheConstants.VB_STATE_ACTIVE:
+                if c.find("\x01") > 0:
                     ready_vbuckets[i] = True
                 elif i in ready_vbuckets:
                     log.warning("vbucket state changed from active to {0}".format(c))
