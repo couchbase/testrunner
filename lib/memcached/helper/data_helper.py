@@ -168,18 +168,12 @@ class MemcachedClientHelper(object):
                                                        write_only=write_only,
                                                        moxi=moxi)
 
-        t = Thread(target=ClusterOperationHelper.persistence_verification,
-                           name="persistence-verification-thread",
-                           args=(servers, name, 180))
         #we can start them!
         for thread in threads:
             thread.start()
         log.info("waiting for all worker thread to finish their work...")
-        t.start()
-        log.info("waiting for persistence threads to finish ...")
         [thread.join() for thread in threads]
-        t.join()
-        log.info("worker and persistence threads are done...")
+        log.info("worker threads are done...")
 
         inserted_count = 0
         rejected_count = 0
@@ -215,19 +209,12 @@ class MemcachedClientHelper(object):
                                                        override_vBucketId,
                                                        write_only,
                                                        moxi)
-
-        t = Thread(target=ClusterOperationHelper.persistence_verification,
-                           name="persistence-verification-thread",
-                           args=(servers, name, 180))
         #we can start them!
         for thread in threads:
             thread.start()
         log.info("waiting for all worker thread to finish their work...")
-        t.start()
-        log.info("waiting for persistence threads to finish ...")
         [thread.join() for thread in threads]
-        t.join()
-        log.info("worker and persistence threads are done...")
+        log.info("worker threads are done...")
         for thread in threads:
             inserted_keys_count += thread.inserted_keys_count()
             rejected_keys_count += thread.rejected_keys_count()

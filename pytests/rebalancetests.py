@@ -9,6 +9,8 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached
+from threading import Thread
+
 
 NUM_REBALANCE = 2
 DEFAULT_LOAD_RATIO = 5
@@ -206,6 +208,26 @@ class RebalanceBaseTest(unittest.TestCase):
                                                                    test=test, concurrency=4)
 
     @staticmethod
+    def verify_persistence(servers, test):
+        master = servers[0]
+        rest = RestConnection(master)
+        test.log.info("Verifying Persistence")
+        buckets = rest.get_buckets()
+        for bucket in buckets:
+            #Load some data
+            thread = Thread(target=RebalanceBaseTest.load_data,
+                            name="loading thread",
+                            args=(master, bucket.name, 400000))
+
+            thread.start()
+            # Do persistence verification
+            ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, 180)
+            test.assertTrue(ready, msg="Cannot verify persistence")
+            test.log.info("waiting for mutation and persistence threads to finish...")
+            thread.join()
+            test.log.info("mutation and persistence threads finished...")
+
+    @staticmethod
     def get_test_params(input):
         _keys_count = -1
         _replica = -1
@@ -264,7 +286,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
             for bucket in buckets:
                 RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
-
+            RebalanceBaseTest.verify_persistence(self._servers, self)
 
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 

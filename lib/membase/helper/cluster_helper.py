@@ -77,6 +77,7 @@ class ClusterOperationHelper(object):
             nodes_ip.append(node.ip)
         for i in range(len(servers)):
             if servers[i].ip in nodes_ip:
+                log.info("Server {0} part of cluster".format(servers[i].ip))
                 rest = RestConnection(servers[i])
                 t = Thread(target=ClusterOperationHelper.persistence_verification_per_node,
                            name="verification-thread-{0}".format(servers[i]),
