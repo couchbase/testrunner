@@ -108,7 +108,7 @@ class ClusterOperationHelper(object):
         value_90th = ClusterOperationHelper.percentile(stats, 90)
         average = float(sum(stats)) / len(stats)
         log.info("90th percentile value is {0} and average {1}".format(value_90th, average))
-        if value_90th is 0 and average is 0:
+        if value_90th == 0 and average == 0:
             queue.put(False)
             return
         queue.put(True)
