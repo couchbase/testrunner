@@ -39,14 +39,14 @@ def run_worker(ctl, cfg, cur, store, prefix=""):
     t_last = time.time()
     o_last = store.num_ops(cur)
 
-    while ctl['run_ok']:
-        num_ops = cur['cur-gets'] + cur['cur-sets']
+    while ctl.get('run_ok', True):
+        num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
-        if cfg['max-ops'] > 0 and cfg['max-ops'] <= num_ops:
+        if cfg.get('max-ops', 0) > 0 and cfg.get('max-ops', 0) <= num_ops:
             break
-        if cfg['exit-after-creates'] > 0 and \
-           cfg['max-creates'] > 0 and \
-           cfg['max-creates'] <= cur['cur-creates']:
+        if cfg.get('exit-after-creates', 0) > 0 and \
+           cfg.get('max-creates', 0) > 0 and \
+           cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
             break
 
         store.command(next_cmd(cfg, cur, store))
@@ -70,50 +70,50 @@ def next_cmd(cfg, cur, store):
     # for i in range(100):
     #     print(long("0x" + md5(str(i)).hexdigest(), 16) & 0xFFFFFFFF)
     #
-    num_ops = cur['cur-gets'] + cur['cur-sets']
+    num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
-    do_set = cfg['ratio-sets'] > float(cur['cur-sets']) / positive(num_ops)
+    do_set = cfg.get('ratio-sets', 0) > float(cur.get('cur-sets', 0)) / positive(num_ops)
     if do_set:
         cmd = 'set'
-        cur['cur-sets'] += 1
+        cur['cur-sets'] = cur.get('cur-sets', 0) + 1
 
-        do_set_create = (cfg['max-items'] > cur['cur-items'] and
-                         cfg['max-creates'] > cur['cur-creates'] and
-                         cfg['ratio-creates'] > \
-                           float(cur['cur-creates']) / positive(cur['cur-sets']))
+        do_set_create = (cfg.get('max-items', 0) > cur.get('cur-items', 0) and
+                         cfg.get('max-creates', 0) > cur.get('cur-creates', 0) and
+                         cfg.get('ratio-creates', 0) > \
+                           float(cur.get('cur-creates', 0)) / positive(cur.get('cur-sets', 0)))
         if do_set_create:
             # Create...
-            key_num = cur['cur-items']
+            key_num = cur.get('cur-items', 0)
 
-            cur['cur-items'] += 1
-            cur['cur-creates'] += 1
+            cur['cur-items'] = cur.get('cur-items', 0) + 1
+            cur['cur-creates'] = cur.get('cur-creates', 0) + 1
         else:
             # Update...
-            key_num = choose_key_num(cur['cur-items'],
-                                     cfg['ratio-hot'],
-                                     cfg['ratio-hot-sets'],
-                                     cur['cur-sets'])
+            key_num = choose_key_num(cur.get('cur-items', 0),
+                                     cfg.get('ratio-hot', 0),
+                                     cfg.get('ratio-hot-sets', 0),
+                                     cur.get('cur-sets', 0))
 
-        key_str = prepare_key(key_num, cfg['prefix'])
-        itm_val = store.gen_doc(key_num, key_str, cfg['min-value-size'])
+        key_str = prepare_key(key_num, cfg.get('prefix', ''))
+        itm_val = store.gen_doc(key_num, key_str, cfg.get('min-value-size', 0))
 
         return (cmd, key_num, key_str, itm_val)
     else:
         cmd = 'get'
-        cur['cur-gets'] += 1
+        cur['cur-gets'] = cur.get('cur-gets', 0) + 1
 
-        do_get_hit = (cfg['ratio-misses'] * 100) < (cur['cur-gets'] % 100)
+        do_get_hit = (cfg.get('ratio-misses', 0) * 100) < (cur.get('cur-gets', 0) % 100)
         if do_get_hit:
-            key_num = choose_key_num(cur['cur-items'],
-                                     cfg['ratio-hot'],
-                                     cfg['ratio-hot-gets'],
-                                     cur['cur-gets'])
-            key_str = prepare_key(key_num, cfg['prefix'])
-            itm_val = store.gen_doc(key_num, key_str, cfg['min-value-size'])
+            key_num = choose_key_num(cur.get('cur-items', 0),
+                                     cfg.get('ratio-hot', 0),
+                                     cfg.get('ratio-hot-gets', 0),
+                                     cur.get('cur-gets', 0))
+            key_str = prepare_key(key_num, cfg.get('prefix', ''))
+            itm_val = store.gen_doc(key_num, key_str, cfg.get('min-value-size', 0))
 
             return (cmd, key_num, key_str, itm_val)
         else:
-            return (cmd, -1, prepare_key(-1, cfg['prefix']), None)
+            return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None)
 
 def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops):
     hit_hot_range = (ratio_hot_choice * 100) > (num_ops % 100)
@@ -151,7 +151,7 @@ class Store:
         pass
 
     def num_ops(self, cur):
-        return cur['cur-gets'] + cur['cur-sets']
+        return cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
     def gen_doc(self, key_num, key_str, min_value_size):
         return gen_doc_string(key_num, key_str, min_value_size)
@@ -185,7 +185,7 @@ class StoreMemcachedBinary(Store):
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > self.cfg['batch']:
+        if len(self.queue) > self.cfg.get('batch', 0):
             self.flush()
 
     def header(self, op, key, val, opaque=0, extra='', cas=0,
@@ -246,7 +246,7 @@ class StoreMemcachedAscii(Store):
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > self.cfg['batch']:
+        if len(self.queue) > self.cfg.get('batch', 0):
             self.flush()
 
     def command_send(self, cmd, key_num, key_str, data):
@@ -322,7 +322,7 @@ def run(cfg, cur, protocol, host_port, user, pswd):
 
    threads = []
 
-   for i in range(cfg['threads']):
+   for i in range(cfg.get('threads', 1)):
       store = Store()
       if protocol.split('-')[0].find('memcache') >= 0:
          if protocol.split('-')[1] == 'ascii':
@@ -339,7 +339,7 @@ def run(cfg, cur, protocol, host_port, user, pswd):
    log.info("first 5 keys...")
    for i in range(5):
       print("echo get %s | nc %s %s" %
-            (store.cmd_line_get(i, prepare_key(i, cfg['prefix'])),
+            (store.cmd_line_get(i, prepare_key(i, cfg.get('prefix', ''))),
              host_port.split(':')[0],
              host_port.split(':')[1]))
 
@@ -363,7 +363,7 @@ def run(cfg, cur, protocol, host_port, user, pswd):
 
    log.info("\n" + str(cur))
    log.info("    ops/sec: %s" %
-            ((cur['cur-gets'] + cur['cur-sets']) / (t_end - t_start)))
+            ((cur.get('cur-gets', 0) + cur.get('cur-sets', 0)) / (t_end - t_start)))
 
    return cur, t_end - t_start
 
@@ -443,19 +443,19 @@ if __name__ == "__main__":
      if err[kv] > 1:
         sys.exit(-1)
 
-  if cfg['max-items'] < 0 and cfg['max-creates'] < 0:
+  if cfg.get('max-items', 0) < 0 and cfg.get('max-creates', 0) < 0:
      cfg['max-items'] = 100000
-  if cfg['max-items'] < 0:
-     cfg['max-items'] = cfg['max-creates']
-  if cfg['max-creates'] < 0:
-     cfg['max-creates'] = cfg['max-items']
+  if cfg.get('max-items', 0) < 0:
+     cfg['max-items'] = cfg.get('max-creates', 0)
+  if cfg.get('max-creates', 0) < 0:
+     cfg['max-creates'] = cfg.get('max-items', 0)
 
   for o in [cfg, cur]:
      for k in sorted(o.iterkeys()):
         log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
 
   body = 'x'
-  while len(body) < cfg['min-value-size']:
+  while len(body) < cfg.get('min-value-size', 0):
      body = body + md5(str(len(body))).hexdigest()
   suffix = "\"body\":\"" + body + "\"}"
 
