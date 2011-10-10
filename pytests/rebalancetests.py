@@ -265,6 +265,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             for bucket in buckets:
                 RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
 
+
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     def test_load(self):

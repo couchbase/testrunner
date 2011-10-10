@@ -104,9 +104,10 @@ class ClusterOperationHelper(object):
             stats.append(rest.get_bucket_stats(bucket)[stat_key])
             time.sleep(1)
         log.info("Samples {0}".format(stats))
-        value = ClusterOperationHelper.percentile(stats, 90)
-        log.info("90th percentile value is {0}".format(value))
-        if value is 0:
+        value_90th = ClusterOperationHelper.percentile(stats, 90)
+        average = float(sum(stats)) / len(stats)
+        log.info("90th percentile value is {0} and average {1}".format(value_90th, average))
+        if value_90th is 0 and average is 0:
             queue.put(False)
             return
         queue.put(True)
