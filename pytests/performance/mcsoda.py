@@ -32,124 +32,14 @@ from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET
 
-cfg_defaults = {
-  "prefix":             ("",   "Prefix for every item key."),
-  "max-ops":            (0,    "Max number of ops before exiting. 0 means keep going."),
-  "max-items":          (-1,   "Max number of items; default 100000."),
-  "max-creates":        (-1,   "Max number of creates; defaults to max-items."),
-  "min-value-size":     (10,   "Minimal value size in bytes during SET's."),
-  "ratio-sets":         (0.1,  "Fraction of requests that should be SET's."),
-  "ratio-creates":      (0.1,  "Fraction of SET's that should create new items."),
-  "ratio-misses":       (0.05, "Fraction of GET's that should miss."),
-  "ratio-hot":          (0.2,  "Fraction of items to have as a hot item subset."),
-  "ratio-hot-sets":     (0.95, "Fraction of SET's that hit the hot item subset."),
-  "ratio-hot-gets":     (0.95, "Fraction of GET's that hit the hot item subset."),
-  "exit-after-creates": (0,    "Exit after max-creates is reached."),
-  "threads":            (1,    "Number of client worker threads to use."),
-  "batch":              (100,  "Batch / pipeline up this number of commands."),
-  "json":               (1,    "Use JSON documents. 0 to generate binary documents.")
-}
-
-cur_defaults = {
-  "cur-items":   (0, "Number of items known to already exist."),
-  "cur-sets":    (0, "Number of sets already done."),
-  "cur-creates": (0, "Number of sets that were creates."),
-  "cur-gets":    (0, "Number of gets already done.")
-}
-
-if len(sys.argv) < 2 or "-h" in sys.argv or "--help" in sys.argv:
-    print("usage: %s [memcached[-binary|-ascii]://][user[:pswd]@]host[:port] [key=val]*\n" %
-          (sys.argv[0]))
-    print("  default protocol = memcached-binary://")
-    print("  default port     = 11211\n")
-    for s in ["examples: %s memcached-binary://127.0.0.1:11211 max-items=1000000 json=1",
-              "          %s memcached://127.0.0.1:11211",
-              "          %s 127.0.0.1:11211",
-              "          %s 127.0.0.1",
-              "          %s my-test-bucket@127.0.0.1",
-              "          %s my-test-bucket:MyPassword@127.0.0.1"]:
-       print(s % (sys.argv[0]))
-    print("")
-    print("optional key=val's and their defaults:")
-    for d in [cfg_defaults, cur_defaults]:
-        for k in sorted(d.iterkeys()):
-            print("    %s = %s %s" %
-                  (string.ljust(k, 20), string.ljust(str(d[k][0]), 4), d[k][1]))
-    sys.exit(-1)
-
-cfg = {}
-cur = {}
-err = {}
-
-for (o, d) in [(cfg, cfg_defaults), (cur, cur_defaults)]: # Parse key=val pairs.
-   for (dk, dv) in d.iteritems():
-      o[dk] = dv[0]
-   for kv in sys.argv[2:]:
-      k, v = (kv + '=').split('=')[0:2]
-      if k and v and k in o:
-         if type(o[k]) != type(""):
-            try:
-               v = ({ 'y':'1', 'n':'0' }).get(v, v)
-               for parse in [float, int]:
-                  if str(parse(v)) == v:
-                     v = parse(v)
-            except:
-               err[kv] = err.get(kv, 0) + 1
-         o[k] = v
-      else:
-         err[kv] = err.get(kv, 0) + 1
-
-for kv in err:
-   if err[kv] > 1:
-      log.error("problem parsing key=val option: " + kv)
-for kv in err:
-   if err[kv] > 1:
-      sys.exit(-1)
-
-if cfg['max-items'] < 0 and cfg['max-creates'] < 0:
-    cfg['max-items'] = 100000
-if cfg['max-items'] < 0:
-    cfg['max-items'] = cfg['max-creates']
-if cfg['max-creates'] < 0:
-    cfg['max-creates'] = cfg['max-items']
-
-for o in [cfg, cur]:
-    for k in sorted(o.iterkeys()):
-        log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
-
 # --------------------------------------------------------
 
-body = 'x'
-while len(body) < cfg['min-value-size']:
-    body = body + md5(str(len(body))).hexdigest()
-suffix = "\"body\":\"" + body + "\"}"
-
-def gen_doc_obj(key_num, key_str, min_value_size):
-    return { "_id": key_str,
-             "key_num": key_num,
-             "mid": key_str[-8:-1],
-             "last": key_str[-1:],
-             "body": body
-           }
-
-def gen_doc_string(key_num, key_str, min_value_size, key_name="key", json=True):
-    c = "{"
-    if not json:
-        c = "*"
-    s = """%s"%s":"%s", "key_num":%s, "mid":"%s", "last":"%s", %s"""
-    return s % (c, key_name, key_str, key_num,
-                key_str[-8:-1], key_str[-1:], suffix)
-
-# --------------------------------------------------------
-
-run_ok = True
-
-def run(cfg, cur, store, prefix=""):
+def run_worker(ctl, cfg, cur, store, prefix=""):
     i = 0
     t_last = time.time()
     o_last = store.num_ops(cur)
 
-    while run_ok:
+    while ctl['run_ok']:
         num_ops = cur['cur-gets'] + cur['cur-sets']
 
         if cfg['max-ops'] > 0 and cfg['max-ops'] <= num_ops:
@@ -236,16 +126,16 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops):
 
     return base + (num_ops % positive(range))
 
+def positive(x):
+    if x > 0:
+        return x
+    return 1
+
 def prepare_key(key_num, prefix):
     key_hash = md5(str(key_num)).hexdigest()[0:16]
     if prefix and len(prefix) > 0:
         return prefix + "-" + key_hash
     return key_hash
-
-def positive(x):
-    if x > 0:
-        return x
-    return 1
 
 # --------------------------------------------------------
 
@@ -409,51 +299,168 @@ class StoreMemcachedAscii(Store):
 
 # --------------------------------------------------------
 
-protocol = (["memcached"] + sys.argv[1].split("://"))[-2] + "-binary"
-host_port = ('@' + sys.argv[1].split("://")[-1]).split('@')[-1] + ":11211"
-user, pswd = (('@' + sys.argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
+def gen_doc_obj(key_num, key_str, min_value_size):
+    return { "_id": key_str,
+             "key_num": key_num,
+             "mid": key_str[-8:-1],
+             "last": key_str[-1:],
+             "body": body
+           }
 
-threads = []
+def gen_doc_string(key_num, key_str, min_value_size, key_name="key", json=True):
+    c = "{"
+    if not json:
+        c = "*"
+    s = """%s"%s":"%s", "key_num":%s, "mid":"%s", "last":"%s", %s"""
+    return s % (c, key_name, key_str, key_num,
+                key_str[-8:-1], key_str[-1:], suffix)
 
-for i in range(cfg['threads']):
-    store = Store()
-    if protocol.split('-')[0].find('memcache') >= 0:
-        if protocol.split('-')[1] == 'ascii':
+# --------------------------------------------------------
+
+def run(cfg, cur, protocol, host_port, user, pswd):
+   ctl = { 'run_ok': True }
+
+   threads = []
+
+   for i in range(cfg['threads']):
+      store = Store()
+      if protocol.split('-')[0].find('memcache') >= 0:
+         if protocol.split('-')[1] == 'ascii':
             store = StoreMemcachedAscii()
-        else:
+         else:
             store = StoreMemcachedBinary()
 
-    store.connect(host_port, user, pswd, cfg)
+      store.connect(host_port, user, pswd, cfg)
 
-    threads.append(threading.Thread(target=run, args=(cfg, cur, store,
-                                                      "thread-" + str(i) + ": ")))
+      threads.append(threading.Thread(target=run_worker,
+                                      args=(ctl, cfg, cur, store,
+                                            "thread-" + str(i) + ": ")))
 
-log.info("first 5 keys...")
-for i in range(5):
-    print("echo get %s | nc %s %s" %
-          (store.cmd_line_get(i, prepare_key(i, cfg['prefix'])),
-           host_port.split(':')[0],
-           host_port.split(':')[1]))
+   log.info("first 5 keys...")
+   for i in range(5):
+      print("echo get %s | nc %s %s" %
+            (store.cmd_line_get(i, prepare_key(i, cfg['prefix'])),
+             host_port.split(':')[0],
+             host_port.split(':')[1]))
 
-t_start = time.time()
+   t_start = time.time()
 
-try:
-    if len(threads) <= 1:
-        run(cfg, cur, store)
-    else:
-       for thread in threads:
-           thread.daemon = True
-           thread.start()
+   try:
+      if len(threads) <= 1:
+         run_worker(ctl, cfg, cur, store)
+      else:
+         for thread in threads:
+            thread.daemon = True
+            thread.start()
 
-       while len(threads) > 0:
-           threads[0].join(1)
-           threads = [t for t in threads if t.isAlive()]
-except KeyboardInterrupt:
-   run_ok = False
+         while len(threads) > 0:
+            threads[0].join(1)
+            threads = [t for t in threads if t.isAlive()]
+   except KeyboardInterrupt:
+      ctl['run_ok'] = False
 
-t_end = time.time()
+   t_end = time.time()
 
-log.info("\n" + str(cur))
-log.info("    ops/sec: %s" %
-      ((cur['cur-gets'] + cur['cur-sets']) / (t_end - t_start)))
+   log.info("\n" + str(cur))
+   log.info("    ops/sec: %s" %
+            ((cur['cur-gets'] + cur['cur-sets']) / (t_end - t_start)))
 
+   return cur, t_end - t_start
+
+
+if __name__ == "__main__":
+  cfg_defaults = {
+     "prefix":             ("",   "Prefix for every item key."),
+     "max-ops":            (0,    "Max number of ops before exiting. 0 means keep going."),
+     "max-items":          (-1,   "Max number of items; default 100000."),
+     "max-creates":        (-1,   "Max number of creates; defaults to max-items."),
+     "min-value-size":     (10,   "Minimal value size in bytes during SET's."),
+     "ratio-sets":         (0.1,  "Fraction of requests that should be SET's."),
+     "ratio-creates":      (0.1,  "Fraction of SET's that should create new items."),
+     "ratio-misses":       (0.05, "Fraction of GET's that should miss."),
+     "ratio-hot":          (0.2,  "Fraction of items to have as a hot item subset."),
+     "ratio-hot-sets":     (0.95, "Fraction of SET's that hit the hot item subset."),
+     "ratio-hot-gets":     (0.95, "Fraction of GET's that hit the hot item subset."),
+     "exit-after-creates": (0,    "Exit after max-creates is reached."),
+     "threads":            (1,    "Number of client worker threads to use."),
+     "batch":              (100,  "Batch / pipeline up this number of commands."),
+     "json":               (1,    "Use JSON documents. 0 to generate binary documents.")
+     }
+
+  cur_defaults = {
+     "cur-items":   (0, "Number of items known to already exist."),
+     "cur-sets":    (0, "Number of sets already done."),
+     "cur-creates": (0, "Number of sets that were creates."),
+     "cur-gets":    (0, "Number of gets already done.")
+     }
+
+  if len(sys.argv) < 2 or "-h" in sys.argv or "--help" in sys.argv:
+     print("usage: %s [memcached[-binary|-ascii]://][user[:pswd]@]host[:port] [key=val]*\n" %
+           (sys.argv[0]))
+     print("  default protocol = memcached-binary://")
+     print("  default port     = 11211\n")
+     for s in ["examples: %s memcached-binary://127.0.0.1:11211 max-items=1000000 json=1",
+               "          %s memcached://127.0.0.1:11211",
+               "          %s 127.0.0.1:11211",
+               "          %s 127.0.0.1",
+               "          %s my-test-bucket@127.0.0.1",
+               "          %s my-test-bucket:MyPassword@127.0.0.1"]:
+        print(s % (sys.argv[0]))
+     print("")
+     print("optional key=val's and their defaults:")
+     for d in [cfg_defaults, cur_defaults]:
+        for k in sorted(d.iterkeys()):
+           print("    %s = %s %s" %
+                 (string.ljust(k, 20), string.ljust(str(d[k][0]), 4), d[k][1]))
+     sys.exit(-1)
+
+  cfg = {}
+  cur = {}
+  err = {}
+
+  for (o, d) in [(cfg, cfg_defaults), (cur, cur_defaults)]: # Parse key=val pairs.
+     for (dk, dv) in d.iteritems():
+        o[dk] = dv[0]
+     for kv in sys.argv[2:]:
+        k, v = (kv + '=').split('=')[0:2]
+        if k and v and k in o:
+           if type(o[k]) != type(""):
+              try:
+                 v = ({ 'y':'1', 'n':'0' }).get(v, v)
+                 for parse in [float, int]:
+                    if str(parse(v)) == v:
+                       v = parse(v)
+              except:
+                 err[kv] = err.get(kv, 0) + 1
+           o[k] = v
+        else:
+           err[kv] = err.get(kv, 0) + 1
+
+  for kv in err:
+     if err[kv] > 1:
+        log.error("problem parsing key=val option: " + kv)
+  for kv in err:
+     if err[kv] > 1:
+        sys.exit(-1)
+
+  if cfg['max-items'] < 0 and cfg['max-creates'] < 0:
+     cfg['max-items'] = 100000
+  if cfg['max-items'] < 0:
+     cfg['max-items'] = cfg['max-creates']
+  if cfg['max-creates'] < 0:
+     cfg['max-creates'] = cfg['max-items']
+
+  for o in [cfg, cur]:
+     for k in sorted(o.iterkeys()):
+        log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
+
+  body = 'x'
+  while len(body) < cfg['min-value-size']:
+     body = body + md5(str(len(body))).hexdigest()
+  suffix = "\"body\":\"" + body + "\"}"
+
+  protocol = (["memcached"] + sys.argv[1].split("://"))[-2] + "-binary"
+  host_port = ('@' + sys.argv[1].split("://")[-1]).split('@')[-1] + ":11211"
+  user, pswd = (('@' + sys.argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
+
+  run(cfg, cur, protocol, host_port, user, pswd)
