@@ -10,7 +10,6 @@ import crc32
 import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
 from threading import Thread
 
 

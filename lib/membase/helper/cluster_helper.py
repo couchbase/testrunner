@@ -1,10 +1,10 @@
 from membase.api.rest_client import RestConnection, RestHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 import logger
 import testconstants
 import time
 import Queue
 from threading import Thread
-
 
 
 class ClusterOperationHelper(object):
@@ -64,6 +64,26 @@ class ClusterOperationHelper(object):
             log.info("waiting for ns_server @ {0}:{1}".format(server.ip, server.port))
             testcase.assertTrue(RestHelper(rest).is_ns_server_running(),
                             "ns_server is not running in {0}".format(server.ip))
+    @staticmethod
+    def verify_persistence(servers, test):
+       master = servers[0]
+       rest = RestConnection(master)
+       test.log.info("Verifying Persistence")
+       buckets = rest.get_buckets()
+       for bucket in buckets:
+           #Load some data
+           thread = Thread(target=MemcachedClientHelperd.load_bucket_and_return_the_keys,
+                           name="loading thread for bucket {0}".format(bucket.name),
+                           args=([master],bucket.name, -1, 400000, None, 2, -1, True))
+
+           thread.start()
+           # Do persistence verification
+           ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, 180)
+           test.log.info("Persistence Verification returned ? {0}".format(ready))
+           test.assertTrue(ready, msg="Cannot verify persistence")
+           test.log.info("waiting for mutation and persistence threads to finish...")
+           thread.join()
+           test.log.info("mutation and persistence threads finished...")
 
     @staticmethod
     def persistence_verification(servers, bucket, timeout_in_seconds=1260):

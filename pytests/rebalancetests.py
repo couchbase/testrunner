@@ -208,27 +208,6 @@ class RebalanceBaseTest(unittest.TestCase):
                                                                    test=test, concurrency=4)
 
     @staticmethod
-    def verify_persistence(servers, test):
-        master = servers[0]
-        rest = RestConnection(master)
-        test.log.info("Verifying Persistence")
-        buckets = rest.get_buckets()
-        for bucket in buckets:
-            #Load some data
-            thread = Thread(target=RebalanceBaseTest.load_data,
-                            name="loading thread",
-                            args=(master, bucket.name, 400000))
-
-            thread.start()
-            # Do persistence verification
-            ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, 180)
-            test.log.info("Persistence Verification returned ? {0}".format(ready))
-            test.assertTrue(ready, msg="Cannot verify persistence")
-            test.log.info("waiting for mutation and persistence threads to finish...")
-            thread.join()
-            test.log.info("mutation and persistence threads finished...")
-
-    @staticmethod
     def get_test_params(input):
         _keys_count = -1
         _replica = -1
@@ -285,7 +264,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
             for bucket in buckets:
                 RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
-            RebalanceBaseTest.verify_persistence(self._servers, self)
+            ClusterOperationHelper.verify_persistence(self._servers, self)
 
     def test_load(self):
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
