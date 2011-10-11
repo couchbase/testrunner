@@ -239,7 +239,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1, rebalance_in=2):
+    def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1, rebalance_in=2, verify=True):
         master = self._servers[0]
         creds = self._input.membase_settings
         rest = RestConnection(master)
@@ -260,16 +260,20 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             self.assertTrue(rebalanced_in, msg="unable to add and rebalance more nodes")
             rebalanced_servers.extend(which_servers)
             nodes = rest.node_statuses()
-            RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+            if verify:
+                RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
 
-            for bucket in buckets:
-                RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
+                for bucket in buckets:
+                    RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
+            final_replication_state = RestHelper(rest).wait_for_replication(300)
+            msg = "replication state after waiting for up to 5 minutes : {0}"
+            self.log.info(msg.format(final_replication_state))
             ClusterOperationHelper.verify_persistence(self._servers, self)
 
     def test_load(self):
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
         RebalanceBaseTest.common_setup(self._input, self, replica)
-        self._common_test_body(keys_count, load_ratio, replica)
+        self._common_test_body(keys_count, load_ratio, replica, verify=False)
 
 
 class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
