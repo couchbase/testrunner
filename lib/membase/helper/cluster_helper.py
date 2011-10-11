@@ -72,7 +72,7 @@ class ClusterOperationHelper(object):
        buckets = rest.get_buckets()
        for bucket in buckets:
            #Load some data
-           thread = Thread(target=MemcachedClientHelperd.load_bucket_and_return_the_keys,
+           thread = Thread(target=MemcachedClientHelper.load_bucket_and_return_the_keys,
                            name="loading thread for bucket {0}".format(bucket.name),
                            args=([master],bucket.name, -1, 400000, None, 2, -1, True))
 
