@@ -75,7 +75,7 @@ class ClusterOperationHelper(object):
            #Load some data
            thread = Thread(target=MemcachedClientHelper.load_bucket_and_return_the_keys,
                            name="loading thread for bucket {0}".format(bucket.name),
-                           args=([master],bucket.name, -1, keys_count, None, 4, -1, True))
+                           args=([master],bucket.name, -1, keys_count, None, 2, -1, True))
 
            thread.start()
            # Do persistence verification
@@ -121,11 +121,9 @@ class ClusterOperationHelper(object):
         stat_key = 'ep_flusher_todo'
         start=time.time()
         stats = []
-        # Populate stats every 1 seconds
+        # Collect stats data points
         while time.time() - start <= timeout:
             stats.append(rest.get_bucket_stats(bucket)[stat_key])
-            time.sleep(1)
-        log.info("Samples {0}".format(stats))
         value_90th = ClusterOperationHelper.percentile(stats, 90)
         average = float(sum(stats)) / len(stats)
         log.info("90th percentile value is {0} and average {1}".format(value_90th, average))
