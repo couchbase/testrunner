@@ -121,7 +121,7 @@ class RemoteMachineShellConnection:
         if output:
             for line in output:
                 #split to words
-                words = line.split(' ')
+                words = line.strip().split(' ')
                 if len(words) >= 2:
                     process = RemoteMachineProcess()
                     process.pid = words[0]
