@@ -65,7 +65,7 @@ class ClusterOperationHelper(object):
             testcase.assertTrue(RestHelper(rest).is_ns_server_running(),
                             "ns_server is not running in {0}".format(server.ip))
     @staticmethod
-    def verify_persistence(servers, test):
+    def verify_persistence(servers, test, keys_count=400000, timeout_in_seconds=300):
         log = logger.Logger.get_logger()
         master = servers[0]
         rest = RestConnection(master)
@@ -75,16 +75,16 @@ class ClusterOperationHelper(object):
            #Load some data
            thread = Thread(target=MemcachedClientHelper.load_bucket_and_return_the_keys,
                            name="loading thread for bucket {0}".format(bucket.name),
-                           args=([master],bucket.name, -1, 400000, None, 2, -1, True))
+                           args=([master],bucket.name, -1, keys_count, None, 4, -1, True))
 
            thread.start()
            # Do persistence verification
-           ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, 180)
+           ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, timeout_in_seconds)
            log.info("Persistence Verification returned ? {0}".format(ready))
-           test.assertTrue(ready, msg="Cannot verify persistence")
-           log.info("waiting for mutation and persistence threads to finish...")
+           log.info("waiting for persistence threads to finish...")
            thread.join()
-           log.info("mutation and persistence threads finished...")
+           log.info("persistence thread has finished...")
+           test.assertTrue(ready, msg="Cannot verify persistence")
 
     @staticmethod
     def persistence_verification(servers, bucket, timeout_in_seconds=1260):
