@@ -898,7 +898,7 @@ class MultiGetNegativeTest(unittest.TestCase):
         self._create_default_bucket()
         self.keys_cleanup = []
         self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default", timeout=600)
-        self.onenodemoxi = MemcachedClientHelper.direct_client(self.master, "default", timeout=600)
+        self.onenodemoxi = MemcachedClientHelper.proxy_client(self.master, "default", timeout=600)
 
 
     def tearDown(self):
