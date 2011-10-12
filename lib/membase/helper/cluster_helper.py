@@ -1,6 +1,11 @@
 from membase.api.rest_client import RestConnection, RestHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 import logger
 import testconstants
+import time
+import Queue
+from threading import Thread
+
 
 class ClusterOperationHelper(object):
     #the first ip is taken as the master ip
@@ -59,6 +64,81 @@ class ClusterOperationHelper(object):
             log.info("waiting for ns_server @ {0}:{1}".format(server.ip, server.port))
             testcase.assertTrue(RestHelper(rest).is_ns_server_running(),
                             "ns_server is not running in {0}".format(server.ip))
+    @staticmethod
+    def verify_persistence(servers, test, keys_count=400000, timeout_in_seconds=300):
+        log = logger.Logger.get_logger()
+        master = servers[0]
+        rest = RestConnection(master)
+        log.info("Verifying Persistence")
+        buckets = rest.get_buckets()
+        for bucket in buckets:
+           #Load some data
+           thread = Thread(target=MemcachedClientHelper.load_bucket,
+                           name="loading thread for bucket {0}".format(bucket.name),
+                           args=([master], bucket.name, -1, keys_count, None, 3, -1, True, True))
+
+           thread.start()
+           # Do persistence verification
+           ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, timeout_in_seconds)
+           log.info("Persistence Verification returned ? {0}".format(ready))
+           log.info("waiting for persistence threads to finish...")
+           thread.join()
+           log.info("persistence thread has finished...")
+           test.assertTrue(ready, msg="Cannot verify persistence")
+
+    @staticmethod
+    def persistence_verification(servers, bucket, timeout_in_seconds=1260):
+        log = logger.Logger.get_logger()
+        verification_threads = []
+        queue = Queue.Queue()
+        rest = RestConnection(servers[0])
+        nodes = rest.get_nodes()
+        nodes_ip = []
+        for node in nodes:
+            nodes_ip.append(node.ip)
+        for i in range(len(servers)):
+            if servers[i].ip in nodes_ip:
+                log.info("Server {0} part of cluster".format(servers[i].ip))
+                rest = RestConnection(servers[i])
+                t = Thread(target=ClusterOperationHelper.persistence_verification_per_node,
+                           name="verification-thread-{0}".format(servers[i]),
+                           args=(rest, bucket, queue, timeout_in_seconds))
+                verification_threads.append(t)
+        for t in verification_threads:
+            t.start()
+        for t in verification_threads:
+            t.join()
+            log.info("thread {0} finished".format(t.name))
+        while not queue.empty():
+            item = queue.get()
+            if item is False:
+                return False
+        return True
+
+    @staticmethod
+    def persistence_verification_per_node(rest, bucket, queue=None, timeout=1260):
+        log = logger.Logger.get_logger()
+        stat_key = 'ep_flusher_todo'
+        start=time.time()
+        stats = []
+        # Collect stats data points
+        while time.time() - start <= timeout:
+            stats.append(rest.get_bucket_stats(bucket)[stat_key])
+            time.sleep(2)
+        value_90th = ClusterOperationHelper.percentile(stats, 90)
+        average = float(sum(stats)) / len(stats)
+        log.info("90th percentile value is {0} and average {1}".format(value_90th, average))
+        if value_90th == 0 and average == 0:
+            queue.put(False)
+            return
+        queue.put(True)
+
+    @staticmethod
+    def percentile(samples, percentile):
+        element_idx = int(len(samples) * (percentile / 100.0))
+        samples.sort()
+        value = samples[element_idx]
+        return value
 
     @staticmethod
     def cleanup_cluster(servers):

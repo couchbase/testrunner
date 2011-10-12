@@ -155,10 +155,10 @@ class Installer(object):
         info = RemoteMachineShellConnection(server).extract_remote_info()
         raise Exception(msg.format(names, version, info.deliverable_type))
 
+
 class MembaseServerInstaller(Installer):
     def __init__(self):
         Installer.__init__(self)
-
 
     def initialize(self, params):
         log = logger.new_logger("Installer")
@@ -178,7 +178,6 @@ class MembaseServerInstaller(Installer):
             time.sleep(5)
         if not cluster_initialized:
             raise Exception("unable to initialize membase node")
-
 
     def install(self, params):
         log = logger.new_logger("Installer")
@@ -194,10 +193,10 @@ class MembaseServerInstaller(Installer):
         log.info('wait 5 seconds for membase server to start')
         time.sleep(5)
 
+
 class MembaseServerStandaloneInstaller(Installer):
     def __init__(self):
         Installer.__init__(self)
-
 
     def initialize(self, params):
         log = logger.new_logger("Installer")
@@ -212,7 +211,6 @@ PRAGMA synchronous = NORMAL;""")
         remote_client.execute_command('/opt/membase/bin/memcached -d -v -c 80000 -p 11211 -E /opt/membase/lib/memcached/ep.so -r -e "tap_idle_timeout=10;dbname=/opt/membase/var/lib/membase/data/default;ht_size=12582917;min_data_age=0;queue_age_cap=900;initfile=/tmp/init.sql;vb0=true" -u membase > /tmp/memcache.log </dev/null 2>&1')
         time.sleep(5)
 
-
     def install(self, params):
         log = logger.new_logger("Installer")
         build = self.build_url(params)
@@ -222,10 +220,10 @@ PRAGMA synchronous = NORMAL;""")
             log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
         remote_client.membase_install(build, False)
 
+
 class CouchbaseServerInstaller(Installer):
     def __init__(self):
         Installer.__init__(self)
-
 
     def initialize(self, params):
         log = logger.new_logger("Installer")
@@ -246,7 +244,6 @@ class CouchbaseServerInstaller(Installer):
         if not cluster_initialized:
             raise Exception("unable to initialize membase node")
 
-
     def install(self, params):
         log = logger.new_logger("Installer")
         build = self.build_url(params)
@@ -257,7 +254,7 @@ class CouchbaseServerInstaller(Installer):
             task = "install"
             bat_file = "install.bat"
             server_path = "/cygdrive/c/Program Files/Couchbase/Server/"
-            dir_paths = ['/cygdrive/c/automation','/cygdrive/c/tmp']
+            dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
 
             log = logger.new_logger("Installer")
             build = self.build_url(params)
@@ -265,9 +262,9 @@ class CouchbaseServerInstaller(Installer):
             remote_client.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             downloaded = remote_client.download_binary_in_win(build.url, params["product"], params["version"])
             if downloaded:
-                log.info('Successful download {0}_{1}.exe'.format( params["product"], params["version"]))
+                log.info('Successful download {0}_{1}.exe'.format(params["product"], params["version"]))
             else:
-                log.error('Download {0}_{1}.exe failed'.format( params["product"], params["version"]))
+                log.error('Download {0}_{1}.exe failed'.format(params["product"], params["version"]))
             # modify bat file to update new build version
             remote_client.modify_bat_file('/cygdrive/c/automation', bat_file, params["product"],
                                            info.architecture_type, info.windows_name, params["version"], task)
@@ -293,7 +290,6 @@ class CouchbaseServerStandaloneInstaller(Installer):
     def __init__(self):
         Installer.__init__(self)
 
-
     def initialize(self, params):
         log = logger.new_logger("Installer")
         start_time = time.time()
@@ -306,7 +302,6 @@ class CouchbaseServerStandaloneInstaller(Installer):
 PRAGMA synchronous = NORMAL;""")
         remote_client.execute_command('/opt/couchbase/bin/memcached -d -v -c 80000 -p 11211 -E /opt/couchbase/lib/memcached/ep.so -r -e "dbname=/opt/couchbase/var/lib/membase/data/default;ht_size=12582917;min_data_age=0;queue_age_cap=900;initfile=/tmp/init.sql;vb0=true" -u couchbase > /tmp/memcache.log </dev/null 2>&1')
         time.sleep(5)
-
 
     def install(self, params):
         log = logger.new_logger("Installer")
@@ -363,6 +358,7 @@ class CouchbaseSingleServerInstaller(Installer):
         if not couchdb_ok:
             raise Exception("unable to initialize couchbase single server")
 
+
 class InstallerJob(object):
     def sequential_install(self, params):
         for server in input.servers:
@@ -378,8 +374,7 @@ class InstallerJob(object):
                 except Exception as ex:
                     print "unable to initialize the server after successful installation", ex
             except Exception as ex:
-                print "unable to complete the installation", ex
-
+                print "unable to complete the installation: ", ex
 
     def parallel_install(self, servers, params):
         uninstall_threads = []
@@ -416,6 +411,19 @@ class InstallerJob(object):
             print "thread {0} finished".format(t.name)
             t.join()
 
+
+def check_build(input):
+        log = logger.new_logger("Get build")
+        _params = copy.deepcopy(input.test_params)
+        _params["server"] = input.servers[0]
+        installer = installer_factory(_params)
+        try:
+            build = installer.build_url(_params)
+            log.info("Found build: {0}".format(build))
+        except Exception:
+            log.error("Cannot find build {0}".format(_params))
+            exit(1)
+
 params = {"ini": "resources/jenkins/fusion.ini",
           "product": "ms", "version": "1.7.1r-31", "amazon": "false"}
 
@@ -434,10 +442,10 @@ if __name__ == "__main__":
     except getopt.GetoptError, err:
         usage("ERROR: " + str(err))
 
+    check_build(input)
     if "parallel" in input.test_params:
         # workaround for a python2.6 bug of using strptime with threads
         datetime.strptime("30 Nov 00", "%d %b %y")
         InstallerJob().parallel_install(input.servers, input.test_params)
     else:
         InstallerJob().sequential_install(input.test_params)
-

@@ -76,28 +76,41 @@ class RemoteMachineShellConnection:
         self.ip = ip
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         log.info('connecting to {0} with username : {1} pem key : {2}'.format(ip, username, pkey_location))
-        self._ssh_client.connect(hostname=ip,
-                                 username=username,
-                                 key_filename=pkey_location)
+        try:
+            self._ssh_client.connect(hostname=ip, username=username, key_filename=pkey_location)
+        except paramiko.AuthenticationException:
+            log.info("Authentication failed")
+            exit(1)
+        except paramiko.BadHostKeyException:
+            log.info("Invalid Host key")
+            exit(1)
+        except Exception:
+            log.info("Can't establish SSH session")
+            exit(1)
 
     def __init__(self, serverInfo):
         #let's create a connection
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        if serverInfo.ssh_key == '':
-            #connect with username/password
-            msg = 'connecting to {0} with username : {1} password : {2}'
-            log.info(msg.format(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password))
-            self._ssh_client.connect(hostname=serverInfo.ip,
-                                     username=serverInfo.ssh_username,
-                                     password=serverInfo.ssh_password)
-        else:
-            msg = 'connecting to {0} with username : {1} pem key : {2}'
-            log.info(msg.format(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_key))
-            self._ssh_client.connect(hostname=serverInfo.ip,
-                                     username=serverInfo.ssh_username,
-                                     key_filename=serverInfo.ssh_key)
+        msg = 'connecting to {0} with username : {1} password : {2} ssh_key: {3}'
+        log.info(msg.format(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password, serverInfo.ssh_key))
+        try:
+            if serverInfo.ssh_key == '':
+                self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
+                                         password=serverInfo.ssh_password)
+            else:
+                self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
+                                         key_filename=serverInfo.ssh_key)
+        except paramiko.AuthenticationException:
+            log.info("Authentication failed")
+            exit(1)
+        except paramiko.BadHostKeyException:
+            log.info("Invalid Host key")
+            exit(1)
+        except Exception:
+            log.info("Can't establish SSH session")
+            exit(1)
 
     def get_running_processes(self):
         #if its linux ,then parse each line
@@ -108,7 +121,7 @@ class RemoteMachineShellConnection:
         if output:
             for line in output:
                 #split to words
-                words = line.split(' ')
+                words = line.strip().split(' ')
                 if len(words) >= 2:
                     process = RemoteMachineProcess()
                     process.pid = words[0]
@@ -537,7 +550,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 time.sleep(1)
         return ended
 
-    def terminate_processes(self,info,list):
+    def terminate_processes(self, info, list):
         for process in list:
             type = info.distribution_type.lower()
             if type == "windows":

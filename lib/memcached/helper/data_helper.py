@@ -10,6 +10,7 @@ import crc32
 import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
+from threading import Thread
 
 
 class MemcachedClientHelperExcetion(Exception):
@@ -165,12 +166,14 @@ class MemcachedClientHelper(object):
                                                        override_vBucketId,
                                                        write_only=write_only,
                                                        moxi=moxi)
+
         #we can start them!
         for thread in threads:
             thread.start()
         log.info("waiting for all worker thread to finish their work...")
         [thread.join() for thread in threads]
         log.info("worker threads are done...")
+
         inserted_count = 0
         rejected_count = 0
         for thread in threads:
