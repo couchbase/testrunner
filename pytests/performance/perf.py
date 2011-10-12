@@ -8,6 +8,7 @@ from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 
 import mcsoda
 
@@ -29,10 +30,6 @@ class PerfBase(unittest.TestCase):
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
-        moxi = self.param('moxi', 'default')
-        if moxi != 'default' and moxi != master:
-            self.setUp_moxi(moxi)
-
         self.rest        = rest        = RestConnection(master)
         self.rest_helper = rest_helper = RestHelper(rest)
 
@@ -47,7 +44,14 @@ class PerfBase(unittest.TestCase):
         self.assertTrue(rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
 
+        # Number of items loaded by load() method.
+        # Does not include or count any items that came from setUp_dgm().
+        #
         self.num_items_loaded = 0
+
+        self.setUp_moxi()
+        self.setUp_dgm()
+        self.wait_until_warmed_up()
 
     def tearDown(self):
         self.tearDown_moxi()
@@ -56,10 +60,42 @@ class PerfBase(unittest.TestCase):
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
 
-    def setUp_moxi(self, moxi_host):
-        TODO()
+    def setUp_moxi(self):
+        if len(self.input.moxis) > 0:
+            moxi = self.input.moxis[0]
+            TODO()
 
     def tearDown_moxi(self):
+        if len(self.input.moxis) > 0:
+            moxi = self.input.moxis[0]
+            TODO()
+
+    def target_moxi(self, bucket='default'): # Returns "host:port" of moxi to hit.
+        rv = self.param('moxi', None)
+        if rv:
+            return rv
+        if len(self.input.moxis) > 0:
+            return "%s:%s" % (self.input.moxis[0].ip,
+                              self.input.moxis[0].port)
+        return "%s:%s" % (self.input.servers[0].ip,
+                          self.rest.get_bucket(bucket).nodes[0].moxi)
+
+    def restart_moxi(self, bucket='default'):
+        TODO()
+
+    def setUp_dgm(self):
+        # Download fragmented, DGM dataset onto each cluster node, if
+        # not already locally available.
+        #
+        # The number of vbuckets and database schema must match the
+        # target cluster.
+        #
+        # Shutdown all cluster nodes.
+        #
+        # Do a cluster-restore.
+        #
+        # Restart all cluster nodes.
+        #
         TODO()
 
     def spec(self, reference):
@@ -75,10 +111,6 @@ class PerfBase(unittest.TestCase):
     def end_stats(self, stats_capture_id):
         TODO()
 
-    def target_host_port(self, bucket='default'):
-        return self.param('moxi',
-                          "%s:%s" % (self.input.servers[0].ip,
-                                     self.rest.get_bucket(bucket).nodes[0].moxi))
     def json(self, kind):
         if kind == 'json':
             return 1
@@ -88,7 +120,6 @@ class PerfBase(unittest.TestCase):
              kind='binary',
              protocol='binary',
              expiration=None):
-        stats = self.start_stats(self.spec + ".load")
         cfg = { 'max-items': num_items,
                 'max-creates': num_items,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -97,13 +128,12 @@ class PerfBase(unittest.TestCase):
                 'exit-after-creates': 1,
                 'json': int(kind == 'json')
                 }
-        self.log.info("mcsoda - host_port: " + self.target_host_port())
+        self.log.info("mcsoda - host_port: " + self.target_moxi())
         self.log.info("mcsoda - cfg: " + str(cfg))
         mcsoda.run(cfg, {},
                    'memcached-' + protocol,
-                   self.target_host_port(),
+                   self.target_moxi(),
                    '', '')
-        self.end_stats(stats)
         self.num_items_loaded = num_items
 
     def load_dgm(self, min_value_size=None,
@@ -115,6 +145,15 @@ class PerfBase(unittest.TestCase):
         dgm_num_items = self.mem_quota() * 1024 * 1024 * dgm_factor / min_value_size
         self.load(dgm_num_items, min_value_size=min_value_size,
                   kind=kind, expiration=expiration)
+
+    def nodes(self, num_remote_nodes):
+        TODO()
+
+    def delayed_rebalance(self, target_num_nodes, delay_seconds=10):
+        TODO()
+
+    def delayed_compaction(self, delay_seconds=10):
+        TODO()
 
     def loop(self, num_ops,
              num_items=None,
@@ -143,11 +182,11 @@ class PerfBase(unittest.TestCase):
                 'threads': clients,
                 'json': int(kind == 'json')
                 }
-        self.log.info("mcsoda - host_port: " + self.target_host_port())
+        self.log.info("mcsoda - moxi: " + self.target_moxi())
         self.log.info("mcsoda - cfg: " + str(cfg))
         mcsoda.run(cfg, {},
                    'memcached-' + protocol,
-                   self.target_host_port(),
+                   self.target_moxi(),
                    '', '')
         self.end_stats(stats)
 
@@ -167,20 +206,11 @@ class PerfBase(unittest.TestCase):
     def stop_bg(self):
         TODO()
 
-    def nodes(self, num_remote_nodes):
-        TODO()
-
-    def delayed_rebalance(self, target_num_nodes, delay_seconds=10):
-        TODO()
-
-    def delayed_compaction(self, delay_seconds=10):
-        TODO()
-
-    def start_server(self):
+    def start_cluster(self):
         # lib/remote/remote_util.py: def start_couchbase(self):
         TODO()
 
-    def stop_server(self):
+    def stop_cluster(self):
         # lib/remote/remote_util.py: def stop_couchbase(self):
         TODO()
 
@@ -191,18 +221,18 @@ class PerfBase(unittest.TestCase):
         TODO()
 
     def wait_until_drained(self):
-        server = self.input.servers[0]
+        master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
-        from membase.helper.rebalance_helper import RebalanceHelper
-
-        RebalanceHelper.wait_for_stats(server, bucket, 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_stats(server, bucket, 'ep_flusher_todo', 0)
-
-        # TODO: we could use wait_for_stats_on_all / checks across all nodes in the cluster.
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
 
     def wait_until_warmed_up(self):
-        TODO()
+        master = self.input.servers[0]
+        bucket = self.param("bucket", "default")
+
+        RebalanceHelper.wait_for_stats_on_all(master, bucket,
+                                              'ep_warmup_thread', 'complete')
 
     def assert_perf_was_ok(self):
         TODO()
@@ -225,6 +255,7 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.wait_until_drained()
+        self.restart_moxi()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -459,8 +490,8 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.spec('DBF-001')
         self.load(10000000)
         self.wait_until_drained()
-        self.stop_server()
-        self.start_server()
+        self.stop_cluster()
+        self.start_cluster()
         self.wait_until_warmed_up()
 
     def test_All_ops(self):
@@ -468,10 +499,10 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.spec('DBF-002')
         self.load(10000000, expiration=[0.1, expiration])
         self.wait_until_drained()
-        self.stop_server()
+        self.stop_cluster()
         self.log.info("sleepng {0} seconds to ensure expirations".format(expiration + 2))
         time.sleep(expiration + 2)
-        self.start_server()
+        self.start_cluster()
         self.wait_until_warmed_up()
 
     def test_2nodes(self):
@@ -479,8 +510,8 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.nodes(2)
         self.load(10000000)
         self.wait_until_drained()
-        self.stop_server()
-        self.start_server()
+        self.stop_cluster()
+        self.start_cluster()
         self.wait_until_warmed_up()
 
 
