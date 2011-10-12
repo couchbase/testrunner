@@ -36,7 +36,11 @@ class RebalanceBaseTest(unittest.TestCase):
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-        BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1)
+        if "ascii" in TestInputSingleton.input.test_params \
+                and TestInputSingleton.input.test_params["ascii"].lower() == "true":
+            BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1, sasl=False)
+        else:
+            BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1, sasl=True)
         buckets = rest.get_buckets()
         for bucket in buckets:
             ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket.name)

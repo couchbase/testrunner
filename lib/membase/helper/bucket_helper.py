@@ -34,7 +34,7 @@ class BucketOperationHelper():
         return ratio
 
     @staticmethod
-    def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0), howmany=3):
+    def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0), howmany=3, sasl=True):
         success = True
         log = logger.Logger.get_logger()
         rest = RestConnection(server)
@@ -49,15 +49,21 @@ class BucketOperationHelper():
             else:
                 bucket_ram = 100
                 #choose a port that is not taken by this ns server
-            port = info.memcached
+            port = info.moxi+1
             for i in range(0, howmany):
                 name = "bucket-{0}".format(i)
-                rest.create_bucket(bucket=name,
-                                   ramQuotaMB=bucket_ram,
-                                   replicaNumber=replica,
-                                   authType="sasl",
-                                   saslPassword="password",
-                                   proxyPort=port)
+                if sasl:
+                    rest.create_bucket(bucket=name,
+                                       ramQuotaMB=bucket_ram,
+                                       replicaNumber=replica,
+                                       authType="sasl",
+                                       saslPassword="password",
+                                       proxyPort=port)
+                else:
+                    rest.create_bucket(bucket=name,
+                                       ramQuotaMB=bucket_ram,
+                                       replicaNumber=replica,
+                                       proxyPort=port)
                 port += 1
                 msg = "create_bucket succeeded but bucket \"{0}\" does not exist"
                 bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)

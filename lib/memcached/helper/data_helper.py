@@ -266,7 +266,7 @@ class MemcachedClientHelper(object):
             RestHelper(rest).vbucket_map_ready(bucket, 60)
             vBuckets = rest.get_vbuckets(bucket)
             if ascii:
-                client = MemcachedAsciiClient(server.ip, node.moxi, timeout=timeout)
+                client = MemcachedAsciiClient(server.ip, bucket_info.port, timeout=timeout)
             else:
                 client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
                 client.vbucket_count = len(vBuckets)
