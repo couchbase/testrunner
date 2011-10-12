@@ -34,6 +34,8 @@ from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET
 
 # --------------------------------------------------------
 
+MIN_VALUE_SIZE = [10]
+
 def run_worker(ctl, cfg, cur, store, prefix=""):
     i = 0
     t_last = time.time()
@@ -95,7 +97,9 @@ def next_cmd(cfg, cur, store):
                                      cur.get('cur-sets', 0))
 
         key_str = prepare_key(key_num, cfg.get('prefix', ''))
-        itm_val = store.gen_doc(key_num, key_str, cfg.get('min-value-size', 10))
+        itm_val = store.gen_doc(key_num, key_str,
+                                choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
+                                             num_ops))
 
         return (cmd, key_num, key_str, itm_val)
     else:
@@ -109,7 +113,9 @@ def next_cmd(cfg, cur, store):
                                      cfg.get('ratio-hot-gets', 0),
                                      cur.get('cur-gets', 0))
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
-            itm_val = store.gen_doc(key_num, key_str, cfg.get('min-value-size', 10))
+            itm_val = store.gen_doc(key_num, key_str,
+                                    choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
+                                                 num_ops))
 
             return (cmd, key_num, key_str, itm_val)
         else:
@@ -137,12 +143,16 @@ def prepare_key(key_num, prefix):
         return prefix + "-" + key_hash
     return key_hash
 
+def choose_entry(arr, n):
+    return arr[n % len(arr)]
+
 # --------------------------------------------------------
 
 class Store:
 
-    def connect(self, target, user, pswd, cfg):
+    def connect(self, target, user, pswd, cfg, cur):
         self.cfg = cfg
+        self.cur = cur
 
     def command(self, c):
         log.info("%s %s %s %s" % c)
@@ -155,7 +165,7 @@ class Store:
 
     def gen_doc(self, key_num, key_str, min_value_size):
         return gen_doc_string(key_num, key_str, min_value_size,
-                              self.cfg.get('suffix', None),
+                              self.cfg['suffix'][min_value_size],
                               self.cfg.get('json', 1) > 0)
 
     def cmd_line_get(self, key_num, key_str):
@@ -172,8 +182,9 @@ class Store:
 
 class StoreMemcachedBinary(Store):
 
-    def connect(self, target, user, pswd, cfg):
+    def connect(self, target, user, pswd, cfg, cur):
         self.cfg = cfg
+        self.cur = cur
         self.target = target
         self.host_port = (target + ":11211").split(':')[0:2]
         self.host_port[1] = int(self.host_port[1])
@@ -234,8 +245,9 @@ class StoreMemcachedBinary(Store):
 
 class StoreMemcachedAscii(Store):
 
-    def connect(self, target, user, pswd, cfg):
+    def connect(self, target, user, pswd, cfg, cur):
         self.cfg = cfg
+        self.cur = cur
         self.target = target
         self.host_port = (target + ":11211").split(':')[0:2]
         self.host_port[1] = int(self.host_port[1])
@@ -321,6 +333,23 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 # --------------------------------------------------------
 
 def run(cfg, cur, protocol, host_port, user, pswd):
+   if type(cfg['min-value-size']) == type(""):
+       cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
+   if type(cfg['min-value-size']) != type([]):
+       cfg['min-value-size'] = [ cfg['min-value-size'] ]
+
+   cfg['body'] = {}
+   cfg['suffix'] = {}
+
+   for i in range(len(cfg['min-value-size'])):
+       mvs = int(cfg['min-value-size'][i])
+       cfg['min-value-size'][i] = mvs
+       cfg['body'][mvs] = 'x'
+       while len(cfg['body'][mvs]) < mvs:
+          cfg['body'][mvs] = cfg['body'][mvs] + \
+                             md5(str(len(cfg['body'][mvs]))).hexdigest()
+       cfg['suffix'][mvs] = "\"body\":\"" + cfg['body'][mvs] + "\"}"
+
    ctl = { 'run_ok': True }
 
    threads = []
@@ -333,7 +362,7 @@ def run(cfg, cur, protocol, host_port, user, pswd):
          else:
             store = StoreMemcachedBinary()
 
-      store.connect(host_port, user, pswd, cfg)
+            store.connect(host_port, user, pswd, cfg, cur)
 
       threads.append(threading.Thread(target=run_worker,
                                       args=(ctl, cfg, cur, store,
@@ -364,7 +393,8 @@ def run(cfg, cur, protocol, host_port, user, pswd):
 
    t_end = time.time()
 
-   log.info("\n" + str(cur))
+   log.info("")
+   log.info(str(cur))
    log.info("    ops/sec: %s" %
             ((cur.get('cur-gets', 0) + cur.get('cur-sets', 0)) / (t_end - t_start)))
 
@@ -377,7 +407,7 @@ if __name__ == "__main__":
      "max-ops":            (0,    "Max number of ops before exiting. 0 means keep going."),
      "max-items":          (-1,   "Max number of items; default 100000."),
      "max-creates":        (-1,   "Max number of creates; defaults to max-items."),
-     "min-value-size":     (10,   "Minimal value size in bytes during SET's."),
+     "min-value-size":     ("10", "Minimal value size (bytes) during SET's; comma-separated."),
      "ratio-sets":         (0.1,  "Fraction of requests that should be SET's."),
      "ratio-creates":      (0.1,  "Fraction of SET's that should create new items."),
      "ratio-misses":       (0.05, "Fraction of GET's that should miss."),
@@ -413,8 +443,11 @@ if __name__ == "__main__":
      print("optional key=val's and their defaults:")
      for d in [cfg_defaults, cur_defaults]:
         for k in sorted(d.iterkeys()):
-           print("    %s = %s %s" %
+           print("  %s = %s %s" %
                  (string.ljust(k, 20), string.ljust(str(d[k][0]), 4), d[k][1]))
+     print("")
+     print("  TIP: min-value-size can be comma-separated values: min-value-size=10,256,1024")
+     print("")
      sys.exit(-1)
 
   cfg = {}
@@ -456,11 +489,6 @@ if __name__ == "__main__":
   for o in [cfg, cur]:
      for k in sorted(o.iterkeys()):
         log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
-
-  cur['body'] = 'x'
-  while len(cur['body']) < cfg.get('min-value-size', 10):
-     cur['body'] = cur['body'] + md5(str(len(cur['body']))).hexdigest()
-  cur['suffix'] = "\"body\":\"" + cur['body'] + "\"}"
 
   protocol = (["memcached"] + sys.argv[1].split("://"))[-2] + "-binary"
   host_port = ('@' + sys.argv[1].split("://")[-1]).split('@')[-1] + ":11211"
