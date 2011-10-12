@@ -78,7 +78,7 @@ class Server(object):
         if isinstance(url, basestring):
             self.resource = http.Resource(url, session or http.Session())
         else:
-            self.resource = url # treat as a Resource object
+            self.resource = url  # treat as a Resource object
         if not full_commit:
             self.resource.headers['X-Couch-Full-Commit'] = 'false'
 
@@ -134,7 +134,7 @@ class Server(object):
         :raise ResourceNotFound: if no database with that name exists
         """
         db = Database(self.resource(name), validate_dbname(name))
-        db.resource.head() # actually make a request to the database
+        db.resource.head()  # actually make a request to the database
         return db
 
     def config(self):
@@ -219,7 +219,7 @@ class Server(object):
         """
         data = {'source': source, 'target': target}
         data.update(options)
-        status, headers, data = self.resource.post_json('_replicate', data)
+        status, headers, data = self.resource.post_json('_replicator', data)
         return data
 
 
@@ -425,7 +425,7 @@ class Database(object):
         _, _, data = func(body=doc, **options)
         id, rev = data['id'], data.get('rev')
         doc['_id'] = id
-        if rev is not None: # Not present for batch='ok'
+        if rev is not None:  # Not present for batch='ok'
             doc['_rev'] = rev
         return id, rev
 
@@ -782,7 +782,7 @@ class Database(object):
                                 exc_type(result['reason'])))
             else:
                 doc = documents[idx]
-                if isinstance(doc, dict): # XXX: Is this a good idea??
+                if isinstance(doc, dict):  # XXX: Is this a good idea??
                     doc.update({'_id': result['id'], '_rev': result['rev']})
                 results.append((True, result['id'], result['rev']))
 
@@ -891,10 +891,10 @@ class Database(object):
         _, _, data = self.resource.get('_changes', **opts)
         lines = iter(data)
         for ln in lines:
-            if not ln: # skip heartbeats
+            if not ln:  # skip heartbeats
                 continue
             doc = json.decode(ln)
-            if 'last_seq' in doc: # consume the rest of the response if this
+            if 'last_seq' in doc:  # consume the rest of the response if this
                 for ln in lines:  # was the last line, allows conn reuse
                     pass
             yield doc
@@ -939,7 +939,7 @@ class Document(dict):
 
     def __repr__(self):
         return '<%s %r@%r %r>' % (type(self).__name__, self.id, self.rev,
-                                  dict([(k,v) for k,v in self.items()
+                                  dict([(k, v) for k, v in self.items()
                                         if k not in ('_id', '_rev')]))
 
     @property
@@ -1203,11 +1203,14 @@ class Row(dict):
             return Document(doc)
 
 
-SPECIAL_DB_NAMES = set(['_users'])
+SPECIAL_DB_NAMES = set(['_users', "_replicator"])
 VALID_DB_NAME = re.compile(r'^[a-z][a-z0-9_$()+-/]*$')
+
+
 def validate_dbname(name):
+    """ Validate dbname """
     if name in SPECIAL_DB_NAMES:
         return name
     if not VALID_DB_NAME.match(name):
-        raise ValueError('Invalid database name')
+        raise ValueError("Invalid database name '%s'" % name)
     return name
