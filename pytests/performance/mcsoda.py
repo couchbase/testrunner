@@ -375,6 +375,15 @@ def run(cfg, cur, protocol, host_port, user, pswd):
              host_port.split(':')[0],
              host_port.split(':')[1]))
 
+   def stop_after(secs):
+      time.sleep(secs)
+      ctl['run_ok'] = False
+
+   if cfg['time'] > 0:
+      t = threading.Thread(target=stop_after, args=(cfg['time'],))
+      t.daemon = True
+      t.start()
+
    t_start = time.time()
 
    try:
@@ -417,7 +426,8 @@ if __name__ == "__main__":
      "exit-after-creates": (0,    "Exit after max-creates is reached."),
      "threads":            (1,    "Number of client worker threads to use."),
      "batch":              (100,  "Batch / pipeline up this number of commands."),
-     "json":               (1,    "Use JSON documents. 0 to generate binary documents.")
+     "json":               (1,    "Use JSON documents. 0 to generate binary documents."),
+     "time":               (0,    "Stop after this many seconds if > 0.")
      }
 
   cur_defaults = {
