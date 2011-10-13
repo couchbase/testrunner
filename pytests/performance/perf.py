@@ -2,6 +2,7 @@ import unittest
 import logger
 import time
 import os
+import threading
 
 from TestInput import TestInputSingleton
 
@@ -146,11 +147,19 @@ class PerfBase(unittest.TestCase):
         self.load(dgm_num_items, min_value_size=min_value_size,
                   kind=kind, expiration=expiration)
 
-    def nodes(self, num_remote_nodes):
-        TODO()
+    def nodes(self, num_nodes):
+        self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1))
 
-    def delayed_rebalance(self, target_num_nodes, delay_seconds=10):
-        TODO()
+    @staticmethod
+    def delayed_rebalance_worker(servers, num_nodes, delay_seconds=10):
+        time.sleep(delay_seconds)
+        RebalanceHelper.rebalance_in(servers, num_nodes - 1)
+
+    def delayed_rebalance(self, num_nodes, delay_seconds=10):
+        t = threading.Thread(target=PerfBase.delayed_rebalance_worker,
+                             args=(self.input.servers, num_nodes))
+        t.daemon = True
+        t.start()
 
     def delayed_compaction(self, delay_seconds=10):
         TODO()
@@ -232,7 +241,8 @@ class PerfBase(unittest.TestCase):
         bucket = self.param("bucket", "default")
 
         RebalanceHelper.wait_for_stats_on_all(master, bucket,
-                                              'ep_warmup_thread', 'complete')
+                                              'ep_warmup_thread', 'complete',
+                                              fn=RebalanceHelper.wait_for_mc_stats)
 
     def assert_perf_was_ok(self):
         TODO()

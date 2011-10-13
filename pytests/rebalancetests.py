@@ -93,37 +93,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def rebalance_in(servers, how_many):
-        servers_rebalanced = []
-        log = logger.Logger.get_logger()
-        rest = RestConnection(servers[0])
-        nodes = rest.node_statuses()
-        #choose how_many nodes from self._servers which are not part of
-        # nodes
-        nodeIps = [node.ip for node in nodes]
-        log.info("current nodes : {0}".format(nodeIps))
-        toBeAdded = []
-        selection = servers[1:]
-        shuffle(selection)
-        for server in selection:
-            if not server.ip in nodeIps:
-                toBeAdded.append(server)
-                servers_rebalanced.append(server)
-            if len(toBeAdded) == how_many:
-                break
-
-        for server in toBeAdded:
-            rest.add_node('Administrator', 'password', server.ip)
-            #check if its added ?
-        otpNodes = [node.id for node in rest.node_statuses()]
-        started = rest.rebalance(otpNodes, [])
-        msg = "rebalance operation started ? {0}"
-        log.info(msg.format(started))
-        if started:
-            result = rest.monitorRebalance()
-            msg = "successfully rebalanced out selected nodes from the cluster ? {0}"
-            log.info(msg.format(result))
-            return result, servers_rebalanced
-        return False, servers_rebalanced
+        return RebalanceHelper.rebalance_in(servers, how_many)
 
     @staticmethod
     def load_data_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data, test):
@@ -1004,34 +974,7 @@ class RebalanceSwapTests(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     def rebalance_in(self, how_many):
-        rest = RestConnection(self._servers[0])
-        nodes = rest.node_statuses()
-        #choose how_many nodes from self._servers which are not part of
-        # nodes
-        nodeIps = [node.ip for node in nodes]
-        self.log.info("current nodes : {0}".format(nodeIps))
-        toBeAdded = []
-        selection = self._servers[1:]
-        shuffle(selection)
-        for server in selection:
-            if server.ip in nodeIps:
-                toBeAdded.append(server)
-            if len(toBeAdded) == how_many:
-                break
-
-        for server in toBeAdded:
-            rest.add_node('Administrator', 'password', server.ip)
-            #check if its added ?
-        otpNodes = [node.id for node in nodes]
-        started = rest.rebalance(otpNodes, [])
-        msg = "rebalance operation started ? {0}"
-        self.log.info(msg.format(started))
-        if started:
-            result = rest.monitorRebalance()
-            msg = "successfully rebalanced in selected nodes ? {0}"
-            self.log.info(msg.format(result))
-            return result
-        return False
+        return RebalanceHelper.rebalance_in(self._servers, how_many)
 
     #load data add one node , rebalance add another node rebalance
     #swap one node with another node
