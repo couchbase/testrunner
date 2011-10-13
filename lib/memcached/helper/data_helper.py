@@ -379,7 +379,7 @@ class WorkerThread(threading.Thread):
                  values_list,
                  ignore_how_many_errors=5000,
                  override_vBucketId=-1,
-                 terminate_in_minutes=60,
+                 terminate_in_minutes=120,
                  write_only=False,
                  moxi=True,
                  async_write=False):
