@@ -118,7 +118,7 @@ class RebalanceBaseTest(unittest.TestCase):
                                                            name=bucket.name,
                                                            ram_load_ratio=load_ratio,
                                                            value_size_distribution=distribution,
-                                                           number_of_threads=2)
+                                                           number_of_threads=4)
             [t.start() for t in threads]
             bucket_data[bucket.name]["threads"] = threads
         return bucket_data
@@ -198,6 +198,77 @@ class RebalanceBaseTest(unittest.TestCase):
         return _keys_count, _replica, _load_ratio
 
 
+class IncrementalRebalanceComboTests(unittest.TestCase):
+    def setUp(self):
+        self._input = TestInputSingleton.input
+        self._servers = self._input.servers
+        self.log = logger.Logger().get_logger()
+
+    def tearDown(self):
+        RebalanceBaseTest.common_tearDown(self._servers, self)
+
+    #load data add one node , rebalance add another node rebalance
+    def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1, rebalance_in=2, verify=True):
+        master = self._servers[0]
+        creds = self._input.membase_settings
+        rest = RestConnection(master)
+        rebalanced_servers = [master]
+        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+        temp_bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+        buckets = rest.get_buckets()
+        inserted_keys = []
+        for bucket in buckets:
+            inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, -1, load_ratio=3)
+            temp_bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
+            temp_bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
+            self.log.info("inserted {0} keys".format(len(inserted_keys)))
+
+        nodes = rest.node_statuses()
+        while len(nodes) < len(self._servers):
+            # Start loading threads
+            bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, None, rebalanced_servers,
+                                                                bucket_data)
+            # Start rebalance in thread
+            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+            rebalance_thread = Thread(target=RebalanceHelper.rebalance_in,
+                             args=(self._servers, rebalance_in), name="rebalance_thread")
+            #rebalance_thread.daemon = True
+            rebalance_thread.start()
+
+            # Start reader daemon
+            for bucket in buckets:
+                reader_thread = Thread(target=BucketOperationHelper.keys_exist_or_assert_in_parallel,
+                args=(inserted_keys, master, bucket.name, self, 4), name="reader_thread")
+                reader_thread.daemon = True
+                reader_thread.start()
+
+            # Wait for loading threads to finish
+            for name in bucket_data:
+                for thread in bucket_data[name]["threads"]:
+                    thread.join()
+                    bucket_data[name]["items_inserted_count"] += thread.inserted_keys_count()
+            rebalance_thread.join()
+
+            # Verification step
+            nodes = rest.node_statuses()
+            if verify:
+                RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+
+                for bucket in buckets:
+                    RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
+
+            # Wait for replicaion and verify persistence
+            final_replication_state = RestHelper(rest).wait_for_replication(300)
+            msg = "replication state after waiting for up to 5 minutes : {0}"
+            self.log.info(msg.format(final_replication_state))
+            ClusterOperationHelper.verify_persistence(self._servers, self)
+
+    def test_load(self):
+        keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
+        self._common_test_body(keys_count, load_ratio, replica, verify=False)
+
+
 #load data. add one node rebalance , rebalance out
 class IncrementalRebalanceInTests(unittest.TestCase):
     def setUp(self):
@@ -242,7 +313,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
     def test_load(self):
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
-        RebalanceBaseTest.common_setup(self._input, self, replica)
+        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
         self._common_test_body(keys_count, load_ratio, replica, verify=False)
 
 
@@ -605,13 +676,14 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                 self.assertTrue(rest.monitorRebalance(),
                                 msg="rebalance operation failed after adding node {0}".format(server.ip))
                 self.log.info("completed rebalancing in server {0}".format(server))
-                self._reader_thread(inserted_keys, bucket_data, moxi=moxi)
+                IncrementalRebalanceWithParallelReadTests._reader_thread(self, inserted_keys, bucket_data, moxi=moxi)
                 self.assertTrue(rest.monitorRebalance(),
                                 msg="rebalance operation failed after adding node {0}".format(server.ip))
                 break
 
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
+    @staticmethod
     def _reader_thread(self, inserted_keys, bucket_data, moxi=False):
         errors = []
         rest = RestConnection(self._servers[0])
