@@ -222,7 +222,7 @@ class IncrementalRebalanceComboTests(unittest.TestCase):
         buckets = rest.get_buckets()
         inserted_keys = []
         for bucket in buckets:
-            inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, -1, load_ratio*0.25)
+            inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, -1, load_ratio)
             temp_bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
             temp_bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
             self.log.info("inserted {0} keys".format(len(inserted_keys)))
