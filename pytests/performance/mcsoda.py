@@ -379,8 +379,8 @@ def run(cfg, cur, protocol, host_port, user, pswd):
       time.sleep(secs)
       ctl['run_ok'] = False
 
-   if cfg['time'] > 0:
-      t = threading.Thread(target=stop_after, args=(cfg['time'],))
+   if cfg.get('time', 0) > 0:
+      t = threading.Thread(target=stop_after, args=(cfg.get('time', 0),))
       t.daemon = True
       t.start()
 

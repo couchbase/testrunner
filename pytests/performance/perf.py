@@ -178,7 +178,6 @@ class PerfBase(unittest.TestCase):
 
         stats = self.start_stats(self.spec + ".loop")
         cfg = { 'cur-items': num_items,
-                'max-ops': num_ops,
                 'max-items': num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -191,6 +190,12 @@ class PerfBase(unittest.TestCase):
                 'threads': clients,
                 'json': int(kind == 'json')
                 }
+        if type(num_ops) == type(0):
+            cfg['max-ops'] = num_ops
+        else:
+            # num_ops looks like tuple of...
+            # ('seconds', integer_num_of_seconds_to_run)
+            cfg['time'] = num_ops[1]
         self.log.info("mcsoda - moxi: " + self.target_moxi())
         self.log.info("mcsoda - cfg: " + str(cfg))
         mcsoda.run(cfg, {},
@@ -324,13 +329,14 @@ class NodePeakPerformance(PerfBase):
                   ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
                   ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
 
-    def TODO_test_get_30client(self):
+    def test_get_30client(self):
         self.spec('NPP-05-1k')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.wait_until_drained()
-        self.loop(('seconds', 60 * 60),
+        seconds = self.parami('seconds', 60 * 60)
+        self.loop(('seconds', seconds),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 30),
