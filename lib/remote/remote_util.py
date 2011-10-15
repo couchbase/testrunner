@@ -158,14 +158,18 @@ class RemoteMachineShellConnection:
                 return False
         return True
 
-    #/opt/moxi/bin/moxi  -Z port_listen=11211 -u root -t 16 -O /var/log/moxi/moxi.log
-    def start_moxi(self, ip, bucket, port, user, threads, log_file="/var/log/moxi.log"):
+    # /opt/moxi/bin/moxi -Z port_listen=11211 -u root -t 4 -O /var/log/moxi/moxi.log
+    def start_moxi(self, ip, bucket, port, user=None, threads=4, log_file="/var/log/moxi.log"):
+        if self.is_membase_installed():
+            prod = "membase"
+        else:
+            prod = "couchbase"
+        cli_path = "/opt/" + prod + "/bin/moxi"
         args = ""
-        args += "http://{0}:8091/pools/default/bucketsStreaming/{1} ".format(ip,bucket)
-        args += "-Z port_listen={0} -u {1} -t {2} -O {3} -d".format(port,user,threads,log_file)
-        cli_path = "/opt/membase/bin/moxi"
-        if not self.is_membase_installed():
-            cli_path = "/opt/couchbase/bin/moxi"
+        args += "http://{0}:8091/pools/default/bucketsStreaming/{1} ".format(ip, bucket)
+        args += "-Z port_listen={0} -u {1} -t {2} -O {3} -d".format(port,
+                                                                    user or prod,
+                                                                    threads, log_file)
         info = self.extract_remote_info()
         if info.type.lower() == "linux":
             o, r = self.execute_command("{0} {1}".format(cli_path, args))

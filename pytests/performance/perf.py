@@ -10,6 +10,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 import mcsoda
 
@@ -61,15 +62,19 @@ class PerfBase(unittest.TestCase):
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
 
-    def setUp_moxi(self):
+    def setUp_moxi(self, bucket=None):
+        bucket = bucket or self.param("bucket", "default")
         if len(self.input.moxis) > 0:
-            moxi = self.input.moxis[0]
-            TODO()
+            shell = RemoteMachineShellConnection(self.input.moxis[0])
+            shell.start_moxi(self.input.servers[0].ip, bucket,
+                             self.input.moxis[0].port)
+            shell.disconnect()
 
     def tearDown_moxi(self):
         if len(self.input.moxis) > 0:
-            moxi = self.input.moxis[0]
-            TODO()
+            shell = RemoteMachineShellConnection(self.input.moxis[0])
+            shell.stop_moxi()
+            shell.disconnect()
 
     def target_moxi(self, bucket='default'): # Returns "host:port" of moxi to hit.
         rv = self.param('moxi', None)
