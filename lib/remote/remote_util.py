@@ -173,14 +173,13 @@ class RemoteMachineShellConnection:
         else:
             raise Exception("running standalone moxi is not supported for windows")
 
-    def restart_moxi(self):
+    def stop_moxi(self):
         info = self.extract_remote_info()
         if info.type.lower() == "linux":
             o, r = self.execute_command("killall -9 moxi")
             self.log_command_output(o, r)
         else:
-            raise Exception("restarting moxi is only supported on windows now")
-
+            raise Exception("stopping standalone moxi is not supported on windows")
 
     def download_build(self, build):
         return self.download_binary(build.url, build.deliverable_type, build.name)
