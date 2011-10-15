@@ -86,8 +86,9 @@ class PerfBase(unittest.TestCase):
         return "%s:%s" % (self.input.servers[0].ip,
                           self.rest.get_bucket(bucket).nodes[0].moxi)
 
-    def restart_moxi(self, bucket='default'):
-        TODO()
+    def restart_moxi(self, bucket=None):
+        self.tearDown_moxi()
+        self.setUp_moxi(bucket)
 
     def setUp_dgm(self):
         # Download fragmented, DGM dataset onto each cluster node, if
@@ -174,6 +175,10 @@ class PerfBase(unittest.TestCase):
 
     def delayed_compaction(self, delay_seconds=10):
         TODO()
+
+    def loop_prep(self):
+        self.wait_until_drained()
+        self.restart_moxi()
 
     def loop(self, num_ops,
              num_items=None,
@@ -287,8 +292,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
-        self.restart_moxi()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -303,7 +307,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 4000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -318,7 +322,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind           = self.param('kind', 'binary'),
@@ -334,7 +338,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind           = self.param('kind', 'binary'),
@@ -352,7 +356,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         seconds = self.parami('seconds', 60 * 60)
         self.loop(('seconds', seconds),
                   kind           = self.param('kind', 'binary'),
@@ -369,7 +373,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -385,7 +389,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -401,7 +405,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -417,7 +421,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 5000),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
@@ -434,7 +438,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
         self.loop(self.parami("items", 1000000),
                   self.parami('size', 1024),
@@ -454,7 +458,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind           = self.param('kind', 'json'),
@@ -559,7 +563,7 @@ class TODO_CacheMisses(TODO_PerfBase):
         self.log.info("loading {0} items, {0}x more than mem_quota of {0}MB".format(
                 num_items, dgm_factor, min_value_size))
         self.load(num_items)
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(num_items)
 
 
@@ -609,7 +613,7 @@ class TODO_ViewPerformance(TODO_PerfBase):
     def test_mutation(self):
         self.spec('VP-007')
         self.load(1000000)
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop_bg(-1)
         self.view(100, 10)
         self.stop_bg()
