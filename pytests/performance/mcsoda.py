@@ -119,6 +119,7 @@ def next_cmd(cfg, cur, store):
 
             return (cmd, key_num, key_str, itm_val)
         else:
+            cur['cur-misses'] = cur.get('cur-misses', 0) + 1
             return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None)
 
 def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops):
@@ -407,7 +408,7 @@ def run(cfg, cur, protocol, host_port, user, pswd):
    log.info("    ops/sec: %s" %
             ((cur.get('cur-gets', 0) + cur.get('cur-sets', 0)) / (t_end - t_start)))
 
-   return cur, t_end - t_start
+   return cur, t_start, t_end
 
 
 if __name__ == "__main__":

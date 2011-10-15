@@ -112,6 +112,12 @@ class PerfBase(unittest.TestCase):
     def end_stats(self, stats_capture_id):
         TODO()
 
+    def rec_stats(self, stats_capture_id, ops, start_time, end_time):
+        # The ops is a dict with keys like...
+        # 'tot-sets', 'tot-gets', 'tot-items', 'tot-creates', 'tot-misses'
+        self.log.info("stats result ops: %s, secs: %s" % (ops, end_time - start_time))
+        TODO()
+
     def json(self, kind):
         if kind == 'json':
             return 1
@@ -177,8 +183,7 @@ class PerfBase(unittest.TestCase):
         num_items = num_items or self.num_items_loaded
 
         stats = self.start_stats(self.spec + ".loop")
-        cfg = { 'cur-items': num_items,
-                'max-items': num_items,
+        cfg = { 'max-items': num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
                 'ratio-sets': ratio_sets,
@@ -190,18 +195,26 @@ class PerfBase(unittest.TestCase):
                 'threads': clients,
                 'json': int(kind == 'json')
                 }
+        cur = { 'cur-items': num_items }
         if type(num_ops) == type(0):
             cfg['max-ops'] = num_ops
         else:
-            # num_ops looks like tuple of...
+            # Here, we num_ops looks like "time to run" tuple of...
             # ('seconds', integer_num_of_seconds_to_run)
             cfg['time'] = num_ops[1]
         self.log.info("mcsoda - moxi: " + self.target_moxi())
         self.log.info("mcsoda - cfg: " + str(cfg))
-        mcsoda.run(cfg, {},
-                   'memcached-' + protocol,
-                   self.target_moxi(),
-                   '', '')
+        cur, start_time, end_time = mcsoda.run(cfg, cur,
+                                               'memcached-' + protocol,
+                                               self.target_moxi(),
+                                               '', '')
+        ops = { 'tot-sets': cur.get('cur-sets', 0),
+                'tot-gets': cur.get('cur-gets', 0),
+                'tot-items': cur.get('cur-items', 0),
+                'tot-creates': cur.get('cur-creates', 0),
+                'tot-misses': cur.get('cur-misses', 0)
+                }
+        self.rec_stats(stats, ops, start_time, end_time)
         self.end_stats(stats)
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
