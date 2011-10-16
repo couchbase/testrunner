@@ -9,6 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
+from couchdb import client
 
 
 class XDCRBaseTest(unittest.TestCase):
@@ -21,10 +22,14 @@ class XDCRBaseTest(unittest.TestCase):
                 ClusterOperationHelper.cleanup_cluster([server])
             ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
             BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
-
             XDCRBaseTest.cluster_initialization(servers)
             XDCRBaseTest.create_buckets(servers, testcase, howmany=2)
             XDCRBaseTest.rebalance_servers_in(servers, input.membase_settings, testcase)
+
+        master_cluster1 = input.clusters.get(0)[0]
+        master_cluster2 = input.clusters.get(1)[0]
+        bucket = "bucket-0"
+        XDCRBaseTest._insert_replicator_doc(testcase, input.membase_settings, master_cluster1.ip, bucket, master_cluster2.ip, bucket)
 
     @staticmethod
     def common_tearDown(servers, testcase):
@@ -91,6 +96,22 @@ class XDCRBaseTest(unittest.TestCase):
         testcase.assertTrue(rebalanceSucceeded,
                             "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
 
+    @staticmethod
+    def _insert_replicator_doc(testcase, rest_settings, source_ip, source_bucket, target_ip, target_bucket):
+        log = logger.Logger().get_logger()
+        username = rest_settings.rest_username
+        password = rest_settings.rest_password
+
+        source_url = "http://{0}:{1}@{2}:8091/pools/default/buckets/{3}".format(username, password, source_ip, source_bucket)
+        target_url = "http://{0}:{1}@{2}:8091/pools/default/buckets/{3}".format(username, password, target_ip, target_bucket)
+
+        # Insert doc at the source_ip
+        couchdb_url = "http://{0}:{1}/".format(source_ip, "5984")
+        server = client.Server(couchdb_url)
+        doc = {'continuous': True, 'type': 'xdcr'}
+        data = server.replicate(source_url, target_url, **doc)
+        log.info("replicator doc inserted {0}".format(data['id']))
+
 
 class XDCRTests(unittest.TestCase):
     def setUp(self):
@@ -100,7 +121,11 @@ class XDCRTests(unittest.TestCase):
         if not self._clusters:
             self.log.info("No Cluster tags defined in resource file")
             exit(1)
-        XDCRBaseTest.common_setup(self._input, self)
+        if len(self._clusters.items()) == 2:
+            XDCRBaseTest.common_setup(self._input, self)
+        else:
+            self.log.info("Two clusters needed")
+            exit(1)
 
     def tearDown(self):
         for id, servers in self._clusters.items():
@@ -133,7 +158,6 @@ class XDCRTests(unittest.TestCase):
     def test_existing_replication_configuration(self):
         self.common_test_body()
 
-    def common_test_body(self, unidirectional=True):
+    def common_test_body(self):
         log = logger.Logger.get_logger()
         log.info("Common Test Body")
-        

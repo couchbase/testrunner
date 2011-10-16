@@ -36,7 +36,11 @@ class RebalanceBaseTest(unittest.TestCase):
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-        BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1)
+        if "ascii" in TestInputSingleton.input.test_params \
+                and TestInputSingleton.input.test_params["ascii"].lower() == "true":
+            BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1, sasl=False)
+        else:
+            BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1, sasl=True)
         buckets = rest.get_buckets()
         for bucket in buckets:
             ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket.name)
@@ -93,37 +97,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def rebalance_in(servers, how_many):
-        servers_rebalanced = []
-        log = logger.Logger.get_logger()
-        rest = RestConnection(servers[0])
-        nodes = rest.node_statuses()
-        #choose how_many nodes from self._servers which are not part of
-        # nodes
-        nodeIps = [node.ip for node in nodes]
-        log.info("current nodes : {0}".format(nodeIps))
-        toBeAdded = []
-        selection = servers[1:]
-        shuffle(selection)
-        for server in selection:
-            if not server.ip in nodeIps:
-                toBeAdded.append(server)
-                servers_rebalanced.append(server)
-            if len(toBeAdded) == how_many:
-                break
-
-        for server in toBeAdded:
-            rest.add_node('Administrator', 'password', server.ip)
-            #check if its added ?
-        otpNodes = [node.id for node in rest.node_statuses()]
-        started = rest.rebalance(otpNodes, [])
-        msg = "rebalance operation started ? {0}"
-        log.info(msg.format(started))
-        if started:
-            result = rest.monitorRebalance()
-            msg = "successfully rebalanced out selected nodes from the cluster ? {0}"
-            log.info(msg.format(result))
-            return result, servers_rebalanced
-        return False, servers_rebalanced
+        return RebalanceHelper.rebalance_in(servers, how_many)
 
     @staticmethod
     def load_data_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data, test):
@@ -148,7 +122,7 @@ class RebalanceBaseTest(unittest.TestCase):
                                                            name=bucket.name,
                                                            ram_load_ratio=load_ratio,
                                                            value_size_distribution=distribution,
-                                                           number_of_threads=2)
+                                                           number_of_threads=4)
             [t.start() for t in threads]
             bucket_data[bucket.name]["threads"] = threads
         return bucket_data
@@ -228,6 +202,77 @@ class RebalanceBaseTest(unittest.TestCase):
         return _keys_count, _replica, _load_ratio
 
 
+class IncrementalRebalanceComboTests(unittest.TestCase):
+    def setUp(self):
+        self._input = TestInputSingleton.input
+        self._servers = self._input.servers
+        self.log = logger.Logger().get_logger()
+
+    def tearDown(self):
+        RebalanceBaseTest.common_tearDown(self._servers, self)
+
+    #load data add one node , rebalance add another node rebalance
+    def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1, rebalance_in=2, verify=True):
+        master = self._servers[0]
+        creds = self._input.membase_settings
+        rest = RestConnection(master)
+        rebalanced_servers = [master]
+        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+        temp_bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+        buckets = rest.get_buckets()
+        inserted_keys = []
+        for bucket in buckets:
+            inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, -1, load_ratio)
+            temp_bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
+            temp_bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
+            self.log.info("inserted {0} keys".format(len(inserted_keys)))
+
+        nodes = rest.node_statuses()
+        while len(nodes) < len(self._servers):
+            # Start loading threads
+            bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, None, rebalanced_servers,
+                                                                bucket_data)
+            # Start rebalance in thread
+            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+            rebalance_thread = Thread(target=RebalanceHelper.rebalance_in,
+                             args=(self._servers, rebalance_in), name="rebalance_thread")
+            #rebalance_thread.daemon = True
+            rebalance_thread.start()
+
+            # Start reader daemon
+            for bucket in buckets:
+                reader_thread = Thread(target=BucketOperationHelper.keys_exist_or_assert_in_parallel,
+                args=(inserted_keys, master, bucket.name, self, 4), name="reader_thread")
+                reader_thread.daemon = True
+                reader_thread.start()
+
+            # Wait for loading threads to finish
+            for name in bucket_data:
+                for thread in bucket_data[name]["threads"]:
+                    thread.join()
+                    bucket_data[name]["items_inserted_count"] += thread.inserted_keys_count()
+            rebalance_thread.join()
+
+            # Verification step
+            nodes = rest.node_statuses()
+            if verify:
+                RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+
+                for bucket in buckets:
+                    RebalanceBaseTest.verify_data(master, bucket_data[bucket.name]['inserted_keys'], bucket.name, self)
+
+            # Wait for replicaion and verify persistence
+            final_replication_state = RestHelper(rest).wait_for_replication(300)
+            msg = "replication state after waiting for up to 5 minutes : {0}"
+            self.log.info(msg.format(final_replication_state))
+            ClusterOperationHelper.verify_persistence(self._servers, self)
+
+    def test_load(self):
+        keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
+        self._common_test_body(keys_count, load_ratio, replica, verify=False)
+
+
 #load data. add one node rebalance , rebalance out
 class IncrementalRebalanceInTests(unittest.TestCase):
     def setUp(self):
@@ -272,7 +317,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
     def test_load(self):
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
-        RebalanceBaseTest.common_setup(self._input, self, replica)
+        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
         self._common_test_body(keys_count, load_ratio, replica, verify=False)
 
 
@@ -635,13 +680,14 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                 self.assertTrue(rest.monitorRebalance(),
                                 msg="rebalance operation failed after adding node {0}".format(server.ip))
                 self.log.info("completed rebalancing in server {0}".format(server))
-                self._reader_thread(inserted_keys, bucket_data, moxi=moxi)
+                IncrementalRebalanceWithParallelReadTests._reader_thread(self, inserted_keys, bucket_data, moxi=moxi)
                 self.assertTrue(rest.monitorRebalance(),
                                 msg="rebalance operation failed after adding node {0}".format(server.ip))
                 break
 
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
+    @staticmethod
     def _reader_thread(self, inserted_keys, bucket_data, moxi=False):
         errors = []
         rest = RestConnection(self._servers[0])
@@ -1004,34 +1050,7 @@ class RebalanceSwapTests(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     def rebalance_in(self, how_many):
-        rest = RestConnection(self._servers[0])
-        nodes = rest.node_statuses()
-        #choose how_many nodes from self._servers which are not part of
-        # nodes
-        nodeIps = [node.ip for node in nodes]
-        self.log.info("current nodes : {0}".format(nodeIps))
-        toBeAdded = []
-        selection = self._servers[1:]
-        shuffle(selection)
-        for server in selection:
-            if server.ip in nodeIps:
-                toBeAdded.append(server)
-            if len(toBeAdded) == how_many:
-                break
-
-        for server in toBeAdded:
-            rest.add_node('Administrator', 'password', server.ip)
-            #check if its added ?
-        otpNodes = [node.id for node in nodes]
-        started = rest.rebalance(otpNodes, [])
-        msg = "rebalance operation started ? {0}"
-        self.log.info(msg.format(started))
-        if started:
-            result = rest.monitorRebalance()
-            msg = "successfully rebalanced in selected nodes ? {0}"
-            self.log.info(msg.format(result))
-            return result
-        return False
+        return RebalanceHelper.rebalance_in(self._servers, how_many)
 
     #load data add one node , rebalance add another node rebalance
     #swap one node with another node
@@ -1106,3 +1125,56 @@ class RebalanceSwapTests(unittest.TestCase):
 
     def test_swap_4(self):
         self._common_test_body(4)
+
+class RebalanceInOutWithParallelLoad(unittest.TestCase):
+    def setUp(self):
+        self._input = TestInputSingleton.input
+        self._servers = self._input.servers
+        self.log = logger.Logger().get_logger()
+
+    def tearDown(self):
+        RebalanceBaseTest.common_tearDown(self._servers, self)
+
+    def _common_test_body(self, load_ratio=-1, replica=1, verify=True):
+        master = self._servers[0]
+        rest = RestConnection(master)
+        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+        creds = self._input.membase_settings
+        rebalanced_servers = [master]
+
+        otpNode = None
+        for server in self._servers[1:]:
+            if otpNode:
+                # rebalance out the previous node
+                ejectedNodes = [otpNode.id]
+            else:
+                ejectedNodes = []
+            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
+            self.log.info("adding node {0}, removing node {1} and rebalance afterwards".format(server.ip, ejectedNodes))
+            otpNode = rest.add_node(creds.rest_username,
+                                    creds.rest_password,
+                                    server.ip)
+            msg = "unable to add node {0} to the cluster and remove node {1}"
+            self.assertTrue(otpNode, msg.format(server.ip, ejectedNodes))
+            distribution = RebalanceBaseTest.get_distribution(load_ratio)
+            bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers,
+                                                                bucket_data)
+
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node {0} and removing node {1}".format(server.ip, ejectedNodes))
+            rebalanced_servers.append(server)
+
+            for name in bucket_data:
+                for thread in bucket_data[name]["threads"]:
+                    thread.join()
+                    bucket_data[name]["items_inserted_count"] += thread.inserted_keys_count()
+            if verify:
+                RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+
+        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
+
+    def test_load(self):
+        keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
+        self._common_test_body(load_ratio, replica, verify=True)

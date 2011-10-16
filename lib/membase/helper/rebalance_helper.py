@@ -1,3 +1,4 @@
+from random import shuffle
 import time
 import logger
 from membase.api.exception import StatsUnavailableException
@@ -21,6 +22,32 @@ class RebalanceHelper():
             rest = RestConnection(master)
             stats = rest.get_bucket_stats(bucket)
             if stats and stat_key in stats and stats[stat_key] == stat_value:
+                log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                verified = True
+                break
+            else:
+                if stats and stat_key in stats:
+                    if verbose:
+                        log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                if not verbose:
+                    time.sleep(0.1)
+                else:
+                    time.sleep(2)
+        return verified
+
+    @staticmethod
+    #bucket is a json object that contains name,port,password
+    def wait_for_mc_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
+        log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
+                                                                                stat_value, master.ip))
+        start = time.time()
+        verified = False
+        while (time.time() - start) <= timeout_in_seconds:
+            import mc_bin_client
+            c = mc_bin_client.MemcachedClient(master.ip, 11210)
+            stats = c.stats()
+            c.close()
+            if stats and stat_key in stats and str(stats[stat_key]) == str(stat_value):
                 log.info("{0} : {1}".format(stat_key, stats[stat_key]))
                 verified = True
                 break
@@ -73,13 +100,15 @@ class RebalanceHelper():
 
     @staticmethod
     #bucket is a json object that contains name,port,password
-    def wait_for_stats_on_all(master, bucket, stat_key, stat_value, timeout_in_seconds=120):
+    def wait_for_stats_on_all(master, bucket, stat_key, stat_value, timeout_in_seconds=120,
+                              fn=None):
+        fn = fn or RebalanceHelper.wait_for_stats
         rest = RestConnection(master)
         servers = rest.get_nodes()
         verified = False
         for server in servers:
-            verified = RebalanceHelper.wait_for_stats(server, bucket, stat_key, stat_value, \
-                                                      timeout_in_seconds=timeout_in_seconds)
+            verified = fn(server, bucket, stat_key, stat_value, \
+                          timeout_in_seconds=timeout_in_seconds)
             if not verified:
                 log.info("bucket {0}: stat_key {1} for server {2} timed out in {3}".format(bucket, stat_key, \
                                                                                            server.ip, timeout_in_seconds))
@@ -269,3 +298,37 @@ class RebalanceHelper():
     #if its not added then let try to add this and then rebalance
     #we should alo try to get the bucket information from
     #rest api instead of passing it to the fucntions
+
+    @staticmethod
+    def rebalance_in(servers, how_many):
+        servers_rebalanced = []
+        log = logger.Logger.get_logger()
+        rest = RestConnection(servers[0])
+        nodes = rest.node_statuses()
+        #choose how_many nodes from self._servers which are not part of
+        # nodes
+        nodeIps = [node.ip for node in nodes]
+        log.info("current nodes : {0}".format(nodeIps))
+        toBeAdded = []
+        selection = servers[1:]
+        shuffle(selection)
+        for server in selection:
+            if not server.ip in nodeIps:
+                toBeAdded.append(server)
+                servers_rebalanced.append(server)
+            if len(toBeAdded) == how_many:
+                break
+
+        for server in toBeAdded:
+            rest.add_node('Administrator', 'password', server.ip)
+            #check if its added ?
+        otpNodes = [node.id for node in rest.node_statuses()]
+        started = rest.rebalance(otpNodes, [])
+        msg = "rebalance operation started ? {0}"
+        log.info(msg.format(started))
+        if started:
+            result = rest.monitorRebalance()
+            msg = "successfully rebalanced in selected nodes from the cluster ? {0}"
+            log.info(msg.format(result))
+            return result, servers_rebalanced
+        return False, servers_rebalanced

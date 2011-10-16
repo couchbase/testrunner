@@ -5,10 +5,12 @@ import time
 from random import Random
 import uuid
 from TestInput import TestInputServer
+from TestInput import TestInputSingleton
 import logger
 import crc32
 import threading
 from mc_bin_client import MemcachedClient, MemcachedError
+from mc_ascii_client import MemcachedAsciiClient
 from membase.api.rest_client import RestConnection, RestHelper
 from threading import Thread
 
@@ -249,19 +251,28 @@ class MemcachedClientHelper(object):
         return client
 
     @staticmethod
-    def proxy_client(server, bucket, timeout=30):
+    def proxy_client(server, bucket, timeout=30, force_ascii=False):
         #for this bucket on this node what is the proxy ?
         rest = RestConnection(server)
         bucket_info = rest.get_bucket(bucket)
         nodes = bucket_info.nodes
+        if ("ascii" in TestInputSingleton.input.test_params \
+                and TestInputSingleton.input.test_params["ascii"].lower() == "true") \
+                or force_ascii:
+            ascii = True
+        else:
+            ascii = False
         for node in nodes:
             RestHelper(rest).vbucket_map_ready(bucket, 60)
             vBuckets = rest.get_vbuckets(bucket)
-            client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
-            client.vbucket_count = len(vBuckets)
-            if bucket_info.authType == "sasl":
-                client.sasl_auth_plain(bucket_info.name.encode('ascii'),
-                           bucket_info.saslPassword.encode('ascii'))
+            if ascii:
+                client = MemcachedAsciiClient(server.ip, bucket_info.port, timeout=timeout)
+            else:
+                client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
+                client.vbucket_count = len(vBuckets)
+                if bucket_info.authType == "sasl":
+                    client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                                           bucket_info.saslPassword.encode('ascii'))
             return client
         raise Exception("unable to find {0} in get_nodes()".format(server.ip))
 
@@ -379,7 +390,7 @@ class WorkerThread(threading.Thread):
                  values_list,
                  ignore_how_many_errors=5000,
                  override_vBucketId=-1,
-                 terminate_in_minutes=60,
+                 terminate_in_minutes=120,
                  write_only=False,
                  moxi=True,
                  async_write=False):

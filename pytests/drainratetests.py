@@ -27,6 +27,10 @@ class DrainRateTests(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio([self.master])
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
+            serverInfo = self.master
+            rest.init_cluster(username=serverInfo.rest_username,
+                              password=serverInfo.rest_password)
+            rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
             rest.create_bucket(bucket=self.bucket, ramQuotaMB=int(available_ram))
             ready = BucketOperationHelper.wait_for_memcached(self.master, self.bucket)
             self.assertTrue(ready, msg="wait_for_memcached failed")
