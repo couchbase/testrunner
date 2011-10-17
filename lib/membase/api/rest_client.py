@@ -64,6 +64,8 @@ class RestHelper(object):
     #this method will rebalance the cluster by passing the remote_node as
     #ejected node
     def remove_nodes(self, knownNodes, ejectedNodes):
+        if len(ejectedNodes) == 0:
+            return False
         self.rest.rebalance(knownNodes, ejectedNodes)
         return self.rest.monitorRebalance()
 
