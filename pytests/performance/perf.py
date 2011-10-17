@@ -106,7 +106,7 @@ class PerfBase(unittest.TestCase):
         TODO()
 
     def spec(self, reference):
-        self.spec = reference
+        self.spec_reference = reference
         self.log.info("spec: " + reference)
 
     def start_stats(self, test_name, servers=None,
@@ -124,57 +124,64 @@ class PerfBase(unittest.TestCase):
         self.log.info("stats result ops: %s, secs: %s" % (ops, end_time - start_time))
         TODO()
 
-    def json(self, kind):
-        if kind == 'json':
-            return 1
-        return 0
-
     def load(self, num_items, min_value_size=None,
              kind='binary',
              protocol='binary',
-             expiration=None):
+             expiration=None,
+             ratio_sets=1.0,
+             ratio_hot_sets=0.0,
+             ratio_hot_gets=0.0):
         cfg = { 'max-items': num_items,
                 'max-creates': num_items,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
-                'ratio-sets': 1.0,
+                'ratio-sets': ratio_sets,
+                'ratio-misses': 0.0,
                 'ratio-creates': 1.0,
+                'ratio-hot': 0.0,
+                'ratio-hot-sets': ratio_hot_sets,
+                'ratio-hot-gets': ratio_hot_gets,
                 'exit-after-creates': 1,
                 'json': int(kind == 'json')
                 }
         self.log.info("mcsoda - host_port: " + self.target_moxi())
         self.log.info("mcsoda - cfg: " + str(cfg))
-        mcsoda.run(cfg, {},
-                   'memcached-' + protocol,
-                   self.target_moxi(),
-                   '', '')
+        cur, start_time, end_time = mcsoda.run(cfg, {},
+                                               'memcached-' + protocol,
+                                               self.target_moxi(),
+                                               '', '')
         self.num_items_loaded = num_items
-
-    def load_dgm(self, min_value_size=None,
-                 kind='binary',
-                 protocol='binary',
-                 expiration=None,
-                 dgm_factor=5):
-        min_value_size = min_value_size or self.parami("min_value_size", 1024)
-        dgm_num_items = self.mem_quota() * 1024 * 1024 * dgm_factor / min_value_size
-        self.load(dgm_num_items, min_value_size=min_value_size,
-                  kind=kind, expiration=expiration)
+        ops = { 'tot-sets': cur.get('cur-sets', 0),
+                'tot-gets': cur.get('cur-gets', 0),
+                'tot-items': cur.get('cur-items', 0),
+                'tot-creates': cur.get('cur-creates', 0),
+                'tot-misses': cur.get('cur-misses', 0)
+                }
+        return ops, start_time, end_time
 
     def nodes(self, num_nodes):
         self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1))
 
     @staticmethod
-    def delayed_rebalance_worker(servers, num_nodes, delay_seconds=10):
+    def delayed_rebalance_worker(servers, num_nodes, delay_seconds):
         time.sleep(delay_seconds)
         RebalanceHelper.rebalance_in(servers, num_nodes - 1)
 
     def delayed_rebalance(self, num_nodes, delay_seconds=10):
         t = threading.Thread(target=PerfBase.delayed_rebalance_worker,
-                             args=(self.input.servers, num_nodes))
+                             args=(self.input.servers, num_nodes, delay_seconds))
         t.daemon = True
         t.start()
 
+    @staticmethod
+    def delayed_compaction_worker(servers, delay_seconds):
+        time.sleep(delay_seconds)
+        # TODO() - Need a cluster-wide compaction API.  Will looping work?
+
     def delayed_compaction(self, delay_seconds=10):
-        TODO()
+        t = threading.Thread(target=PerfBase.delayed_compaction_worker,
+                             args=(self.input.servers, delay_seconds))
+        t.daemon = True
+        t.start()
 
     def loop_prep(self):
         self.wait_until_drained()
@@ -192,7 +199,7 @@ class PerfBase(unittest.TestCase):
              ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95):
         num_items = num_items or self.num_items_loaded
 
-        stats = self.start_stats(self.spec + ".loop")
+        stats = self.start_stats(self.spec_reference + ".loop")
         cfg = { 'max-items': num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -226,6 +233,7 @@ class PerfBase(unittest.TestCase):
                 }
         self.rec_stats(stats, ops, start_time, end_time)
         self.end_stats(stats)
+        return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
                 kind='binary',
@@ -236,6 +244,30 @@ class PerfBase(unittest.TestCase):
                 ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95):
         min_value_size = min_value_size or self.parami("min_value_size", 1024)
         num_items = num_items or self.num_items_loaded
+        TODO()
+
+    def wait_until_drained(self):
+        master = self.input.servers[0]
+        bucket = self.param("bucket", "default")
+
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+
+        return time.time()
+
+    def wait_until_warmed_up(self):
+        master = self.input.servers[0]
+        bucket = self.param("bucket", "default")
+
+        RebalanceHelper.wait_for_stats_on_all(master, bucket,
+                                              'ep_warmup_thread', 'complete',
+                                              fn=RebalanceHelper.wait_for_mc_stats)
+
+    def clog_cluster(self):
+        TODO()
+
+    def unclog_cluster(self):
+        TODO()
 
     def view(self, views_per_client, clients=1):
         TODO()
@@ -248,21 +280,6 @@ class PerfBase(unittest.TestCase):
 
     def force_expirations(self):
         TODO()
-
-    def wait_until_drained(self):
-        master = self.input.servers[0]
-        bucket = self.param("bucket", "default")
-
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
-
-    def wait_until_warmed_up(self):
-        master = self.input.servers[0]
-        bucket = self.param("bucket", "default")
-
-        RebalanceHelper.wait_for_stats_on_all(master, bucket,
-                                              'ep_warmup_thread', 'complete',
-                                              fn=RebalanceHelper.wait_for_mc_stats)
 
     def assert_perf_was_ok(self):
         TODO()
@@ -463,40 +480,72 @@ class NodePeakPerformance(PerfBase):
                   ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
 
 
-class TODO_PerfBase():
-    TODO()
-
-
-class TODO_DiskDrainRate(TODO_PerfBase):
+class DiskDrainRate(PerfBase):
 
     def test_1M_2k(self):
         self.spec('DRR-01')
-        self.load(1000000, 2048,
-                  kind='binary')
-        self.wait_until_drained()
+        stats = self.start_stats(self.spec_reference)
+        ops, start_time, end_time = self.load(self.parami("items", 1000000),
+                                              self.parami('size', 2048),
+                                              kind=self.param('kind', 'binary'))
+        end_time_drain = self.wait_until_drained()
+        self.rec_stats(stats, ops, start_time, end_time_drain)
+        self.end_stats(stats)
 
     def test_9M_1k(self):
         self.spec('DRR-02')
-        self.load(9000000, 1024,
-                  kind='binary')
-        self.wait_until_drained()
+        stats = self.start_stats(self.spec_reference)
+        ops, start_time, end_time = self.load(self.parami("items", 9000000),
+                                              self.parami('size', 1024),
+                                              kind=self.param('kind', 'binary'),
+                                              ratio_sets=self.paramf('ratio-sets', 0.9))
+        end_time_drain = self.wait_until_drained()
+        self.rec_stats(stats, ops, start_time, end_time_drain)
+        self.end_stats(stats)
 
     def test_1M_rebalance(self):
         self.spec('DRR-03')
         self.nodes(2)
-        self.load_dgm()
         self.delayed_rebalance(4)
-        self.load(1000000, 1024,
-                  kind='binary')
-        self.loop(1000000, ratio_sets=1.0)
-        self.wait_until_drained()
+        stats = self.start_stats(self.spec_reference)
+        ops, start_time, end_time = self.load(self.parami("items", 1000000),
+                                              self.parami('size', 1024),
+                                              kind=self.param('kind', 'binary'))
+        end_time_drain = self.wait_until_drained()
+        self.rec_stats(stats, ops, start_time, end_time_drain)
+        self.end_stats(stats)
 
-    def test_1M_compaction(self):
+    def TODO_test_1M_compaction(self):
+        # TODO: Need cluster-wide compaction API.
         self.spec('DRR-04')
-        self.load_dgm()
         self.delayed_compaction()
-        self.loop(1000000, ratio_sets=1.0)
-        self.wait_until_drained()
+        stats = self.start_stats(self.spec_reference)
+        ops, start_time, end_time = self.load(self.parami("items", 1000000),
+                                              self.parami('size', 1024),
+                                              kind=self.param('kind', 'binary'))
+        end_time_drain = self.wait_until_drained()
+        self.rec_stats(stats, { 'tot-items': ops['tot-items'] },
+                       start_time, end_time_drain)
+        self.end_stats(stats)
+
+    def TODO_test_1M_clog(self):
+        # TODO: Need cluster-wide clog/unclog API.
+        self.spec('DRR-06')
+        self.clog_cluster()
+        ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),
+                                                        self.parami('size', 1024),
+                                                        kind=self.param('kind', 'binary'))
+        stats = self.start_stats(self.spec_reference)
+        start_time_drain = time.time()
+        self.unclog_cluster()
+        end_time_drain = self.wait_until_drained()
+        self.rec_stats(stats, { 'tot-items': ops['tot-items'] },
+                       start_time_drain, end_time_drain)
+        self.end_stats(stats)
+
+
+class TODO_PerfBase():
+    TODO()
 
 
 class TODO_RAMUsage(TODO_PerfBase):
