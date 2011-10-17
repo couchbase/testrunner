@@ -175,7 +175,7 @@ class PerfBase(unittest.TestCase):
     @staticmethod
     def delayed_compaction_worker(servers, delay_seconds):
         time.sleep(delay_seconds)
-        # TODO() - Need a cluster-wide compaction API.  Will looping work?
+        TODO() # Need a cluster-wide compaction API.  Will looping work?
 
     def delayed_compaction(self, delay_seconds=10):
         t = threading.Thread(target=PerfBase.delayed_compaction_worker,
@@ -264,10 +264,10 @@ class PerfBase(unittest.TestCase):
                                               fn=RebalanceHelper.wait_for_mc_stats)
 
     def clog_cluster(self):
-        TODO()
+        ClusterOperationHelper.flushctl_stop(self.input.servers)
 
     def unclog_cluster(self):
-        TODO()
+        ClusterOperationHelper.flushctl_start(self.input.servers)
 
     def view(self, views_per_client, clients=1):
         TODO()
@@ -528,8 +528,7 @@ class DiskDrainRate(PerfBase):
                        start_time, end_time_drain)
         self.end_stats(stats)
 
-    def TODO_test_1M_clog(self):
-        # TODO: Need cluster-wide clog/unclog API.
+    def test_1M_clog(self):
         self.spec('DRR-06')
         self.clog_cluster()
         ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),

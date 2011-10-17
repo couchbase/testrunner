@@ -173,3 +173,19 @@ class ClusterOperationHelper(object):
                 removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
                                               ejectedNodes=[node.id for node in nodes if node.id != master_id])
                 log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], removed))
+
+    @staticmethod
+    def flushctl_start(servers, username=None, password=None):
+        for server in servers:
+            c = mc_bin_client.MemcachedClient(server.ip, 11210)
+            if username:
+                c.sasl_auth_plain(username, password)
+            c.start_persistence()
+
+    @staticmethod
+    def flushctl_stop(servers, username=None, password=None):
+        for server in servers:
+            c = mc_bin_client.MemcachedClient(server.ip, 11210)
+            if username:
+                c.sasl_auth_plain(username, password)
+            c.stop_persistence()
