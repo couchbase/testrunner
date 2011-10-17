@@ -131,7 +131,7 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops):
         base  = math.floor(ratio_hot * num_items)
         range = math.floor((1.0 - ratio_hot) * num_items)
 
-    return base + (num_ops % positive(range))
+    return int(base + (num_ops % positive(range)))
 
 def positive(x):
     if x > 0:
