@@ -36,7 +36,7 @@ from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET
 
 MIN_VALUE_SIZE = [10]
 
-def run_worker(ctl, cfg, cur, store, prefix=""):
+def run_worker(ctl, cfg, cur, store, prefix):
     i = 0
     t_last = time.time()
     o_last = store.num_ops(cur)
@@ -155,6 +155,9 @@ class Store:
         self.cfg = cfg
         self.cur = cur
 
+    def stats_collector(self, sc):
+        self.sc = sc
+
     def command(self, c):
         log.info("%s %s %s %s" % c)
 
@@ -213,21 +216,37 @@ class StoreMemcachedBinary(Store):
     def flush(self):
         extra = struct.pack(SET_PKT_FMT, 0, 0)
 
+        num_gets = 0
+        num_sets = 0
+
         m = []
         for c in self.queue:
             cmd, key_num, key_str, data = c
             if cmd[0] == 'g':
+                num_gets += 1
                 m.append(self.header(CMD_GET, key_str, ''))
                 m.append(key_str)
             else:
+                num_sets += 1
                 m.append(self.header(CMD_SET, key_str, data, extra=extra))
                 m.append(extra)
                 m.append(key_str)
                 m.append(data)
+
+        start = time.time()
+
         self.conn.s.send(''.join(m))
 
         for c in self.queue:
             self.recvMsg()
+
+        end = time.time()
+
+        if self.sc:
+           self.sc.ops_stats({ 'tot-gets': num_gets,
+                               'tot-sets': num_sets,
+                               'start-time': start,
+                               'end-time': end })
 
         self.ops += len(self.queue)
         self.queue = []
@@ -333,7 +352,8 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 
 # --------------------------------------------------------
 
-def run(cfg, cur, protocol, host_port, user, pswd):
+def run(cfg, cur, protocol, host_port, user, pswd,
+        stats_collector = None):
    if type(cfg['min-value-size']) == type(""):
        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
    if type(cfg['min-value-size']) != type([]):
@@ -363,7 +383,8 @@ def run(cfg, cur, protocol, host_port, user, pswd):
          else:
             store = StoreMemcachedBinary()
 
-            store.connect(host_port, user, pswd, cfg, cur)
+      store.connect(host_port, user, pswd, cfg, cur)
+      store.stats_collector(stats_collector)
 
       threads.append(threading.Thread(target=run_worker,
                                       args=(ctl, cfg, cur, store,
@@ -389,7 +410,7 @@ def run(cfg, cur, protocol, host_port, user, pswd):
 
    try:
       if len(threads) <= 1:
-         run_worker(ctl, cfg, cur, store)
+         run_worker(ctl, cfg, cur, store, "")
       else:
          for thread in threads:
             thread.daemon = True
