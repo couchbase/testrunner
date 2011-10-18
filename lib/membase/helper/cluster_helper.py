@@ -1,5 +1,7 @@
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+
 import logger
 import testconstants
 import time
@@ -139,6 +141,24 @@ class ClusterOperationHelper(object):
         samples.sort()
         value = samples[element_idx]
         return value
+
+    @staticmethod
+    def start_cluster(servers):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            if shell.is_membase_installed():
+                shell.start_membase()
+            else:
+                shell.start_couchbase()
+
+    @staticmethod
+    def stop_cluster(servers):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            if shell.is_membase_installed():
+                shell.start_membase()
+            else:
+                shell.start_couchbase()
 
     @staticmethod
     def cleanup_cluster(servers):

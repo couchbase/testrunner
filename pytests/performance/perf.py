@@ -243,14 +243,6 @@ class PerfBase(unittest.TestCase):
     def stop_bg(self):
         TODO()
 
-    def start_cluster(self):
-        # lib/remote/remote_util.py: def start_couchbase(self):
-        TODO()
-
-    def stop_cluster(self):
-        # lib/remote/remote_util.py: def stop_couchbase(self):
-        TODO()
-
     def measure_db_size(self):
         TODO()
 
@@ -528,8 +520,8 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.spec('DBF-001')
         self.load(10000000)
         self.wait_until_drained()
-        self.stop_cluster()
-        self.start_cluster()
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        ClusterOperationHelper.start_cluster(self.input.servers)
         self.wait_until_warmed_up()
 
     def test_All_ops(self):
@@ -537,10 +529,10 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.spec('DBF-002')
         self.load(10000000, expiration=[0.1, expiration])
         self.wait_until_drained()
-        self.stop_cluster()
+        ClusterOperationHelper.stop_cluster(self.input.servers)
         self.log.info("sleepng {0} seconds to ensure expirations".format(expiration + 2))
         time.sleep(expiration + 2)
-        self.start_cluster()
+        ClusterOperationHelper.start_cluster(self.input.servers)
         self.wait_until_warmed_up()
 
     def test_2nodes(self):
@@ -548,8 +540,8 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.nodes(2)
         self.load(10000000)
         self.wait_until_drained()
-        self.stop_cluster()
-        self.start_cluster()
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        ClusterOperationHelper.start_cluster(self.input.servers)
         self.wait_until_warmed_up()
 
 
