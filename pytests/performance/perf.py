@@ -1,4 +1,5 @@
 import unittest
+import uuid
 import logger
 import time
 import os
@@ -10,6 +11,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
+from membase.performance.stats import StatsCollector
 from remote.remote_util import RemoteMachineShellConnection
 
 import mcsoda
@@ -112,8 +114,9 @@ class PerfBase(unittest.TestCase):
     def start_stats(self, test_name, servers=None,
                     process_names=['memcached', 'beam.smp', 'couchjs']):
         servers = servers or self.input.servers
-        TODO()
-        return "stats-capture-id"
+        sc = StatsCollector(False)
+        sc.start(servers, "default", process_names, test_name, 10)
+        return sc
 
     def end_stats(self, stats_capture_id):
         TODO()
@@ -199,7 +202,7 @@ class PerfBase(unittest.TestCase):
              ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95):
         num_items = num_items or self.num_items_loaded
 
-        stats = self.start_stats(self.spec_reference + ".loop")
+        sc = self.start_stats(self.spec_reference + ".loop")
         cfg = { 'max-items': num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -224,15 +227,16 @@ class PerfBase(unittest.TestCase):
         cur, start_time, end_time = mcsoda.run(cfg, cur,
                                                'memcached-' + protocol,
                                                self.target_moxi(),
-                                               '', '')
+                                               '', '',sc)
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
                 'tot-items': cur.get('cur-items', 0),
                 'tot-creates': cur.get('cur-creates', 0),
-                'tot-misses': cur.get('cur-misses', 0)
-                }
-        self.rec_stats(stats, ops, start_time, end_time)
-        self.end_stats(stats)
+                'tot-misses': cur.get('cur-misses', 0),
+                "start-time":start_time,"end-time":end_time}
+        sc.total_stats(ops)
+        sc.stop()
+        sc.export(self.spec_reference)
         return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
