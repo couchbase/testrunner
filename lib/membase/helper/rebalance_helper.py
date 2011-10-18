@@ -316,7 +316,7 @@ class RebalanceHelper():
             if not server.ip in nodeIps:
                 toBeAdded.append(server)
                 servers_rebalanced.append(server)
-            if len(toBeAdded) == how_many:
+            if len(toBeAdded) == int(how_many):
                 break
 
         for server in toBeAdded:
