@@ -24,7 +24,7 @@ class StatsCollector(object):
         self._task["name"] = name
         self._task["time"] = time.time()
         self._task["ops"] = []
-        self._task["total-ops"] = []
+        self._task["totalops"] = []
         self._task["ops-temp"] = []
         self.build_stats(nodes)
         #create multiple threds for each one required. kick them off. assign an id to each.
@@ -47,7 +47,7 @@ class StatsCollector(object):
                "membasestats": self._task["membasestats"],
                "systemstats": self._task["systemstats"],
                "name": name,
-               "total-ops":self._task["total-ops"],
+               "totalops":self._task["totalops"],
                "ops":self._task["ops"],
                "time": self._task["time"]}
         file = open("{0}.json".format(name), 'w')
@@ -62,6 +62,7 @@ class StatsCollector(object):
         if len(self._task["ops-temp"]) > 10000:
             merged = self._merge()
             self._task["ops"].append(merged)
+            self._task["ops-temp"] = []
 
         #if self._task["ops"] has more than 1000 elements try to aggregate them ?
 
@@ -82,7 +83,7 @@ class StatsCollector(object):
 
     def total_stats(self, ops_stat):
         ops_stat["time"] = time.time()
-        self._task["total-ops"].append(ops_stat)
+        self._task["totalops"].append(ops_stat)
 
     def build_stats(self,nodes):
         json_response = StatUtil.build_info(nodes[0])
