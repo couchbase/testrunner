@@ -907,7 +907,7 @@ class RestConnection(object):
                 return True, i
         return False, i
 
-    def _reset_auto_compaction(self):
+    def reset_auto_compaction(self):
         api = self.baseUrl + "controller/setAutoCompaction"
         params = urllib.urlencode({"just_validate":"1",
                                    "parallelDBAndViewCompaction":"false",
