@@ -240,6 +240,8 @@ class MemcachedClientHelper(object):
     def direct_client(server, bucket, timeout=30):
         rest = RestConnection(server)
         node = rest.get_nodes_self()
+        log = logger.Logger.get_logger()
+        log.info("creating direct client {0}:{1} {2}".format(server.ip, node.memcached, bucket))
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vBuckets = RestConnection(server).get_vbuckets(bucket)
         client = MemcachedClient(server.ip, node.memcached, timeout=timeout)
@@ -254,6 +256,7 @@ class MemcachedClientHelper(object):
     def proxy_client(server, bucket, timeout=30, force_ascii=False):
         #for this bucket on this node what is the proxy ?
         rest = RestConnection(server)
+        log = logger.Logger.get_logger()
         bucket_info = rest.get_bucket(bucket)
         nodes = bucket_info.nodes
         if ("ascii" in TestInputSingleton.input.test_params \
@@ -266,8 +269,12 @@ class MemcachedClientHelper(object):
             RestHelper(rest).vbucket_map_ready(bucket, 60)
             vBuckets = rest.get_vbuckets(bucket)
             if ascii:
+                log = logger.Logger.get_logger()
+                log.info("creating ascii client {0}:{1} {2}".format(server.ip, bucket_info.port, bucket))
                 client = MemcachedAsciiClient(server.ip, bucket_info.port, timeout=timeout)
             else:
+                log = logger.Logger.get_logger()
+                log.info("creating proxy client {0}:{1} {2}".format(server.ip, node.moxi, bucket))
                 client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
                 client.vbucket_count = len(vBuckets)
                 if bucket_info.authType == "sasl":
