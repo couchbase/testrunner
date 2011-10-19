@@ -118,14 +118,11 @@ class PerfBase(unittest.TestCase):
         sc.start(servers, "default", process_names, test_name, 10)
         return sc
 
-    def end_stats(self, stats_capture_id):
-        TODO()
-
-    def rec_stats(self, stats_capture_id, ops, start_time, end_time):
-        # The ops is a dict with keys like...
-        # 'tot-sets', 'tot-gets', 'tot-items', 'tot-creates', 'tot-misses'
-        self.log.info("stats result ops: %s, secs: %s" % (ops, end_time - start_time))
-        TODO()
+    def end_stats(sc, total_stats=None):
+        if total_stats:
+            sc.total_stats(total_stats)
+        sc.stop()
+        sc.export(self.spec_reference)
 
     def load(self, num_items, min_value_size=None,
              kind='binary',
@@ -157,8 +154,9 @@ class PerfBase(unittest.TestCase):
                 'tot-gets': cur.get('cur-gets', 0),
                 'tot-items': cur.get('cur-items', 0),
                 'tot-creates': cur.get('cur-creates', 0),
-                'tot-misses': cur.get('cur-misses', 0)
-                }
+                'tot-misses': cur.get('cur-misses', 0),
+                "start-time": start_time,
+                "end-time": end_time }
         return ops, start_time, end_time
 
     def nodes(self, num_nodes):
@@ -233,10 +231,9 @@ class PerfBase(unittest.TestCase):
                 'tot-items': cur.get('cur-items', 0),
                 'tot-creates': cur.get('cur-creates', 0),
                 'tot-misses': cur.get('cur-misses', 0),
-                "start-time":start_time,"end-time":end_time}
-        sc.total_stats(ops)
-        sc.stop()
-        sc.export(self.spec_reference)
+                "start-time": start_time,
+                "end-time": end_time }
+        self.end_stats(sc, ops)
         return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
@@ -488,49 +485,44 @@ class DiskDrainRate(PerfBase):
 
     def test_1M_2k(self):
         self.spec('DRR-01')
-        stats = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference)
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 2048),
                                               kind=self.param('kind', 'binary'))
-        end_time_drain = self.wait_until_drained()
-        self.rec_stats(stats, ops, start_time, end_time_drain)
-        self.end_stats(stats)
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
 
     def test_9M_1k(self):
         self.spec('DRR-02')
-        stats = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference)
         ops, start_time, end_time = self.load(self.parami("items", 9000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'),
                                               ratio_sets=self.paramf('ratio-sets', 0.9))
-        end_time_drain = self.wait_until_drained()
-        self.rec_stats(stats, ops, start_time, end_time_drain)
-        self.end_stats(stats)
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
 
     def test_1M_rebalance(self):
         self.spec('DRR-03')
         self.nodes(2)
         self.delayed_rebalance(4)
-        stats = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference)
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'))
-        end_time_drain = self.wait_until_drained()
-        self.rec_stats(stats, ops, start_time, end_time_drain)
-        self.end_stats(stats)
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
 
     def TODO_test_1M_compaction(self):
         # TODO: Need cluster-wide compaction API.
         self.spec('DRR-04')
         self.delayed_compaction()
-        stats = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference)
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'))
-        end_time_drain = self.wait_until_drained()
-        self.rec_stats(stats, { 'tot-items': ops['tot-items'] },
-                       start_time, end_time_drain)
-        self.end_stats(stats)
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
 
     def test_1M_clog(self):
         self.spec('DRR-06')
@@ -538,13 +530,14 @@ class DiskDrainRate(PerfBase):
         ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),
                                                         self.parami('size', 1024),
                                                         kind=self.param('kind', 'binary'))
-        stats = self.start_stats(self.spec_reference)
-        start_time_drain = time.time()
+        sc = self.start_stats(self.spec_reference)
+        start_time_unclog = time.time()
         self.unclog_cluster()
-        end_time_drain = self.wait_until_drained()
-        self.rec_stats(stats, { 'tot-items': ops['tot-items'] },
-                       start_time_drain, end_time_drain)
-        self.end_stats(stats)
+        end_time_unclog = time.time()
+
+        ops['start-time'] = start_time_unclog
+        ops['end-time'] = end_time_unclog
+        self.end_stats(sc, ops)
 
 
 class TODO_PerfBase():
