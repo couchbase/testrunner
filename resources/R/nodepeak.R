@@ -13,7 +13,7 @@ args <- commandArgs(TRUE)
 cat(paste("args : ",args,""),sep="\n")
 args <- unlist(strsplit(args," "))
 tname <- args[1]
-tname = "NPP-01-1k"
+#tname = "NPP-01-1k"
 cat(paste("Test Case : ", tname),sep="\n")
 pdf(paste(tname,sep="",".pdf"))
 
