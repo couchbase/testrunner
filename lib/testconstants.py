@@ -1,5 +1,7 @@
 NS_SERVER_TIMEOUT = 120
 COUCHBASE_SINGLE_DEFAULT_INI_PATH = "/opt/couchbase/etc/couchdb/default.ini"
+MEMBASE_DATA_PATH = "/opt/membase/var/lib/membase/data/"
+COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/membase/data/"
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
 LINUX_CB_PATH = "/opt/couchbase/"
 VERSION_FILE = "VERSION.txt"

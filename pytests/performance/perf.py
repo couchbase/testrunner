@@ -13,6 +13,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.performance.stats import StatsCollector
 from remote.remote_util import RemoteMachineShellConnection
+import testconstants
 
 import mcsoda
 
@@ -105,7 +106,63 @@ class PerfBase(unittest.TestCase):
         #
         # Restart all cluster nodes.
         #
-        TODO()
+        bucket = self.param("bucket", "default")
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        for server in self.input.servers:
+            remote = RemoteMachineShellConnection(server)
+            #TODO: Better way to pass num_nodes and db_size?
+            self.get_data_files(remote, bucket, 1, 10)
+            remote.disconnect()
+        ClusterOperationHelper.start_cluster(self.input.servers)
+
+    def get_data_files(self, remote, bucket, num_nodes, db_size):
+        dir = '/tmp/'
+        if remote.is_membase_installed():
+            dir = dir + '/membase/{0}-{1}-{2}/'.format(num_nodes, 1024, db_size)
+            output, error = remote.execute_command('mkdir -p {0}'.format(dir))
+            remote.log_command_output(output, error)
+            file = '{0}_mb.tar.gz'.format(bucket)
+            base_url = 'https://s3.amazonaws.com/database-analysis/membase/{0}-{1}-{2}/{3}'.format(num_nodes, \
+                                                                                                1024, db_size, file)
+        else:
+            dir = dir + '/couchbase/{0}-{1}-{2}/'.format(num_nodes, 256, db_size)
+            output, error = remote.execute_command('mkdir -p {0}'.format(dir))
+            remote.log_command_output(output, error)
+            file = '{0}_cb.tar.gz'.format(bucket)
+            base_url = 'https://s3.amazonaws.com/database-analysis/couchbase/{0}-{1}-{2}/{3}'.format(num_nodes, \
+                                                                                                  256, db_size, file)
+
+        info = remote.extract_remote_info()
+        wget_command = 'wget'
+        if info.type.lower() == 'windows':
+            wget_command = "cd {0} ;cmd /c 'c:\\automation\\wget.exe --no-check-certificate".format(dir)
+
+        # Check if the file exists on the remote server else download the gzipped version
+        # Extract if necessary
+        exist = remote.file_exists(dir, file)
+        if not exist:
+            additional_quote = ""
+            if info.type.lower() == 'windows':
+                additional_quote = "'"
+            command = "{0} -v -O {1}{2} {3} {4} ".format(wget_command, dir, file, base_url, additional_quote)
+            output, error = remote.execute_command(command)
+            remote.log_command_output(output, error)
+
+        if remote.is_membase_installed():
+            if info.type.lower() == 'windows':
+                WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/'
+                destination_folder = WIN_MEMBASE_DATA_PATH
+            else:
+                destination_folder = testconstants.MEMBASE_DATA_PATH
+        else:
+            if info.type.lower() == 'windows':
+                WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/membase/'
+                destination_folder = WIN_COUCHBASE_DATA_PATH
+            else:
+                destination_folder = testconstants.COUCHBASE_DATA_PATH
+        untar_command = 'tar -xzf {0} -C {1}'.format(dir+file , destination_folder)
+        output, error = remote.execute_command(untar_command)
+        remote.log_command_output(output, error)
 
     def spec(self, reference):
         self.spec_reference = reference

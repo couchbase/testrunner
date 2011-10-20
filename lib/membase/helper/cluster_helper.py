@@ -156,9 +156,9 @@ class ClusterOperationHelper(object):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             if shell.is_membase_installed():
-                shell.start_membase()
+                shell.stop_membase()
             else:
-                shell.start_couchbase()
+                shell.stop_couchbase()
 
     @staticmethod
     def cleanup_cluster(servers):
