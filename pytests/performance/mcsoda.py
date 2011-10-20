@@ -429,6 +429,11 @@ def run(cfg, cur, protocol, host_port, user, pswd,
    log.info("    ops/sec: %s" %
             ((cur.get('cur-gets', 0) + cur.get('cur-sets', 0)) / (t_end - t_start)))
 
+   threads = [t for t in threads if t.isAlive()]
+   while len(threads) > 0:
+      threads[0].join(1)
+      threads = [t for t in threads if t.isAlive()]
+
    return cur, t_start, t_end
 
 
