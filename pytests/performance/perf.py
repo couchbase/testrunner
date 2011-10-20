@@ -176,7 +176,7 @@ class PerfBase(unittest.TestCase):
         sc.start(servers, "default", process_names, test_name, 10)
         return sc
 
-    def end_stats(sc, total_stats=None):
+    def end_stats(self, sc, total_stats=None):
         if total_stats:
             sc.total_stats(total_stats)
         sc.stop()
