@@ -1,6 +1,7 @@
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
+from mc_bin_client import MemcachedClient, MemcachedError
 
 import logger
 import testconstants
@@ -177,7 +178,7 @@ class ClusterOperationHelper(object):
     @staticmethod
     def flushctl_start(servers, username=None, password=None):
         for server in servers:
-            c = mc_bin_client.MemcachedClient(server.ip, 11210)
+            c = MemcachedClient(server.ip, 11210)
             if username:
                 c.sasl_auth_plain(username, password)
             c.start_persistence()
@@ -185,7 +186,7 @@ class ClusterOperationHelper(object):
     @staticmethod
     def flushctl_stop(servers, username=None, password=None):
         for server in servers:
-            c = mc_bin_client.MemcachedClient(server.ip, 11210)
+            c = MemcachedClient(server.ip, 11210)
             if username:
                 c.sasl_auth_plain(username, password)
             c.stop_persistence()
