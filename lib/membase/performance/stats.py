@@ -59,7 +59,7 @@ class StatsCollector(object):
     def ops_stats(self, ops_stat):
         ops_stat["time"] = time.time()
         self._task["ops-temp"].append(ops_stat)
-        if len(self._task["ops-temp"]) > 10000:
+        if len(self._task["ops-temp"]) > 1000:
             merged = self._merge()
             self._task["ops"].append(merged)
             self._task["ops-temp"] = []
