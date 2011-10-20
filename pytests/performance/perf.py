@@ -232,13 +232,23 @@ class PerfBase(unittest.TestCase):
         t.start()
 
     @staticmethod
-    def delayed_compaction_worker(servers, delay_seconds):
-        time.sleep(delay_seconds)
-        TODO() # Need a cluster-wide compaction API.  Will looping work?
+    def set_auto_compaction(server, parallel_compaction, percent_threshold):
+        rest = RestConnection(server)
+        rest.set_autoCompaction(parallel_compaction, percent_threshold, percent_threshold)
 
-    def delayed_compaction(self, delay_seconds=10):
+    @staticmethod
+    def delayed_compaction_worker(servers, parallel_compaction, percent_threshold, delay_seconds):
+        time.sleep(delay_seconds)
+        PerfBase.set_auto_compaction(servers[0], parallel_compaction, percent_threshold)
+
+    def delayed_compaction(self, parallel_compaction="false",
+                           percent_threshold=0.01,
+                           delay_seconds=10):
         t = threading.Thread(target=PerfBase.delayed_compaction_worker,
-                             args=(self.input.servers, delay_seconds))
+                             args=(self.input.servers,
+                                   parallel_compaction,
+                                   percent_threshold,
+                                   delay_seconds))
         t.daemon = True
         t.start()
 
@@ -570,8 +580,7 @@ class DiskDrainRate(PerfBase):
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
-    def TODO_test_1M_compaction(self):
-        # TODO: Need cluster-wide compaction API.
+    def test_1M_compaction(self):
         self.spec('DRR-04')
         self.delayed_compaction()
         sc = self.start_stats(self.spec_reference)
