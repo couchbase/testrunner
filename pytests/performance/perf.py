@@ -56,6 +56,7 @@ class PerfBase(unittest.TestCase):
 
         self.setUp_moxi()
         self.setUp_dgm()
+        time.sleep(10)
         self.wait_until_warmed_up()
 
     def tearDown(self):
