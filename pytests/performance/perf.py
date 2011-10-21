@@ -319,8 +319,10 @@ class PerfBase(unittest.TestCase):
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, \
+                                              fn=RebalanceHelper.wait_for_stats_no_timeout)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0, \
+                                              fn=RebalanceHelper.wait_for_stats_no_timeout)
 
         return time.time()
 
@@ -330,7 +332,7 @@ class PerfBase(unittest.TestCase):
 
         RebalanceHelper.wait_for_stats_on_all(master, bucket,
                                               'ep_warmup_thread', 'complete',
-                                              fn=RebalanceHelper.wait_for_mc_stats)
+                                              fn=RebalanceHelper.wait_for_mc_stats_no_timeout)
 
     def clog_cluster(self):
         ClusterOperationHelper.flushctl_stop(self.input.servers)
