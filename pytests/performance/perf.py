@@ -522,7 +522,6 @@ class NodePeakPerformance(PerfBase):
 
     def test_set_1client_json(self):
         self.spec('NPP-12-1k')
-        self.nodes(1)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
