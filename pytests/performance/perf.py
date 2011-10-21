@@ -152,14 +152,12 @@ class PerfBase(unittest.TestCase):
 
         if remote.is_membase_installed():
             if info.type.lower() == 'windows':
-                WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/'
-                destination_folder = WIN_MEMBASE_DATA_PATH
+                destination_folder = testconstants.WIN_MEMBASE_DATA_PATH
             else:
                 destination_folder = testconstants.MEMBASE_DATA_PATH
         else:
             if info.type.lower() == 'windows':
-                WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/membase/'
-                destination_folder = WIN_COUCHBASE_DATA_PATH
+                destination_folder = testconstants.WIN_COUCHBASE_DATA_PATH
             else:
                 destination_folder = testconstants.COUCHBASE_DATA_PATH
         untar_command = 'cd {1}; tar -xzf {0}'.format(dir+file , destination_folder)
