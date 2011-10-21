@@ -29,7 +29,7 @@ class PerfBase(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
-
+        self.sc = None
         self.tearDown() # Helps when a previous broken test never reached tearDown.
 
         master = self.input.servers[0]
@@ -61,7 +61,8 @@ class PerfBase(unittest.TestCase):
 
     def tearDown(self):
         self.tearDown_moxi()
-
+        if self.sc is not None:
+            self.sc.stop()
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
@@ -174,7 +175,8 @@ class PerfBase(unittest.TestCase):
         servers = servers or self.input.servers
         sc = StatsCollector(False)
         sc.start(servers, "default", process_names, test_name, 10)
-        return sc
+        self.sc = sc
+        return self.sc
 
     def end_stats(self, sc, total_stats=None):
         if total_stats:
