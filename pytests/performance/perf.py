@@ -162,7 +162,7 @@ class PerfBase(unittest.TestCase):
                 destination_folder = WIN_COUCHBASE_DATA_PATH
             else:
                 destination_folder = testconstants.COUCHBASE_DATA_PATH
-        untar_command = 'tar -xzf {0} -C {1}'.format(dir+file , destination_folder)
+        untar_command = 'cd {1}; tar -xzf {0}'.format(dir+file , destination_folder)
         output, error = remote.execute_command(untar_command)
         remote.log_command_output(output, error)
 
