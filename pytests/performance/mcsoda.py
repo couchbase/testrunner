@@ -30,7 +30,7 @@ import memcacheConstants
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
-from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET
+from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
 
 # --------------------------------------------------------
 
@@ -91,6 +91,14 @@ def next_cmd(cfg, cur, store):
             cur['cur-creates'] = cur.get('cur-creates', 0) + 1
         else:
             # Update...
+            num_updates = cur['cur-sets'] - cur.get('cur-creates', 0)
+
+            do_delete = cfg.get('ratio-deletes', 0) > \
+                          float(cur.get('cur-deletes', 0)) / positive(num_updates)
+            if do_delete:
+               cmd = 'delete'
+               cur['cur-deletes'] = cur.get('cur-deletes', 0) + 1
+
             key_num = choose_key_num(cur.get('cur-items', 0),
                                      cfg.get('ratio-hot', 0),
                                      cfg.get('ratio-hot-sets', 0),
@@ -218,6 +226,7 @@ class StoreMemcachedBinary(Store):
 
         num_gets = 0
         num_sets = 0
+        num_deletes = 0
 
         m = []
         for c in self.queue:
@@ -225,6 +234,10 @@ class StoreMemcachedBinary(Store):
             if cmd[0] == 'g':
                 num_gets += 1
                 m.append(self.header(CMD_GET, key_str, ''))
+                m.append(key_str)
+            elif cmd[0] == 'd':
+                num_deletes += 1
+                m.append(self.header(CMD_DELETE, key_str, ''))
                 m.append(key_str)
             else:
                 num_sets += 1
@@ -245,6 +258,7 @@ class StoreMemcachedBinary(Store):
         if self.sc:
            self.sc.ops_stats({ 'tot-gets': num_gets,
                                'tot-sets': num_sets,
+                               'tot-deletes': num_deletes,
                                'start-time': start,
                                'end-time': end })
 
@@ -286,6 +300,8 @@ class StoreMemcachedAscii(Store):
     def command_send(self, cmd, key_num, key_str, data):
         if cmd[0] == 'g':
             return 'get ' + key_str + '\r\n'
+        if cmd[0] == 'd':
+            return 'delete ' + key_str + '\r\n'
         return "set %s 0 0 %s\r\n%s\r\n" % (key_str, len(data), data)
 
     def command_recv(self, cmd, key_num, key_str, data):
@@ -298,6 +314,9 @@ class StoreMemcachedAscii(Store):
                 rvalue, rkey, rflags, rlen = line.split()
                 data, buf = self.readbytes(self.skt, int(rlen) + 2, buf)
                 line, buf = self.readline(self.skt, buf)
+        elif cmd[0] == 'd':
+            # DELETE...
+            line, buf = self.readline(self.skt, buf) # line == "DELETED"
         else:
             # SET...
             line, buf = self.readline(self.skt, buf) # line == "STORED"
@@ -450,6 +469,7 @@ if __name__ == "__main__":
      "ratio-hot":          (0.2,  "Fraction of items to have as a hot item subset."),
      "ratio-hot-sets":     (0.95, "Fraction of SET's that hit the hot item subset."),
      "ratio-hot-gets":     (0.95, "Fraction of GET's that hit the hot item subset."),
+     "ratio-deletes":      (0.0,  "Fraction of SET updates that should be DELETE's instead."),
      "exit-after-creates": (0,    "Exit after max-creates is reached."),
      "threads":            (1,    "Number of client worker threads to use."),
      "batch":              (100,  "Batch / pipeline up this number of commands."),
@@ -461,7 +481,8 @@ if __name__ == "__main__":
      "cur-items":   (0, "Number of items known to already exist."),
      "cur-sets":    (0, "Number of sets already done."),
      "cur-creates": (0, "Number of sets that were creates."),
-     "cur-gets":    (0, "Number of gets already done.")
+     "cur-gets":    (0, "Number of gets already done."),
+     "cur-deletes": (0, "Number of deletes already done.")
      }
 
   if len(sys.argv) < 2 or "-h" in sys.argv or "--help" in sys.argv:
