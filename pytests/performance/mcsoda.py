@@ -222,7 +222,7 @@ class StoreMemcachedBinary(Store):
                            len(key) + len(extra) + len(val), opaque, cas)
 
     def flush(self):
-        extra = struct.pack(SET_PKT_FMT, 0, 0)
+        extra = struct.pack(SET_PKT_FMT, 0, self.cfg.get('expiration', 0))
 
         num_gets = 0
         num_sets = 0
@@ -302,7 +302,8 @@ class StoreMemcachedAscii(Store):
             return 'get ' + key_str + '\r\n'
         if cmd[0] == 'd':
             return 'delete ' + key_str + '\r\n'
-        return "set %s 0 0 %s\r\n%s\r\n" % (key_str, len(data), data)
+        return "set %s 0 %s %s\r\n%s\r\n" % (key_str, self.cfg.get('expiration', 0),
+                                             len(data), data)
 
     def command_recv(self, cmd, key_num, key_str, data):
         buf = self.buf
@@ -470,6 +471,7 @@ if __name__ == "__main__":
      "ratio-hot-sets":     (0.95, "Fraction of SET's that hit the hot item subset."),
      "ratio-hot-gets":     (0.95, "Fraction of GET's that hit the hot item subset."),
      "ratio-deletes":      (0.0,  "Fraction of SET updates that should be DELETE's instead."),
+     "expiration":         (0,    "Expiration time parameter for SET's"),
      "exit-after-creates": (0,    "Exit after max-creates is reached."),
      "threads":            (1,    "Number of client worker threads to use."),
      "batch":              (100,  "Batch / pipeline up this number of commands."),
