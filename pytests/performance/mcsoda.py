@@ -32,6 +32,7 @@ import memcacheConstants
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
+from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "ARPA"
 
 # --------------------------------------------------------
 
@@ -142,6 +143,14 @@ def next_cmd(cfg, cur, store):
             if do_delete:
                cmd = 'delete'
                cur['cur-deletes'] = cur.get('cur-deletes', 0) + 1
+            else:
+               num_mutates = num_updates - cur.get('cur-deletes', 0)
+
+               do_arpa = cfg.get('ratio-arpas', 0) > \
+                           float(cur.get('cur-arpas', 0)) / positive(num_mutates)
+               if do_arpa:
+                  cmd = 'arpa'
+                  cur['cur-arpas'] = cur.get('cur-arpas', 0) + 1
 
             key_num = choose_key_num(cur.get('cur-items', 0),
                                      cfg.get('ratio-hot', 0),
@@ -261,12 +270,17 @@ class StoreMemcachedBinary(Store):
         self.queue = []
         self.ops = 0
         self.buf = ''
+        self.arpa = [ (CMD_ADD,     True),
+                      (CMD_REPLACE, True),
+                      (CMD_APPEND,  False),
+                      (CMD_PREPEND, False) ]
 
     def inflight_reinit(self, inflight=0):
         self.inflight = inflight
         self.inflight_num_gets = 0
         self.inflight_num_sets = 0
         self.inflight_num_deletes = 0
+        self.inflight_num_arpas = 0
         self.inflight_start_time = 0
         self.inflight_end_time = 0
 
@@ -280,7 +294,6 @@ class StoreMemcachedBinary(Store):
                fmt=REQ_PKT_FMT,
                magic=REQ_MAGIC_BYTE):
         vbucketId = crc32.crc32_hash(key) & (self.vbucket_count - 1)
-        #print vbucketId
         return struct.pack(fmt, magic, op,
                            len(key), len(extra), dtype, vbucketId,
                            len(key) + len(extra) + len(val), opaque, cas)
@@ -297,6 +310,7 @@ class StoreMemcachedBinary(Store):
               self.sc.ops_stats({ 'tot-gets':    self.inflight_num_gets,
                                   'tot-sets':    self.inflight_num_sets,
                                   'tot-deletes': self.inflight_num_deletes,
+                                  'tot-arpas':   self.inflight_num_arpas,
                                   'start-time':  self.inflight_start_time,
                                   'end-time':    self.inflight_end_time })
            self.inflight_reinit()
@@ -306,7 +320,7 @@ class StoreMemcachedBinary(Store):
            #
            m = []
            cmd, key_num, key_str, data = self.queue.pop(0)
-           delta_gets, delta_sets, delta_deletes = \
+           delta_gets, delta_sets, delta_deletes, delta_arpas = \
                 self.cmd_append(cmd, key_num, key_str, data, m, extra)
            msg = ''.join(m)
 
@@ -319,6 +333,7 @@ class StoreMemcachedBinary(Store):
               self.sc.ops_stats({ 'tot-gets': delta_gets,
                                   'tot-sets': delta_sets,
                                   'tot-deletes': delta_deletes,
+                                  'tot-arpas': delta_arpas,
                                   'start-time': start,
                                   'end-time': end })
 
@@ -330,11 +345,12 @@ class StoreMemcachedBinary(Store):
         m = []
         for c in self.queue:
             cmd, key_num, key_str, data = c
-            delta_gets, delta_sets, delta_deletes = \
+            delta_gets, delta_sets, delta_deletes, delta_arpas = \
                 self.cmd_append(cmd, key_num, key_str, data, m, extra)
             self.inflight_num_gets += delta_gets
             self.inflight_num_sets += delta_sets
             self.inflight_num_deletes += delta_deletes
+            self.inflight_num_arpas += delta_arpas
 
         self.inflight_reinit(len(self.queue))
         self.queue = []
@@ -347,17 +363,28 @@ class StoreMemcachedBinary(Store):
        if cmd[0] == 'g':
           m.append(self.header(CMD_GET, key_str, ''))
           m.append(key_str)
-          return 1, 0, 0
+          return 1, 0, 0, 0
        elif cmd[0] == 'd':
           m.append(self.header(CMD_DELETE, key_str, ''))
           m.append(key_str)
-          return 0, 0, 1
-       else:
-          m.append(self.header(CMD_SET, key_str, data, extra=extra))
+          return 0, 0, 1, 0
+
+       rv = (0, 1, 0, 0)
+       curr_cmd = CMD_SET
+       curr_extra = extra
+
+       if cmd[0] == 'a':
+          rv = (0, 0, 0, 1)
+          curr_cmd, have_extra = self.arpa[self.cur.get('cur-sets', 0) % len(self.arpa)]
+          if not have_extra:
+             curr_extra = ''
+
+       m.append(self.header(curr_cmd, key_str, data, extra=curr_extra))
+       if curr_extra:
           m.append(extra)
-          m.append(key_str)
-          m.append(data)
-          return 0, 1, 0
+       m.append(key_str)
+       m.append(data)
+       return rv
 
     def num_ops(self, cur):
         return self.ops
@@ -385,6 +412,7 @@ class StoreMemcachedAscii(Store):
         self.queue = []
         self.ops = 0
         self.buf = ''
+        self.arpa = [ 'add', 'replace', 'append', 'prepend' ]
 
     def command(self, c):
         self.queue.append(c)
@@ -396,8 +424,12 @@ class StoreMemcachedAscii(Store):
             return 'get ' + key_str + '\r\n'
         if cmd[0] == 'd':
             return 'delete ' + key_str + '\r\n'
-        return "set %s 0 %s %s\r\n%s\r\n" % (key_str, self.cfg.get('expiration', 0),
-                                             len(data), data)
+
+        c = 'set'
+        if cmd[0] == 'a':
+           c = self.arpa[self.cur.get('cur-sets', 0) % len(self.arpa)]
+        return "%s %s 0 %s %s\r\n%s\r\n" % (c, key_str, self.cfg.get('expiration', 0),
+                                            len(data), data)
 
     def command_recv(self, cmd, key_num, key_str, data):
         buf = self.buf
@@ -566,6 +598,7 @@ if __name__ == "__main__":
      "ratio-hot-sets":     (0.95, "Fraction of SET's that hit the hot item subset."),
      "ratio-hot-gets":     (0.95, "Fraction of GET's that hit the hot item subset."),
      "ratio-deletes":      (0.0,  "Fraction of SET updates that should be DELETE's instead."),
+     "ratio-arpas":        (0.0,  "Fraction of SET non-DELETE'S to be 'a-r-p-a' cmds."),
      "expiration":         (0,    "Expiration time parameter for SET's"),
      "exit-after-creates": (0,    "Exit after max-creates is reached."),
      "threads":            (1,    "Number of client worker threads to use."),
@@ -575,11 +608,12 @@ if __name__ == "__main__":
      }
 
   cur_defaults = {
-     "cur-items":   (0, "Number of items known to already exist."),
-     "cur-sets":    (0, "Number of sets already done."),
-     "cur-creates": (0, "Number of sets that were creates."),
-     "cur-gets":    (0, "Number of gets already done."),
-     "cur-deletes": (0, "Number of deletes already done.")
+     "cur-items":    (0, "Number of items known to already exist."),
+     "cur-sets":     (0, "Number of sets already done."),
+     "cur-creates":  (0, "Number of sets that were creates."),
+     "cur-gets":     (0, "Number of gets already done."),
+     "cur-deletes":  (0, "Number of deletes already done."),
+     "cur-arpas":    (0, "Number of add/replace/prepend/append's (a-r-p-a) commands."),
      }
 
   if len(sys.argv) < 2 or "-h" in sys.argv or "--help" in sys.argv:
