@@ -728,7 +728,6 @@ class RestConnection(object):
 
         return stats
 
-
     def get_bucket(self, bucket='default'):
         bucketInfo = None
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
@@ -884,12 +883,12 @@ class RestConnection(object):
         status, content = self._http_request(api, 'POST', params)
         return status
 
-    def get_database_disk_size(self):
-        api = self.baseUrl + "pools/default/buckets"
+    def get_database_disk_size(self, bucket='default'):
+        api = self.baseUrl + "pools/{0}/buckets".format(bucket)
         status, content = self._http_request(api)
         json_parsed = json.loads(content)
-        # disk_size in kB
-        disk_size = (json_parsed[0]["basicStats"]["diskUsed"])/1024
+        # disk_size in MB
+        disk_size = (json_parsed[0]["basicStats"]["diskUsed"]) / (1024 * 1024)
         return status, disk_size
 
     def check_compaction_status(self, bucket):

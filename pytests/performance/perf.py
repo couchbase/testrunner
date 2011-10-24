@@ -347,7 +347,9 @@ class PerfBase(unittest.TestCase):
         TODO()
 
     def measure_db_size(self):
-        TODO()
+        bucket = self.param("bucket", "default")
+        status, db_size = self.rest.get_database_disk_size(bucket)
+        return db_size
 
     def force_expirations(self):
         TODO()
@@ -753,7 +755,6 @@ class TODO_DatabaseFileSize(TODO_PerfBase):
             self.measure_db_size()
 
         # TODO: self.loop(m1, ratio_sets=1.0, ratio_creates=0.0, ratio_deletes=1.0)
-        # TODO: self.measure_db_size()
 
         self.loop(m1, ratio_sets=1.0, ratio_creates=0.0, expiration=[1.0, 10])
         self.measure_db_size()
