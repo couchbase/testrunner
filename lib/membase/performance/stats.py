@@ -34,14 +34,10 @@ class StatsCollector(object):
         for t in self._task["threads"]:
 #            print "waiting for thread : {0}".format(t)
             t.join()
-        if self._task["ops-temp"]:
-            merged = self._merge()
-            self._task["ops"].append(merged)
 
         self._task["time"] = time.time() - self._task["time"]
 
-
-    def export(self,name):
+    def export(self, name, test_params):
 
         obj = {"buildinfo": self._task["buildstats"],
                "membasestats": self._task["membasestats"],
@@ -49,7 +45,8 @@ class StatsCollector(object):
                "name": name,
                "totalops":self._task["totalops"],
                "ops":self._task["ops"],
-               "time": self._task["time"]}
+               "time": self._task["time"],
+               "info": test_params }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
 
@@ -132,7 +129,6 @@ class StatsCollector(object):
                         d["snapshots"].append(value)
         self._task["systemstats"] = d["snapshots"]
         print " finished system_stats"
-
 
     def couchdb_stats(nodes):
         pass

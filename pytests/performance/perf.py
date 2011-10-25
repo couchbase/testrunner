@@ -169,10 +169,11 @@ class PerfBase(unittest.TestCase):
         self.log.info("spec: " + reference)
 
     def start_stats(self, test_name, servers=None,
-                    process_names=['memcached', 'beam.smp', 'couchjs']):
+                    process_names=['memcached', 'beam.smp', 'couchjs'], test_params = None):
         servers = servers or self.input.servers
         sc = StatsCollector(False)
         sc.start(servers, "default", process_names, test_name, 10)
+        self.test_params = test_params
         self.sc = sc
         return self.sc
 
@@ -180,7 +181,7 @@ class PerfBase(unittest.TestCase):
         if total_stats:
             sc.total_stats(total_stats)
         sc.stop()
-        sc.export(self.spec_reference)
+        sc.export(self.spec_reference, self.test_params)
 
     def load(self, num_items, min_value_size=None,
              kind='binary',
@@ -265,10 +266,8 @@ class PerfBase(unittest.TestCase):
              clients=1,
              expiration=None,
              ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0,
-             ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95):
+             ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95, test_name=None):
         num_items = num_items or self.num_items_loaded
-
-        sc = self.start_stats(self.spec_reference + ".loop")
         cfg = { 'max-items': num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -281,6 +280,11 @@ class PerfBase(unittest.TestCase):
                 'threads': clients,
                 'json': int(kind == 'json')
                 }
+        cfg_params = cfg.copy()
+        cfg_params['test_time'] = time.time()
+        cfg_params['test_name'] = test_name
+        sc = self.start_stats(self.spec_reference + ".loop", test_params = cfg_params)
+
         cur = { 'cur-items': num_items }
         if type(num_ops) == type(0):
             cfg['max-ops'] = num_ops
@@ -367,6 +371,7 @@ class PerfBase(unittest.TestCase):
         return float(self.param(name, default_float))
 
 
+
 class NodePeakPerformance(PerfBase):
 
     def test_get_1client(self):
@@ -382,7 +387,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_4client(self):
         self.spec('NPP-02-1k')
@@ -397,7 +403,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_set_1client(self):
         self.spec('NPP-03-1k')
@@ -413,7 +420,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 1.0),
                   ratio_creates  = self.paramf('ratio_creates', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95))
+                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                  test_name      = self.id())
 
     def test_mixed_1client(self):
         self.spec('NPP-04-1k')
@@ -431,7 +439,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_creates  = self.paramf('ratio_creates', 0.5),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
                   ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_30client(self):
         self.spec('NPP-05-1k')
@@ -447,7 +456,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_5client_2node(self):
         self.spec('NPP-06-1k')
@@ -463,7 +473,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_5client_3node(self):
         self.spec('NPP-07-1k')
@@ -479,7 +490,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_5client_5node(self):
         self.spec('NPP-08-1k')
@@ -495,7 +507,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_1client_rebalance(self):
         self.spec('NPP-09-5k')
@@ -512,7 +525,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_mixed_1client_rebalance_json(self):
         self.spec('NPP-10-1k')
@@ -532,7 +546,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_creates  = self.paramf('ratio_creates', 0.5),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
                   ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_set_1client_json(self):
         self.spec('NPP-12-1k')
@@ -549,14 +564,15 @@ class NodePeakPerformance(PerfBase):
                   ratio_creates  = self.paramf('ratio_creates', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
                   ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
 
 class DiskDrainRate(PerfBase):
 
     def test_1M_2k(self):
         self.spec('DRR-01')
-        sc = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 2048),
                                               kind=self.param('kind', 'binary'))
@@ -565,7 +581,7 @@ class DiskDrainRate(PerfBase):
 
     def test_9M_1k(self):
         self.spec('DRR-02')
-        sc = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 9000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'),
@@ -577,7 +593,7 @@ class DiskDrainRate(PerfBase):
         self.spec('DRR-03')
         self.nodes(2)
         self.delayed_rebalance(4)
-        sc = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'))
@@ -587,7 +603,7 @@ class DiskDrainRate(PerfBase):
     def test_1M_compaction(self):
         self.spec('DRR-04')
         self.delayed_compaction()
-        sc = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'))
@@ -600,7 +616,7 @@ class DiskDrainRate(PerfBase):
         ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),
                                                         self.parami('size', 1024),
                                                         kind=self.param('kind', 'binary'))
-        sc = self.start_stats(self.spec_reference)
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
         start_time_unclog = time.time()
         self.unclog_cluster()
         end_time_unclog = time.time()
