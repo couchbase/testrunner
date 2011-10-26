@@ -1,5 +1,8 @@
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+from mc_bin_client import MemcachedClient, MemcachedError
+
 import logger
 import testconstants
 import time
@@ -141,6 +144,24 @@ class ClusterOperationHelper(object):
         return value
 
     @staticmethod
+    def start_cluster(servers):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            if shell.is_membase_installed():
+                shell.start_membase()
+            else:
+                shell.start_couchbase()
+
+    @staticmethod
+    def stop_cluster(servers):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            if shell.is_membase_installed():
+                shell.stop_membase()
+            else:
+                shell.stop_couchbase()
+
+    @staticmethod
     def cleanup_cluster(servers):
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
@@ -153,3 +174,19 @@ class ClusterOperationHelper(object):
                 removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
                                               ejectedNodes=[node.id for node in nodes if node.id != master_id])
                 log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], removed))
+
+    @staticmethod
+    def flushctl_start(servers, username=None, password=None):
+        for server in servers:
+            c = MemcachedClient(server.ip, 11210)
+            if username:
+                c.sasl_auth_plain(username, password)
+            c.start_persistence()
+
+    @staticmethod
+    def flushctl_stop(servers, username=None, password=None):
+        for server in servers:
+            c = MemcachedClient(server.ip, 11210)
+            if username:
+                c.sasl_auth_plain(username, password)
+            c.stop_persistence()

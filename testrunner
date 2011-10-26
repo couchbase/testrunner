@@ -26,6 +26,7 @@ Options:
  -c <file>        Config file name (located in the conf subdirectory)
  -i <file>        Path to .ini file containing server information
  -t <test>        Test name (multiple -t options add more tests)
+ -p k=v,k2=v2,... Optional key=value parameters, comma-separated
  -n               NO-OP - emit test names, but don't actually run them
  -h               Show this help message
 

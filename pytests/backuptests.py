@@ -538,7 +538,7 @@ class BackupHelper(object):
     def backup(self, bucket, node, backup_location):
         mbbackup_path = "{0}/{1}".format(self.server.cli_path, "mbbackup")
         data_directory = "{0}/{1}-{2}/{3}".format(node.storage[0].path, bucket, "data", bucket)
-        command = "sudo -u membase {0} {1} {2}".format(mbbackup_path,
+        command = "{0} {1} {2}".format(mbbackup_path,
                                        data_directory,
                                        backup_location)
         output, error = self.test.shell.execute_command(command.format(command))
@@ -559,7 +559,7 @@ class BackupHelper(object):
         files = self.test.shell.list_files(backup_location)
         for file in files:
             command += " " + file['path'] + "/" + file['file']
-        command = "sudo -u membase {0}".format(command)
+        command = "{0}".format(command)
         self.log.info(command)
 
         output, error = self.test.shell.execute_command(command)

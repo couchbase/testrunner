@@ -64,6 +64,8 @@ class RestHelper(object):
     #this method will rebalance the cluster by passing the remote_node as
     #ejected node
     def remove_nodes(self, knownNodes, ejectedNodes):
+        if len(ejectedNodes) == 0:
+            return False
         self.rest.rebalance(knownNodes, ejectedNodes)
         return self.rest.monitorRebalance()
 
@@ -302,10 +304,7 @@ class RestConnection(object):
         end_time = time.time() + timeout
         while True:
             try:
-                default_socket_timeout = socket.getdefaulttimeout()
-                socket.setdefaulttimeout(timeout)
-                response, content = httplib2.Http().request(api, method, params, headers)
-#                log.info("{0} response {1} ,content {2}".format(api, response, content))
+                response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers)
                 if response['status'] in ['200', '201', '202']:
                     return True, content
                 else:
@@ -323,8 +322,6 @@ class RestConnection(object):
                 log.error(e)
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
-            finally:
-                socket.setdefaulttimeout(default_socket_timeout)
             time.sleep(1)
 
 
@@ -731,7 +728,6 @@ class RestConnection(object):
 
         return stats
 
-
     def get_bucket(self, bucket='default'):
         bucketInfo = None
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
@@ -887,12 +883,12 @@ class RestConnection(object):
         status, content = self._http_request(api, 'POST', params)
         return status
 
-    def get_database_disk_size(self):
-        api = self.baseUrl + "pools/default/buckets"
+    def get_database_disk_size(self, bucket='default'):
+        api = self.baseUrl + "pools/{0}/buckets".format(bucket)
         status, content = self._http_request(api)
         json_parsed = json.loads(content)
-        # disk_size in kB
-        disk_size = (json_parsed[0]["basicStats"]["diskUsed"])/1024
+        # disk_size in MB
+        disk_size = (json_parsed[0]["basicStats"]["diskUsed"]) / (1024 * 1024)
         return status, disk_size
 
     def check_compaction_status(self, bucket):
@@ -905,7 +901,7 @@ class RestConnection(object):
                 return True, i
         return False, i
 
-    def _reset_auto_compaction(self):
+    def reset_auto_compaction(self):
         api = self.baseUrl + "controller/setAutoCompaction"
         params = urllib.urlencode({"just_validate":"1",
                                    "parallelDBAndViewCompaction":"false",

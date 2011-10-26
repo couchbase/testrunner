@@ -30,13 +30,13 @@ import memcacheConstants
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
-from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET
+from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
 
 # --------------------------------------------------------
 
 MIN_VALUE_SIZE = [10]
 
-def run_worker(ctl, cfg, cur, store, prefix=""):
+def run_worker(ctl, cfg, cur, store, prefix):
     i = 0
     t_last = time.time()
     o_last = store.num_ops(cur)
@@ -91,6 +91,14 @@ def next_cmd(cfg, cur, store):
             cur['cur-creates'] = cur.get('cur-creates', 0) + 1
         else:
             # Update...
+            num_updates = cur['cur-sets'] - cur.get('cur-creates', 0)
+
+            do_delete = cfg.get('ratio-deletes', 0) > \
+                          float(cur.get('cur-deletes', 0)) / positive(num_updates)
+            if do_delete:
+               cmd = 'delete'
+               cur['cur-deletes'] = cur.get('cur-deletes', 0) + 1
+
             key_num = choose_key_num(cur.get('cur-items', 0),
                                      cfg.get('ratio-hot', 0),
                                      cfg.get('ratio-hot-sets', 0),
@@ -119,6 +127,7 @@ def next_cmd(cfg, cur, store):
 
             return (cmd, key_num, key_str, itm_val)
         else:
+            cur['cur-misses'] = cur.get('cur-misses', 0) + 1
             return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None)
 
 def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops):
@@ -130,7 +139,7 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops):
         base  = math.floor(ratio_hot * num_items)
         range = math.floor((1.0 - ratio_hot) * num_items)
 
-    return base + (num_ops % positive(range))
+    return int(base + (num_ops % positive(range)))
 
 def positive(x):
     if x > 0:
@@ -153,6 +162,9 @@ class Store:
     def connect(self, target, user, pswd, cfg, cur):
         self.cfg = cfg
         self.cur = cur
+
+    def stats_collector(self, sc):
+        self.sc = sc
 
     def command(self, c):
         log.info("%s %s %s %s" % c)
@@ -210,23 +222,45 @@ class StoreMemcachedBinary(Store):
                            len(key) + len(extra) + len(val), opaque, cas)
 
     def flush(self):
-        extra = struct.pack(SET_PKT_FMT, 0, 0)
+        extra = struct.pack(SET_PKT_FMT, 0, self.cfg.get('expiration', 0))
+
+        num_gets = 0
+        num_sets = 0
+        num_deletes = 0
 
         m = []
         for c in self.queue:
             cmd, key_num, key_str, data = c
             if cmd[0] == 'g':
+                num_gets += 1
                 m.append(self.header(CMD_GET, key_str, ''))
                 m.append(key_str)
+            elif cmd[0] == 'd':
+                num_deletes += 1
+                m.append(self.header(CMD_DELETE, key_str, ''))
+                m.append(key_str)
             else:
+                num_sets += 1
                 m.append(self.header(CMD_SET, key_str, data, extra=extra))
                 m.append(extra)
                 m.append(key_str)
                 m.append(data)
+
+        start = time.time()
+
         self.conn.s.send(''.join(m))
 
         for c in self.queue:
             self.recvMsg()
+
+        end = time.time()
+
+        if self.sc:
+           self.sc.ops_stats({ 'tot-gets': num_gets,
+                               'tot-sets': num_sets,
+                               'tot-deletes': num_deletes,
+                               'start-time': start,
+                               'end-time': end })
 
         self.ops += len(self.queue)
         self.queue = []
@@ -266,7 +300,10 @@ class StoreMemcachedAscii(Store):
     def command_send(self, cmd, key_num, key_str, data):
         if cmd[0] == 'g':
             return 'get ' + key_str + '\r\n'
-        return "set %s 0 0 %s\r\n%s\r\n" % (key_str, len(data), data)
+        if cmd[0] == 'd':
+            return 'delete ' + key_str + '\r\n'
+        return "set %s 0 %s %s\r\n%s\r\n" % (key_str, self.cfg.get('expiration', 0),
+                                             len(data), data)
 
     def command_recv(self, cmd, key_num, key_str, data):
         buf = self.buf
@@ -278,6 +315,9 @@ class StoreMemcachedAscii(Store):
                 rvalue, rkey, rflags, rlen = line.split()
                 data, buf = self.readbytes(self.skt, int(rlen) + 2, buf)
                 line, buf = self.readline(self.skt, buf)
+        elif cmd[0] == 'd':
+            # DELETE...
+            line, buf = self.readline(self.skt, buf) # line == "DELETED"
         else:
             # SET...
             line, buf = self.readline(self.skt, buf) # line == "STORED"
@@ -332,7 +372,8 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 
 # --------------------------------------------------------
 
-def run(cfg, cur, protocol, host_port, user, pswd):
+def run(cfg, cur, protocol, host_port, user, pswd,
+        stats_collector = None):
    if type(cfg['min-value-size']) == type(""):
        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
    if type(cfg['min-value-size']) != type([]):
@@ -362,7 +403,8 @@ def run(cfg, cur, protocol, host_port, user, pswd):
          else:
             store = StoreMemcachedBinary()
 
-            store.connect(host_port, user, pswd, cfg, cur)
+      store.connect(host_port, user, pswd, cfg, cur)
+      store.stats_collector(stats_collector)
 
       threads.append(threading.Thread(target=run_worker,
                                       args=(ctl, cfg, cur, store,
@@ -379,8 +421,8 @@ def run(cfg, cur, protocol, host_port, user, pswd):
       time.sleep(secs)
       ctl['run_ok'] = False
 
-   if cfg['time'] > 0:
-      t = threading.Thread(target=stop_after, args=(cfg['time'],))
+   if cfg.get('time', 0) > 0:
+      t = threading.Thread(target=stop_after, args=(cfg.get('time', 0),))
       t.daemon = True
       t.start()
 
@@ -388,7 +430,7 @@ def run(cfg, cur, protocol, host_port, user, pswd):
 
    try:
       if len(threads) <= 1:
-         run_worker(ctl, cfg, cur, store)
+         run_worker(ctl, cfg, cur, store, "")
       else:
          for thread in threads:
             thread.daemon = True
@@ -407,7 +449,12 @@ def run(cfg, cur, protocol, host_port, user, pswd):
    log.info("    ops/sec: %s" %
             ((cur.get('cur-gets', 0) + cur.get('cur-sets', 0)) / (t_end - t_start)))
 
-   return cur, t_end - t_start
+   threads = [t for t in threads if t.isAlive()]
+   while len(threads) > 0:
+      threads[0].join(1)
+      threads = [t for t in threads if t.isAlive()]
+
+   return cur, t_start, t_end
 
 
 if __name__ == "__main__":
@@ -423,6 +470,8 @@ if __name__ == "__main__":
      "ratio-hot":          (0.2,  "Fraction of items to have as a hot item subset."),
      "ratio-hot-sets":     (0.95, "Fraction of SET's that hit the hot item subset."),
      "ratio-hot-gets":     (0.95, "Fraction of GET's that hit the hot item subset."),
+     "ratio-deletes":      (0.0,  "Fraction of SET updates that should be DELETE's instead."),
+     "expiration":         (0,    "Expiration time parameter for SET's"),
      "exit-after-creates": (0,    "Exit after max-creates is reached."),
      "threads":            (1,    "Number of client worker threads to use."),
      "batch":              (100,  "Batch / pipeline up this number of commands."),
@@ -434,7 +483,8 @@ if __name__ == "__main__":
      "cur-items":   (0, "Number of items known to already exist."),
      "cur-sets":    (0, "Number of sets already done."),
      "cur-creates": (0, "Number of sets that were creates."),
-     "cur-gets":    (0, "Number of gets already done.")
+     "cur-gets":    (0, "Number of gets already done."),
+     "cur-deletes": (0, "Number of deletes already done.")
      }
 
   if len(sys.argv) < 2 or "-h" in sys.argv or "--help" in sys.argv:

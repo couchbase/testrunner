@@ -1,4 +1,5 @@
 import unittest
+import uuid
 import logger
 import time
 import os
@@ -10,6 +11,9 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
+from membase.performance.stats import StatsCollector
+from remote.remote_util import RemoteMachineShellConnection
+import testconstants
 
 import mcsoda
 
@@ -25,7 +29,7 @@ class PerfBase(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
-
+        self.sc = None
         self.tearDown() # Helps when a previous broken test never reached tearDown.
 
         master = self.input.servers[0]
@@ -52,24 +56,30 @@ class PerfBase(unittest.TestCase):
 
         self.setUp_moxi()
         self.setUp_dgm()
+        time.sleep(10)
         self.wait_until_warmed_up()
 
     def tearDown(self):
         self.tearDown_moxi()
-
+        if self.sc is not None:
+            self.sc.stop()
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
 
-    def setUp_moxi(self):
+    def setUp_moxi(self, bucket=None):
+        bucket = bucket or self.param("bucket", "default")
         if len(self.input.moxis) > 0:
-            moxi = self.input.moxis[0]
-            TODO()
+            shell = RemoteMachineShellConnection(self.input.moxis[0])
+            shell.start_moxi(self.input.servers[0].ip, bucket,
+                             self.input.moxis[0].port)
+            shell.disconnect()
 
     def tearDown_moxi(self):
         if len(self.input.moxis) > 0:
-            moxi = self.input.moxis[0]
-            TODO()
+            shell = RemoteMachineShellConnection(self.input.moxis[0])
+            shell.stop_moxi()
+            shell.disconnect()
 
     def target_moxi(self, bucket='default'): # Returns "host:port" of moxi to hit.
         rv = self.param('moxi', None)
@@ -81,8 +91,9 @@ class PerfBase(unittest.TestCase):
         return "%s:%s" % (self.input.servers[0].ip,
                           self.rest.get_bucket(bucket).nodes[0].moxi)
 
-    def restart_moxi(self, bucket='default'):
-        TODO()
+    def restart_moxi(self, bucket=None):
+        self.tearDown_moxi()
+        self.setUp_moxi(bucket)
 
     def setUp_dgm(self):
         # Download fragmented, DGM dataset onto each cluster node, if
@@ -97,72 +108,154 @@ class PerfBase(unittest.TestCase):
         #
         # Restart all cluster nodes.
         #
-        TODO()
+        bucket = self.param("bucket", "default")
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        for server in self.input.servers:
+            remote = RemoteMachineShellConnection(server)
+            #TODO: Better way to pass num_nodes and db_size?
+            self.get_data_files(remote, bucket, 1, 10)
+            remote.disconnect()
+        ClusterOperationHelper.start_cluster(self.input.servers)
+
+    def get_data_files(self, remote, bucket, num_nodes, db_size):
+        dir = '/tmp/'
+        if remote.is_membase_installed():
+            dir = dir + '/membase/{0}-{1}-{2}/'.format(num_nodes, 1024, db_size)
+            output, error = remote.execute_command('mkdir -p {0}'.format(dir))
+            remote.log_command_output(output, error)
+            file = '{0}_mb.tar.gz'.format(bucket)
+            base_url = 'https://s3.amazonaws.com/database-analysis/membase/{0}-{1}-{2}/{3}'.format(num_nodes, \
+                                                                                                1024, db_size, file)
+        else:
+            dir = dir + '/couchbase/{0}-{1}-{2}/'.format(num_nodes, 256, db_size)
+            output, error = remote.execute_command('mkdir -p {0}'.format(dir))
+            remote.log_command_output(output, error)
+            file = '{0}_cb.tar.gz'.format(bucket)
+            base_url = 'https://s3.amazonaws.com/database-analysis/couchbase/{0}-{1}-{2}/{3}'.format(num_nodes, \
+                                                                                                  256, db_size, file)
+
+        info = remote.extract_remote_info()
+        wget_command = 'wget'
+        if info.type.lower() == 'windows':
+            wget_command = "cd {0} ;cmd /c 'c:\\automation\\wget.exe --no-check-certificate".format(dir)
+
+        # Check if the file exists on the remote server else download the gzipped version
+        # Extract if necessary
+        exist = remote.file_exists(dir, file)
+        if not exist:
+            additional_quote = ""
+            if info.type.lower() == 'windows':
+                additional_quote = "'"
+            command = "{0} -v -O {1}{2} {3} {4} ".format(wget_command, dir, file, base_url, additional_quote)
+            output, error = remote.execute_command(command)
+            remote.log_command_output(output, error)
+
+        if remote.is_membase_installed():
+            if info.type.lower() == 'windows':
+                destination_folder = testconstants.WIN_MEMBASE_DATA_PATH
+            else:
+                destination_folder = testconstants.MEMBASE_DATA_PATH
+        else:
+            if info.type.lower() == 'windows':
+                destination_folder = testconstants.WIN_COUCHBASE_DATA_PATH
+            else:
+                destination_folder = testconstants.COUCHBASE_DATA_PATH
+        untar_command = 'cd {1}; tar -xzf {0}'.format(dir+file , destination_folder)
+        output, error = remote.execute_command(untar_command)
+        remote.log_command_output(output, error)
 
     def spec(self, reference):
-        self.spec = reference
+        self.spec_reference = reference
         self.log.info("spec: " + reference)
 
     def start_stats(self, test_name, servers=None,
-                    process_names=['memcached', 'beam.smp', 'couchjs']):
+                    process_names=['memcached', 'beam.smp', 'couchjs'], test_params = None):
         servers = servers or self.input.servers
-        TODO()
-        return "stats-capture-id"
+        sc = StatsCollector(False)
+        sc.start(servers, "default", process_names, test_name, 10)
+        self.test_params = test_params
+        self.sc = sc
+        return self.sc
 
-    def end_stats(self, stats_capture_id):
-        TODO()
-
-    def json(self, kind):
-        if kind == 'json':
-            return 1
-        return 0
+    def end_stats(self, sc, total_stats=None):
+        if total_stats:
+            sc.total_stats(total_stats)
+        sc.stop()
+        sc.export(self.spec_reference, self.test_params)
 
     def load(self, num_items, min_value_size=None,
              kind='binary',
              protocol='binary',
-             expiration=None):
+             expiration=None,
+             ratio_sets=1.0,
+             ratio_hot_sets=0.0,
+             ratio_hot_gets=0.0):
         cfg = { 'max-items': num_items,
                 'max-creates': num_items,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
-                'ratio-sets': 1.0,
+                'ratio-sets': ratio_sets,
+                'ratio-misses': 0.0,
                 'ratio-creates': 1.0,
+                'ratio-hot': 0.0,
+                'ratio-hot-sets': ratio_hot_sets,
+                'ratio-hot-gets': ratio_hot_gets,
                 'exit-after-creates': 1,
                 'json': int(kind == 'json')
                 }
         self.log.info("mcsoda - host_port: " + self.target_moxi())
         self.log.info("mcsoda - cfg: " + str(cfg))
-        mcsoda.run(cfg, {},
-                   'memcached-' + protocol,
-                   self.target_moxi(),
-                   '', '')
+        cur, start_time, end_time = mcsoda.run(cfg, {},
+                                               'memcached-' + protocol,
+                                               self.target_moxi(),
+                                               '', '')
         self.num_items_loaded = num_items
-
-    def load_dgm(self, min_value_size=None,
-                 kind='binary',
-                 protocol='binary',
-                 expiration=None,
-                 dgm_factor=5):
-        min_value_size = min_value_size or self.parami("min_value_size", 1024)
-        dgm_num_items = self.mem_quota() * 1024 * 1024 * dgm_factor / min_value_size
-        self.load(dgm_num_items, min_value_size=min_value_size,
-                  kind=kind, expiration=expiration)
+        ops = { 'tot-sets': cur.get('cur-sets', 0),
+                'tot-gets': cur.get('cur-gets', 0),
+                'tot-items': cur.get('cur-items', 0),
+                'tot-creates': cur.get('cur-creates', 0),
+                'tot-misses': cur.get('cur-misses', 0),
+                "start-time": start_time,
+                "end-time": end_time }
+        return ops, start_time, end_time
 
     def nodes(self, num_nodes):
         self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1))
 
     @staticmethod
-    def delayed_rebalance_worker(servers, num_nodes, delay_seconds=10):
+    def delayed_rebalance_worker(servers, num_nodes, delay_seconds):
         time.sleep(delay_seconds)
         RebalanceHelper.rebalance_in(servers, num_nodes - 1)
 
     def delayed_rebalance(self, num_nodes, delay_seconds=10):
         t = threading.Thread(target=PerfBase.delayed_rebalance_worker,
-                             args=(self.input.servers, num_nodes))
+                             args=(self.input.servers, num_nodes, delay_seconds))
         t.daemon = True
         t.start()
 
-    def delayed_compaction(self, delay_seconds=10):
-        TODO()
+    @staticmethod
+    def set_auto_compaction(server, parallel_compaction, percent_threshold):
+        rest = RestConnection(server)
+        rest.set_autoCompaction(parallel_compaction, percent_threshold, percent_threshold)
+
+    @staticmethod
+    def delayed_compaction_worker(servers, parallel_compaction, percent_threshold, delay_seconds):
+        time.sleep(delay_seconds)
+        PerfBase.set_auto_compaction(servers[0], parallel_compaction, percent_threshold)
+
+    def delayed_compaction(self, parallel_compaction="false",
+                           percent_threshold=0.01,
+                           delay_seconds=10):
+        t = threading.Thread(target=PerfBase.delayed_compaction_worker,
+                             args=(self.input.servers,
+                                   parallel_compaction,
+                                   percent_threshold,
+                                   delay_seconds))
+        t.daemon = True
+        t.start()
+
+    def loop_prep(self):
+        self.wait_until_drained()
+        self.restart_moxi()
 
     def loop(self, num_ops,
              num_items=None,
@@ -173,13 +266,9 @@ class PerfBase(unittest.TestCase):
              clients=1,
              expiration=None,
              ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0,
-             ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95):
+             ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95, test_name=None):
         num_items = num_items or self.num_items_loaded
-
-        stats = self.start_stats(self.spec + ".loop")
-        cfg = { 'cur-items': num_items,
-                'max-ops': num_ops,
-                'max-items': num_items,
+        cfg = { 'max-items': num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
                 'ratio-sets': ratio_sets,
@@ -191,13 +280,33 @@ class PerfBase(unittest.TestCase):
                 'threads': clients,
                 'json': int(kind == 'json')
                 }
+        cfg_params = cfg.copy()
+        cfg_params['test_time'] = time.time()
+        cfg_params['test_name'] = test_name
+        sc = self.start_stats(self.spec_reference + ".loop", test_params = cfg_params)
+
+        cur = { 'cur-items': num_items }
+        if type(num_ops) == type(0):
+            cfg['max-ops'] = num_ops
+        else:
+            # Here, we num_ops looks like "time to run" tuple of...
+            # ('seconds', integer_num_of_seconds_to_run)
+            cfg['time'] = num_ops[1]
         self.log.info("mcsoda - moxi: " + self.target_moxi())
         self.log.info("mcsoda - cfg: " + str(cfg))
-        mcsoda.run(cfg, {},
-                   'memcached-' + protocol,
-                   self.target_moxi(),
-                   '', '')
-        self.end_stats(stats)
+        cur, start_time, end_time = mcsoda.run(cfg, cur,
+                                               'memcached-' + protocol,
+                                               self.target_moxi(),
+                                               '', '',sc)
+        ops = { 'tot-sets': cur.get('cur-sets', 0),
+                'tot-gets': cur.get('cur-gets', 0),
+                'tot-items': cur.get('cur-items', 0),
+                'tot-creates': cur.get('cur-creates', 0),
+                'tot-misses': cur.get('cur-misses', 0),
+                "start-time": start_time,
+                "end-time": end_time }
+        self.end_stats(sc, ops)
+        return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
                 kind='binary',
@@ -208,33 +317,18 @@ class PerfBase(unittest.TestCase):
                 ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95):
         min_value_size = min_value_size or self.parami("min_value_size", 1024)
         num_items = num_items or self.num_items_loaded
-
-    def view(self, views_per_client, clients=1):
-        TODO()
-
-    def stop_bg(self):
-        TODO()
-
-    def start_cluster(self):
-        # lib/remote/remote_util.py: def start_couchbase(self):
-        TODO()
-
-    def stop_cluster(self):
-        # lib/remote/remote_util.py: def stop_couchbase(self):
-        TODO()
-
-    def measure_db_size(self):
-        TODO()
-
-    def force_expirations(self):
         TODO()
 
     def wait_until_drained(self):
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, \
+                                              fn=RebalanceHelper.wait_for_stats_no_timeout)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0, \
+                                              fn=RebalanceHelper.wait_for_stats_no_timeout)
+
+        return time.time()
 
     def wait_until_warmed_up(self):
         master = self.input.servers[0]
@@ -242,7 +336,27 @@ class PerfBase(unittest.TestCase):
 
         RebalanceHelper.wait_for_stats_on_all(master, bucket,
                                               'ep_warmup_thread', 'complete',
-                                              fn=RebalanceHelper.wait_for_mc_stats)
+                                              fn=RebalanceHelper.wait_for_mc_stats_no_timeout)
+
+    def clog_cluster(self):
+        ClusterOperationHelper.flushctl_stop(self.input.servers)
+
+    def unclog_cluster(self):
+        ClusterOperationHelper.flushctl_start(self.input.servers)
+
+    def view(self, views_per_client, clients=1):
+        TODO()
+
+    def stop_bg(self):
+        TODO()
+
+    def measure_db_size(self):
+        bucket = self.param("bucket", "default")
+        status, db_size = self.rest.get_database_disk_size(bucket)
+        return db_size
+
+    def force_expirations(self):
+        TODO()
 
     def assert_perf_was_ok(self):
         TODO()
@@ -257,6 +371,7 @@ class PerfBase(unittest.TestCase):
         return float(self.param(name, default_float))
 
 
+
 class NodePeakPerformance(PerfBase):
 
     def test_get_1client(self):
@@ -264,8 +379,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
-        self.restart_moxi()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -273,14 +387,15 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_4client(self):
         self.spec('NPP-02-1k')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 4000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -288,14 +403,15 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_set_1client(self):
         self.spec('NPP-03-1k')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind           = self.param('kind', 'binary'),
@@ -304,14 +420,15 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 1.0),
                   ratio_creates  = self.paramf('ratio_creates', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95))
+                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                  test_name      = self.id())
 
     def test_mixed_1client(self):
         self.spec('NPP-04-1k')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind           = self.param('kind', 'binary'),
@@ -322,22 +439,25 @@ class NodePeakPerformance(PerfBase):
                   ratio_creates  = self.paramf('ratio_creates', 0.5),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
                   ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
-    def TODO_test_get_30client(self):
+    def test_get_30client(self):
         self.spec('NPP-05-1k')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
-        self.loop(('seconds', 60 * 60),
+        self.loop_prep()
+        seconds = self.parami('seconds', 60 * 60)
+        self.loop(('seconds', seconds),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 30),
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_5client_2node(self):
         self.spec('NPP-06-1k')
@@ -345,7 +465,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -353,7 +473,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_5client_3node(self):
         self.spec('NPP-07-1k')
@@ -361,7 +482,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -369,7 +490,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_5client_5node(self):
         self.spec('NPP-08-1k')
@@ -377,7 +499,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
@@ -385,7 +507,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_get_1client_rebalance(self):
         self.spec('NPP-09-5k')
@@ -393,7 +516,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 5000),
                   kind=self.param('kind', 'binary'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
         self.loop(self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
@@ -402,7 +525,8 @@ class NodePeakPerformance(PerfBase):
                   ratio_sets     = self.paramf('ratio_sets', 0.0),
                   ratio_misses   = self.paramf('ratio_misses', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_mixed_1client_rebalance_json(self):
         self.spec('NPP-10-1k')
@@ -410,7 +534,7 @@ class NodePeakPerformance(PerfBase):
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
         self.loop(self.parami("items", 1000000),
                   self.parami('size', 1024),
@@ -422,15 +546,15 @@ class NodePeakPerformance(PerfBase):
                   ratio_creates  = self.paramf('ratio_creates', 0.5),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
                   ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
     def test_set_1client_json(self):
         self.spec('NPP-12-1k')
-        self.nodes(1)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind           = self.param('kind', 'json'),
@@ -440,43 +564,70 @@ class NodePeakPerformance(PerfBase):
                   ratio_creates  = self.paramf('ratio_creates', 0.0),
                   ratio_hot      = self.paramf('ratio_hot', 0.2),
                   ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95))
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
 
 
-class TODO_PerfBase():
-    TODO()
-
-
-class TODO_DiskDrainRate(TODO_PerfBase):
+class DiskDrainRate(PerfBase):
 
     def test_1M_2k(self):
         self.spec('DRR-01')
-        self.load(1000000, 2048,
-                  kind='binary')
-        self.wait_until_drained()
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        ops, start_time, end_time = self.load(self.parami("items", 1000000),
+                                              self.parami('size', 2048),
+                                              kind=self.param('kind', 'binary'))
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
 
     def test_9M_1k(self):
         self.spec('DRR-02')
-        self.load(9000000, 1024,
-                  kind='binary')
-        self.wait_until_drained()
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        ops, start_time, end_time = self.load(self.parami("items", 9000000),
+                                              self.parami('size', 1024),
+                                              kind=self.param('kind', 'binary'),
+                                              ratio_sets=self.paramf('ratio-sets', 0.9))
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
 
     def test_1M_rebalance(self):
         self.spec('DRR-03')
         self.nodes(2)
-        self.load_dgm()
         self.delayed_rebalance(4)
-        self.load(1000000, 1024,
-                  kind='binary')
-        self.loop(1000000, ratio_sets=1.0)
-        self.wait_until_drained()
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        ops, start_time, end_time = self.load(self.parami("items", 1000000),
+                                              self.parami('size', 1024),
+                                              kind=self.param('kind', 'binary'))
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
 
     def test_1M_compaction(self):
         self.spec('DRR-04')
-        self.load_dgm()
         self.delayed_compaction()
-        self.loop(1000000, ratio_sets=1.0)
-        self.wait_until_drained()
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        ops, start_time, end_time = self.load(self.parami("items", 1000000),
+                                              self.parami('size', 1024),
+                                              kind=self.param('kind', 'binary'))
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
+
+    def test_1M_clog(self):
+        self.spec('DRR-06')
+        self.clog_cluster()
+        ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),
+                                                        self.parami('size', 1024),
+                                                        kind=self.param('kind', 'binary'))
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        start_time_unclog = time.time()
+        self.unclog_cluster()
+        end_time_unclog = time.time()
+
+        ops['start-time'] = start_time_unclog
+        ops['end-time'] = end_time_unclog
+        self.end_stats(sc, ops)
+
+
+class TODO_PerfBase():
+    TODO()
 
 
 class TODO_RAMUsage(TODO_PerfBase):
@@ -500,8 +651,8 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.spec('DBF-001')
         self.load(10000000)
         self.wait_until_drained()
-        self.stop_cluster()
-        self.start_cluster()
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        ClusterOperationHelper.start_cluster(self.input.servers)
         self.wait_until_warmed_up()
 
     def test_All_ops(self):
@@ -509,10 +660,10 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.spec('DBF-002')
         self.load(10000000, expiration=[0.1, expiration])
         self.wait_until_drained()
-        self.stop_cluster()
+        ClusterOperationHelper.stop_cluster(self.input.servers)
         self.log.info("sleepng {0} seconds to ensure expirations".format(expiration + 2))
         time.sleep(expiration + 2)
-        self.start_cluster()
+        ClusterOperationHelper.start_cluster(self.input.servers)
         self.wait_until_warmed_up()
 
     def test_2nodes(self):
@@ -520,8 +671,8 @@ class TODO_DiskBackfill(TODO_PerfBase):
         self.nodes(2)
         self.load(10000000)
         self.wait_until_drained()
-        self.stop_cluster()
-        self.start_cluster()
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        ClusterOperationHelper.start_cluster(self.input.servers)
         self.wait_until_warmed_up()
 
 
@@ -535,7 +686,7 @@ class TODO_CacheMisses(TODO_PerfBase):
         self.log.info("loading {0} items, {0}x more than mem_quota of {0}MB".format(
                 num_items, dgm_factor, min_value_size))
         self.load(num_items)
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop(num_items)
 
 
@@ -585,7 +736,7 @@ class TODO_ViewPerformance(TODO_PerfBase):
     def test_mutation(self):
         self.spec('VP-007')
         self.load(1000000)
-        self.wait_until_drained()
+        self.loop_prep()
         self.loop_bg(-1)
         self.view(100, 10)
         self.stop_bg()
@@ -620,7 +771,6 @@ class TODO_DatabaseFileSize(TODO_PerfBase):
             self.measure_db_size()
 
         # TODO: self.loop(m1, ratio_sets=1.0, ratio_creates=0.0, ratio_deletes=1.0)
-        # TODO: self.measure_db_size()
 
         self.loop(m1, ratio_sets=1.0, ratio_creates=0.0, expiration=[1.0, 10])
         self.measure_db_size()

@@ -14,7 +14,20 @@ Requirements:
  Paramiko (http://www.lag.net/paramiko/)
  pycrypto https://www.dlitz.net/software/pycrypto/
 
- pycrypto is not supported on all windows platform.
+ pycrypto is not supported on all windows platform, and unfortunately
+ the authors of pycrypto thinks that gcc is the only compiler available
+ for a unix platforms and adds gcc-specific compiler options. To build
+ the modules with Sun Studio compilers you need to modify setup.py:
+
+125c125
+<             self.__add_compiler_option("-std=c99")
+---
+>             self.__add_compiler_option("-xc99=all")
+140,141c140
+<                 self.__add_compiler_option("-O3")
+<                 self.__add_compiler_option("-fomit-frame-pointer")
+---
+>                 self.__add_compiler_option("-xO3")
 
  while paramiko and pycrypto both support pypi package
  installation i still recommend downloading and installing these two modules manually.

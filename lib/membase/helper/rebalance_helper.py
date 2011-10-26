@@ -5,6 +5,8 @@ from membase.api.exception import StatsUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from mc_bin_client import MemcachedClient, MemcachedError
+
 import threading
 
 log = logger.Logger.get_logger()
@@ -36,6 +38,20 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
+    def wait_for_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
+        log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
+                                                                                stat_value, master.ip))
+        rest = RestConnection(master)
+        stats = rest.get_bucket_stats(bucket)
+
+        while stats[stat_key] != stat_value:
+            stats = rest.get_bucket_stats(bucket)
+            if verbose:
+                log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+            time.sleep(5)
+        return True
+
+    @staticmethod
     #bucket is a json object that contains name,port,password
     def wait_for_mc_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
@@ -43,8 +59,7 @@ class RebalanceHelper():
         start = time.time()
         verified = False
         while (time.time() - start) <= timeout_in_seconds:
-            import mc_bin_client
-            c = mc_bin_client.MemcachedClient(master.ip, 11210)
+            c = MemcachedClient(master.ip, 11210)
             stats = c.stats()
             c.close()
             if stats and stat_key in stats and str(stats[stat_key]) == str(stat_value):
@@ -60,6 +75,23 @@ class RebalanceHelper():
                 else:
                     time.sleep(2)
         return verified
+
+    @staticmethod
+    def wait_for_mc_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
+        log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
+                                                                                stat_value, master.ip))
+        c = MemcachedClient(master.ip, 11210)
+        stats = c.stats()
+        c.close()
+
+        while str(stats[stat_key]) != str(stat_value):
+            c = MemcachedClient(master.ip, 11210)
+            stats = c.stats()
+            c.close()
+            if verbose:
+                log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+            time.sleep(5)
+        return True
 
     @staticmethod
     #bucket is a json object that contains name,port,password
@@ -316,7 +348,7 @@ class RebalanceHelper():
             if not server.ip in nodeIps:
                 toBeAdded.append(server)
                 servers_rebalanced.append(server)
-            if len(toBeAdded) == how_many:
+            if len(toBeAdded) == int(how_many):
                 break
 
         for server in toBeAdded:

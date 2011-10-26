@@ -575,6 +575,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                         toBeEjectedNodes.append(node.id)
                 helper = RestHelper(rest)
                 removed = helper.remove_nodes(knownNodes=allNodes, ejectedNodes=toBeEjectedNodes)
+                self.assertTrue(removed, msg="Unable to remove nodes {0}".format(toBeEjectedNodes))
                 remote = RemoteMachineShellConnection(server)
                 remote.membase_uninstall()
                 remote.download_build(appropriate_build)

@@ -46,7 +46,7 @@ class AutoCompactionTests(unittest.TestCase):
         rest = RestConnection(serverInfo)
         remote_client = RemoteMachineShellConnection(serverInfo)
 
-        rest._reset_auto_compaction()
+        rest.reset_auto_compaction()
         parallelDBAndView = "false"
         output = rest.set_autoCompaction(parallelDBAndView, percent_threshold, 100)
         if not output and percent_threshold < MIN_COMPACTION_THRESHOLD:
@@ -106,5 +106,5 @@ class AutoCompactionTests(unittest.TestCase):
         for serverInfo in self.servers:
             self.log.info(serverInfo)
             rest = RestConnection(serverInfo)
-            rest._reset_auto_compaction()
+            rest.reset_auto_compaction()
             parallelDBAndView = "false"
