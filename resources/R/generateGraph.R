@@ -30,8 +30,8 @@ for(arg in args) {
 	bb <- transform(bb, build=paste(gsub("membase-", "", build)))
 	bb <- transform(bb, rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), drainRate=as.numeric(drainRate), unique_col=paste(substring(doc_id, 28, 32), '-', build))
  	bb <- bb[bb$test==tname,]
+
  	(temp_data_frame <- data_frame[FALSE, ])
-	print(temp_data_frame)
 	builds = factor(bb$build)
 	for(a_build in levels(builds)) {
 		filtered <- bb[bb$build == a_build,]
@@ -55,8 +55,8 @@ for(arg in args) {
 	
 	# Latency
 	data_frame <- data.frame()
-	data_frame <- data.frame(t(rep(NA, 16)))
- 	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'startTime','endTime','totalGets','totalSets',	'unique_col')	
+	data_frame <- data.frame(t(rep(NA, 17)))
+ 	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'startTime','endTime','totalGets','totalSets',	'unique_col', 'avgLatency')	
 
 	opsstats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/opsstats", sep=''))$rows
 	bb <- plyr::ldply(opsstats, unlist)
@@ -66,23 +66,30 @@ for(arg in args) {
 	bb <- transform(bb, rowid=as.numeric(rowid),ram=as.numeric(ram), test_time=as.numeric(test_time), startTime=as.numeric(startTime), endTime=as.numeric(endTime), unique_col=paste(substring(doc_id,	28,32),'-',build))
 	bb <- transform(bb, avgLatency = (endTime-startTime))
 	bb <- bb[bb$test == tname,]
-	(temp_data_frame <- data_frame[FALSE, ])
+	# Drain Rate tests have no OPS/Latency
+	if(nrow(bb) != 0){
+		print(bb)
+		(temp_data_frame <- data_frame[FALSE, ])
+		print(bb$build)
+		print(bb)
+		builds = factor(bb$build)
 
-	builds = factor(bb$build)
-	for(a_build in levels(builds)) {
-		filtered <- bb[bb$build == a_build,]
-		max_time <- max(filtered$test_time)
-		print(max_time)
-		graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
-		temp_data_frame <- rbind(temp_data_frame,  graphed)
+		for(a_build in levels(builds)) {
+			filtered <- bb[bb$build == a_build,]
+			print(filtered)
+			max_time <- max(filtered$test_time)
+			print(max_time)
+			graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
+			temp_data_frame <- rbind(temp_data_frame,  graphed)
+		}
+		print(temp_data_frame)
+		p <- ggplot(temp_data_frame, aes(rowid, avgLatency, fill=build)) + labs(x="samples", y="ms")
+		p  <-   p + stat_smooth(se = FALSE)
+		#p <- p + geom_line(aes(rowid, avgLatency, color=build))
+		p <- p + labs(y='ms', x="samples")
+		p <- p + opts(title=paste("Avg. Latency"))
+		print(p)
 	}
-	p <- ggplot(temp_data_frame, aes(rowid, avgLatency, fill=build)) + labs(x="samples", y="ms")
-	p  <-   p + stat_smooth(se = FALSE)
-	#p <- p + geom_line(aes(rowid, avgLatency, color=build))
-	p <- p + labs(y='ms', x="samples")
-	p <- p + opts(title=paste("Avg. Latency"))
-	print(p)
-	
 	# OPS
 	bb <- plyr::ldply(opsstats,unlist)
 	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'startTime', 'endTime', 'totalGets', 'totalSets')	
@@ -91,22 +98,23 @@ for(arg in args) {
 
 	bb <- transform(bb, rowid=as.numeric(rowid),ram=as.numeric(ram), test_time=as.numeric(test_time),opsPerSecond=(as.numeric(totalGets)+as.numeric(totalSets))/(as.numeric(endTime) - 		as.numeric(startTime)),unique_col=paste(substring(doc_id,28,32),'-',build))
 	bb <- bb[bb$test == tname,]
-	(temp_data_frame <- data_frame[FALSE, ])
-	builds = factor(bb$build)
-	for(a_build in levels(builds)) {
-		filtered <- bb[bb$build == a_build,]
-		max_time <- max(filtered$test_time)
-		print(max_time)
-		graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
-		temp_data_frame <- rbind(temp_data_frame,  graphed)
+	if(nrow(bb) != 0){
+		(temp_data_frame <- data_frame[FALSE, ])
+		builds = factor(bb$build)
+		for(a_build in levels(builds)) {
+			filtered <- bb[bb$build == a_build,]
+			max_time <- max(filtered$test_time)
+			print(max_time)
+			graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
+			temp_data_frame <- rbind(temp_data_frame,  graphed)
+		}
+		p <- ggplot(temp_data_frame,aes(rowid, opsPerSecond, fill=build)) + labs(x="samples", y="OPS")
+		p  <-   p + stat_smooth(se = FALSE)
+		#p <- p + geom_line(aes(rowid, opsPerSecond, color=build))
+		p <- p + labs(y='OPS', x="samples")
+		p <- p + opts(title=paste("OPS"))
+		print(p)
 	}
-	p <- ggplot(temp_data_frame,aes(rowid, opsPerSecond, fill=build)) + labs(x="samples", y="OPS")
-	p  <-   p + stat_smooth(se = FALSE)
-	#p <- p + geom_line(aes(rowid, opsPerSecond, color=build))
-	p <- p + labs(y='OPS', x="samples")
-	p <- p + opts(title=paste("OPS"))
-	print(p)
-
 	# System Stats (Memory)
 	data_frame <- data.frame()
 	data_frame <- data.frame(t(rep(NA, 15)))
