@@ -20,7 +20,6 @@ for(arg in args) {
 	data_frame <- data.frame(t(rep(NA, 13)))
  	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'drainRate', 'unique_col')	
 
-
 	# Drain Rate
 	# Does not import the null values if present in json 
 	membasestats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/membasestats", sep=''))$rows
@@ -68,22 +67,17 @@ for(arg in args) {
 	bb <- bb[bb$test == tname,]
 	# Drain Rate tests have no OPS/Latency
 	if(nrow(bb) != 0){
-		print(bb)
 		(temp_data_frame <- data_frame[FALSE, ])
-		print(bb$build)
-		print(bb)
 		builds = factor(bb$build)
 
 		for(a_build in levels(builds)) {
 			filtered <- bb[bb$build == a_build,]
-			print(filtered)
 			max_time <- max(filtered$test_time)
 			print(max_time)
 			graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
 			temp_data_frame <- rbind(temp_data_frame,  graphed)
 		}
-		print(temp_data_frame)
-		p <- ggplot(temp_data_frame, aes(rowid, avgLatency, fill=build)) + labs(x="samples", y="ms")
+		p <- ggplot(temp_data_frame, aes(rowid, avgLatency, fill=build, color=build)) + labs(x="samples", y="ms")
 		p  <-   p + stat_smooth(se = FALSE)
 		#p <- p + geom_line(aes(rowid, avgLatency, color=build))
 		p <- p + labs(y='ms', x="samples")
@@ -108,7 +102,7 @@ for(arg in args) {
 			graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
 			temp_data_frame <- rbind(temp_data_frame,  graphed)
 		}
-		p <- ggplot(temp_data_frame,aes(rowid, opsPerSecond, fill=build)) + labs(x="samples", y="OPS")
+		p <- ggplot(temp_data_frame,aes(rowid, opsPerSecond, fill=build, color=build)) + labs(x="samples", y="OPS")
 		p  <-   p + stat_smooth(se = FALSE)
 		#p <- p + geom_line(aes(rowid, opsPerSecond, color=build))
 		p <- p + labs(y='OPS', x="samples")
