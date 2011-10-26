@@ -73,9 +73,9 @@ class StatsCollector(object):
             totalgets += stat["tot-gets"]
             totalsets += stat["tot-sets"]
             delta += (stat["end-time"] - stat["start-time"])
-        merged["endTime"] = merged["start-time"] + delta
-        merged["tot-sets"] = totalsets
-        merged["tot-gets"] = totalgets
+        merged["endTime"] = merged["startTime"] + delta
+        merged["totalSets"] = totalsets
+        merged["totalGets"] = totalgets
         return merged
 
     def total_stats(self, ops_stat):
