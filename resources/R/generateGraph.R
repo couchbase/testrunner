@@ -17,14 +17,14 @@ for(arg in args) {
 	cat(paste("Test Case : ", tname),sep="\n")
 	pdf(paste(tname,sep="",".pdf"))
 	data_frame <- data.frame()
-	data_frame <- data.frame(t(rep(NA, 13)))
- 	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'drainRate', 'unique_col')	
+	data_frame <- data.frame(t(rep(NA, 19)))
+ 	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'rowid', 'drainRate', 'unique_col')	
 
 	# Drain Rate
 	# Does not import the null values if present in json 
 	membasestats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/membasestats", sep=''))$rows
 	bb <- plyr::ldply(membasestats, unlist)
-	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'drainRate')	
+	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'rowid', 'drainRate')	
 	bb <- transform(bb, build=paste(gsub("couchbase-", "", build)))
 	bb <- transform(bb, build=paste(gsub("membase-", "", build)))
 	bb <- transform(bb,rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), drainRate=as.numeric(drainRate), unique_col=paste(substring(doc_id, 28, 32), '-', build))
@@ -48,12 +48,12 @@ for(arg in args) {
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 	testName <- unlist(strsplit(temp_data_frame$test_name[1], "\\."))[4]
 	print(testName)
-	values <- c(paste('test:', testName), paste('items:', format(temp_data_frame$max_items[1], scientific = FALSE)), paste('value_size:',temp_data_frame$min_value_size[1]))
+	values <- c(paste('test:', testName), paste('items:', temp_data_frame$total_items[1]), paste('value_size:',temp_data_frame$min_value_size[1]), paste('total_gets:', temp_data_frame$total_gets[1]), paste('total_sets:', temp_data_frame$total_sets[1]), paste('total_creates:', temp_data_frame$total_creates[1]), paste('run_time:', temp_data_frame$run_time[1]) )
 	print(values)
 	print(p)
 	pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:3){
+	for (row in 1:7){
 		grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
@@ -95,7 +95,7 @@ for(arg in args) {
 		print(p)
 		pushViewport(viewport())
 		y <- 0.75 
-		for (row in 1:3){
+		for (row in 1:7){
 			grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
 			y <- y + 0.026	
 		}
@@ -129,20 +129,20 @@ for(arg in args) {
 		print(p)
 		pushViewport(viewport())
 		y <- 0.75 
-		for (row in 1:3){
+		for (row in 1:7){
 			grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
 			y <- y + 0.026	
 		}
 	    popViewport()
 	}
-	# System Stats (Memory)
+	# System Stats (Memory for Beam.smp)
 	data_frame <- data.frame()
-	data_frame <- data.frame(t(rep(NA, 15)))
- 	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'process', 'rowid', 'time_sample', 'rss', 'unique_col')	
+	data_frame <- data.frame(t(rep(NA, 21)))
+ 	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'rowid', 'time_sample', 'rss', 'process','unique_col')	
 
 	systemstats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/systemstats", sep=''))$rows
 	bb <- plyr::ldply(systemstats, unlist)
-	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'process', 'rowid', 'time_sample', 'rss')		
+	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time','rowid', 'time_sample', 'rss', 'process')		
 	bb <- transform(bb, build=paste(gsub("couchbase-", "", build)))
 	bb <- transform(bb, build=paste(gsub("membase-", "", build)))
 	bb <- transform(bb, rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), time_sample=as.numeric(time_sample), rss=as.numeric(rss), unique_col=paste(substring(doc_id, 28, 32), '-', build))
@@ -153,7 +153,7 @@ for(arg in args) {
 		filtered <- bb[bb$build == a_build,]
 		max_time <- max(filtered$test_time)
 		print(max_time)
-		graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
+		graphed <- bb[bb$build == a_build & bb$test_time == max_time & bb$process == 'beam.smp',]
 		temp_data_frame <- rbind(temp_data_frame,  graphed)
 	}
 	p <- ggplot(temp_data_frame, aes(rowid, rss, fill=build, label=rss))
@@ -166,11 +166,49 @@ for(arg in args) {
 	print(p)
 	pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:3){
+	for (row in 1:7){
 		grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
 	popViewport()
+	
+	# System Stats (Memory for Memcached)
+	data_frame <- data.frame()
+	data_frame <- data.frame(t(rep(NA, 21)))
+ 	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'rowid', 'time_sample', 'rss', 'process','unique_col')	
+
+	systemstats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/systemstats", sep=''))$rows
+	bb <- plyr::ldply(systemstats, unlist)
+	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time','rowid', 'time_sample', 'rss', 'process')
+	bb <- transform(bb, build=paste(gsub("couchbase-", "", build)))
+	bb <- transform(bb, build=paste(gsub("membase-", "", build)))
+	bb <- transform(bb, rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), time_sample=as.numeric(time_sample), rss=as.numeric(rss), unique_col=paste(substring(doc_id, 28, 32), '-', build))
+	bb <- bb[bb$test==tname,]
+	(temp_data_frame <- data_frame[FALSE, ])
+	builds = factor(bb$build)
+	for(a_build in levels(builds)) {
+		filtered <- bb[bb$build == a_build,]
+		max_time <- max(filtered$test_time)
+		print(max_time)
+		graphed <- bb[bb$build == a_build & bb$test_time == max_time & bb$process == 'memcached',]
+		temp_data_frame <- rbind(temp_data_frame,  graphed)
+	}
+	p <- ggplot(temp_data_frame, aes(rowid, rss, fill=build, label=rss))
+	#p  <-   p + stat_smooth(se = FALSE)
+	p <- p + geom_line(aes(rowid, rss, color=build))
+	p <- p + labs(y='Memory (in MB)', x="----time (every 10 secs) --->")
+	p <- p + opts(title=paste("Memcached"))
+	p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+    p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))
+	print(p)
+	pushViewport(viewport())
+	y <- 0.75 
+	for (row in 1:7){
+		grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
+		y <- y + 0.026	
+	}
+	popViewport()
+
 	
 dev.off()	
 	
