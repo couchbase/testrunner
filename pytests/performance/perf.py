@@ -257,7 +257,7 @@ class PerfBase(unittest.TestCase):
         self.wait_until_drained()
         self.restart_moxi()
 
-    def loop(self, num_ops,
+    def loop(self, num_ops=None,
              num_items=None,
              max_creates=None,
              min_value_size=None,
@@ -268,6 +268,7 @@ class PerfBase(unittest.TestCase):
              ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0,
              ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95, test_name=None):
         num_items = num_items or self.num_items_loaded
+
         cfg = { 'max-items': num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -286,6 +287,8 @@ class PerfBase(unittest.TestCase):
         sc = self.start_stats(self.spec_reference + ".loop", test_params = cfg_params)
 
         cur = { 'cur-items': num_items }
+        if num_ops is None:
+            num_ops = num_items
         if type(num_ops) == type(0):
             cfg['max-ops'] = num_ops
         else:
@@ -380,7 +383,7 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -396,7 +399,7 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 4000000),
+        self.loop(num_items      = self.parami("items", 4000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 4),
@@ -412,8 +415,8 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
-                  self.parami('size', 1024),
+        self.loop(num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -429,8 +432,8 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
-                  self.parami('size', 1024),
+        self.loop(num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -466,7 +469,7 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 5),
@@ -483,7 +486,7 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 5),
@@ -500,7 +503,7 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 5),
@@ -518,7 +521,7 @@ class NodePeakPerformance(PerfBase):
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -536,8 +539,8 @@ class NodePeakPerformance(PerfBase):
                   kind=self.param('kind', 'json'))
         self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
-        self.loop(self.parami("items", 1000000),
-                  self.parami('size', 1024),
+        self.loop(num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
                   kind           = self.param('kind', 'json'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -555,8 +558,8 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
-                  self.parami('size', 1024),
+        self.loop(num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
                   kind           = self.param('kind', 'json'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
