@@ -30,6 +30,7 @@ class PerfBase(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.sc = None
+        self.vbucket_count = 0
         self.tearDown() # Helps when a previous broken test never reached tearDown.
 
         master = self.input.servers[0]
@@ -48,6 +49,10 @@ class PerfBase(unittest.TestCase):
                         msg="wait_for_memcached failed for {0}".format(bucket))
         self.assertTrue(rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
+
+        vBuckets = RestConnection(master).get_vbuckets(bucket)
+        self.vbucket_count = len(vBuckets)
+        print self.vbucket_count
 
         # Number of items loaded by load() method.
         # Does not include or count any items that came from setUp_dgm().
@@ -81,8 +86,11 @@ class PerfBase(unittest.TestCase):
             shell.stop_moxi()
             shell.disconnect()
 
-    def target_moxi(self, bucket='default'): # Returns "host:port" of moxi to hit.
+    def target_moxi(self, bucket='default', use_direct=False): # Returns "host:port" of moxi to hit.
         rv = self.param('moxi', None)
+        if use_direct:
+            return "%s:%s" % (self.input.servers[0].ip,
+                              '11210')
         if rv:
             return rv
         if len(self.input.moxis) > 0:
@@ -200,14 +208,15 @@ class PerfBase(unittest.TestCase):
                 'ratio-hot-sets': ratio_hot_sets,
                 'ratio-hot-gets': ratio_hot_gets,
                 'exit-after-creates': 1,
-                'json': int(kind == 'json')
+                'json': int(kind == 'json'),
+                'batch':1000
                 }
-        self.log.info("mcsoda - host_port: " + self.target_moxi())
+        self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=True))
         self.log.info("mcsoda - cfg: " + str(cfg))
         cur, start_time, end_time = mcsoda.run(cfg, {},
                                                'memcached-' + protocol,
-                                               self.target_moxi(),
-                                               '', '')
+                                               self.target_moxi(use_direct=True),
+                                               '', '', vbucket_count= self.vbucket_count)
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
@@ -279,7 +288,8 @@ class PerfBase(unittest.TestCase):
                 'ratio-hot-sets': ratio_hot_sets,
                 'ratio_hot-gets': ratio_hot_gets,
                 'threads': clients,
-                'json': int(kind == 'json')
+                'json': int(kind == 'json'),
+                'batch': 1000
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
@@ -295,12 +305,12 @@ class PerfBase(unittest.TestCase):
             # Here, we num_ops looks like "time to run" tuple of...
             # ('seconds', integer_num_of_seconds_to_run)
             cfg['time'] = num_ops[1]
-        self.log.info("mcsoda - moxi: " + self.target_moxi())
+        self.log.info("mcsoda - moxi: " + self.target_moxi(use_direct=True))
         self.log.info("mcsoda - cfg: " + str(cfg))
         cur, start_time, end_time = mcsoda.run(cfg, cur,
                                                'memcached-' + protocol,
-                                               self.target_moxi(),
-                                               '', '',sc)
+                                               self.target_moxi(use_direct=True),
+                                               '', '',sc, vbucket_count= self.vbucket_count)
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
                 'tot-items': cur.get('cur-items', 0),
