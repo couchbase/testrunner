@@ -56,7 +56,7 @@ class StatsCollector(object):
     def ops_stats(self, ops_stat):
         ops_stat["time"] = time.time()
         self._task["ops-temp"].append(ops_stat)
-        if len(self._task["ops-temp"]) > 1000:
+        if len(self._task["ops-temp"]) >= 100:
             merged = self._merge()
             self._task["ops"].append(merged)
             self._task["ops-temp"] = []
@@ -65,7 +65,7 @@ class StatsCollector(object):
 
     def _merge(self):
         first = self._task["ops-temp"][0]
-        merged = {"start-time":first["start-time"]}
+        merged = {"startTime":first["start-time"]}
         totalgets = 0
         totalsets = 0
         delta = 0
@@ -73,9 +73,9 @@ class StatsCollector(object):
             totalgets += stat["tot-gets"]
             totalsets += stat["tot-sets"]
             delta += (stat["end-time"] - stat["start-time"])
-        merged["end-time"] = merged["start-time"] + delta
-        merged["tot-sets"] = totalsets
-        merged["tot-gets"] = totalgets
+        merged["endTime"] = merged["startTime"] + delta
+        merged["totalSets"] = totalsets
+        merged["totalGets"] = totalgets
         return merged
 
     def total_stats(self, ops_stat):

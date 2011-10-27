@@ -619,7 +619,7 @@ class DiskDrainRate(PerfBase):
         sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
         start_time_unclog = time.time()
         self.unclog_cluster()
-        end_time_unclog = time.time()
+        end_time_unclog = self.wait_until_drained()
 
         ops['start-time'] = start_time_unclog
         ops['end-time'] = end_time_unclog
