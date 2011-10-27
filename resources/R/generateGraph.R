@@ -1,6 +1,6 @@
 # Print out Graphs for each test
 # i.e. 
-# Drain Rate, Latency and OPS
+# Drain Rate, Latency OPS and SYstem stats
 
 require(reshape, quietly=TRUE)
 require(plyr, quietly=TRUE)
@@ -27,7 +27,7 @@ for(arg in args) {
 	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'drainRate')	
 	bb <- transform(bb, build=paste(gsub("couchbase-", "", build)))
 	bb <- transform(bb, build=paste(gsub("membase-", "", build)))
-	bb <- transform(bb, rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), drainRate=as.numeric(drainRate), unique_col=paste(substring(doc_id, 28, 32), '-', build))
+	bb <- transform(bb,rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), drainRate=as.numeric(drainRate), unique_col=paste(substring(doc_id, 28, 32), '-', build))
  	bb <- bb[bb$test==tname,]
 
  	(temp_data_frame <- data_frame[FALSE, ])
@@ -39,18 +39,26 @@ for(arg in args) {
 		graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
 		temp_data_frame <- rbind(temp_data_frame,  graphed)
 	}
-	p <- ggplot(temp_data_frame, aes(rowid, drainRate, fill=build)) + labs(x="samples", y="ms")
+	p <- ggplot(temp_data_frame, aes(rowid, drainRate, fill=build, label=drainRate)) + labs(x="----time (every 10 sec)--->", y="ms")
 	#p  <-   p + stat_smooth(se = FALSE)
 	p <- p + geom_line(aes(rowid, drainRate, color=build))
-	p <- p + labs(y='ms', x="samples")
-	#labs <- cbind('test_name',temp_data_frame$test_name[0])
-	#labs <- cbind('test_time',temp_data_frame$test_time[0])
-	#labs <- cbind('items',temp_data_frame$max_items[0])
-	#labs <- cbind('value-size',temp_data_frame$min_value_size[0])
-	#g <- tableGrob(labs)
-	#grid.arrange(p, g, nrow=4, widths=c(5,5))
+	
 	p <- p + opts(title=paste("Disk Write Queue"))
+    p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+    p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+	testName <- unlist(strsplit(temp_data_frame$test_name[1], "\\."))[4]
+	print(testName)
+	values <- c(paste('test:', testName), paste('items:', format(temp_data_frame$max_items[1], scientific = FALSE)), paste('value_size:',temp_data_frame$min_value_size[1]))
+	print(values)
 	print(p)
+	pushViewport(viewport())
+	y <- 0.75 
+	for (row in 1:3){
+		grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
+		y <- y + 0.026	
+	}
+    popViewport()
+
 	
 	# Latency
 	data_frame <- data.frame()
@@ -77,12 +85,21 @@ for(arg in args) {
 			graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
 			temp_data_frame <- rbind(temp_data_frame,  graphed)
 		}
-		p <- ggplot(temp_data_frame, aes(rowid, avgLatency, fill=build, color=build)) + labs(x="samples", y="ms")
+		p <- ggplot(temp_data_frame, aes(rowid, avgLatency, fill=build, color=build, label=avgLatency)) + labs(x="samples", y="ms")
 		p  <-   p + stat_smooth(se = FALSE)
 		#p <- p + geom_line(aes(rowid, avgLatency, color=build))
-		p <- p + labs(y='ms', x="samples")
+		p <- p + labs(y='ms', x="----time --->")
 		p <- p + opts(title=paste("Avg. Latency"))
+	    p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+    	p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 		print(p)
+		pushViewport(viewport())
+		y <- 0.75 
+		for (row in 1:3){
+			grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
+			y <- y + 0.026	
+		}
+	    popViewport()
 	}
 	# OPS
 	bb <- plyr::ldply(opsstats,unlist)
@@ -102,12 +119,21 @@ for(arg in args) {
 			graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
 			temp_data_frame <- rbind(temp_data_frame,  graphed)
 		}
-		p <- ggplot(temp_data_frame,aes(rowid, opsPerSecond, fill=build, color=build)) + labs(x="samples", y="OPS")
+		p <- ggplot(temp_data_frame,aes(rowid, opsPerSecond, fill=build, color=build, label=opsPerSecond)) + labs(x="samples", y="OPS")
 		p  <-   p + stat_smooth(se = FALSE)
 		#p <- p + geom_line(aes(rowid, opsPerSecond, color=build))
-		p <- p + labs(y='OPS', x="samples")
+		p <- p + labs(y='OPS', x="----time --->")
 		p <- p + opts(title=paste("OPS"))
+	    p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+    	p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 		print(p)
+		pushViewport(viewport())
+		y <- 0.75 
+		for (row in 1:3){
+			grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
+			y <- y + 0.026	
+		}
+	    popViewport()
 	}
 	# System Stats (Memory)
 	data_frame <- data.frame()
@@ -130,18 +156,21 @@ for(arg in args) {
 		graphed <- bb[bb$build == a_build & bb$test_time == max_time,]
 		temp_data_frame <- rbind(temp_data_frame,  graphed)
 	}
-	p <- ggplot(temp_data_frame, aes(rowid, rss, fill=build)) + labs(x="samples", y="Memory")
+	p <- ggplot(temp_data_frame, aes(rowid, rss, fill=build, label=rss))
 	#p  <-   p + stat_smooth(se = FALSE)
 	p <- p + geom_line(aes(rowid, rss, color=build))
-	p <- p + labs(y='Memory (in MB)', x="samples")
-	#labs <- cbind('test_name',temp_data_frame$test_name[0])
-	#labs <- cbind('test_time',temp_data_frame$test_time[0])
-	#labs <- cbind('items',temp_data_frame$max_items[0])
-	#labs <- cbind('value-size',temp_data_frame$min_value_size[0])
-	#g <- tableGrob(labs)
-	#grid.arrange(p, g, nrow=4, widths=c(5,5))
+	p <- p + labs(y='Memory (in MB)', x="----time (every 10 secs) --->")
 	p <- p + opts(title=paste("beam.smp"))
+	p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+    p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))
 	print(p)
+	pushViewport(viewport())
+	y <- 0.75 
+	for (row in 1:3){
+		grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
+		y <- y + 0.026	
+	}
+	popViewport()
 	
 dev.off()	
 	
