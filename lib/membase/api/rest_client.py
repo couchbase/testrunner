@@ -796,7 +796,7 @@ class RestConnection(object):
         create_start_time = time.time()
         status, content = self._http_request(api, 'POST', params)
         create_time = time.time() - create_start_time
-        log.info("{0} seconds to create bucket {1}".format(create_time, bucket)
+        log.info("{0} seconds to create bucket {1}".format(create_time, bucket))
 
         if not status:
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
