@@ -319,6 +319,7 @@ class PerfBase(unittest.TestCase):
                 "start-time": start_time,
                 "end-time": end_time }
         self.end_stats(sc, ops)
+        self.wait_until_drained()
         return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
