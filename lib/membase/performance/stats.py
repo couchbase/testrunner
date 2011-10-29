@@ -69,10 +69,13 @@ class StatsCollector(object):
         totalgets = 0
         totalsets = 0
         delta = 0
-        for stat in self._task["ops-temp"]:
-            totalgets += stat["tot-gets"]
-            totalsets += stat["tot-sets"]
-            delta += (stat["end-time"] - stat["start-time"])
+        i = 0
+        for i in range(len(self._task["ops-temp"])-1):
+            current = self._task["ops-temp"][i]
+            next = self._task["ops-temp"][i+1]
+            totalgets += current["tot-gets"]
+            totalsets += current["tot-sets"]
+            delta += (next["start-time"] - current["start-time"])
         merged["endTime"] = merged["startTime"] + delta
         merged["totalSets"] = totalsets
         merged["totalGets"] = totalgets
