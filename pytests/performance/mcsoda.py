@@ -25,6 +25,7 @@ try:
 except ImportError:
    from md5 import md5
 
+import crc32
 import mc_bin_client
 import memcacheConstants
 
@@ -159,7 +160,7 @@ def choose_entry(arr, n):
 
 class Store:
 
-    def connect(self, target, user, pswd, cfg, cur):
+    def connect(self, target, user, pswd, cfg, cur, vbucket_count):
         self.cfg = cfg
         self.cur = cur
 
@@ -194,14 +195,16 @@ class Store:
 
 class StoreMemcachedBinary(Store):
 
-    def connect(self, target, user, pswd, cfg, cur):
+    def connect(self, target, user, pswd, cfg, cur, vbucket_count):
         self.cfg = cfg
         self.cur = cur
         self.target = target
         self.host_port = (target + ":11211").split(':')[0:2]
         self.host_port[1] = int(self.host_port[1])
         self.conn = mc_bin_client.MemcachedClient(self.host_port[0],
-                                                  self.host_port[1])
+                                                     self.host_port[1])
+        self.vbucket_count = vbucket_count
+
         if user:
            self.conn.sasl_auth_plain(user, pswd)
         self.queue = []
@@ -217,6 +220,8 @@ class StoreMemcachedBinary(Store):
                dtype=0, vbucketId=0,
                fmt=REQ_PKT_FMT,
                magic=REQ_MAGIC_BYTE):
+        vbucketId = crc32.crc32_hash(key) & (self.vbucket_count - 1)
+        #print vbucketId
         return struct.pack(fmt, magic, op,
                            len(key), len(extra), dtype, vbucketId,
                            len(key) + len(extra) + len(val), opaque, cas)
@@ -279,7 +284,7 @@ class StoreMemcachedBinary(Store):
 
 class StoreMemcachedAscii(Store):
 
-    def connect(self, target, user, pswd, cfg, cur):
+    def connect(self, target, user, pswd, cfg, cur, vbucket_count):
         self.cfg = cfg
         self.cur = cur
         self.target = target
@@ -373,7 +378,7 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 # --------------------------------------------------------
 
 def run(cfg, cur, protocol, host_port, user, pswd,
-        stats_collector = None):
+        stats_collector = None, vbucket_count=1024):
    if type(cfg['min-value-size']) == type(""):
        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
    if type(cfg['min-value-size']) != type([]):
@@ -403,7 +408,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
          else:
             store = StoreMemcachedBinary()
 
-      store.connect(host_port, user, pswd, cfg, cur)
+      store.connect(host_port, user, pswd, cfg, cur, vbucket_count)
       store.stats_collector(stats_collector)
 
       threads.append(threading.Thread(target=run_worker,

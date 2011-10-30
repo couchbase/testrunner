@@ -30,6 +30,7 @@ class PerfBase(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.sc = None
+        self.vbucket_count = 0
         self.tearDown() # Helps when a previous broken test never reached tearDown.
 
         master = self.input.servers[0]
@@ -48,6 +49,10 @@ class PerfBase(unittest.TestCase):
                         msg="wait_for_memcached failed for {0}".format(bucket))
         self.assertTrue(rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
+
+        vBuckets = RestConnection(master).get_vbuckets(bucket)
+        self.vbucket_count = len(vBuckets)
+        print self.vbucket_count
 
         # Number of items loaded by load() method.
         # Does not include or count any items that came from setUp_dgm().
@@ -81,8 +86,11 @@ class PerfBase(unittest.TestCase):
             shell.stop_moxi()
             shell.disconnect()
 
-    def target_moxi(self, bucket='default'): # Returns "host:port" of moxi to hit.
+    def target_moxi(self, bucket='default', use_direct=False): # Returns "host:port" of moxi to hit.
         rv = self.param('moxi', None)
+        if use_direct:
+            return "%s:%s" % (self.input.servers[0].ip,
+                              '11210')
         if rv:
             return rv
         if len(self.input.moxis) > 0:
@@ -200,14 +208,15 @@ class PerfBase(unittest.TestCase):
                 'ratio-hot-sets': ratio_hot_sets,
                 'ratio-hot-gets': ratio_hot_gets,
                 'exit-after-creates': 1,
-                'json': int(kind == 'json')
+                'json': int(kind == 'json'),
+                'batch':1000
                 }
-        self.log.info("mcsoda - host_port: " + self.target_moxi())
+        self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=True))
         self.log.info("mcsoda - cfg: " + str(cfg))
         cur, start_time, end_time = mcsoda.run(cfg, {},
                                                'memcached-' + protocol,
-                                               self.target_moxi(),
-                                               '', '')
+                                               self.target_moxi(use_direct=True),
+                                               '', '', vbucket_count= self.vbucket_count)
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
@@ -257,7 +266,7 @@ class PerfBase(unittest.TestCase):
         self.wait_until_drained()
         self.restart_moxi()
 
-    def loop(self, num_ops,
+    def loop(self, num_ops=None,
              num_items=None,
              max_creates=None,
              min_value_size=None,
@@ -268,6 +277,7 @@ class PerfBase(unittest.TestCase):
              ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0,
              ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95, test_name=None):
         num_items = num_items or self.num_items_loaded
+
         cfg = { 'max-items': num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -278,7 +288,8 @@ class PerfBase(unittest.TestCase):
                 'ratio-hot-sets': ratio_hot_sets,
                 'ratio_hot-gets': ratio_hot_gets,
                 'threads': clients,
-                'json': int(kind == 'json')
+                'json': int(kind == 'json'),
+                'batch': 1000
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
@@ -286,18 +297,20 @@ class PerfBase(unittest.TestCase):
         sc = self.start_stats(self.spec_reference + ".loop", test_params = cfg_params)
 
         cur = { 'cur-items': num_items }
+        if num_ops is None:
+            num_ops = num_items
         if type(num_ops) == type(0):
             cfg['max-ops'] = num_ops
         else:
             # Here, we num_ops looks like "time to run" tuple of...
             # ('seconds', integer_num_of_seconds_to_run)
             cfg['time'] = num_ops[1]
-        self.log.info("mcsoda - moxi: " + self.target_moxi())
+        self.log.info("mcsoda - moxi: " + self.target_moxi(use_direct=True))
         self.log.info("mcsoda - cfg: " + str(cfg))
         cur, start_time, end_time = mcsoda.run(cfg, cur,
                                                'memcached-' + protocol,
-                                               self.target_moxi(),
-                                               '', '',sc)
+                                               self.target_moxi(use_direct=True),
+                                               '', '',sc, vbucket_count= self.vbucket_count)
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
                 'tot-items': cur.get('cur-items', 0),
@@ -306,6 +319,7 @@ class PerfBase(unittest.TestCase):
                 "start-time": start_time,
                 "end-time": end_time }
         self.end_stats(sc, ops)
+        self.wait_until_drained()
         return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
@@ -375,12 +389,13 @@ class PerfBase(unittest.TestCase):
 class NodePeakPerformance(PerfBase):
 
     def test_get_1client(self):
-        self.spec('NPP-01-1k')
+        self.spec('NPP-01-1k.1')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -391,12 +406,13 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_get_4client(self):
-        self.spec('NPP-02-1k')
+        self.spec('NPP-02-1k.1')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 4000000),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 4),
@@ -407,13 +423,14 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_set_1client(self):
-        self.spec('NPP-03-1k')
+        self.spec('NPP-03-1k.1')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
-                  self.parami('size', 1024),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -424,13 +441,14 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_mixed_1client(self):
-        self.spec('NPP-04-1k')
+        self.spec('NPP-04-1k.1')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
-                  self.parami('size', 1024),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -460,13 +478,14 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_get_5client_2node(self):
-        self.spec('NPP-06-1k')
+        self.spec('NPP-06-1k.1')
         self.nodes(2)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 5),
@@ -477,13 +496,14 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_get_5client_3node(self):
-        self.spec('NPP-07-1k')
+        self.spec('NPP-07-1k.1')
         self.nodes(3)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 5),
@@ -494,13 +514,14 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_get_5client_5node(self):
-        self.spec('NPP-08-1k')
+        self.spec('NPP-08-1k.1')
         self.nodes(5)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 5),
@@ -511,14 +532,15 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_get_1client_rebalance(self):
-        self.spec('NPP-09-5k')
+        self.spec('NPP-09-5k.1')
         self.nodes(2)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 5000),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
-        self.loop(self.parami("items", 1000000),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
                   kind           = self.param('kind', 'binary'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -529,15 +551,16 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_mixed_1client_rebalance_json(self):
-        self.spec('NPP-10-1k')
+        self.spec('NPP-10-1k.1')
         self.nodes(2)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
         self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
-        self.loop(self.parami("items", 1000000),
-                  self.parami('size', 1024),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
                   kind           = self.param('kind', 'json'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -550,13 +573,14 @@ class NodePeakPerformance(PerfBase):
                   test_name      = self.id())
 
     def test_set_1client_json(self):
-        self.spec('NPP-12-1k')
+        self.spec('NPP-12-1k.1')
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
         self.loop_prep()
-        self.loop(self.parami("items", 1000000),
-                  self.parami('size', 1024),
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
                   kind           = self.param('kind', 'json'),
                   protocol       = self.param('protocol', 'binary'),
                   clients        = self.parami('clients', 1),
@@ -572,17 +596,19 @@ class DiskDrainRate(PerfBase):
 
     def test_1M_2k(self):
         self.spec('DRR-01')
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
+                                                                'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 2048),
                                               kind=self.param('kind', 'binary'))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
-    def test_9M_1k(self):
-        self.spec('DRR-02')
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
-        ops, start_time, end_time = self.load(self.parami("items", 9000000),
+    def test_1M_1k(self):
+        self.spec('DRR-02.1')
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
+                                                                'test_time':time.time()})
+        ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'),
                                               ratio_sets=self.paramf('ratio-sets', 0.9))
@@ -593,7 +619,8 @@ class DiskDrainRate(PerfBase):
         self.spec('DRR-03')
         self.nodes(2)
         self.delayed_rebalance(4)
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
+                                                                'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'))
@@ -603,7 +630,8 @@ class DiskDrainRate(PerfBase):
     def test_1M_compaction(self):
         self.spec('DRR-04')
         self.delayed_compaction()
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
+                                                                'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'))
@@ -616,7 +644,8 @@ class DiskDrainRate(PerfBase):
         ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),
                                                         self.parami('size', 1024),
                                                         kind=self.param('kind', 'binary'))
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(), 'test_time':time.time()})
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
+                                                                'test_time':time.time()})
         start_time_unclog = time.time()
         self.unclog_cluster()
         end_time_unclog = self.wait_until_drained()
