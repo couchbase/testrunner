@@ -50,7 +50,9 @@ class StatsCollector(object):
                "ops":self._task["ops"],
                "time": self._task["time"],
                "info": test_params,
-               "ns_server_data": self._task["ns_server_stats"] }
+               "ns_server_data": self._task["ns_server_stats"],
+               "timings": self._task["timings"],
+               "dispatcher": self._task["dispatcher"]}
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
 
@@ -149,11 +151,12 @@ class StatsCollector(object):
             except:
                 pass
         self._task["membasestats"] = []
+        self._task["timings"] = []
+        self._task["dispatcher"] = []
         d = {}
         #        "pname":"x","pid":"y","snapshots":[{"time":time,"value":value}]
         for mc in mcs:
-            d[mc.host] = {"snapshots": []}
-
+            d[mc.host] = {"snapshots": [], "timings":[], "dispatcher":[]}
 
         while not self._aborted():
             time.sleep(frequency)
@@ -162,10 +165,18 @@ class StatsCollector(object):
                 stats["time"] = time.time()
                 stats["ip"] = mc.host
                 d[mc.host]["snapshots"].append(stats)
+                timings = mc.stats('timings')
+                d[mc.host]["timings"].append(timings)
+                dispatcher = mc.stats('dispatcher')
+                d[mc.host]["dispatcher"].append(dispatcher)
 
         for mc in mcs:
             for snapshot in d[mc.host]["snapshots"]:
                 self._task["membasestats"].append(snapshot)
+            for timing in d[mc.host]["timings"]:
+                self._task["timings"].append(timing)
+            for dispatcher in d[mc.host]["dispatcher"]:
+                self._task["dispatcher"].append(dispatcher)
 
         print " finished membase_stats"
 
