@@ -229,6 +229,29 @@ class StoreMemcachedBinary(Store):
     def flush(self):
         extra = struct.pack(SET_PKT_FMT, 0, self.cfg.get('expiration', 0))
 
+        if self.sc and len(self.queue) > 0:
+           # Use the first request to measure single request latency.
+           #
+           m = []
+           cmd, key_num, key_str, data = self.queue.pop(0)
+           delta_gets, delta_sets, delta_deletes = \
+                self.cmd_append(cmd, key_num, key_str, data, m, extra)
+           msg = ''.join(m)
+
+           start = time.time()
+           self.conn.s.send(msg)
+           self.recvMsg()
+           end = time.time()
+
+           self.sc.ops_stats({ 'tot-gets': delta_gets,
+                               'tot-sets': delta_sets,
+                               'tot-deletes': delta_deletes,
+                               'start-time': start,
+                               'end-time': end })
+
+        if not self.queue:
+           return
+
         num_gets = 0
         num_sets = 0
         num_deletes = 0
@@ -237,20 +260,11 @@ class StoreMemcachedBinary(Store):
         m = []
         for c in self.queue:
             cmd, key_num, key_str, data = c
-            if cmd[0] == 'g':
-                num_gets += 1
-                m.append(self.header(CMD_GET, key_str, ''))
-                m.append(key_str)
-            elif cmd[0] == 'd':
-                num_deletes += 1
-                m.append(self.header(CMD_DELETE, key_str, ''))
-                m.append(key_str)
-            else:
-                num_sets += 1
-                m.append(self.header(CMD_SET, key_str, data, extra=extra))
-                m.append(extra)
-                m.append(key_str)
-                m.append(data)
+            delta_gets, delta_sets, delta_deletes = \
+                self.cmd_append(cmd, key_num, key_str, data, m, extra)
+            num_gets += delta_gets
+            num_sets += delta_sets
+            num_deletes += delta_deletes
 
         self.queue = []
         msg = ''.join(m)
@@ -272,6 +286,22 @@ class StoreMemcachedBinary(Store):
                                'tot-deletes': num_deletes,
                                'start-time': start,
                                'end-time': end })
+
+    def cmd_append(self, cmd, key_num, key_str, data, m, extra):
+       if cmd[0] == 'g':
+          m.append(self.header(CMD_GET, key_str, ''))
+          m.append(key_str)
+          return 1, 0, 0
+       elif cmd[0] == 'd':
+          m.append(self.header(CMD_DELETE, key_str, ''))
+          m.append(key_str)
+          return 0, 0, 1
+       else:
+          m.append(self.header(CMD_SET, key_str, data, extra=extra))
+          m.append(extra)
+          m.append(key_str)
+          m.append(data)
+          return 0, 1, 0
 
     def num_ops(self, cur):
         return self.ops
