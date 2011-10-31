@@ -807,3 +807,25 @@ class TODO_DatabaseFileSize(TODO_PerfBase):
         self.force_expirations()
         self.measure_db_size()
 
+class Experimental(PerfBase):
+
+    def test_experimental(self):
+        self.spec('Experimental')
+        self.load(self.parami("items", 1000000),
+                  self.parami('size', 1024),
+                  kind=self.param('kind', 'binary'))
+        self.loop_prep()
+        seconds = self.parami('seconds', 60 * 20)
+        self.loop(('seconds', seconds),
+                  num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
+                  kind           = self.param('kind', 'binary'),
+                  protocol       = self.param('protocol', 'binary'),
+                  clients        = self.parami('clients', 1),
+                  ratio_sets     = self.paramf('ratio_sets', 0.2),
+                  ratio_misses   = self.paramf('ratio_misses', 0.2),
+                  ratio_creates  = self.paramf('ratio_creates', 0.5),
+                  ratio_hot      = self.paramf('ratio_hot', 0.2),
+                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                  test_name      = self.id())
