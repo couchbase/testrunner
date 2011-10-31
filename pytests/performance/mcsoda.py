@@ -35,6 +35,49 @@ from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
 
 # --------------------------------------------------------
 
+INT_TYPE = type(123)
+FLOAT_TYPE = type(0.1)
+DICT_TYPE = type({})
+
+def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
+   dtype = DICT_TYPE
+   scalars = []
+   complex = []
+   for key in d.keys():
+      if type(d[key]) == dtype:
+         complex.append(key)
+      else:
+         scalars.append(key)
+   scalars.sort()
+   complex.sort()
+
+   # Special case for histogram output.
+   histo = 0
+   if scalars and not complex and \
+      type(scalars[0]) == FLOAT_TYPE and type(d[scalars[0]]) == INT_TYPE:
+      for key in scalars:
+         histo = max(d[key], histo)
+
+   for key in scalars:
+      k = str(key)
+      if ljust:
+         k = string.ljust(k, ljust)
+      v = str(d[key])
+      if histo:
+         v = string.rjust(v, 8) + " " + ("*" * int(math.ceil(50.0 * d[key] / histo)))
+
+      res.append(level + k + ": " + v + suffix)
+
+   if complex:
+      res.append("\n")
+   for key in complex:
+      res.append(level + str(key) + ":\n")
+      dict_to_s(d[key], level + "  ", res=res, suffix="\n", ljust=8)
+
+   return ''.join(res)
+
+# --------------------------------------------------------
+
 MIN_VALUE_SIZE = [10]
 
 def run_worker(ctl, cfg, cur, store, prefix):
@@ -58,7 +101,7 @@ def run_worker(ctl, cfg, cur, store, prefix):
         if i % 100000 == 0:
             t_curr = time.time()
             o_curr = store.num_ops(cur)
-            log.info(prefix + str(cur))
+            log.info(prefix + dict_to_s(cur))
             log.info("%s    ops: %s secs: %s ops/sec: %s" %
                   (prefix,
                    string.ljust(str(o_curr - o_last), 10),
@@ -495,7 +538,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
    t_end = time.time()
 
    log.info("")
-   log.info(str(cur))
+   log.info(dict_to_s(cur))
    log.info("    ops/sec: %s" %
             ((cur.get('cur-gets', 0) + cur.get('cur-sets', 0)) / (t_end - t_start)))
 
