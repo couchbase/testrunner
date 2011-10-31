@@ -233,6 +233,7 @@ class StoreMemcachedBinary(Store):
         num_sets = 0
         num_deletes = 0
 
+        n = len(self.queue)
         m = []
         for c in self.queue:
             cmd, key_num, key_str, data = c
@@ -251,14 +252,19 @@ class StoreMemcachedBinary(Store):
                 m.append(key_str)
                 m.append(data)
 
+        self.queue = []
+        msg = ''.join(m)
+
         start = time.time()
 
-        self.conn.s.send(''.join(m))
+        self.conn.s.send(msg)
 
-        for c in self.queue:
+        for i in range(n):
             self.recvMsg()
 
         end = time.time()
+
+        self.ops += n
 
         if self.sc:
            self.sc.ops_stats({ 'tot-gets': num_gets,
@@ -266,9 +272,6 @@ class StoreMemcachedBinary(Store):
                                'tot-deletes': num_deletes,
                                'start-time': start,
                                'end-time': end })
-
-        self.ops += len(self.queue)
-        self.queue = []
 
     def num_ops(self, cur):
         return self.ops
@@ -329,18 +332,22 @@ class StoreMemcachedAscii(Store):
         self.buf = buf
 
     def flush(self):
+        n = len(self.queue)
         m = []
         for c in self.queue:
             cmd, key_num, key_str, data = c
             m.append(self.command_send(cmd, key_num, key_str, data))
-        self.skt.send(''.join(m))
+
+        self.queue = []
+        msg = ''.join(m)
+
+        self.skt.send(msg)
 
         for c in self.queue:
             cmd, key_num, key_str, data = c
             self.command_recv(cmd, key_num, key_str, data)
 
-        self.ops += len(self.queue)
-        self.queue = []
+        self.ops += n
 
     def num_ops(self, cur):
         return self.ops
