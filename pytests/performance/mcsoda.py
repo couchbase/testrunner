@@ -192,6 +192,14 @@ class Store:
             buf += data
         return buf[:nbytes], buf[nbytes:]
 
+    def add_timing_sample(self, cmd, delta, prefix="latency-"):
+       histo = self.cur.get(prefix + cmd, None)
+       if histo is None:
+          histo = {}
+          self.cur[prefix + cmd] = histo
+       bucket = 10 ** math.floor(math.log10(delta))
+       histo[bucket] = histo.get(bucket, 0) + 1
+
 
 class StoreMemcachedBinary(Store):
 
@@ -229,7 +237,7 @@ class StoreMemcachedBinary(Store):
     def flush(self):
         extra = struct.pack(SET_PKT_FMT, 0, self.cfg.get('expiration', 0))
 
-        if self.sc and len(self.queue) > 0:
+        if len(self.queue) > 0:
            # Use the first request to measure single request latency.
            #
            m = []
@@ -243,11 +251,14 @@ class StoreMemcachedBinary(Store):
            self.recvMsg()
            end = time.time()
 
-           self.sc.ops_stats({ 'tot-gets': delta_gets,
-                               'tot-sets': delta_sets,
-                               'tot-deletes': delta_deletes,
-                               'start-time': start,
-                               'end-time': end })
+           if self.sc:
+              self.sc.ops_stats({ 'tot-gets': delta_gets,
+                                  'tot-sets': delta_sets,
+                                  'tot-deletes': delta_deletes,
+                                  'start-time': start,
+                                  'end-time': end })
+
+           self.add_timing_sample(cmd, end - start)
 
         if not self.queue:
            return
