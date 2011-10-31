@@ -332,22 +332,19 @@ class StoreMemcachedAscii(Store):
         self.buf = buf
 
     def flush(self):
-        n = len(self.queue)
         m = []
         for c in self.queue:
             cmd, key_num, key_str, data = c
             m.append(self.command_send(cmd, key_num, key_str, data))
 
-        self.queue = []
-        msg = ''.join(m)
-
-        self.skt.send(msg)
+        self.skt.send(''.join(m))
 
         for c in self.queue:
             cmd, key_num, key_str, data = c
             self.command_recv(cmd, key_num, key_str, data)
 
-        self.ops += n
+        self.ops += len(self.queue)
+        self.queue = []
 
     def num_ops(self, cur):
         return self.ops
