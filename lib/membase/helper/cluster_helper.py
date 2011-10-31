@@ -190,3 +190,12 @@ class ClusterOperationHelper(object):
             if username:
                 c.sasl_auth_plain(username, password)
             c.stop_persistence()
+
+    @staticmethod
+    def flush_os_caches(servers):
+        for server in servers:
+            try:
+                shell = RemoteMachineShellConnection(server)
+                shell.flush_os_caches()
+            except:
+                pass

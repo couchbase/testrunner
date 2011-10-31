@@ -63,6 +63,7 @@ class PerfBase(unittest.TestCase):
         self.setUp_dgm()
         time.sleep(10)
         self.wait_until_warmed_up()
+        self.flush_cluster_os_caches()
 
     def tearDown(self):
         self.tearDown_moxi()

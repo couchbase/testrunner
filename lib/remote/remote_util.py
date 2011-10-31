@@ -974,3 +974,11 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/couchbase-server start")
             self.log_command_output(o, r)
+
+    def flush_os_caches(self):
+        info = self.extract_remote_info()
+        if info.type.lower() == "linux":
+            o, r = self.execute_command("sync")
+            self.log_command_output(o, r)
+            o, r = self.execute_command("echo 3 > /proc/sys/vm/drop_caches")
+            self.log_command_output(o, r)
