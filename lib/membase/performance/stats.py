@@ -180,8 +180,8 @@ class StatsCollector(object):
             time.sleep(frequency)
             print "Collecting ns_server_stats"
             for node in nodes:
-                f = os.popen("curl -X GET http://Administrator:password@localhost:8091/pools/{0}/buckets/{0}/stats?zoom=minute -o  ns_server_data".format(bucket))
-                dict  = open("ns_server_data","r").read()
+                f = os.popen("curl -X GET http://Administrator:password@{1}:8091/pools/{0}/buckets/{0}/stats?zoom=minute -o  ns_server_data".format(bucket, node.ip))
+                dict  = open("./ns_server_data","r").read()
                 data_json = json.loads(dict)
                 d[node]["snapshots"].append(data_json)
                 f.close()
