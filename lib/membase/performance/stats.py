@@ -1,4 +1,5 @@
 import json
+import os
 from threading import Thread
 import time
 from membase.api.rest_client import RestConnection
@@ -20,7 +21,9 @@ class StatsCollector(object):
         mbstats_thread.start()
         sysstats_thread = Thread(target=self.system_stats,args=(nodes, pnames, frequency, self._verbosity))
         sysstats_thread.start()
-        self._task["threads"] = [mbstats_thread, sysstats_thread]
+        ns_server_stats_thread = Thread(target=self.ns_server_stats,args=(nodes, bucket, 60, self._verbosity))
+        ns_server_stats_thread.start()
+        self._task["threads"] = [mbstats_thread, sysstats_thread, ns_server_stats_thread]
         self._task["name"] = name
         self._task["time"] = time.time()
         self._task["ops"] = []
@@ -46,7 +49,8 @@ class StatsCollector(object):
                "totalops":self._task["totalops"],
                "ops":self._task["ops"],
                "time": self._task["time"],
-               "info": test_params }
+               "info": test_params,
+               "ns_server_data": self._task["ns_server_stats"] }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
 
@@ -164,6 +168,29 @@ class StatsCollector(object):
                 self._task["membasestats"].append(snapshot)
 
         print " finished membase_stats"
+
+    def ns_server_stats(self, nodes, bucket, frequency, verbose=False):
+
+        self._task["ns_server_stats"] = []
+        d = {}
+        for node in nodes:
+            d[node] = {"snapshots": [] }
+
+        while not self._aborted():
+            time.sleep(frequency)
+            print "Collecting ns_server_stats"
+            for node in nodes:
+                f = os.popen("curl -X GET http://Administrator:password@localhost:8091/pools/{0}/buckets/{0}/stats?zoom=minute -o  ns_server_data".format(bucket))
+                dict  = open("ns_server_data","r").read()
+                data_json = json.loads(dict)
+                d[node]["snapshots"].append(data_json)
+                f.close()
+
+        for node in nodes:
+           for snapshot in d[node]["snapshots"]:
+               self._task["ns_server_stats"].append(snapshot)
+
+        print " finished ns_server_stats"
 
     def _aborted(self):
         return self._task["state"] == "stopped"
