@@ -23,6 +23,9 @@ class StatsCollector(object):
         sysstats_thread.start()
         ns_server_stats_thread = Thread(target=self.ns_server_stats,args=(nodes, bucket, 60, self._verbosity))
         ns_server_stats_thread.start()
+        rest = RestConnection(nodes[0])
+        bucket_size_thead = Thread(target=self.get_bucket_size, args=(bucket, rest, frequency))
+        bucket_size_thead.start()
         self._task["threads"] = [mbstats_thread, sysstats_thread, ns_server_stats_thread]
         self._task["name"] = name
         self._task["time"] = time.time()
@@ -52,10 +55,25 @@ class StatsCollector(object):
                "info": test_params,
                "ns_server_data": self._task["ns_server_stats"],
                "timings": self._task["timings"],
-               "dispatcher": self._task["dispatcher"]}
+               "dispatcher": self._task["dispatcher"],
+               "bucket_size":self._task["bucket_size"]}
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
 
+    def get_bucket_size(self, bucket, rest, frequency):
+        self._task["bucket_size"] = []
+        d = []
+        while not self._aborted():
+            print "Collecting bucket size stats"
+            status, db_size = rest.get_database_disk_size(bucket)
+            if status:
+                d.append(db_size)
+            else:
+                print "Enable to read bucket stats"
+            time.sleep(frequency)
+
+        self._task["bucket_size"] = d
+        print "finished bucket size stats"
 
     #ops stats
     #{'cur-sets': 899999, 'cur-gets': 1, 'cur-items': 899999, 'cur-creates': 899999}
