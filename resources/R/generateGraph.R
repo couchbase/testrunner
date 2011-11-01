@@ -22,7 +22,7 @@ for(arg in args) {
 
 	# Drain Rate
 	# Does not import the null values if present in json 
-	membasestats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/membasestats", sep=''))$rows
+	membasestats <- fromJSON(file=paste("http://couchdb2.couchbaseqe.com:5984/pythonperformance","/_design/rviews/_view/membasestats", sep=''))$rows
 	bb <- plyr::ldply(membasestats, unlist)
 	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'rowid', 'drainRate')	
 	bb <- transform(bb, build=paste(gsub("couchbase-", "", build)))
@@ -65,7 +65,7 @@ for(arg in args) {
 	data_frame <- data.frame(t(rep(NA, 17)))
  	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'startTime','endTime','totalGets','totalSets',	'unique_col', 'avgLatency')	
 
-	opsstats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/opsstats", sep=''))$rows
+	opsstats <- fromJSON(file=paste("http://couchdb2.couchbaseqe.com:5984/pythonperformance","/_design/rviews/_view/opsstats", sep=''))$rows
 	bb <- plyr::ldply(opsstats, unlist)
 	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'rowid', 'startTime', 'endTime', 'totalGets', 'totalSets')	
 	bb <- transform(bb, build=paste(gsub("couchbase-","",build)))
@@ -140,9 +140,9 @@ for(arg in args) {
 	data_frame <- data.frame(t(rep(NA, 21)))
  	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'rowid', 'time_sample', 'rss', 'process','unique_col')	
 
-	systemstats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/systemstats", sep=''))$rows
+	systemstats <- fromJSON(file=paste("http://couchdb2.couchbaseqe.com:5984/pythonperformance","/_design/rviews/_view/systemstats", sep=''))$rows
 	bb <- plyr::ldply(systemstats, unlist)
-	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time','rowid', 'time_sample', 'rss', 'process')		
+	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time','rowid', 'time_sample', 'rss', 'process','cpu_time')		
 	bb <- transform(bb, build=paste(gsub("couchbase-", "", build)))
 	bb <- transform(bb, build=paste(gsub("membase-", "", build)))
 	bb <- transform(bb, rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), time_sample=as.numeric(time_sample), rss=as.numeric(rss), unique_col=paste(substring(doc_id, 28, 32), '-', build))
@@ -177,12 +177,12 @@ for(arg in args) {
 	data_frame <- data.frame(t(rep(NA, 21)))
  	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'rowid', 'time_sample', 'rss', 'process','unique_col')	
 
-	systemstats <- fromJSON(file=paste("http://ec2-50-16-117-7.compute-1.amazonaws.com:5984/pythonperformance","/_design/rviews/_view/systemstats", sep=''))$rows
+	systemstats <- fromJSON(file=paste("http://couchdb2.couchbaseqe.com:5984/pythonperformance","/_design/rviews/_view/systemstats", sep=''))$rows
 	bb <- plyr::ldply(systemstats, unlist)
-	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time','rowid', 'time_sample', 'rss', 'process')
+	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time','rowid', 'time_sample', 'rss', 'process','cpu_time')
 	bb <- transform(bb, build=paste(gsub("couchbase-", "", build)))
 	bb <- transform(bb, build=paste(gsub("membase-", "", build)))
-	bb <- transform(bb, rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), time_sample=as.numeric(time_sample), rss=as.numeric(rss), unique_col=paste(substring(doc_id, 28, 32), '-', build))
+	bb <- transform(bb, rowid=as.numeric(rowid), ram=as.numeric(ram), test_time=as.numeric(test_time), time_sample=as.numeric(time_sample), rss=as.numeric(rss), unique_col=paste(substring(doc_id, 28, 32), '-', build),cpu_time=as.numeric(cpu_time))
 	bb <- bb[bb$test==tname,]
 	(temp_data_frame <- data_frame[FALSE, ])
 	builds = factor(bb$build)
@@ -201,6 +201,34 @@ for(arg in args) {
 	p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))
 	print(p)
+	
+	
+	bb <- bb[bb$test==tname,]
+	(temp_data_frame <- data_frame[FALSE, ])
+	builds = factor(bb$build)
+	for(a_build in levels(builds)) {
+		filtered <- bb[bb$build == a_build,]
+		max_time <- max(filtered$test_time)
+		print(max_time)
+		graphed <- bb[bb$build == a_build & bb$test_time == max_time & bb$process == 'memcached',]
+		temp_data_frame <- rbind(temp_data_frame,  graphed)
+	}
+	p <- ggplot(temp_data_frame, aes(rowid, cpu_time, fill=build, label=cpu_time))
+	#p  <-   p + stat_smooth(se = FALSE)
+	p <- p + geom_line(aes(rowid, rss, color=build))
+	p <- p + labs(y='Memory (in MB)', x="----time (every 10 secs) --->")
+	p <- p + opts(title=paste("Memcached"))
+	p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+    p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))
+	print(p)
+	pushViewport(viewport())
+	y <- 0.75 
+	for (row in 1:7){
+		grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
+		y <- y + 0.026	
+	}
+	
+	
 	pushViewport(viewport())
 	y <- 0.75 
 	for (row in 1:7){
