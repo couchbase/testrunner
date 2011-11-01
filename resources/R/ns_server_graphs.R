@@ -41,12 +41,12 @@ for(arg in args) {
 		temp_data_frame <- rbind(temp_data_frame,  graphed)
 	}
 	p <- ggplot(temp_data_frame, aes(timestamp, ops, fill=build, label=ops)) + labs(x="----time (sec)--->", y="OPS")
-	#p  <-   p + stat_smooth(se = FALSE)
-	p <- p + geom_line(aes(timestamp, ops, color=build))
-	
 	p <- p + opts(title=paste("Operations Per Sec"))
     p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
-    p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+    p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))	
+	p  <-  p + stat_smooth(se = TRUE)
+#	p  <-  p + geom_smooth(aes(timestamp, ops, color=build), stat="identity") 
+#	p <- p + geom_line(aes(timestamp, ops, color=build))
 	testName <- unlist(strsplit(temp_data_frame$test_name[1], "\\."))[4]
 	print(testName)
 	values <- c(paste('test:', testName), paste('items:', temp_data_frame$total_items[1]), paste('value_size:',temp_data_frame$min_value_size[1]), paste('total_gets:', temp_data_frame$total_gets[1]), paste('total_sets:', temp_data_frame$total_sets[1]), paste('total_creates:', temp_data_frame$total_creates[1]), paste('run_time:', temp_data_frame$run_time[1]) )
@@ -62,8 +62,8 @@ for(arg in args) {
 
 	p <- ggplot(temp_data_frame, aes(timestamp, disk_write_queue, fill=build, label=ops)) + labs(x="----time (sec)--->", y="dwq")
 	#p  <-   p + stat_smooth(se = FALSE)
-	p <- p + geom_line(aes(timestamp, disk_write_queue, color=build))
-	
+	#p <- p + geom_line(aes(timestamp, disk_write_queue, color=build))
+	p  <-  p + stat_smooth(se = TRUE)
 	p <- p + opts(title=paste("Disk Write Queue"))
     p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
@@ -78,9 +78,8 @@ for(arg in args) {
     popViewport()
 
 	p <- ggplot(temp_data_frame, aes(timestamp, drain_rate, fill=build, label=ops)) + labs(x="----time (sec)--->", y="drain_rate")
-	#p  <-   p + stat_smooth(se = FALSE)
-	p <- p + geom_line(aes(timestamp, drain_rate, color=build))
-	
+	#p <- p + geom_line(aes(timestamp, drain_rate, color=build))
+	p  <-  p + stat_smooth(se = TRUE)
 	p <- p + opts(title=paste("Drain Rate"))
     p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
