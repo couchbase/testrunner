@@ -197,5 +197,6 @@ class ClusterOperationHelper(object):
             try:
                 shell = RemoteMachineShellConnection(server)
                 shell.flush_os_caches()
+                log.info("Clearing os caches on {0}".format(server))
             except:
                 pass
