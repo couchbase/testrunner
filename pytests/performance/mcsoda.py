@@ -253,14 +253,22 @@ class StoreMemcachedBinary(Store):
         self.host_port = (target + ":11211").split(':')[0:2]
         self.host_port[1] = int(self.host_port[1])
         self.conn = mc_bin_client.MemcachedClient(self.host_port[0],
-                                                     self.host_port[1])
+                                                  self.host_port[1])
         self.vbucket_count = vbucket_count
-
         if user:
            self.conn.sasl_auth_plain(user, pswd)
+        self.inflight_reinit()
         self.queue = []
         self.ops = 0
         self.buf = ''
+
+    def inflight_reinit(self, inflight=0):
+        self.inflight = inflight
+        self.inflight_num_gets = 0
+        self.inflight_num_sets = 0
+        self.inflight_num_deletes = 0
+        self.inflight_start_time = 0
+        self.inflight_end_time = 0
 
     def command(self, c):
         self.queue.append(c)
@@ -279,6 +287,19 @@ class StoreMemcachedBinary(Store):
 
     def flush(self):
         extra = struct.pack(SET_PKT_FMT, 0, self.cfg.get('expiration', 0))
+
+        if self.inflight > 0:
+           for i in range(self.inflight):
+              self.recvMsg()
+           self.inflight_end_time = time.time()
+           self.ops += self.inflight
+           if self.sc:
+              self.sc.ops_stats({ 'tot-gets':    self.inflight_num_gets,
+                                  'tot-sets':    self.inflight_num_sets,
+                                  'tot-deletes': self.inflight_num_deletes,
+                                  'start-time':  self.inflight_start_time,
+                                  'end-time':    self.inflight_end_time })
+           self.inflight_reinit()
 
         if len(self.queue) > 0:
            # Use the first request to measure single request latency.
@@ -306,40 +327,21 @@ class StoreMemcachedBinary(Store):
         if not self.queue:
            return
 
-        num_gets = 0
-        num_sets = 0
-        num_deletes = 0
-
-        n = len(self.queue)
         m = []
         for c in self.queue:
             cmd, key_num, key_str, data = c
             delta_gets, delta_sets, delta_deletes = \
                 self.cmd_append(cmd, key_num, key_str, data, m, extra)
-            num_gets += delta_gets
-            num_sets += delta_sets
-            num_deletes += delta_deletes
+            self.inflight_num_gets += delta_gets
+            self.inflight_num_sets += delta_sets
+            self.inflight_num_deletes += delta_deletes
 
+        self.inflight_reinit(len(self.queue))
         self.queue = []
         msg = ''.join(m)
 
-        start = time.time()
-
+        self.inflight_start_time = time.time()
         self.conn.s.send(msg)
-
-        for i in range(n):
-            self.recvMsg()
-
-        end = time.time()
-
-        self.ops += n
-
-        if self.sc:
-           self.sc.ops_stats({ 'tot-gets': num_gets,
-                               'tot-sets': num_sets,
-                               'tot-deletes': num_deletes,
-                               'start-time': start,
-                               'end-time': end })
 
     def cmd_append(self, cmd, key_num, key_str, data, m, extra):
        if cmd[0] == 'g':
