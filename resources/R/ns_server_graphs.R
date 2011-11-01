@@ -12,7 +12,7 @@ cat(paste("args : ",args,""),sep="\n")
 args <- unlist(strsplit(args," "))
 for(arg in args) {
 	tname <- arg
-	#tname = "NPP-01-1k.1"
+	#tname = "Experimental"
 	print(tname)
 	cat(paste("Test Case : ", tname),sep="\n")
 	pdf(paste(tname,sep="",".pdf"))
@@ -22,7 +22,7 @@ for(arg in args) {
 
 	# Does not import the null values if present in json 
 	cat("generating ops/sec graph")
-	stats <- fromJSON(file=paste("http://couchdb2.couchbaseqe.com:5984/pythonperformance","/_design/ns_server/_view/ops", sep=''))$rows
+	stats <- fromJSON(file=paste("http://couchdb2.couchbaseqe.com:5984/experimental","/_design/data/_view/data", sep=''))$rows
 	bb <- plyr::ldply(stats, unlist)
 	names(bb) <- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'timestamp','ops', 'disk_write_queue', 'memory_used', 'resident_ratio', 'drain_rate', 'active_disk_queue','disk_reads')	
 
@@ -100,7 +100,7 @@ for(arg in args) {
     #system stats
 	# Does not import the null values if present in json 
 	cat("generating memcached cpu usage graphs")
-	systemstats <- fromJSON(file=paste("http://couchdb2.couchbaseqe.com:5984/pythonperformance","/_design/rviews/_view/systemstats", sep=''))$rows
+	systemstats <- fromJSON(file=paste("http://couchdb2.couchbaseqe.com:5984/experimental","/_design/data/_view/systemstats", sep=''))$rows
 	bb <- plyr::ldply(systemstats, unlist)
  	names(bb)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'max_items', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time','rowid', 'time_sample', 'rss', 'process','cpu_time')
 
