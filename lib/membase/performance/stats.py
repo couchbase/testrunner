@@ -32,6 +32,7 @@ class StatsCollector(object):
         self._task["ops"] = []
         self._task["totalops"] = []
         self._task["ops-temp"] = []
+        self._task["latency"] = []
         self.build_stats(nodes)
         #create multiple threds for each one required. kick them off. assign an id to each.
 
@@ -56,7 +57,8 @@ class StatsCollector(object):
                "ns_server_data": self._task["ns_server_stats"],
                "timings": self._task["timings"],
                "dispatcher": self._task["dispatcher"],
-               "bucket_size":self._task["bucket_size"]}
+               "bucket_size":self._task["bucket_size"],
+               "latency":self._task["latency"]}
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
 
@@ -76,7 +78,7 @@ class StatsCollector(object):
         print "finished bucket size stats"
 
     #ops stats
-    #{'cur-sets': 899999, 'cur-gets': 1, 'cur-items': 899999, 'cur-creates': 899999}
+    #{'tot-sets': 899999, 'tot-gets': 1, 'tot-items': 899999, 'tot-creates': 899999}
     def ops_stats(self, ops_stat):
         ops_stat["time"] = time.time()
         self._task["ops-temp"].append(ops_stat)
@@ -86,6 +88,9 @@ class StatsCollector(object):
             self._task["ops-temp"] = []
 
         #if self._task["ops"] has more than 1000 elements try to aggregate them ?
+
+    def latency_stats(self, ops_stat):
+        self._task["latency"].append(ops_stat)
 
     def _merge(self):
         first = self._task["ops-temp"][0]

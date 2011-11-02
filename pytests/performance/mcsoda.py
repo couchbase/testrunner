@@ -330,12 +330,12 @@ class StoreMemcachedBinary(Store):
            end = time.time()
 
            if self.sc:
-              self.sc.ops_stats({ 'tot-gets': delta_gets,
-                                  'tot-sets': delta_sets,
-                                  'tot-deletes': delta_deletes,
-                                  'tot-arpas': delta_arpas,
-                                  'start-time': start,
-                                  'end-time': end })
+              self.sc.latency_stats({ 'tot-gets': delta_gets,
+                                      'tot-sets': delta_sets,
+                                      'tot-deletes': delta_deletes,
+                                      'tot-arpas': delta_arpas,
+                                      'start-time': start,
+                                      'end-time': end })
 
            self.add_timing_sample(cmd, end - start)
 
