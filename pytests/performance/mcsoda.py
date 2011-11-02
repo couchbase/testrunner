@@ -501,14 +501,6 @@ class StoreMemcachedAscii(Store):
 
 # --------------------------------------------------------
 
-def gen_doc_obj(key_num, key_str, min_value_size, body):
-    return { "_id": key_str,
-             "key_num": key_num,
-             "mid": key_str[-8:-1],
-             "last": key_str[-1:],
-             "body": body
-           }
-
 def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                    key_name="key"):
     c = "{"
