@@ -10,13 +10,14 @@ require(gridExtra, quietly=TRUE)
 library(methods)
 args <- commandArgs(TRUE)
 cat(paste("args : ",args,""),sep="\n")
+pdf(paste('perf_graphs',sep="",".pdf"))
+
 args <- unlist(strsplit(args," "))
 for(arg in args) {
 	tname <- arg
 	#tname = "Experimental"
 	print(tname)
 	cat(paste("Test Case : ", tname),sep="\n")
-	pdf(paste(tname,sep="",".pdf"))
 	data_frame <- data.frame()
 	data_frame <- data.frame(t(rep(NA, 25)))
  	names(data_frame)<- c('id', 'build', 'ram', 'os', 'doc_id', 'test', 'test_time', 'test_name', 'min_value_size', 'total_gets', 'total_creates', 'total_sets', 'total_items', 'total_misses', 'run_time', 'timestamp','ops', 'disk_write_queue', 'memory_used', 'resident_ratio', 'drain_rate', 'active_disk_queue','disk_reads','unique_col')	
@@ -43,7 +44,7 @@ for(arg in args) {
 		temp_data_frame <- rbind(temp_data_frame,  graphed)
 	}
 	p <- ggplot(temp_data_frame, aes(timestamp, ops, fill=build, label=ops)) + labs(x="----time (sec)--->", y="OPS")
-	p <- p + opts(title=paste("Operations Per Sec"))
+	p <- p + opts(title=paste("Operations Per Sec", sep=''))
     p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))	
 	p  <-  p + stat_smooth(se = TRUE)
@@ -56,10 +57,11 @@ for(arg in args) {
 	print(p)
 	pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:7){
+	for (row in 1:6){
 		grid.text(values[row],gp=gpar(col="black"), x=0.73, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
+	grid.text(temp_data_frame$test_name[1],gp=gpar(col="black"), x=0.18, y=0.98, check.overlap=TRUE, just="left")
     popViewport()
 
 	cat("generating disk write queue graph")
@@ -67,37 +69,39 @@ for(arg in args) {
 	#p  <-   p + stat_smooth(se = FALSE)
 	#p <- p + geom_line(aes(timestamp, disk_write_queue, color=build))
 	p  <-  p + stat_smooth(se = TRUE)
-	p <- p + opts(title=paste("Disk Write Queue"))
+	p <- p + opts(title=paste("Disk Write Queue", sep=''))
     p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 	print(values)
 	print(p)
 	pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:7){
+	for (row in 1:6){
 		grid.text(values[row],gp=gpar(col="black"), x=0.73, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
+	grid.text(temp_data_frame$test_name[1],gp=gpar(col="black"), x=0.18, y=0.98, check.overlap=TRUE, just="left")
+
     popViewport()
 
 	cat("generating disk drain rate graph")
 	p <- ggplot(temp_data_frame, aes(timestamp, drain_rate, fill=build, label=ops)) + labs(x="----time (sec)--->", y="drain_rate")
 	p <- p + geom_line(aes(timestamp, drain_rate, color=build))
 	#p  <-  p + stat_smooth(se = TRUE)
-	p <- p + opts(title=paste("Drain Rate"))
+	p <- p + opts(title=paste("Drain Rate", sep=''))
     p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 	print(values)
 	print(p)
 	pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:7){
+	for (row in 1:6){
 		grid.text(values[row],gp=gpar(col="black"), x=0.73, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
+	grid.text(temp_data_frame$test_name[1],gp=gpar(col="black"), x=0.18, y=0.98, check.overlap=TRUE, just="left")
     popViewport()
-    
-    
+
     #system stats
     # System Stats (Memory for Beam.smp)
     cat("Generating Memory usage for beam.smp and memcached")
@@ -124,17 +128,18 @@ for(arg in args) {
 	p <- ggplot(temp_data_frame, aes(rowid, rss, fill=build, label=rss))
 	#p  <-   p + stat_smooth(se = FALSE)
 	p <- p + geom_line(aes(rowid, rss, color=build))
-	p <- p + labs(y='Memory (in MB)', x="----time (every 10 secs) --->")
-	p <- p + opts(title=paste("beam.smp"))
+	p <- p + labs(y='Memory (in MB)', x="----time (sampling ~ 10 secs)) --->")
+	p <- p + opts(title=paste("Memory profile: beam.smp", sep=''))
 	p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))
 	print(p)
 	pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:7){
+	for (row in 1:6){
 		grid.text(values[row],gp=gpar(col="black"), x=0.71, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
+	grid.text(temp_data_frame$test_name[1],gp=gpar(col="black"), x=0.18, y=0.98, check.overlap=TRUE, just="left")
 	popViewport()
 	
 	# System Stats (Memory for Memcached)
@@ -161,17 +166,18 @@ for(arg in args) {
 	p <- ggplot(temp_data_frame, aes(rowid, rss, fill=build, label=rss))
 	#p  <-   p + stat_smooth(se = FALSE)
 	p <- p + geom_line(aes(rowid, rss, color=build))
-	p <- p + labs(y='Memory (in MB)', x="----time (every 10 secs) --->")
-	p <- p + opts(title=paste("Memcached"))
+	p <- p + labs(y='Memory (in MB)', x="----time (sampling ~ 10 secs)) --->")
+	p <- p + opts(title=paste("Memory profile: Memcached", sep=''))
 	p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))
 	print(p)
     pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:7){
+	for (row in 1:6){
 		grid.text(values[row],gp=gpar(col="black"), x=0.73, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
+	grid.text(temp_data_frame$test_name[1],gp=gpar(col="black"), x=0.18, y=0.98, check.overlap=TRUE, just="left")
     popViewport()
     
 	# Does not import the null values if present in json 
@@ -199,17 +205,18 @@ for(arg in args) {
 	}
 	p <- ggplot(temp_data_frame, aes(rowid, cpu_time, fill=build, label= comma(cpu_time)))
 	p <- p + geom_line(aes(rowid, cpu_time, color=build))
-	p <- p + labs(y='stime+utime', x="----time (every 10 secs) --->")
-	p <- p + opts(title=paste("Memcached"))
+	p <- p + labs(y='stime+utime', x="----time (sampling ~ 10 secs)) --->")
+	p <- p + opts(title=paste("CPU profile: Memcached", sep=''))
 	p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))	
     print(p)
     pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:7){
+	for (row in 1:6){
 		grid.text(values[row],gp=gpar(col="black"), x=0.73, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
+	grid.text(temp_data_frame$test_name[1],gp=gpar(col="black"), x=0.18, y=0.98, check.overlap=TRUE, just="left")
     popViewport()
     
     #cpu time for beam.smp
@@ -234,21 +241,21 @@ for(arg in args) {
 	}
 	p <- ggplot(temp_data_frame, aes(rowid, cpu_time, fill=build, label= comma(cpu_time)))
 	p <- p + geom_line(aes(rowid, cpu_time, color=build))
-	p <- p + labs(y='stime+utime', x="----time (every 10 secs) --->")
-	p <- p + opts(title=paste("beam.smp"))
+	p <- p + labs(y='stime+utime', x="----time (sampling ~ 10 secs)) --->")
+	p <- p + opts(title=paste("CPU profile: beam.smp", sep=''))
 	p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
     p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))	
     print(p)    
     
 	pushViewport(viewport())
 	y <- 0.75 
-	for (row in 1:7){
+	for (row in 1:6){
 		grid.text(values[row],gp=gpar(col="black"), x=0.73, y=y, check.overlap=TRUE, just="left")
 		y <- y + 0.026	
 	}
+	grid.text(temp_data_frame$test_name[1],gp=gpar(col="black"), x=0.18, y=0.98, check.overlap=TRUE, just="left")
     popViewport()
 	
-dev.off()	
-	
-	
 }
+
+dev.off()	
