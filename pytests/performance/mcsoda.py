@@ -506,9 +506,34 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
     c = "{"
     if not json:
         c = "*"
-    s = """%s"%s":"%s", "key_num":%s, "mid":"%s", "last":"%s", %s"""
-    return s % (c, key_name, key_str, key_num,
-                key_str[-8:-1], key_str[-1:], suffix)
+    s = """%s"%s":"%s",
+ "key_num":%s,
+ "name":"%s",
+ "email":"%s@%s.com",
+ "city":"%s",
+ "country":"%s",
+ "realm":"%s",
+ "coins":%s,
+ "achievements":%s,
+ %s"""
+
+    next = 300
+    achievements = []
+    for i in range(len(key_str)):
+       next = (next + int(key_str[i], 16) * i) % 500
+       if next < 256:
+          achievements.append(next)
+
+    return s % (c, key_name, key_str,
+                key_num,
+                key_str[0:4] + " " + key_str[-4:-1], # name
+                key_str[0:4], key_str[3:5], # email
+                key_str[4:7], # city
+                key_str[7:9], # country
+                key_str[9:12], # realm
+                max(0.0, int(key_str[0:4], 16) / 100.0), # coins
+                achievements,
+                suffix)
 
 # --------------------------------------------------------
 
