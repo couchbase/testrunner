@@ -69,6 +69,7 @@ def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
 
       res.append(level + k + ": " + v + suffix)
 
+   # Recurse for nested, dictionary values.
    if complex:
       res.append("\n")
    for key in complex:
@@ -80,11 +81,16 @@ def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
 # --------------------------------------------------------
 
 MIN_VALUE_SIZE = [10]
+REPORT_EVERY = 20000
 
 def run_worker(ctl, cfg, cur, store, prefix):
     i = 0
     t_last = time.time()
     o_last = store.num_ops(cur)
+    ops_per_sec_prev = []
+
+    if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
+       cur['batch'] = 10
 
     while ctl.get('run_ok', True):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
@@ -99,24 +105,37 @@ def run_worker(ctl, cfg, cur, store, prefix):
         store.command(next_cmd(cfg, cur, store))
         i += 1
 
-        if i % 100000 == 0:
+        if i % REPORT_EVERY == 0:
             t_curr = time.time()
             o_curr = store.num_ops(cur)
+
+            t_delta = t_curr - t_last
+            o_delta = o_curr - o_last
+
+            ops_per_sec = o_delta / t_delta
+
             log.info(prefix + dict_to_s(cur))
             log.info("%s    ops: %s secs: %s ops/sec: %s" %
-                  (prefix,
-                   string.ljust(str(o_curr - o_last), 10),
-                   string.ljust(str(t_curr - t_last), 15),
-                   (o_curr - o_last) / (t_curr - t_last)))
+                     (prefix,
+                      string.ljust(str(o_delta), 10),
+                      string.ljust(str(t_delta), 15),
+                      ops_per_sec))
             t_last = t_curr
             o_last = o_curr
+
+            ops_per_sec_prev.append(ops_per_sec)
+            while len(ops_per_sec_prev) > 10:
+               ops_per_sec_prev.pop(0)
+
+            max_ops_per_sec = cfg.get('max-ops-per-sec', 0)
+            if max_ops_per_sec > 0 and len(ops_per_sec_prev) >= 2:
+               # Do something clever here to prevent going over
+               # the max-ops-per-sec.
+               pass
 
     store.flush()
 
 def next_cmd(cfg, cur, store):
-    # for i in range(100):
-    #     print(long("0x" + md5(str(i)).hexdigest(), 16) & 0xFFFFFFFF)
-    #
     num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
     do_set = cfg.get('ratio-sets', 0) > float(cur.get('cur-sets', 0)) / positive(num_ops)
@@ -286,7 +305,8 @@ class StoreMemcachedBinary(Store):
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > self.cfg.get('batch', 100):
+        if len(self.queue) > (self.cur.get('batch') or \
+                              self.cfg.get('batch', 100)):
             self.flush()
 
     def header(self, op, key, val, opaque=0, extra='', cas=0,
@@ -416,7 +436,8 @@ class StoreMemcachedAscii(Store):
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > self.cfg.get('batch', 100):
+        if len(self.queue) > (self.cur.get('batch') or \
+                              self.cfg.get('batch', 100)):
             self.flush()
 
     def command_send(self, cmd, key_num, key_str, data):
@@ -604,7 +625,8 @@ if __name__ == "__main__":
      "threads":            (1,    "Number of client worker threads to use."),
      "batch":              (100,  "Batch / pipeline up this number of commands."),
      "json":               (1,    "Use JSON documents. 0 to generate binary documents."),
-     "time":               (0,    "Stop after this many seconds if > 0.")
+     "time":               (0,    "Stop after this many seconds if > 0."),
+     "max-ops-per-sec":    (0,    "Max ops/second, which overrides the batch parameter.")
      }
 
   cur_defaults = {
