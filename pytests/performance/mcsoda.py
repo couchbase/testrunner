@@ -218,7 +218,7 @@ def positive(x):
         return x
     return 1
 
-def prepare_key(key_num, prefix):
+def prepare_key(key_num, prefix=None):
     key_hash = md5(str(key_num)).hexdigest()[0:16]
     if prefix and len(prefix) > 0:
         return prefix + "-" + key_hash
@@ -501,6 +501,18 @@ class StoreMemcachedAscii(Store):
 
 # --------------------------------------------------------
 
+# A key is a 16 char hex string.
+def key_to_name(key_num, key_str):
+   return key_str[0:4] + " " + key_str[-4:-1]
+def key_to_email(key_num, key_str):
+   return key_str[0:4] + "@" + key_str[3:5] + ".com"
+def key_to_city(key_num, key_str):
+   return key_str[4:7]
+def key_to_country(key_num, key_str):
+   return key_str[7:9]
+def key_to_realm(key_num, key_str):
+   return key_str[9:12]
+
 def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                    key_name="key"):
     c = "{"
@@ -509,7 +521,7 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
     s = """%s"%s":"%s",
  "key_num":%s,
  "name":"%s",
- "email":"%s@%s.com",
+ "email":"%s",
  "city":"%s",
  "country":"%s",
  "realm":"%s",
@@ -526,11 +538,11 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 
     return s % (c, key_name, key_str,
                 key_num,
-                key_str[0:4] + " " + key_str[-4:-1], # name
-                key_str[0:4], key_str[3:5], # email
-                key_str[4:7], # city
-                key_str[7:9], # country
-                key_str[9:12], # realm
+                key_to_name(key_num, key_str),
+                key_to_email(key_num, key_str),
+                key_to_city(key_num, key_str),
+                key_to_country(key_num, key_str),
+                key_to_realm(key_num, key_str),
                 max(0.0, int(key_str[0:4], 16) / 100.0), # coins
                 achievements,
                 suffix)
