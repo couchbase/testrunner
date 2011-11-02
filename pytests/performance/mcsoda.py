@@ -511,7 +511,7 @@ def key_to_city(key_num, key_str):
 def key_to_country(key_num, key_str):
    return key_str[7:9]
 def key_to_realm(key_num, key_str):
-   return key_str[9:12]
+   return key_str[9:11]
 
 def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                    key_name="key"):
