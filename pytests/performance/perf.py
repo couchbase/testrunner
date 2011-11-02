@@ -2,6 +2,7 @@ import unittest
 import uuid
 import logger
 import time
+import json
 import os
 import threading
 
@@ -60,7 +61,10 @@ class PerfBase(unittest.TestCase):
         self.num_items_loaded = 0
 
         self.setUp_moxi()
-        self.setUp_dgm()
+
+        if self.parami("dgm", 1) > 0:
+            self.setUp_dgm()
+
         time.sleep(10)
         self.wait_until_warmed_up()
         ClusterOperationHelper.flush_os_caches(self.input.servers)
@@ -654,6 +658,69 @@ class DiskDrainRate(PerfBase):
         ops['start-time'] = start_time_unclog
         ops['end-time'] = end_time_unclog
         self.end_stats(sc, ops)
+
+
+class MapReduce(PerfBase):
+
+    def create_view(self, rest, bucket, view, map, reduce=''):
+        dict = {"language": "javascript", "_id": "_design/{0}".format(view)}
+        try:
+            view_response = rest.get_view(bucket, view)
+            if view_response:
+                dict["_rev"] = view_response["_rev"]
+        except:
+            pass
+        if reduce:
+            dict["views"] = {view: {"map": map, "reduce": reduce}}
+        else:
+            dict["views"] = {view: {"map": map}}
+
+        rest.create_view(bucket, view, json.dumps(dict))
+
+    def test_VP_001(self):
+        self.spec('VP-001')
+
+        items  = self.parami("items", 1000000)
+        limit  = self.parami('limit', 1)
+        bucket = "default"
+        view   = "myview"
+
+        self.load(items,
+                  self.parami('size', 1024),
+                  kind=self.param('kind', 'json'))
+        self.loop_prep()
+
+        rest = RestConnection(self.input.servers[0])
+        self.create_view(rest, bucket, view,
+                         "function(doc) { emit(doc.email, doc); }")
+
+        ops = {}
+
+        self.log.info("building view: %s" % (view,))
+        ops["view-build-start-time"] = time.time()
+        rest.view_results(bucket, view, { "startkey":"a" }, limit)
+        ops["view-build-end-time"] = time.time()
+
+        sc = self.start_stats(self.spec_reference,
+                              test_params={'test_name':self.id(),
+                                           'test_time':time.time()})
+
+        self.log.info("accessing view: %s" % (view,))
+        ops["start-time"] = time.time()
+        for i in range(self.parami("ops", 10000)):
+            k = i % items
+            e = mcsoda.key_to_email(k, mcsoda.prepare_key(k))
+            start = time.time()
+            rest.view_results(bucket, view, { "startkey":e, "endkey":e }, limit)
+            end = time.time()
+            self.sc.latency_stats({ 'tot-views': 1,
+                                    'start-time': start,
+                                    'end-time': end })
+        ops["end-time"] = time.time()
+        ops["tot-views"] = i
+        self.end_stats(sc, ops)
+
+        print(ops)
 
 
 class TODO_PerfBase():
