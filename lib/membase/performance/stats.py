@@ -26,7 +26,7 @@ class StatsCollector(object):
         rest = RestConnection(nodes[0])
         bucket_size_thead = Thread(target=self.get_bucket_size, args=(bucket, rest, frequency))
         bucket_size_thead.start()
-        self._task["threads"] = [mbstats_thread, sysstats_thread, ns_server_stats_thread]
+        self._task["threads"] = [mbstats_thread, sysstats_thread, ns_server_stats_thread, bucket_size_thead]
         self._task["name"] = name
         self._task["time"] = time.time()
         self._task["ops"] = []
