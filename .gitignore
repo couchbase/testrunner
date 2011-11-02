@@ -3,7 +3,9 @@
 *~
 *.DS_*
 *.idea
+*.json
 *.log
 *tmp-
 tmp-*
 tmp
+ns_server_data
