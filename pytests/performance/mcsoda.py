@@ -4,6 +4,7 @@ import os
 import sys
 import math
 import time
+import heapq
 import socket
 import string
 import struct
@@ -321,7 +322,40 @@ class StoreMemcachedBinary(Store):
     def flush(self):
         extra = struct.pack(SET_PKT_FMT, 0, self.cfg.get('expiration', 0))
 
+        next_inflight = 0
+        next_inflight_num_gets = 0
+        next_inflight_num_sets = 0
+        next_inflight_num_deletes = 0
+        next_inflight_num_arpas = 0
+
+        next_arr = []
+
+        i = 1
+        n = len(self.queue)
+        while i < n:
+            cmd, key_num, key_str, data = self.queue[i]
+            delta_gets, delta_sets, delta_deletes, delta_arpas = \
+                self.cmd_append(cmd, key_num, key_str, data, next_arr, extra)
+            next_inflight += 1
+            next_inflight_num_gets += delta_gets
+            next_inflight_num_sets += delta_sets
+            next_inflight_num_deletes += delta_deletes
+            next_inflight_num_arpas += delta_arpas
+            i = i + 1
+
+        next_msg = ''.join(next_arr)
+
+        latency_cmd = None
+        latency_start = 0
+        latency_end = 0
+
+        delta_gets = 0
+        delta_sets = 0
+        delta_deletes = 0
+        delta_arpas = 0
+
         if self.inflight > 0:
+           # Receive replies from the previous batch of infight requests.
            for i in range(self.inflight):
               self.recvMsg()
            self.inflight_end_time = time.time()
@@ -333,51 +367,44 @@ class StoreMemcachedBinary(Store):
                                   'tot-arpas':   self.inflight_num_arpas,
                                   'start-time':  self.inflight_start_time,
                                   'end-time':    self.inflight_end_time })
-           self.inflight_reinit()
 
         if len(self.queue) > 0:
-           # Use the first request to measure single request latency.
-           #
-           m = []
-           cmd, key_num, key_str, data = self.queue.pop(0)
+           # Use the first request in the batch to measure single
+           # request latency.
+           arr = []
+           latency_cmd, key_num, key_str, data = self.queue[0]
            delta_gets, delta_sets, delta_deletes, delta_arpas = \
-                self.cmd_append(cmd, key_num, key_str, data, m, extra)
-           msg = ''.join(m)
+                self.cmd_append(latency_cmd, key_num, key_str, data, arr, extra)
+           msg = ''.join(arr)
 
-           start = time.time()
+           latency_start = time.time()
            self.conn.s.send(msg)
            self.recvMsg()
-           end = time.time()
+           latency_end = time.time()
 
-           if self.sc:
-              self.sc.latency_stats({ 'tot-gets': delta_gets,
-                                      'tot-sets': delta_sets,
-                                      'tot-deletes': delta_deletes,
-                                      'tot-arpas': delta_arpas,
-                                      'start-time': start,
-                                      'end-time': end })
+           self.ops += 1
 
-           self.add_timing_sample(cmd, end - start)
-
-        if not self.queue:
-           return
-
-        m = []
-        for c in self.queue:
-            cmd, key_num, key_str, data = c
-            delta_gets, delta_sets, delta_deletes, delta_arpas = \
-                self.cmd_append(cmd, key_num, key_str, data, m, extra)
-            self.inflight_num_gets += delta_gets
-            self.inflight_num_sets += delta_sets
-            self.inflight_num_deletes += delta_deletes
-            self.inflight_num_arpas += delta_arpas
-
-        self.inflight_reinit(len(self.queue))
         self.queue = []
-        msg = ''.join(m)
 
-        self.inflight_start_time = time.time()
-        self.conn.s.send(msg)
+        self.inflight_reinit()
+        if next_inflight > 0:
+           self.inflight = next_inflight
+           self.inflight_num_gets = next_inflight_num_gets
+           self.inflight_num_sets = next_inflight_num_sets
+           self.inflight_num_deletes = next_inflight_num_deletes
+           self.inflight_num_arpas = next_inflight_num_arpas
+           self.inflight_start_time = time.time()
+           self.conn.s.send(next_msg)
+
+        if self.sc:
+           self.sc.latency_stats({ 'tot-gets': delta_gets,
+                                   'tot-sets': delta_sets,
+                                   'tot-deletes': delta_deletes,
+                                   'tot-arpas': delta_arpas,
+                                   'start-time': latency_start,
+                                   'end-time': latency_end })
+
+        self.add_timing_sample(cmd, latency_end - latency_start)
 
     def cmd_append(self, cmd, key_num, key_str, data, m, extra):
        if cmd[0] == 'g':
