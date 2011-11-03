@@ -20,6 +20,7 @@ class RemoteMachineInfo(object):
         self.ram = ''
         self.cpu = ''
         self.disk = ''
+        self.hostname = ''
 
 
 class RemoteMachineProcess(object):
@@ -944,6 +945,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.ram = ''
             info.disk = ''
             info.cpu = ''
+            info.hostname = ''
             return info
         else:
             #now run uname -m to get the architechtre type
@@ -965,7 +967,14 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.cpu = self.get_cpu_info()
             info.disk = self.get_disk_info()
             info.ram = self.get_ram_info()
+            info.hostname = self.get_hostname()
             return info
+
+    #TODO: Windows
+    def get_hostname(self):
+        o, r = self.execute_command('hostname')
+        if o:
+            return o
 
     #TODO: Windows
     def get_cpu_info(self):

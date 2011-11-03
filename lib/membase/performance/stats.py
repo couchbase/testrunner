@@ -246,4 +246,4 @@ class StatUtil(object):
         info = shell.extract_remote_info()
         return {"type": info.type, "distribution": info.distribution_type,
                 "version": info.distribution_version, "ram": info.ram,
-                "cpu": info.cpu, "disk": info.disk}
+                "cpu": info.cpu, "disk": info.disk, "hostname":info.hostname}
