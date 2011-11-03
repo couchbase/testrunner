@@ -95,13 +95,14 @@ def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
 # --------------------------------------------------------
 
 MIN_VALUE_SIZE = [10]
-REPORT_EVERY = 20000
 
 def run_worker(ctl, cfg, cur, store, prefix):
     i = 0
     t_last = time.time()
     o_last = store.num_ops(cur)
     ops_per_sec_prev = []
+
+    report = cfg.get('report', 0)
 
     if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
        cur['batch'] = 10
@@ -119,7 +120,7 @@ def run_worker(ctl, cfg, cur, store, prefix):
         store.command(next_cmd(cfg, cur, store))
         i += 1
 
-        if i % REPORT_EVERY == 0:
+        if report > 0 and i % report == 0:
             t_curr = time.time()
             o_curr = store.num_ops(cur)
 
@@ -681,26 +682,27 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
 if __name__ == "__main__":
   cfg_defaults = {
-     "prefix":             ("",   "Prefix for every item key."),
-     "max-ops":            (0,    "Max number of ops before exiting. 0 means keep going."),
-     "max-items":          (-1,   "Max number of items; default 100000."),
-     "max-creates":        (-1,   "Max number of creates; defaults to max-items."),
-     "min-value-size":     ("10", "Minimal value size (bytes) during SET's; comma-separated."),
-     "ratio-sets":         (0.1,  "Fraction of requests that should be SET's."),
-     "ratio-creates":      (0.1,  "Fraction of SET's that should create new items."),
-     "ratio-misses":       (0.05, "Fraction of GET's that should miss."),
-     "ratio-hot":          (0.2,  "Fraction of items to have as a hot item subset."),
-     "ratio-hot-sets":     (0.95, "Fraction of SET's that hit the hot item subset."),
-     "ratio-hot-gets":     (0.95, "Fraction of GET's that hit the hot item subset."),
-     "ratio-deletes":      (0.0,  "Fraction of SET updates that should be DELETE's instead."),
-     "ratio-arpas":        (0.0,  "Fraction of SET non-DELETE'S to be 'a-r-p-a' cmds."),
-     "expiration":         (0,    "Expiration time parameter for SET's"),
-     "exit-after-creates": (0,    "Exit after max-creates is reached."),
-     "threads":            (1,    "Number of client worker threads to use."),
-     "batch":              (100,  "Batch / pipeline up this number of commands."),
-     "json":               (1,    "Use JSON documents. 0 to generate binary documents."),
-     "time":               (0,    "Stop after this many seconds if > 0."),
-     "max-ops-per-sec":    (0,    "Max ops/second, which overrides the batch parameter.")
+     "prefix":             ("",    "Prefix for every item key."),
+     "max-ops":            (0,     "Max number of ops before exiting. 0 means keep going."),
+     "max-items":          (-1,    "Max number of items; default 100000."),
+     "max-creates":        (-1,    "Max number of creates; defaults to max-items."),
+     "min-value-size":     ("10",  "Minimal value size (bytes) during SET's; comma-separated."),
+     "ratio-sets":         (0.1,   "Fraction of requests that should be SET's."),
+     "ratio-creates":      (0.1,   "Fraction of SET's that should create new items."),
+     "ratio-misses":       (0.05,  "Fraction of GET's that should miss."),
+     "ratio-hot":          (0.2,   "Fraction of items to have as a hot item subset."),
+     "ratio-hot-sets":     (0.95,  "Fraction of SET's that hit the hot item subset."),
+     "ratio-hot-gets":     (0.95,  "Fraction of GET's that hit the hot item subset."),
+     "ratio-deletes":      (0.0,   "Fraction of SET updates that should be DELETE's instead."),
+     "ratio-arpas":        (0.0,   "Fraction of SET non-DELETE'S to be 'a-r-p-a' cmds."),
+     "expiration":         (0,     "Expiration time parameter for SET's"),
+     "exit-after-creates": (0,     "Exit after max-creates is reached."),
+     "threads":            (1,     "Number of client worker threads to use."),
+     "batch":              (100,   "Batch / pipeline up this number of commands."),
+     "json":               (1,     "Use JSON documents. 0 to generate binary documents."),
+     "time":               (0,     "Stop after this many seconds if > 0."),
+     "max-ops-per-sec":    (0,     "Max ops/second, which overrides the batch parameter."),
+     "report":             (40000, "Emit performance output after this many requests.")
      }
 
   cur_defaults = {
@@ -729,7 +731,7 @@ if __name__ == "__main__":
      for d in [cfg_defaults, cur_defaults]:
         for k in sorted(d.iterkeys()):
            print("  %s = %s %s" %
-                 (string.ljust(k, 20), string.ljust(str(d[k][0]), 4), d[k][1]))
+                 (string.ljust(k, 20), string.ljust(str(d[k][0]), 5), d[k][1]))
      print("")
      print("  TIP: min-value-size can be comma-separated values: min-value-size=10,256,1024")
      print("")
