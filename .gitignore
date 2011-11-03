@@ -5,6 +5,7 @@
 *.idea
 *.json
 *.log
+*.log.*
 *tmp-
 tmp-*
 tmp
