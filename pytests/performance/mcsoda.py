@@ -55,12 +55,16 @@ def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
    complex.sort()
 
    # Special case for histogram output.
-   histo = 0
+   histo_max = 0
+   histo_sum = 0
    if scalars and not complex and \
       type(scalars[0]) == FLOAT_TYPE and type(d[scalars[0]]) == INT_TYPE:
       for key in scalars:
-         histo = max(d[key], histo)
+         v = d[key]
+         histo_max = max(v, histo_max)
+         histo_sum = histo_sum + v
 
+   histo_cur = 0 # Running total for histogram output.
    for key in scalars:
       if type(key) == FLOAT_TYPE:
          k = re.sub("0*$", "", "%.7f" % (key))
@@ -68,9 +72,14 @@ def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
          k = str(key)
       if ljust:
          k = string.ljust(k, ljust)
-      v = str(d[key])
-      if histo:
-         v = string.rjust(v, 8) + " " + ("*" * int(math.ceil(50.0 * d[key] / histo)))
+      x = d[key]
+      if histo_max:
+         histo_cur = histo_cur + x
+      v = str(x)
+      if histo_max:
+         v = string.rjust(v, 8) + " " + \
+             string.rjust("{0:.1%}".format(histo_cur / float(histo_sum)), 8) + " " + \
+             ("*" * int(math.ceil(50.0 * d[key] / histo_max)))
 
       res.append(level + k + ": " + v + suffix)
 
