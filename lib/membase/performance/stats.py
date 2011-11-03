@@ -61,7 +61,8 @@ class StatsCollector(object):
                "timings": self._task["timings"],
                "dispatcher": self._task["dispatcher"],
                "bucket_size":self._task["bucket_size"],
-               "latency":self._task["latency"]}
+        #       "latency":self._task["latency"]
+        }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
 
@@ -93,7 +94,8 @@ class StatsCollector(object):
         #if self._task["ops"] has more than 1000 elements try to aggregate them ?
 
     def latency_stats(self, ops_stat):
-        self._task["latency"].append(ops_stat)
+        #self._task["latency"].append(ops_stat)
+        pass
 
     def _merge(self):
         first = self._task["ops-temp"][0]
