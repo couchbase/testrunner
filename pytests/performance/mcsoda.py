@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import re
 import os
 import sys
 import math
@@ -61,7 +62,10 @@ def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
          histo = max(d[key], histo)
 
    for key in scalars:
-      k = str(key)
+      if type(key) == FLOAT_TYPE:
+         k = re.sub("0*$", "", "%.7f" % (key))
+      else:
+         k = str(key)
       if ljust:
          k = string.ljust(k, ljust)
       v = str(d[key])
@@ -75,7 +79,7 @@ def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
       res.append("\n")
    for key in complex:
       res.append(level + str(key) + ":\n")
-      dict_to_s(d[key], level + "  ", res=res, suffix="\n", ljust=8)
+      dict_to_s(d[key], level + "  ", res=res, suffix="\n", ljust=9)
 
    return ''.join(res)
 
@@ -269,8 +273,13 @@ class Store:
        if histo is None:
           histo = {}
           self.cur[prefix + cmd] = histo
-       bucket = 10 ** math.floor(math.log10(delta))
+       bucket = self.histo_bucket(delta)
        histo[bucket] = histo.get(bucket, 0) + 1
+
+    def histo_bucket(self, samp):
+       p = 10 ** (math.floor(math.log10(samp)) - 1)
+       r = round(samp / p)
+       return r * p
 
 
 class StoreMemcachedBinary(Store):
