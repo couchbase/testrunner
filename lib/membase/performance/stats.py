@@ -33,8 +33,10 @@ class StatsCollector(object):
         self._task["totalops"] = []
         self._task["ops-temp"] = []
         self._task["latency"] = []
+        # Getting build/machine stats from only one node in the cluster
         self.build_stats(nodes)
-        #create multiple threds for each one required. kick them off. assign an id to each.
+        self.machine_stats(nodes)
+        #create multiple threads for each one required. kick them off. assign an id to each.
 
     def stop(self):
         self._task["state"] = "stopped"
@@ -47,6 +49,7 @@ class StatsCollector(object):
     def export(self, name, test_params):
 
         obj = {"buildinfo": self._task["buildstats"],
+               "machineinfo": self._task["machinestats"],
                "membasestats": self._task["membasestats"],
                "systemstats": self._task["systemstats"],
                "name": name,
@@ -119,9 +122,8 @@ class StatsCollector(object):
         self._task["buildstats"] = json_response
 
     def machine_stats(self,nodes):
-        machine_stats = [StatUtil.machine_info(node) for node in nodes]
+        machine_stats = StatUtil.machine_info(nodes[0])
         self._task["machinestats"] = machine_stats
-
 
     def _extract_proc_info(self, shell, pid):
         o, r = shell.execute_command("cat /proc/{0}/stat".format(pid))
@@ -135,7 +137,6 @@ class StatsCollector(object):
 
         d = dict(zip(fields, o[0].split(' ')))
         return d
-
 
     def system_stats(self, nodes, pnames, frequency, verbosity=False):
         shells = []
@@ -244,4 +245,5 @@ class StatUtil(object):
         shell = RemoteMachineShellConnection(node)
         info = shell.extract_remote_info()
         return {"type": info.type, "distribution": info.distribution_type,
-                "version": info.distribution_version, "packaging": info.deliverable_type}
+                "version": info.distribution_version, "ram": info.ram,
+                "cpu": info.cpu, "disk": info.disk}

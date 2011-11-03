@@ -17,6 +17,9 @@ class RemoteMachineInfo(object):
         self.architecture_type = ''
         self.distribution_version = ''
         self.deliverable_type = ''
+        self.ram = ''
+        self.cpu = ''
+        self.disk = ''
 
 
 class RemoteMachineProcess(object):
@@ -937,6 +940,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.ip = self.ip
             info.distribution_version = os_version
             info.deliverable_type = 'exe'
+            #TODO: For windows
+            info.ram = ''
+            info.disk = ''
+            info.cpu = ''
             return info
         else:
             #now run uname -m to get the architechtre type
@@ -955,7 +962,28 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.ip = self.ip
             info.distribution_version = os_version
             info.deliverable_type = ext
+            info.cpu = self.get_cpu_info()
+            info.disk = self.get_disk_info()
+            info.ram = self.get_ram_info()
             return info
+
+    #TODO: Windows
+    def get_cpu_info(self):
+        o, r = self.execute_command('cat /proc/cpuinfo')
+        if o:
+            return o
+
+    #TODO: Windows
+    def get_ram_info(self):
+        o, r = self.execute_command('cat /proc/meminfo')
+        if o:
+            return o
+
+    #TODO: Windows
+    def get_disk_info(self):
+        o, r = self.execute_command('df -Th')
+        if o:
+            return o
 
     def stop_couchbase(self):
         info = self.extract_remote_info()
