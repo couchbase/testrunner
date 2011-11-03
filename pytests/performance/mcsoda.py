@@ -287,7 +287,8 @@ class Store:
        histo[bucket] = histo.get(bucket, 0) + 1
 
     def histo_bucket(self, samp):
-       p = 10 ** (math.floor(math.log10(samp)) - 1)
+       hp = self.cfg.get("histo-precision", 2)
+       p = 10 ** (math.floor(math.log10(samp)) - (hp - 1))
        r = round(samp / p)
        return r * p
 
@@ -702,7 +703,8 @@ if __name__ == "__main__":
      "json":               (1,     "Use JSON documents. 0 to generate binary documents."),
      "time":               (0,     "Stop after this many seconds if > 0."),
      "max-ops-per-sec":    (0,     "Max ops/second, which overrides the batch parameter."),
-     "report":             (40000, "Emit performance output after this many requests.")
+     "report":             (40000, "Emit performance output after this many requests."),
+     "histo-precision":    (1,     "Precision of histogram bins.")
      }
 
   cur_defaults = {
