@@ -264,12 +264,15 @@ class Store:
     def num_ops(self, cur):
         return cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
-    def gen_doc(self, key_num, key_str, min_value_size, json=None):
+    def gen_doc(self, key_num, key_str, min_value_size, json=None, cache=None):
         if json is None:
            json = self.cfg.get('json', 1) > 0
+        if cache is None:
+           cache = self.cfg.get('doc-cache', 0)
+
         return gen_doc_string(key_num, key_str, min_value_size,
                               self.cfg['suffix'][min_value_size],
-                              json)
+                              json, cache=cache)
 
     def cmd_line_get(self, key_num, key_str):
         return key_str
@@ -569,14 +572,17 @@ def key_to_realm(key_num, key_str):
 doc_cache = {}
 
 def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
-                   key_name="key"):
+                   cache=None, key_name="key"):
     global doc_cache
 
     c = "{"
     if not json:
         c = "*"
 
-    d = doc_cache.get(key_num, None)
+    d = None
+    if cache:
+       d = doc_cache.get(key_num, None)
+
     if d is None:
        next = 300
        achievements = []
@@ -653,16 +659,17 @@ def run(cfg, cur, protocol, host_port, user, pswd,
              host_port.split(':')[0],
              host_port.split(':')[1]))
 
-   if cfg.get("pre-gen", 0) > 0:
+   if cfg.get("doc-cache", 0) > 0 and cfg.get("doc-gen", 0) > 0:
       min_value_size = cfg['min-value-size'][0]
       json = cfg.get('json', 1) > 0
-      log.info("pre-gen...")
+      cache = cfg.get('doc-cache', 0)
+      log.info("doc-gen...")
       gen_start = time.time()
       for key_num in range(cfg.get("max-items", 0)):
          key_str = prepare_key(key_num, cfg.get('prefix', ''))
-         store.gen_doc(key_num, key_str, min_value_size, json)
+         store.gen_doc(key_num, key_str, min_value_size, json, cache)
       gen_end = time.time()
-      log.info("pre-gen...done (elapsed: %s, docs/sec: %s)" % \
+      log.info("doc-gen...done (elapsed: %s, docs/sec: %s)" % \
                   (gen_end - gen_start,
                    float(key_num) / (gen_end - gen_start)))
 
@@ -731,7 +738,8 @@ if __name__ == "__main__":
      "report":             (40000, "Emit performance output after this many requests."),
      "histo-precision":    (1,     "Precision of histogram bins."),
      "vbuckets":           (0,     "When > 0, vbucket hash during memcached-binary protocol."),
-     "pre-gen":            (0,     "When 1, pre-generate docs before starting main loop.")
+     "doc-cache":          (1,     "When 1, cache generated docs; faster but uses memory."),
+     "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs before main loop."),
      }
 
   cur_defaults = {
