@@ -246,7 +246,7 @@ def choose_entry(arr, n):
 
 class Store:
 
-    def connect(self, target, user, pswd, cfg, cur, vbucket_count):
+    def connect(self, target, user, pswd, cfg, cur):
         self.cfg = cfg
         self.cur = cur
 
@@ -295,7 +295,7 @@ class Store:
 
 class StoreMemcachedBinary(Store):
 
-    def connect(self, target, user, pswd, cfg, cur, vbucket_count):
+    def connect(self, target, user, pswd, cfg, cur):
         self.cfg = cfg
         self.cur = cur
         self.target = target
@@ -303,7 +303,6 @@ class StoreMemcachedBinary(Store):
         self.host_port[1] = int(self.host_port[1])
         self.conn = mc_bin_client.MemcachedClient(self.host_port[0],
                                                   self.host_port[1])
-        self.vbucket_count = vbucket_count
         if user:
            self.conn.sasl_auth_plain(user, pswd)
         self.inflight_reinit()
@@ -334,7 +333,9 @@ class StoreMemcachedBinary(Store):
                dtype=0, vbucketId=0,
                fmt=REQ_PKT_FMT,
                magic=REQ_MAGIC_BYTE):
-        vbucketId = crc32.crc32_hash(key) & (self.vbucket_count - 1)
+        vbuckets = self.cfg.get("vbuckets", 0)
+        if vbuckets > 0:
+           vbucketId = crc32.crc32_hash(key) & (vbuckets - 1)
         return struct.pack(fmt, magic, op,
                            len(key), len(extra), dtype, vbucketId,
                            len(key) + len(extra) + len(val), opaque, cas)
@@ -468,7 +469,7 @@ class StoreMemcachedBinary(Store):
 
 class StoreMemcachedAscii(Store):
 
-    def connect(self, target, user, pswd, cfg, cur, vbucket_count):
+    def connect(self, target, user, pswd, cfg, cur):
         self.cfg = cfg
         self.cur = cur
         self.target = target
@@ -604,7 +605,7 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 # --------------------------------------------------------
 
 def run(cfg, cur, protocol, host_port, user, pswd,
-        stats_collector = None, vbucket_count=1024):
+        stats_collector = None):
    if type(cfg['min-value-size']) == type(""):
        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
    if type(cfg['min-value-size']) != type([]):
@@ -634,7 +635,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
          else:
             store = StoreMemcachedBinary()
 
-      store.connect(host_port, user, pswd, cfg, cur, vbucket_count)
+      store.connect(host_port, user, pswd, cfg, cur)
       store.stats_collector(stats_collector)
 
       threads.append(threading.Thread(target=run_worker,
@@ -711,7 +712,8 @@ if __name__ == "__main__":
      "time":               (0,     "Stop after this many seconds if > 0."),
      "max-ops-per-sec":    (0,     "Max ops/second, which overrides the batch parameter."),
      "report":             (40000, "Emit performance output after this many requests."),
-     "histo-precision":    (1,     "Precision of histogram bins.")
+     "histo-precision":    (1,     "Precision of histogram bins."),
+     "vbuckets":           (0,     "When > 0, vbucket hash during memcached-binary protocol.")
      }
 
   cur_defaults = {

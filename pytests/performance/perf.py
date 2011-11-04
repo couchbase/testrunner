@@ -53,7 +53,6 @@ class PerfBase(unittest.TestCase):
 
         vBuckets = RestConnection(master).get_vbuckets(bucket)
         self.vbucket_count = len(vBuckets)
-        print self.vbucket_count
 
         # Number of items loaded by load() method.
         # Does not include or count any items that came from setUp_dgm().
@@ -214,14 +213,15 @@ class PerfBase(unittest.TestCase):
                 'ratio-hot-gets': ratio_hot_gets,
                 'exit-after-creates': 1,
                 'json': int(kind == 'json'),
-                'batch':1000
+                'batch': 1000,
+                'vbuckets': self.vbucket_count
                 }
         self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=True))
         self.log.info("mcsoda - cfg: " + str(cfg))
         cur, start_time, end_time = mcsoda.run(cfg, {},
                                                'memcached-' + protocol,
                                                self.target_moxi(use_direct=True),
-                                               '', '', vbucket_count= self.vbucket_count)
+                                               '', '')
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
@@ -294,7 +294,8 @@ class PerfBase(unittest.TestCase):
                 'ratio_hot-gets': ratio_hot_gets,
                 'threads': clients,
                 'json': int(kind == 'json'),
-                'batch': 1000
+                'batch': 1000,
+                'vbuckets': self.vbucket_count
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
@@ -315,7 +316,7 @@ class PerfBase(unittest.TestCase):
         cur, start_time, end_time = mcsoda.run(cfg, cur,
                                                'memcached-' + protocol,
                                                self.target_moxi(use_direct=True),
-                                               '', '',sc, vbucket_count= self.vbucket_count)
+                                               '', '', sc)
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
                 'tot-items': cur.get('cur-items', 0),
