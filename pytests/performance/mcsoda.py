@@ -551,9 +551,9 @@ class StoreMemcachedAscii(Store):
 
 # A key is a 16 char hex string.
 def key_to_name(key_num, key_str):
-   return key_str[0:4] + " " + key_str[-4:-1]
+   return "%s %s" % (key_str[0:4], key_str[-4:-1])
 def key_to_email(key_num, key_str):
-   return key_str[0:4] + "@" + key_str[3:5] + ".com"
+   return "%s@%s.com" % (key_str[0:4], key_str[3:5])
 def key_to_city(key_num, key_str):
    return key_str[4:7]
 def key_to_country(key_num, key_str):
@@ -561,12 +561,26 @@ def key_to_country(key_num, key_str):
 def key_to_realm(key_num, key_str):
    return key_str[9:11]
 
+doc_cache = {}
+
 def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                    key_name="key"):
+    global doc_cache
+
     c = "{"
     if not json:
         c = "*"
-    s = """%s"%s":"%s",
+
+    d = doc_cache.get(key_num, None)
+    if d is None:
+       next = 300
+       achievements = []
+       for i in range(len(key_str)):
+          next = (next + int(key_str[i], 16) * i) % 500
+          if next < 256:
+             achievements.append(next)
+
+       d = """"%s":"%s",
  "key_num":%s,
  "name":"%s",
  "email":"%s",
@@ -574,26 +588,18 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
  "country":"%s",
  "realm":"%s",
  "coins":%s,
- "achievements":%s,
- %s"""
+ "achievements":%s,""" % (key_name, key_str,
+                          key_num,
+                          key_to_name(key_num, key_str),
+                          key_to_email(key_num, key_str),
+                          key_to_city(key_num, key_str),
+                          key_to_country(key_num, key_str),
+                          key_to_realm(key_num, key_str),
+                          max(0.0, int(key_str[0:4], 16) / 100.0), # coins
+                          achievements)
+       doc_cache[key_num] = d
 
-    next = 300
-    achievements = []
-    for i in range(len(key_str)):
-       next = (next + int(key_str[i], 16) * i) % 500
-       if next < 256:
-          achievements.append(next)
-
-    return s % (c, key_name, key_str,
-                key_num,
-                key_to_name(key_num, key_str),
-                key_to_email(key_num, key_str),
-                key_to_city(key_num, key_str),
-                key_to_country(key_num, key_str),
-                key_to_realm(key_num, key_str),
-                max(0.0, int(key_str[0:4], 16) / 100.0), # coins
-                achievements,
-                suffix)
+    return "%s%s%s" % (c, d, suffix)
 
 # --------------------------------------------------------
 
