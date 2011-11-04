@@ -608,7 +608,8 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                           key_to_realm(key_num, key_str),
                           max(0.0, int(key_str[0:4], 16) / 100.0), # coins
                           achievements)
-       doc_cache[key_num] = d
+       if cache:
+          doc_cache[key_num] = d
 
     return "%s%s%s" % (c, d, suffix)
 
