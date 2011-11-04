@@ -424,7 +424,8 @@ class StoreMemcachedBinary(Store):
                                    'start-time': latency_start,
                                    'end-time': latency_end })
 
-        self.add_timing_sample(latency_cmd, latency_end - latency_start)
+        if latency_cmd:
+           self.add_timing_sample(latency_cmd, latency_end - latency_start)
 
     def cmd_append(self, cmd, key_num, key_str, data, m, extra):
        if cmd[0] == 'g':
