@@ -214,7 +214,8 @@ class PerfBase(unittest.TestCase):
                 'exit-after-creates': 1,
                 'json': int(kind == 'json'),
                 'batch': 1000,
-                'vbuckets': self.vbucket_count
+                'vbuckets': self.vbucket_count,
+                'doc-cache': 1
                 }
         self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=True))
         self.log.info("mcsoda - cfg: " + str(cfg))
@@ -295,7 +296,8 @@ class PerfBase(unittest.TestCase):
                 'threads': clients,
                 'json': int(kind == 'json'),
                 'batch': 1000,
-                'vbuckets': self.vbucket_count
+                'vbuckets': self.vbucket_count,
+                'doc-cache': 1
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
