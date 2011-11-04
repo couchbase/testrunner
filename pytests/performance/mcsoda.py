@@ -151,10 +151,13 @@ def run_worker(ctl, cfg, cur, store, prefix):
     store.flush()
 
 def next_cmd(cfg, cur, store):
+    itm_val = None
     num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
     do_set = cfg.get('ratio-sets', 0) > float(cur.get('cur-sets', 0)) / positive(num_ops)
     if do_set:
+        itm_gen = True
+
         cmd = 'set'
         cur['cur-sets'] = cur.get('cur-sets', 0) + 1
 
@@ -175,6 +178,7 @@ def next_cmd(cfg, cur, store):
             do_delete = cfg.get('ratio-deletes', 0) > \
                           float(cur.get('cur-deletes', 0)) / positive(num_updates)
             if do_delete:
+               itm_gen = False
                cmd = 'delete'
                cur['cur-deletes'] = cur.get('cur-deletes', 0) + 1
             else:
@@ -192,9 +196,10 @@ def next_cmd(cfg, cur, store):
                                      cur.get('cur-sets', 0))
 
         key_str = prepare_key(key_num, cfg.get('prefix', ''))
-        itm_val = store.gen_doc(key_num, key_str,
-                                choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
-                                             num_ops))
+        if itm_gen:
+           itm_val = store.gen_doc(key_num, key_str,
+                                   choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
+                                                num_ops))
 
         return (cmd, key_num, key_str, itm_val)
     else:
@@ -208,9 +213,6 @@ def next_cmd(cfg, cur, store):
                                      cfg.get('ratio-hot-gets', 0),
                                      cur.get('cur-gets', 0))
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
-            itm_val = store.gen_doc(key_num, key_str,
-                                    choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
-                                                 num_ops))
 
             return (cmd, key_num, key_str, itm_val)
         else:
