@@ -292,12 +292,33 @@ class Store:
           self.cur[prefix + cmd] = histo
        bucket = self.histo_bucket(delta)
        histo[bucket] = histo.get(bucket, 0) + 1
+       return histo
 
     def histo_bucket(self, samp):
        hp = self.cfg.get("histo-precision", 2)
        p = 10 ** (math.floor(math.log10(samp)) - (hp - 1))
        r = round(samp / p)
        return r * p
+
+    # The histo dict is returned by add_timing_sample().
+    # The percentiles must be sorted, ascending, like [0.90, 0.99].
+    def histo_percentile(self, histo, percentiles):
+       v_sum = 0
+       bins = histo.keys()
+       bins.sort()
+       for bin in bins:
+          v_sum += histo[bin]
+       v_sum = float(v_sum)
+       v_cur = 0 # Running total.
+       rv = []
+       for bin in bins:
+          if not percentiles:
+             return rv
+          v_cur += histo[bin]
+          while percentiles and (v_cur / v_sum) >= percentiles[0]:
+             rv.append((percentiles[0], bin))
+             percentiles.pop(0)
+       return rv
 
 
 class StoreMemcachedBinary(Store):
@@ -424,6 +445,11 @@ class StoreMemcachedBinary(Store):
            self.inflight_start_time = time.time()
            self.conn.s.send(next_msg)
 
+        if latency_cmd:
+           histo = self.add_timing_sample(latency_cmd, latency_end - latency_start)
+           if False:
+              p = self.histo_percentile(histo, [0.90, 0.99])
+
         if self.sc:
            self.sc.latency_stats({ 'tot-gets': delta_gets,
                                    'tot-sets': delta_sets,
@@ -431,9 +457,6 @@ class StoreMemcachedBinary(Store):
                                    'tot-arpas': delta_arpas,
                                    'start-time': latency_start,
                                    'end-time': latency_end })
-
-        if latency_cmd:
-           self.add_timing_sample(latency_cmd, latency_end - latency_start)
 
     def cmd_append(self, cmd, key_num, key_str, data, m, extra):
        if cmd[0] == 'g':
