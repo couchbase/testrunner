@@ -449,7 +449,7 @@ class StoreMemcachedBinary(Store):
            histo = self.add_timing_sample(latency_cmd, latency_end - latency_start)
 
         if self.sc:
-            self.sc.latency_stats(histo)
+            self.sc.latency_stats(latency_cmd, histo)
 
     def cmd_append(self, cmd, key_num, key_str, data, m, extra):
        if cmd[0] == 'g':

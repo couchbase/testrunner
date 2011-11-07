@@ -32,7 +32,7 @@ class StatsCollector(object):
         self._task["ops"] = []
         self._task["totalops"] = []
         self._task["ops-temp"] = []
-        self._task["latency"] = []
+        self._task["latency"] = {}
         # Getting build/machine stats from only one node in the cluster
         self.build_stats(nodes)
         self.machine_stats(nodes)
@@ -67,11 +67,13 @@ class StatsCollector(object):
        return rv
 
     def export(self, name, test_params):
-        latency = []
-        for latency_histo in self._task["latency"]:
-            percentiles = [0.90, 0.99]
-            p = self.histo_percentile(latency_histo, percentiles)
-            latency.append(p)
+        latency = {}
+        for latency_cmd, latency_histos in self._task["latency"].items():
+            latency[latency_cmd] = []
+            for latency_histo in latency_histos:
+                percentiles = [0.90, 0.99]
+                p = self.histo_percentile(latency_histo, percentiles)
+                latency[latency_cmd].append(p)
 
         obj = {"buildinfo": self._task["buildstats"],
                "machineinfo": self._task["machinestats"],
@@ -86,7 +88,8 @@ class StatsCollector(object):
                "timings": self._task["timings"],
                "dispatcher": self._task["dispatcher"],
                "bucket_size":self._task["bucket_size"],
-               "latency":latency
+               "latency_set":latency.get('set', []),
+               "latency_get":latency.get('get', [])
         }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
@@ -118,8 +121,10 @@ class StatsCollector(object):
 
         #if self._task["ops"] has more than 1000 elements try to aggregate them ?
 
-    def latency_stats(self, latency_stat):
-        self._task["latency"].append(latency_stat)
+    def latency_stats(self, latency_cmd, latency_stat):
+        if self._task["latency"].get(latency_cmd) is None:
+            self._task["latency"][latency_cmd] = []
+        self._task["latency"][latency_cmd].append(latency_stat)
 
     def _merge(self):
         first = self._task["ops-temp"][0]
