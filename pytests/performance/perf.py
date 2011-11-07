@@ -723,7 +723,49 @@ class MapReduce(PerfBase):
         ops["tot-views"] = i
         self.end_stats(sc, ops)
 
-        print(ops)
+
+class TransactionSize(PerfBase):
+
+    def go(self, settings):
+        for key, val in settings:
+            ClusterOperationHelper.flushctl_set(self.input.servers, key, val)
+
+        # Using the same conditions as NPP-03-1k.1 here...
+        self.load(self.parami("items", 1000000),
+                  self.parami('size', 1024),
+                  kind=self.param('kind', 'binary'))
+        self.loop_prep()
+        self.loop(num_ops        = self.parami("ops", 20000000),
+                  num_items      = self.parami("items", 1000000),
+                  min_value_size = self.parami('size', 1024),
+                  kind           = self.param('kind', 'binary'),
+                  protocol       = self.param('protocol', 'binary'),
+                  clients        = self.parami('clients', 1),
+                  ratio_sets     = self.paramf('ratio_sets', 1.0),
+                  ratio_creates  = self.paramf('ratio_creates', 0.0),
+                  ratio_hot      = self.paramf('ratio_hot', 0.2),
+                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                  test_name      = self.id())
+
+    def test_TS1_0(self):
+        self.spec('TS1.0')
+        self.go([('max_txn_size', '10000'),
+                 ('couch_vbucket_batch_count', '4')])
+
+    def test_TS1_1(self):
+        self.spec('TS1.1')
+        self.go([('max_txn_size', '4000'),
+                 ('couch_vbucket_batch_count', '4')])
+
+    def test_TS1_2(self):
+        self.spec('TS1.2')
+        self.go([('max_txn_size', '8000'),
+                 ('couch_vbucket_batch_count', '8')])
+
+    def test_TS1_3(self):
+        self.spec('TS1.3')
+        self.go([('max_txn_size', '10000'),
+                 ('couch_vbucket_batch_count', '8')])
 
 
 class TODO_PerfBase():

@@ -193,6 +193,7 @@ class ClusterOperationHelper(object):
 
     @staticmethod
     def flush_os_caches(servers):
+        log = logger.Logger.get_logger()
         for server in servers:
             try:
                 shell = RemoteMachineShellConnection(server)
@@ -200,3 +201,14 @@ class ClusterOperationHelper(object):
                 log.info("Clearing os caches on {0}".format(server))
             except:
                 pass
+
+    @staticmethod
+    def flushctl_set(servers, key, val):
+        log = logger.Logger.get_logger()
+        for server in servers:
+            c = MemcachedClient(server.ip, 11210)
+            log.info("Setting flush param on server {0}, {1} to {2}".format(server, key, val))
+            rv = c.set_flush_param(key, val)
+            log.info("Setting flush param on server {0}, {1} to {2}, result: {3}".format(server, key, val, rv))
+            c.close()
+
