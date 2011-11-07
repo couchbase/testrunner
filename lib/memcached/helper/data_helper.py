@@ -36,7 +36,9 @@ class MemcachedClientHelper(object):
                        override_vBucketId=-1,
                        write_only=False,
                        moxi=True,
-                       async_write=False):
+                       async_write=False,
+                       delete_ratio=0,
+                       expiry_ratio=0):
         log = logger.Logger.get_logger()
         if not servers:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
@@ -83,7 +85,9 @@ class MemcachedClientHelper(object):
                                   override_vBucketId=override_vBucketId,
                                   write_only=write_only,
                                   moxi=moxi,
-                                  async_write=async_write)
+                                  async_write=async_write,
+                                  delete_ratio=delete_ratio,
+                                  expiry_ratio=expiry_ratio)
             threads.append(thread)
 
         return threads
@@ -97,7 +101,9 @@ class MemcachedClientHelper(object):
                                        number_of_threads=50,
                                        override_vBucketId=-1,
                                        write_only=False,
-                                       moxi=True):
+                                       moxi=True,
+                                       delete_ratio=0,
+                                       expiry_ratio=0):
         log = logger.Logger.get_logger()
         if not serverInfo:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
@@ -141,7 +147,9 @@ class MemcachedClientHelper(object):
                                   values_list=list,
                                   override_vBucketId=override_vBucketId,
                                   write_only=write_only,
-                                  moxi=moxi)
+                                  moxi=moxi,
+                                  delete_ratio=delete_ratio,
+                                  expiry_ratio=expiry_ratio)
             threads.append(thread)
 
         return threads
@@ -155,7 +163,9 @@ class MemcachedClientHelper(object):
                                         number_of_threads=50,
                                         override_vBucketId=-1,
                                         write_only=False,
-                                        moxi=True):
+                                        moxi=True,
+                                        delete_ratio=0,
+                                        expiry_ratio=0):
         inserted_keys = []
         rejected_keys = []
         log = logger.Logger.get_logger()
@@ -167,7 +177,9 @@ class MemcachedClientHelper(object):
                                                        number_of_threads,
                                                        override_vBucketId,
                                                        write_only=write_only,
-                                                       moxi=moxi)
+                                                       moxi=moxi,
+                                                       delete_ratio=delete_ratio,
+                                                       expiry_ratio=expiry_ratio)
 
         #we can start them!
         for thread in threads:
@@ -178,14 +190,20 @@ class MemcachedClientHelper(object):
 
         inserted_count = 0
         rejected_count = 0
+        deleted_count = 0
+        expired_count = 0
         for thread in threads:
             t_inserted, t_rejected = thread.keys_set()
             inserted_count += thread.inserted_keys_count()
             rejected_count += thread.rejected_keys_count()
+            deleted_count += thread._delete_count
+            expired_count += thread._expiry_count
             inserted_keys.extend(t_inserted)
             rejected_keys.extend(t_rejected)
         msg = "inserted keys count : {0} , rejected keys count : {1}"
         log.info(msg.format(inserted_count, rejected_count))
+        msg = "deleted keys count : {0} , expired keys count : {1}"
+        log.info(msg.format(deleted_count, expired_count))
         return inserted_keys, rejected_keys
 
     @staticmethod
@@ -400,7 +418,9 @@ class WorkerThread(threading.Thread):
                  terminate_in_minutes=120,
                  write_only=False,
                  moxi=True,
-                 async_write=False):
+                 async_write=False,
+                 delete_ratio=0,
+                 expiry_ratio=0):
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
@@ -412,6 +432,11 @@ class WorkerThread(threading.Thread):
         self._inserted_keys_count = 0
         self._rejected_keys = []
         self._rejected_keys_count = 0
+        self._delete_ratio = delete_ratio
+        self._expiry_ratio = expiry_ratio
+        self._delete_count = 0
+        self._expiry_count = 0
+        self._delete = []
         self.ignore_how_many_errors = ignore_how_many_errors
         self.override_vBucketId = override_vBucketId
         self.terminate_in_minutes = terminate_in_minutes
@@ -520,6 +545,22 @@ class WorkerThread(threading.Thread):
                     client.set(key, 0, 0, selected['value'])
                 self._inserted_keys_count += 1
                 backoff_count = 0
+                # do expiry sets, 30 second expiry time
+                if Random().random() < self._expiry_ratio:
+                    client.set(key+"-exp", 30, 0, selected['value'])
+                    self._expiry_count += 1
+                # do deletes if we have 100 pending
+                # at the end delete the remaining
+                if len(self._delete) >= 100:
+#                    self.log.info("deleting {0} keys".format(len(self._delete)))
+                    for key_del in self._delete:
+                        client.delete(key_del)
+                    self._delete = []
+                # do delete sets
+                if Random().random() < self._delete_ratio:
+                    client.set(key+"-del", 0, 0, selected['value'])
+                    self._delete.append(key+"-del")
+                    self._delete_count += 1
             except MemcachedError as error:
                 if not self.moxi:
                     awareness.done()
@@ -583,6 +624,15 @@ class WorkerThread(threading.Thread):
                         break
             self._rejected_keys = rejected_after_retry
             retry = - 1
+            # clean up the rest of the deleted keys
+            if len(self._delete) > 0:
+#                self.log.info("deleting {0} keys".format(len(self._delete)))
+                for key_del in self._delete:
+                    client.delete(key_del)
+                self._delete = []
+
+            self.log.info("deleted {0} keys".format(self._delete_count))
+            self.log.info("expiry {0} keys".format(self._expiry_count))
             #        client.close()
         awareness.done()
         if not self.write_only:

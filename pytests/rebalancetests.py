@@ -15,7 +15,8 @@ from threading import Thread
 NUM_REBALANCE = 2
 DEFAULT_LOAD_RATIO = 5
 DEFAULT_REPLICA = 1
-
+EXPIRY_RATIO = .1
+DELETE_RATIO = .1
 
 class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
@@ -115,14 +116,16 @@ class RebalanceBaseTest(unittest.TestCase):
             bucket_data[bucket.name]["items_inserted_count"] += inserted_count
 
     @staticmethod
-    def threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data):
+    def threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data, delete_ratio=0, expiry_ratio=0):
         buckets = rest.get_buckets()
         for bucket in buckets:
             threads = MemcachedClientHelper.create_threads(servers=rebalanced_servers,
                                                            name=bucket.name,
                                                            ram_load_ratio=load_ratio,
                                                            value_size_distribution=distribution,
-                                                           number_of_threads=4)
+                                                           number_of_threads=4,
+                                                           delete_ratio=delete_ratio,
+                                                           expiry_ratio=expiry_ratio)
             [t.start() for t in threads]
             bucket_data[bucket.name]["threads"] = threads
         return bucket_data
@@ -156,7 +159,7 @@ class RebalanceBaseTest(unittest.TestCase):
         return picked
 
     @staticmethod
-    def load_data(master, bucket, keys_count=-1, load_ratio=-1):
+    def load_data(master, bucket, keys_count=-1, load_ratio=-1, delete_ratio=0, expiry_ratio=0):
         log = logger.Logger.get_logger()
         inserted_keys, rejected_keys =\
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
@@ -164,7 +167,9 @@ class RebalanceBaseTest(unittest.TestCase):
                                                               ram_load_ratio=load_ratio,
                                                               number_of_items=keys_count,
                                                               number_of_threads=2,
-                                                              write_only=True)
+                                                              write_only=True,
+                                                              delete_ratio=delete_ratio,
+                                                              expiry_ratio=expiry_ratio)
         log.info("wait until data is completely persisted on the disk")
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
@@ -231,7 +236,8 @@ class IncrementalRebalanceComboTests(unittest.TestCase):
         while len(nodes) < len(self._servers):
             # Start loading threads
             bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, None, rebalanced_servers,
-                                                                bucket_data)
+                                                                bucket_data,
+                                                                delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO)
             # Start rebalance in thread
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             rebalance_thread = Thread(target=RebalanceHelper.rebalance_in,
@@ -295,7 +301,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         while len(nodes) < len(self._servers):
             buckets = rest.get_buckets()
             for bucket in buckets:
-                inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, keys_count, load_ratio)
+                inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, keys_count, load_ratio, delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO)
                 bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
                 bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
 
@@ -348,7 +354,8 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
             self.assertTrue(otpNode, msg.format(server.ip))
             distribution = RebalanceBaseTest.get_distribution(load_ratio)
             bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers,
-                                                                bucket_data)
+                                                                bucket_data,
+                                                                delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO)
 
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
@@ -738,7 +745,8 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
 
         distribution = RebalanceBaseTest.get_distribution(load_ratio)
         bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers,
-                                                            bucket_data)
+                                                            bucket_data,
+                                                            delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO)
 
         for name in bucket_data:
             for thread in bucket_data[name]["threads"]:
@@ -1158,7 +1166,8 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
             self.assertTrue(otpNode, msg.format(server.ip, ejectedNodes))
             distribution = RebalanceBaseTest.get_distribution(load_ratio)
             bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers,
-                                                                bucket_data)
+                                                                bucket_data,
+                                                                delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO)
 
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
             self.assertTrue(rest.monitorRebalance(),
