@@ -61,7 +61,9 @@ class PerfBase(unittest.TestCase):
 
         self.setUp_moxi()
 
-        if self.parami("dgm", 1) > 0:
+        if self.dgm is None:
+            self.dgm = self.parami("dgm", 1)
+        if self.dgm:
             self.setUp_dgm()
 
         time.sleep(10)
@@ -725,6 +727,10 @@ class MapReduce(PerfBase):
 
 
 class TransactionSize(PerfBase):
+
+    def setUp(self):
+        self.dgm = False
+        super(TransactionSize, self).setUp()
 
     def go(self, settings):
         for key, val in settings:
