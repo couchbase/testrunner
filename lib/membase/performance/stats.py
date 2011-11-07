@@ -46,34 +46,7 @@ class StatsCollector(object):
 
         self._task["time"] = time.time() - self._task["time"]
 
-    # The histo dict is returned by add_timing_sample().
-    # The percentiles must be sorted, ascending, like [0.90, 0.99].
-    def histo_percentile(self, histo, percentiles):
-       v_sum = 0
-       bins = histo.keys()
-       bins.sort()
-       for bin in bins:
-          v_sum += histo[bin]
-       v_sum = float(v_sum)
-       v_cur = 0 # Running total.
-       rv = []
-       for bin in bins:
-          if not percentiles:
-             return rv
-          v_cur += histo[bin]
-          while percentiles and (v_cur / v_sum) >= percentiles[0]:
-             rv.append((percentiles[0], bin))
-             percentiles.pop(0)
-       return rv
-
     def export(self, name, test_params):
-        latency = {}
-        for latency_cmd, latency_histos in self._task["latency"].items():
-            latency[latency_cmd] = []
-            for latency_histo in latency_histos:
-                percentiles = [0.90, 0.99]
-                p = self.histo_percentile(latency_histo, percentiles)
-                latency[latency_cmd].append(p)
 
         obj = {"buildinfo": self._task["buildstats"],
                "machineinfo": self._task["machinestats"],
@@ -88,8 +61,8 @@ class StatsCollector(object):
                "timings": self._task["timings"],
                "dispatcher": self._task["dispatcher"],
                "bucket_size":self._task["bucket_size"],
-               "latency_set":latency.get('set', []),
-               "latency_get":latency.get('get', [])
+               "latency_set":self._task["latency"]['set'],
+               "latency_get":self._task["latency"]['get']
         }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))

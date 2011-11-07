@@ -290,7 +290,7 @@ class Store:
        if histo is None:
           histo = {}
           self.cur[prefix + cmd] = histo
-       bucket = self.histo_bucket(delta)
+       bucket = round(self.histo_bucket(delta), 6)
        histo[bucket] = histo.get(bucket, 0) + 1
        return histo
 
@@ -300,21 +300,32 @@ class Store:
        r = round(samp / p)
        return r * p
 
+    def drange(self, start, stop, step):
+        r = start
+        while r < stop:
+            yield round(float(r), 6)
+            r += float(step)
+
     # The histo dict is returned by add_timing_sample().
     # The percentiles must be sorted, ascending, like [0.90, 0.99].
     def histo_percentile(self, histo, percentiles):
        v_sum = 0
-       bins = histo.keys()
-       bins.sort()
-       for bin in bins:
-          v_sum += histo[bin]
+       keys = histo.keys()
+       min_bin = round(min(keys), 6)
+       max_bin = round(max(keys), 6)
+       bin_precision = int(len(str(min_bin).split('.')[1]))
+       step = round(pow(10, -bin_precision), 6)
+       list = self.drange(min_bin, max_bin, step)
+       bins = [x for x in list]
+       bins.append(max_bin)
+       v_sum = sum(histo.values())
        v_sum = float(v_sum)
        v_cur = 0 # Running total.
        rv = []
        for bin in bins:
           if not percentiles:
              return rv
-          v_cur += histo[bin]
+          v_cur += histo.get(bin, 0)
           while percentiles and (v_cur / v_sum) >= percentiles[0]:
              rv.append((percentiles[0], bin))
              percentiles.pop(0)
@@ -446,10 +457,13 @@ class StoreMemcachedBinary(Store):
            self.conn.s.send(next_msg)
 
         if latency_cmd:
-           histo = self.add_timing_sample(latency_cmd, latency_end - latency_start)
+            histo = self.add_timing_sample(latency_cmd, latency_end - latency_start)
 
         if self.sc:
-            self.sc.latency_stats(latency_cmd, histo)
+            percentiles = [0.90, 0.99]
+            p = self.histo_percentile(histo, percentiles)
+            self.sc.latency_stats(latency_cmd, p)
+
 
     def cmd_append(self, cmd, key_num, key_str, data, m, extra):
        if cmd[0] == 'g':
