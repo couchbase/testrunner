@@ -447,16 +447,9 @@ class StoreMemcachedBinary(Store):
 
         if latency_cmd:
            histo = self.add_timing_sample(latency_cmd, latency_end - latency_start)
-           if False:
-              p = self.histo_percentile(histo, [0.90, 0.99])
 
         if self.sc:
-           self.sc.latency_stats({ 'tot-gets': delta_gets,
-                                   'tot-sets': delta_sets,
-                                   'tot-deletes': delta_deletes,
-                                   'tot-arpas': delta_arpas,
-                                   'start-time': latency_start,
-                                   'end-time': latency_end })
+            self.sc.latency_stats(histo)
 
     def cmd_append(self, cmd, key_num, key_str, data, m, extra):
        if cmd[0] == 'g':
