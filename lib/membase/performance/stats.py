@@ -68,9 +68,9 @@ class StatsCollector(object):
 
     def export(self, name, test_params):
         latency = []
-        precentiles = [0.90, 0.99]
         for latency_histo in self._task["latency"]:
-            p = self.histo_percentile(latency_histo, precentiles)
+            percentiles = [0.90, 0.99]
+            p = self.histo_percentile(latency_histo, percentiles)
             latency.append(p)
 
         obj = {"buildinfo": self._task["buildstats"],
