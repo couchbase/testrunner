@@ -601,6 +601,8 @@ def key_to_country(key_num, key_str):
    return key_str[7:9]
 def key_to_realm(key_num, key_str):
    return key_str[9:11]
+def key_to_coins(key_num, key_str):
+   return max(0.0, int(key_str[0:4], 16) / 100.0)
 def key_to_achievements(key_num, key_str):
    next = 300
    achievements = []
@@ -640,7 +642,7 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                           key_to_city(key_num, key_str),
                           key_to_country(key_num, key_str),
                           key_to_realm(key_num, key_str),
-                          max(0.0, int(key_str[0:4], 16) / 100.0), # coins
+                          key_to_coins(key_num, key_str),
                           key_to_achievements(key_num, key_str))
        if cache:
           doc_cache[key_num] = d
