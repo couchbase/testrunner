@@ -649,7 +649,7 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 # --------------------------------------------------------
 
 def run(cfg, cur, protocol, host_port, user, pswd,
-        stats_collector = None):
+        stats_collector = None, stores = None):
    if type(cfg['min-value-size']) == type(""):
        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
    if type(cfg['min-value-size']) != type([]):
@@ -672,12 +672,17 @@ def run(cfg, cur, protocol, host_port, user, pswd,
    threads = []
 
    for i in range(cfg.get('threads', 1)):
-      store = Store()
-      if protocol.split('-')[0].find('memcache') >= 0:
-         if protocol.split('-')[1] == 'ascii':
-            store = StoreMemcachedAscii()
-         else:
-            store = StoreMemcachedBinary()
+      if stores:
+          store = stores[i]
+      else:
+          store = Store()
+          if protocol.split('-')[0].find('memcache') >= 0:
+             if protocol.split('-')[1] == 'ascii':
+                store = StoreMemcachedAscii()
+             else:
+                store = StoreMemcachedBinary()
+
+      log.info("store: %s - %s" % (i, store.__class__))
 
       store.connect(host_port, user, pswd, cfg, cur)
       store.stats_collector(stats_collector)
@@ -746,7 +751,9 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
    return cur, t_start, t_end
 
-def main(argv, cfg_defaults=None, cur_defaults=None):
+# --------------------------------------------------------
+
+def main(argv, cfg_defaults=None, cur_defaults=None, stores=None):
   cfg_defaults = cfg_defaults or {
      "prefix":             ("",    "Prefix for every item key."),
      "max-ops":            (0,     "Max number of ops before exiting. 0 means keep going."),
@@ -851,7 +858,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None):
   host_port = ('@' + argv[1].split("://")[-1]).split('@')[-1] + ":11211"
   user, pswd = (('@' + argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
 
-  run(cfg, cur, protocol, host_port, user, pswd)
+  run(cfg, cur, protocol, host_port, user, pswd, stores)
+
 
 if __name__ == "__main__":
   main(sys.argv)
