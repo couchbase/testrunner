@@ -313,7 +313,7 @@ class Store:
        keys = histo.keys()
        min_bin = round(min(keys), 6)
        max_bin = round(max(keys), 6)
-       bin_precision = int(len(str(min_bin).split('.')[1]))
+       bin_precision = int(len(("%f" % (min_bin,)).split('.')[1]))
        step = round(pow(10, -bin_precision), 6)
        list = self.drange(min_bin, max_bin, step)
        bins = [x for x in list]
