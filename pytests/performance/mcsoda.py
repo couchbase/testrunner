@@ -164,7 +164,7 @@ def run_worker(ctl, cfg, cur, store, prefix):
 
             max_ops_per_sec = cfg.get('max-ops-per-sec', 0)
             if max_ops_per_sec > 0 and len(ops_per_sec_prev) >= 2:
-               # Do something clever here to prevent going over
+               # TODO: Do something clever here to prevent going over
                # the max-ops-per-sec.
                pass
 
@@ -779,7 +779,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "batch":              (100,   "Batch / pipeline up this number of commands."),
      "json":               (1,     "Use JSON documents. 0 to generate binary documents."),
      "time":               (0,     "Stop after this many seconds if > 0."),
-     "max-ops-per-sec":    (0,     "Max ops/second, which overrides the batch parameter."),
+     # TODO: "max-ops-per-sec":    (0,     "Max ops/second, which overrides the batch parameter."),
      "report":             (40000, "Emit performance output after this many requests."),
      "histo-precision":    (1,     "Precision of histogram bins."),
      "vbuckets":           (0,     "When > 0, vbucket hash during memcached-binary protocol."),
