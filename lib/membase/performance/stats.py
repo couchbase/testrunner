@@ -61,8 +61,8 @@ class StatsCollector(object):
                "timings": self._task["timings"],
                "dispatcher": self._task["dispatcher"],
                "bucket_size":self._task["bucket_size"],
-               "latency_set":self._task["latency"].get('set', []),
-               "latency_get":self._task["latency"].get('get', [])
+               "latency-set":self._task["latency"].get('set', []),
+               "latency-get":self._task["latency"].get('get', [])
         }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
