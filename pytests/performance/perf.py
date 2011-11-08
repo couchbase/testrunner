@@ -33,7 +33,6 @@ class PerfBase(unittest.TestCase):
         self.sc = None
         self.vbucket_count = 0
         self.tearDown() # Helps when a previous broken test never reached tearDown.
-
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
@@ -60,9 +59,11 @@ class PerfBase(unittest.TestCase):
         self.num_items_loaded = 0
 
         self.setUp_moxi()
-
-        if self.dgm is None:
-            self.dgm = self.parami("dgm", 1)
+        try:
+            if self.dgm is None:
+                self.dgm = self.parami("dgm", 1)
+        except AttributeError:
+            self.dgm = True
         if self.dgm:
             self.setUp_dgm()
 
