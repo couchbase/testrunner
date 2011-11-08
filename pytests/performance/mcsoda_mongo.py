@@ -8,6 +8,8 @@ import pymongo # Use: pip install pymongo==2.0
 
 from pymongo import Connection
 
+PERCENTILES = [0.90, 0.99]
+
 mongoDocCache = {}
 
 class StoreMongo(mcsoda.Store):
@@ -51,6 +53,7 @@ class StoreMongo(mcsoda.Store):
 
     def command(self, c):
         cmd, key_num, key_str, data = c
+        cmd_start = time.time()
         if cmd[0] == 'g':
             self.coll.find_one(key_str)
         elif cmd[0] == 's':
@@ -59,6 +62,12 @@ class StoreMongo(mcsoda.Store):
             self.coll.remove(key_str)
         else:
             raise Exception("StoreMongo saw an unsupported cmd: " + cmd)
+        cmd_end = time.time()
+
+        histo = self.add_timing_sample(cmd, cmd_end - cmd_start)
+        if self.sc:
+            p = self.histo_percentile(histo, PERCENTILES)
+            self.sc.latency_stats(cmd, p)
 
 
 if __name__ == "__main__":
