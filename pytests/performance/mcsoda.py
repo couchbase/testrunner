@@ -601,6 +601,14 @@ def key_to_country(key_num, key_str):
    return key_str[7:9]
 def key_to_realm(key_num, key_str):
    return key_str[9:11]
+def key_to_achievements(key_num, key_str):
+   next = 300
+   achievements = []
+   for i in range(len(key_str)):
+      next = (next + int(key_str[i], 16) * i) % 500
+      if next < 256:
+         achievements.append(next)
+   return achievements
 
 doc_cache = {}
 
@@ -617,13 +625,6 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
        d = doc_cache.get(key_num, None)
 
     if d is None:
-       next = 300
-       achievements = []
-       for i in range(len(key_str)):
-          next = (next + int(key_str[i], 16) * i) % 500
-          if next < 256:
-             achievements.append(next)
-
        d = """"%s":"%s",
  "key_num":%s,
  "name":"%s",
@@ -640,7 +641,7 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                           key_to_country(key_num, key_str),
                           key_to_realm(key_num, key_str),
                           max(0.0, int(key_str[0:4], 16) / 100.0), # coins
-                          achievements)
+                          key_to_achievements(key_num, key_str))
        if cache:
           doc_cache[key_num] = d
 
@@ -672,9 +673,11 @@ def run(cfg, cur, protocol, host_port, user, pswd,
    threads = []
 
    for i in range(cfg.get('threads', 1)):
-      if stores:
+      store = None
+      if stores and i < len(stores):
           store = stores[i]
-      else:
+
+      if store is None:
           store = Store()
           if protocol.split('-')[0].find('memcache') >= 0:
              if protocol.split('-')[1] == 'ascii':
@@ -753,7 +756,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
 # --------------------------------------------------------
 
-def main(argv, cfg_defaults=None, cur_defaults=None, stores=None):
+def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None):
   cfg_defaults = cfg_defaults or {
      "prefix":             ("",    "Prefix for every item key."),
      "max-ops":            (0,     "Max number of ops before exiting. 0 means keep going."),
@@ -854,11 +857,11 @@ def main(argv, cfg_defaults=None, cur_defaults=None, stores=None):
      for k in sorted(o.iterkeys()):
         log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
 
-  protocol = (["memcached"] + argv[1].split("://"))[-2] + "-binary"
+  protocol = protocol or (["memcached"] + argv[1].split("://"))[-2] + "-binary"
   host_port = ('@' + argv[1].split("://")[-1]).split('@')[-1] + ":11211"
   user, pswd = (('@' + argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
 
-  run(cfg, cur, protocol, host_port, user, pswd, stores)
+  run(cfg, cur, protocol, host_port, user, pswd, stores=stores)
 
 
 if __name__ == "__main__":
