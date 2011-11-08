@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import copy
 import math
 import time
 import mcsoda
@@ -44,11 +45,13 @@ class StoreMongo(mcsoda.Store):
                   "city": mcsoda.key_to_city(key_num, key_str),
                   "country": mcsoda.key_to_country(key_num, key_str),
                   "realm": mcsoda.key_to_realm(key_num, key_str),
-                  "coins": max(0.0, int(key_str[0:4], 16) / 100.0),
+                  "coins": mcsoda.key_to_coins(key_num, key_str),
                   "achievements": mcsoda.key_to_achievements(key_num, key_str) }
         if cache:
             mongoDocCache[key_num] = d
 
+        d = copy.deepcopy(d)
+        d['body'] = self.cfg['body'][min_value_size]
         return d
 
     def command(self, c):
