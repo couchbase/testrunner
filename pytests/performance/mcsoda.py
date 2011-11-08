@@ -746,9 +746,8 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
    return cur, t_start, t_end
 
-
-if __name__ == "__main__":
-  cfg_defaults = {
+def main(argv, cfg_defaults=None, cur_defaults=None):
+  cfg_defaults = cfg_defaults or {
      "prefix":             ("",    "Prefix for every item key."),
      "max-ops":            (0,     "Max number of ops before exiting. 0 means keep going."),
      "max-items":          (-1,    "Max number of items; default 100000."),
@@ -776,7 +775,7 @@ if __name__ == "__main__":
      "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs before main loop."),
      }
 
-  cur_defaults = {
+  cur_defaults = cur_defaults or {
      "cur-items":    (0, "Number of items known to already exist."),
      "cur-sets":     (0, "Number of sets already done."),
      "cur-creates":  (0, "Number of sets that were creates."),
@@ -785,9 +784,9 @@ if __name__ == "__main__":
      "cur-arpas":    (0, "Number of add/replace/prepend/append's (a-r-p-a) commands."),
      }
 
-  if len(sys.argv) < 2 or "-h" in sys.argv or "--help" in sys.argv:
+  if len(argv) < 2 or "-h" in argv or "--help" in argv:
      print("usage: %s [memcached[-binary|-ascii]://][user[:pswd]@]host[:port] [key=val]*\n" %
-           (sys.argv[0]))
+           (argv[0]))
      print("  default protocol = memcached-binary://")
      print("  default port     = 11211\n")
      for s in ["examples: %s memcached-binary://127.0.0.1:11211 max-items=1000000 json=1",
@@ -796,7 +795,7 @@ if __name__ == "__main__":
                "          %s 127.0.0.1",
                "          %s my-test-bucket@127.0.0.1",
                "          %s my-test-bucket:MyPassword@127.0.0.1"]:
-        print(s % (sys.argv[0]))
+        print(s % (argv[0]))
      print("")
      print("optional key=val's and their defaults:")
      for d in [cfg_defaults, cur_defaults]:
@@ -815,7 +814,7 @@ if __name__ == "__main__":
   for (o, d) in [(cfg, cfg_defaults), (cur, cur_defaults)]: # Parse key=val pairs.
      for (dk, dv) in d.iteritems():
         o[dk] = dv[0]
-     for kv in sys.argv[2:]:
+     for kv in argv[2:]:
         k, v = (kv + '=').split('=')[0:2]
         if k and v and k in o:
            if type(o[k]) != type(""):
@@ -848,8 +847,12 @@ if __name__ == "__main__":
      for k in sorted(o.iterkeys()):
         log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
 
-  protocol = (["memcached"] + sys.argv[1].split("://"))[-2] + "-binary"
-  host_port = ('@' + sys.argv[1].split("://")[-1]).split('@')[-1] + ":11211"
-  user, pswd = (('@' + sys.argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
+  protocol = (["memcached"] + argv[1].split("://"))[-2] + "-binary"
+  host_port = ('@' + argv[1].split("://")[-1]).split('@')[-1] + ":11211"
+  user, pswd = (('@' + argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
 
   run(cfg, cur, protocol, host_port, user, pswd)
+
+if __name__ == "__main__":
+  main(sys.argv)
+
