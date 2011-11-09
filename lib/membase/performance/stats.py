@@ -6,6 +6,26 @@ from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 
+# The histo dict is returned by add_timing_sample().
+# The percentiles must be sorted, ascending, like [0.90, 0.99].
+def histo_percentile(histo, percentiles):
+   v_sum = 0
+   bins = histo.keys()
+   bins.sort()
+   for bin in bins:
+      v_sum += histo[bin]
+   v_sum = float(v_sum)
+   v_cur = 0 # Running total.
+   rv = []
+   for bin in bins:
+      if not percentiles:
+         return rv
+      v_cur += histo[bin]
+      while percentiles and (v_cur / v_sum) >= percentiles[0]:
+         rv.append((percentiles[0], bin))
+         percentiles.pop(0)
+   return rv
+
 class StatsCollector(object):
     _task = {}
     _verbosity = True
@@ -48,6 +68,15 @@ class StatsCollector(object):
 
     def export(self, name, test_params):
 
+        commands = ['latency-set', 'latency-get']
+        for latency in commands:
+            histos = self._task["latency"].get(latency, [])
+            key = 'percentile-' + latency
+            self._task["latency"][key] = []
+            for histo in histos:
+                p = histo_percentile(histo, [0.90, 0.99])
+                self._task["latency"][key].append(p)
+
         obj = {"buildinfo": self._task["buildstats"],
                "machineinfo": self._task["machinestats"],
                "membasestats": self._task["membasestats"],
@@ -61,8 +90,8 @@ class StatsCollector(object):
                "timings": self._task["timings"],
                "dispatcher": self._task["dispatcher"],
                "bucket_size":self._task["bucket_size"],
-               "latency-set":self._task["latency"].get('set', []),
-               "latency-get":self._task["latency"].get('get', [])
+               "latency-set":self._task["latency"].get('percentile-latency-set', []),
+               "latency-get":self._task["latency"].get('percentile-latency-get', [])
         }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
