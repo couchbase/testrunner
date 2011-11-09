@@ -456,8 +456,7 @@ class StoreMemcachedBinary(Store):
             self.add_timing_sample(latency_cmd, latency_end - latency_start)
 
         if self.sc:
-            report = self.cfg.get('report', 10000)
-            if  self.ops - self.previous_ops >  report:
+            if  self.ops - self.previous_ops >  10000:
                 self.previous_ops = self.ops
                 self.save_stats()
 

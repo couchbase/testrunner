@@ -300,8 +300,7 @@ class PerfBase(unittest.TestCase):
                 'json': int(kind == 'json'),
                 'batch': 1000,
                 'vbuckets': self.vbucket_count,
-                'doc-cache': 1,
-                'report': 10000
+                'doc-cache': 1
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
