@@ -168,6 +168,11 @@ class MembaseServerInstaller(Installer):
         while time.time() < (start_time + (10 * 60)):
             rest = RestConnection(server)
             try:
+                if server.data_path:
+                    # Make sure that data_path is writable by membase user
+                    remote_client = RemoteMachineShellConnection(server)
+                    remote_client.execute_command("chown -R membase.membase {0}".format(server.data_path))
+                    rest.set_data_path(data_path=server.data_path)
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 cluster_initialized = True
@@ -233,6 +238,11 @@ class CouchbaseServerInstaller(Installer):
         while time.time() < (start_time + (10 * 60)):
             rest = RestConnection(server)
             try:
+                if server.data_path:
+                    # Make sure that data_path is writable by couchbase user
+                    remote_client = RemoteMachineShellConnection(server)
+                    remote_client.execute_command("chown -R couchbase.couchbase {0}".format(server.data_path))
+                    rest.set_data_path(data_path=server.data_path)
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 cluster_initialized = True

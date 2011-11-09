@@ -26,12 +26,10 @@ class RestHelper(object):
         log.info(msg.format(self.rest.ip,timeout_in_seconds))
         return False
 
-
     def is_cluster_healthy(self):
         #get the nodes and verify that all the nodes.status are healthy
         nodes = self.rest.node_statuses()
         return all(node.status == 'healthy' for node in nodes)
-
 
     def rebalance_reached(self, percentage=100):
         start = time.time()
@@ -878,13 +876,18 @@ class RestConnection(object):
         return status
 
 
-    def set_data_path(self, data_path):
-        api = self.baseUrl + '/nodes/self/controller/settings'
-        params = urllib.urlencode({'path': data_path})
-        log.info('/nodes/self/controller/settings params : {0}'.format(params))
+    def set_data_path(self, data_path=None):
+        if data_path:
+            api = self.baseUrl + '/nodes/self/controller/settings'
+            params = urllib.urlencode({'path': data_path})
+            log.info('/nodes/self/controller/settings params : {0}'.format(params))
 
-        status, content = self._http_request(api, 'POST', params)
-        return status
+            status, content = self._http_request(api, 'POST', params)
+            if status:
+                log.info("Setting data_path: {0}: status {1}".format(data_path, status))
+            else:
+                log.error("Unable to set data_path {0} : {1}".format(data_path, content))
+            return status
 
     def get_database_disk_size(self, bucket='default'):
         api = self.baseUrl + "pools/{0}/buckets".format(bucket)
