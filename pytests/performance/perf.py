@@ -38,7 +38,8 @@ class PerfBase(unittest.TestCase):
 
         self.rest        = rest        = RestConnection(master)
         self.rest_helper = rest_helper = RestHelper(rest)
-
+        self.data_path   = master.data_path
+        rest.set_data_path(master.data_path)
         rest.init_cluster(master.rest_username, master.rest_password)
         rest.init_cluster_memoryQuota(master.rest_username,
                                       master.rest_password,
@@ -175,6 +176,8 @@ class PerfBase(unittest.TestCase):
                 destination_folder = testconstants.WIN_COUCHBASE_DATA_PATH
             else:
                 destination_folder = testconstants.COUCHBASE_DATA_PATH
+        if self.data_path:
+            destination_folder = self.data_path
         untar_command = 'cd {1}; tar -xzf {0}'.format(dir+file , destination_folder)
         output, error = remote.execute_command(untar_command)
         remote.log_command_output(output, error)
