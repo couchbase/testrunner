@@ -759,38 +759,53 @@ class TransactionSize(PerfBase):
 
     def test_TS1_0(self):
         self.spec('TS1.0')
-        self.go([('max_txn_size', '10000'),
+        self.go([('max_txn_size', '1000'),
                  ('couch_vbucket_batch_count', '4')])
 
     def test_TS1_1(self):
         self.spec('TS1.1')
-        self.go([('max_txn_size', '4000'),
-                 ('couch_vbucket_batch_count', '4')])
+        self.go([('max_txn_size', '1000'),
+                 ('couch_vbucket_batch_count', '8')])
 
     def test_TS1_2(self):
         self.spec('TS1.2')
-        self.go([('max_txn_size', '8000'),
-                 ('couch_vbucket_batch_count', '8')])
+        self.go([('max_txn_size', '2000'),
+                 ('couch_vbucket_batch_count', '4')])
 
     def test_TS1_3(self):
         self.spec('TS1.3')
-        self.go([('max_txn_size', '10000'),
+        self.go([('max_txn_size', '2000'),
                  ('couch_vbucket_batch_count', '8')])
 
     def test_TS1_4(self):
         self.spec('TS1.4')
-        self.go([('max_txn_size', '2000'),
+        self.go([('max_txn_size', '4000'),
                  ('couch_vbucket_batch_count', '4')])
 
     def test_TS1_5(self):
         self.spec('TS1.5')
         self.go([('max_txn_size', '4000'),
-                 ('couch_vbucket_batch_count', '4')])
+                 ('couch_vbucket_batch_count', '8')])
 
     def test_TS1_6(self):
         self.spec('TS1.6')
-        self.go([('max_txn_size', '6000'),
-                 ('couch_vbucket_batch_count', '6')])
+        self.go([('max_txn_size', '8000'),
+                 ('couch_vbucket_batch_count', '4')])
+
+    def test_TS1_7(self):
+        self.spec('TS1.6')
+        self.go([('max_txn_size', '8000'),
+                 ('couch_vbucket_batch_count', '8')])
+
+    def test_TS1_8(self):
+        self.spec('TS1.6')
+        self.go([('max_txn_size', '10000'),
+                 ('couch_vbucket_batch_count', '4')])
+
+    def test_TS1_9(self):
+        self.spec('TS1.6')
+        self.go([('max_txn_size', '10000'),
+                 ('couch_vbucket_batch_count', '8')])
 
 
 
