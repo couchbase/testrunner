@@ -212,3 +212,12 @@ class ClusterOperationHelper(object):
             log.info("Setting flush param on server {0}, {1} to {2}, result: {3}".format(server, key, val, rv))
             c.close()
 
+    @staticmethod
+    def get_mb_stats(servers, key):
+        log = logger.Logger.get_logger()
+        for server in servers:
+            c = MemcachedClient(server.ip, 11210)
+            log.info("Get flush param on server {0}, {1}".format(server, key))
+            value = c.stats().get(key, None)
+            log.info("Get flush param on server {0}, {1}".format(server, value))
+            c.close()
