@@ -60,11 +60,12 @@ class PerfBase(unittest.TestCase):
         self.num_items_loaded = 0
 
         self.setUp_moxi()
+
         try:
             if self.dgm is None:
                 self.dgm = self.parami("dgm", 1)
         except AttributeError:
-            self.dgm = True
+            self.dgm = self.parami("dgm", 1)
         if self.dgm:
             self.setUp_dgm()
 
