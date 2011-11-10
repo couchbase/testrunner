@@ -35,33 +35,39 @@ class StatsCollector(object):
 
     #this function starts collecting stats from all nodes with the given
     #frequency
-    def start(self, nodes, bucket, pnames, name, frequency):
-        self._task = {"state": "running"}
-        mbstats_thread = Thread(target=self.membase_stats,args=(nodes, bucket, frequency, self._verbosity))
-        mbstats_thread.start()
-        sysstats_thread = Thread(target=self.system_stats,args=(nodes, pnames, frequency, self._verbosity))
-        sysstats_thread.start()
-        ns_server_stats_thread = Thread(target=self.ns_server_stats,args=(nodes, bucket, 60, self._verbosity))
-        ns_server_stats_thread.start()
-        rest = RestConnection(nodes[0])
-        bucket_size_thead = Thread(target=self.get_bucket_size, args=(bucket, rest, frequency))
-        bucket_size_thead.start()
-        self._task["threads"] = [mbstats_thread, sysstats_thread, ns_server_stats_thread, bucket_size_thead]
+    def start(self, nodes, bucket, pnames, name, frequency,
+              collect_server_stats = True):
+        self._task = {"state": "running", "threads": []}
         self._task["name"] = name
         self._task["time"] = time.time()
         self._task["ops"] = []
         self._task["totalops"] = []
         self._task["ops-temp"] = []
         self._task["latency"] = {}
-        # Getting build/machine stats from only one node in the cluster
-        self.build_stats(nodes)
-        self.machine_stats(nodes)
-        #create multiple threads for each one required. kick them off. assign an id to each.
+
+        if collect_server_stats:
+            mbstats_thread = Thread(target=self.membase_stats,
+                                    args=(nodes, bucket, frequency, self._verbosity))
+            mbstats_thread.start()
+            sysstats_thread = Thread(target=self.system_stats,
+                                     args=(nodes, pnames, frequency, self._verbosity))
+            sysstats_thread.start()
+            ns_server_stats_thread = Thread(target=self.ns_server_stats,
+                                            args=(nodes, bucket, 60, self._verbosity))
+            ns_server_stats_thread.start()
+            rest = RestConnection(nodes[0])
+            bucket_size_thead = Thread(target=self.get_bucket_size,
+                                       args=(bucket, rest, frequency))
+            bucket_size_thead.start()
+            self._task["threads"] = [mbstats_thread, sysstats_thread,
+                                     ns_server_stats_thread, bucket_size_thead]
+            # Getting build/machine stats from only one node in the cluster
+            self.build_stats(nodes)
+            self.machine_stats(nodes)
 
     def stop(self):
         self._task["state"] = "stopped"
         for t in self._task["threads"]:
-#            print "waiting for thread : {0}".format(t)
             t.join()
 
         self._task["time"] = time.time() - self._task["time"]

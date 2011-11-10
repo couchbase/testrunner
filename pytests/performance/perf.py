@@ -94,7 +94,8 @@ class PerfBase(unittest.TestCase):
             shell.stop_moxi()
             shell.disconnect()
 
-    def target_moxi(self, bucket='default', use_direct=False): # Returns "host:port" of moxi to hit.
+    # Returns "host:port" of moxi to hit.
+    def target_moxi(self, bucket='default', use_direct=False):
         rv = self.param('moxi', None)
         if use_direct:
             return "%s:%s" % (self.input.servers[0].ip,
@@ -162,7 +163,8 @@ class PerfBase(unittest.TestCase):
             additional_quote = ""
             if info.type.lower() == 'windows':
                 additional_quote = "'"
-            command = "{0} -v -O {1}{2} {3} {4} ".format(wget_command, dir, file, base_url, additional_quote)
+            command = "{0} -v -O {1}{2} {3} {4} ".format(wget_command, dir, file,
+                                                         base_url, additional_quote)
             output, error = remote.execute_command(command)
             remote.log_command_output(output, error)
 
@@ -178,7 +180,7 @@ class PerfBase(unittest.TestCase):
                 destination_folder = testconstants.COUCHBASE_DATA_PATH
         if self.data_path:
             destination_folder = self.data_path
-        untar_command = 'cd {1}; tar -xzf {0}'.format(dir+file , destination_folder)
+        untar_command = 'cd {1}; tar -xzf {0}'.format(dir+file, destination_folder)
         output, error = remote.execute_command(untar_command)
         remote.log_command_output(output, error)
 
@@ -187,10 +189,13 @@ class PerfBase(unittest.TestCase):
         self.log.info("spec: " + reference)
 
     def start_stats(self, test_name, servers=None,
-                    process_names=['memcached', 'beam.smp', 'couchjs'], test_params = None):
+                    process_names=['memcached', 'beam.smp', 'couchjs'],
+                    test_params = None,
+                    collect_server_stats = True):
         servers = servers or self.input.servers
         sc = StatsCollector(False)
-        sc.start(servers, "default", process_names, test_name, 10)
+        sc.start(servers, "default", process_names, test_name, 10,
+                 collect_server_stats = collect_server_stats)
         self.test_params = test_params
         self.sc = sc
         return self.sc
@@ -207,7 +212,9 @@ class PerfBase(unittest.TestCase):
              expiration=None,
              ratio_sets=1.0,
              ratio_hot_sets=0.0,
-             ratio_hot_gets=0.0):
+             ratio_hot_gets=0.0,
+             doc_cache=1,
+             use_direct=True):
         cfg = { 'max-items': num_items,
                 'max-creates': num_items,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -221,13 +228,13 @@ class PerfBase(unittest.TestCase):
                 'json': int(kind == 'json'),
                 'batch': 1000,
                 'vbuckets': self.vbucket_count,
-                'doc-cache': 1
+                'doc-cache': doc_cache
                 }
-        self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=True))
+        self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=use_direct))
         self.log.info("mcsoda - cfg: " + str(cfg))
         cur, start_time, end_time = mcsoda.run(cfg, {},
                                                'memcached-' + protocol,
-                                               self.target_moxi(use_direct=True),
+                                               self.target_moxi(use_direct=use_direct),
                                                '', '')
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
@@ -259,7 +266,8 @@ class PerfBase(unittest.TestCase):
         rest.set_autoCompaction(parallel_compaction, percent_threshold, percent_threshold)
 
     @staticmethod
-    def delayed_compaction_worker(servers, parallel_compaction, percent_threshold, delay_seconds):
+    def delayed_compaction_worker(servers, parallel_compaction,
+                                  percent_threshold, delay_seconds):
         time.sleep(delay_seconds)
         PerfBase.set_auto_compaction(servers[0], parallel_compaction, percent_threshold)
 
@@ -286,8 +294,11 @@ class PerfBase(unittest.TestCase):
              protocol='binary',
              clients=1,
              expiration=None,
-             ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0,
-             ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95, test_name=None):
+             ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0, ratio_deletes=0.0,
+             ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95, test_name=None,
+             doc_cache=1,
+             use_direct=True,
+             collect_server_stats=True):
         num_items = num_items or self.num_items_loaded
 
         cfg = { 'max-items': num_items,
@@ -296,6 +307,7 @@ class PerfBase(unittest.TestCase):
                 'ratio-sets': ratio_sets,
                 'ratio-misses': ratio_misses,
                 'ratio-creates': ratio_creates,
+                'ratio-deletes': ratio_deletes,
                 'ratio-hot': ratio_hot,
                 'ratio-hot-sets': ratio_hot_sets,
                 'ratio_hot-gets': ratio_hot_gets,
@@ -303,12 +315,14 @@ class PerfBase(unittest.TestCase):
                 'json': int(kind == 'json'),
                 'batch': 1000,
                 'vbuckets': self.vbucket_count,
-                'doc-cache': 1
+                'doc-cache': doc_cache
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
-        sc = self.start_stats(self.spec_reference + ".loop", test_params = cfg_params)
+        sc = self.start_stats(self.spec_reference + ".loop",
+                              test_params = cfg_params,
+                              collect_server_stats = collect_server_stats)
 
         cur = { 'cur-items': num_items }
         if num_ops is None:
@@ -323,7 +337,7 @@ class PerfBase(unittest.TestCase):
         self.log.info("mcsoda - cfg: " + str(cfg))
         cur, start_time, end_time = mcsoda.run(cfg, cur,
                                                'memcached-' + protocol,
-                                               self.target_moxi(use_direct=True),
+                                               self.target_moxi(use_direct=use_direct),
                                                '', '', sc)
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
