@@ -741,6 +741,7 @@ class TransactionSize(PerfBase):
             ClusterOperationHelper.flushctl_set(self.input.servers, key, val)
 
         for key, val in settings:
+            key = 'ep_' + key
             ClusterOperationHelper.get_mb_stats(self.input.servers, key)
         # Using the same conditions as NPP-03-1k.1 here...
         self.load(self.parami("items", 1000000),
