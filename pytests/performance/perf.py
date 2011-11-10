@@ -399,7 +399,6 @@ class PerfBase(unittest.TestCase):
         return float(self.param(name, default_float))
 
 
-
 class NodePeakPerformance(PerfBase):
 
     def test_get_1client(self):
@@ -738,6 +737,7 @@ class TransactionSize(PerfBase):
 
     def go(self, settings):
         for key, val in settings:
+            val = self.param(key, val)
             ClusterOperationHelper.flushctl_set(self.input.servers, key, val)
 
         for key, val in settings:
@@ -813,7 +813,6 @@ class TransactionSize(PerfBase):
         self.spec('TS1.6')
         self.go([('max_txn_size', '10000'),
                  ('couch_vbucket_batch_count', '8')])
-
 
 
 class TODO_PerfBase():
@@ -967,6 +966,7 @@ class TODO_DatabaseFileSize(TODO_PerfBase):
 
         self.force_expirations()
         self.measure_db_size()
+
 
 class Experimental(PerfBase):
 
