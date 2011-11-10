@@ -27,32 +27,38 @@ class PerfBase(unittest.TestCase):
     def mem_quota(self):
         return self.parami("mem_quota", 6000) # In MB.
 
-    def setUp(self):
+    # The setUpBaseX() methods allow subclasses to resequence the
+    # setUp() and skip cluster configuration.
+    #
+    def setUpBase0(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.sc = None
-        self.vbucket_count = 0
-        self.tearDown() # Helps when a previous broken test never reached tearDown.
+        self.tearDown() # Tear down in case previous run had unclean death.
+        self.rest        = RestConnection(self.input.servers[0])
+        self.rest_helper = RestHelper(self.rest)
+
+    def setUpBase1(self):
+        vBuckets = self.rest.get_vbuckets(self.param("bucket", "default"))
+        self.vbucket_count = len(vBuckets)
+
+    def setUp(self):
+        self.setUpBase0()
+
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
-        self.rest        = rest        = RestConnection(master)
-        self.rest_helper = rest_helper = RestHelper(rest)
         self.data_path   = master.data_path
-        rest.set_data_path(master.data_path)
-        rest.init_cluster(master.rest_username, master.rest_password)
-        rest.init_cluster_memoryQuota(master.rest_username,
-                                      master.rest_password,
-                                      memoryQuota=self.mem_quota())
-
-        rest.create_bucket(bucket=bucket, ramQuotaMB=self.mem_quota())
+        self.rest.set_data_path(master.data_path)
+        self.rest.init_cluster(master.rest_username, master.rest_password)
+        self.rest.init_cluster_memoryQuota(master.rest_username,
+                                           master.rest_password,
+                                           memoryQuota=self.mem_quota())
+        self.rest.create_bucket(bucket=bucket, ramQuotaMB=self.mem_quota())
         self.assertTrue(BucketOperationHelper.wait_for_memcached(master, bucket),
                         msg="wait_for_memcached failed for {0}".format(bucket))
-        self.assertTrue(rest_helper.bucket_exists(bucket),
+        self.assertTrue(self.rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
-
-        vBuckets = RestConnection(master).get_vbuckets(bucket)
-        self.vbucket_count = len(vBuckets)
 
         # Number of items loaded by load() method.
         # Does not include or count any items that came from setUp_dgm().
@@ -68,6 +74,8 @@ class PerfBase(unittest.TestCase):
             self.dgm = self.parami("dgm", 1)
         if self.dgm:
             self.setUp_dgm()
+
+        self.setUpBase1()
 
         time.sleep(10)
         self.wait_until_warmed_up()
@@ -341,7 +349,7 @@ class PerfBase(unittest.TestCase):
             # Here, we num_ops looks like "time to run" tuple of...
             # ('seconds', integer_num_of_seconds_to_run)
             cfg['time'] = num_ops[1]
-        self.log.info("mcsoda - moxi: " + self.target_moxi(use_direct=True))
+        self.log.info("mcsoda - moxi: " + self.target_moxi(use_direct=use_direct))
         self.log.info("mcsoda - cfg: " + str(cfg))
         cur, start_time, end_time = mcsoda.run(cfg, cur,
                                                'memcached-' + protocol,
