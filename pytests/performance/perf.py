@@ -214,6 +214,7 @@ class PerfBase(unittest.TestCase):
              ratio_sets=1.0,
              ratio_hot_sets=0.0,
              ratio_hot_gets=0.0,
+             prefix="",
              doc_cache=1,
              use_direct=True):
         cfg = { 'max-items': num_items,
@@ -229,7 +230,8 @@ class PerfBase(unittest.TestCase):
                 'json': int(kind == 'json'),
                 'batch': 1000,
                 'vbuckets': self.vbucket_count,
-                'doc-cache': doc_cache
+                'doc-cache': doc_cache,
+                'prefix': prefix
                 }
         self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=use_direct))
         self.log.info("mcsoda - cfg: " + str(cfg))
@@ -297,6 +299,7 @@ class PerfBase(unittest.TestCase):
              expiration=None,
              ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0, ratio_deletes=0.0,
              ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95, test_name=None,
+             prefix="",
              doc_cache=1,
              use_direct=True,
              collect_server_stats=True):
@@ -316,7 +319,8 @@ class PerfBase(unittest.TestCase):
                 'json': int(kind == 'json'),
                 'batch': 1000,
                 'vbuckets': self.vbucket_count,
-                'doc-cache': doc_cache
+                'doc-cache': doc_cache,
+                'prefix': prefix
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
