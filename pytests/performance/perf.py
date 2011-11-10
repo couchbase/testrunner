@@ -760,6 +760,10 @@ class TransactionSize(PerfBase):
                   ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
                   test_name      = self.id())
 
+        for key, val in settings:
+            key = 'ep_' + key
+            ClusterOperationHelper.get_mb_stats(self.input.servers, key)
+
     def test_TS1_0(self):
         self.spec('TS1.0')
         self.go([('max_txn_size', '1000'),
