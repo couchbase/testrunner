@@ -75,8 +75,11 @@ class PerfBase(unittest.TestCase):
 
     def tearDown(self):
         self.tearDown_moxi()
+
         if self.sc is not None:
             self.sc.stop()
+            self.sc = None
+
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
