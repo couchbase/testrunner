@@ -22,7 +22,7 @@ def TODO():
     pass
 
 class PerfBase(unittest.TestCase):
-    spec = "http://hub.internal.couchbase.org/confluence/display/cbit/Black+Box+Performance+Test+Matrix"
+    specURL = "http://hub.internal.couchbase.org/confluence/display/cbit/Black+Box+Performance+Test+Matrix"
 
     def mem_quota(self):
         return self.parami("mem_quota", 6000) # In MB.
