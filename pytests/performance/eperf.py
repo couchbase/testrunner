@@ -67,6 +67,7 @@ class EPerfMaster(perf.PerfBase):
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
                       prefix=self.param("prefix", ""))
+            self.loop_prep()
 
     def access_phase(self, items,
                      ratio_sets     = 0,
@@ -78,7 +79,6 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot_sets = 0,
                      max_creates    = 0):
         if (not self.is_master) or self.parami("access_phase", 0) > 0:
-            self.loop_prep()
             self.loop(num_ops        = 0,
                       num_items      = self.parami("items", items),
                       max_creates    = self.parami("max_creates", max_creates),
