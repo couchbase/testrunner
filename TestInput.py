@@ -132,12 +132,15 @@ class TestInputParser():
         clusters = {}
         moxis = []
         moxi_ips = []
+        client_ips = []
         for section in sections:
             result = re.search('^cluster', section)
             if section == 'servers':
                 ips = TestInputParser.get_server_ips(config, section)
             elif section == 'moxis':
                 moxi_ips = TestInputParser.get_server_ips(config, section)
+            elif section == 'clients':
+                client_ips = TestInputParser.get_server_ips(config, section)
             elif section == 'membase':
                 input.membase_settings = TestInputParser.get_membase_settings(config, section)
             elif  section == 'global':
@@ -171,6 +174,9 @@ class TestInputParser():
         for moxi_ip in moxi_ips:
             moxis.append(TestInputParser.get_server(moxi_ip, config))
         input.moxis = TestInputParser.get_server_options(moxis, input.membase_settings, global_properties)
+
+        # Setting up 'clients' tag
+        input.clients = client_ips
 
         return input
 
