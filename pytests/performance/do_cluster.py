@@ -19,6 +19,7 @@ class EPerfMasterWrapper(eperf.EPerfMaster):
         pass
 
 obj = EPerfMasterWrapper()
+obj.input = TestInputSingleton.input
 
 if "setUp" in sys.argv:
     obj.setUp()

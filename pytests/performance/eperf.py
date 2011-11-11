@@ -26,6 +26,7 @@ class EPerfMaster(perf.PerfBase):
     def setUp(self):
         self.dgm = False
         self.is_master = True
+        self.mem_quota = self.parami("mem_quota", 10000)
         super(EPerfMaster, self).setUp()
 
     def tearDown(self):

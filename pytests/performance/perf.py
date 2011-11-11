@@ -24,8 +24,14 @@ def TODO():
 class PerfBase(unittest.TestCase):
     specURL = "http://hub.internal.couchbase.org/confluence/display/cbit/Black+Box+Performance+Test+Matrix"
 
-    def mem_quota(self):
-        return self.parami("mem_quota", 6000) # In MB.
+    def ram_quota(self):
+        try:
+            if self.mem_quota is None:
+                self.mem_quota = self.parami("mem_quota", 6000) # In MB.
+        except AttributeError:
+            self.mem_quota = self.parami("mem_quota", 6000) # In MB.
+
+        return self.mem_quota
 
     # The setUpBaseX() methods allow subclasses to resequence the
     # setUp() and skip cluster configuration.
@@ -52,13 +58,12 @@ class PerfBase(unittest.TestCase):
         self.rest.init_cluster(master.rest_username, master.rest_password)
         self.rest.init_cluster_memoryQuota(master.rest_username,
                                            master.rest_password,
-                                           memoryQuota=self.mem_quota())
-        self.rest.create_bucket(bucket=bucket, ramQuotaMB=self.mem_quota())
+                                           memoryQuota=self.ram_quota())
+        self.rest.create_bucket(bucket=bucket, ramQuotaMB=self.ram_quota())
         self.assertTrue(BucketOperationHelper.wait_for_memcached(master, bucket),
                         msg="wait_for_memcached failed for {0}".format(bucket))
         self.assertTrue(self.rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
-
         # Number of items loaded by load() method.
         # Does not include or count any items that came from setUp_dgm().
         #
