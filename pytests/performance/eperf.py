@@ -57,7 +57,7 @@ class EPerfMaster(perf.PerfBase):
         pass
 
     def load_phase(self, num_nodes, num_items):
-        if self.is_master:
+        if self.is_master or self.parami("load_phase", 0) > 0:
             self.nodes(num_nodes)
             self.load(self.parami("items", num_items),
                       self.param('size', self.min_value_size()),
@@ -76,27 +76,28 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot_gets = 0,
                      ratio_hot_sets = 0,
                      max_creates    = 0):
-        self.loop_prep()
-        self.loop(num_ops        = 0,
-                  num_items      = self.parami("items", items),
-                  max_creates    = self.parami("max_creates", max_creates),
-                  min_value_size = self.param('size', self.min_value_size()),
-                  kind           = self.param('kind', 'json'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = ratio_sets,
-                  ratio_misses   = ratio_misses,
-                  ratio_creates  = ratio_creates,
-                  ratio_deletes  = ratio_deletes,
-                  ratio_hot      = ratio_hot,
-                  ratio_hot_gets = ratio_hot_gets,
-                  ratio_hot_sets = ratio_hot_sets,
-                  test_name      = self.id(),
-                  use_direct     = self.parami('use_direct', 1),
-                  doc_cache      = self.parami('doc_cache', 0),
-                  prefix         = self.param("prefix", ""),
-                  collect_server_stats = self.parami("collect_server_stats",
-                                                     self.is_master))
+        if (not self.is_master) or self.parami("access_phase", 0) > 0:
+            self.loop_prep()
+            self.loop(num_ops        = 0,
+                      num_items      = self.parami("items", items),
+                      max_creates    = self.parami("max_creates", max_creates),
+                      min_value_size = self.param('size', self.min_value_size()),
+                      kind           = self.param('kind', 'json'),
+                      protocol       = self.param('protocol', 'binary'),
+                      clients        = self.parami('clients', 1),
+                      ratio_sets     = ratio_sets,
+                      ratio_misses   = ratio_misses,
+                      ratio_creates  = ratio_creates,
+                      ratio_deletes  = ratio_deletes,
+                      ratio_hot      = ratio_hot,
+                      ratio_hot_gets = ratio_hot_gets,
+                      ratio_hot_sets = ratio_hot_sets,
+                      test_name      = self.id(),
+                      use_direct     = self.parami('use_direct', 1),
+                      doc_cache      = self.parami('doc_cache', 0),
+                      prefix         = self.param("prefix", ""),
+                      collect_server_stats = self.parami("collect_server_stats",
+                                                         self.is_master))
 
     # ---------------------------------------------
 
