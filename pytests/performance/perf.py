@@ -834,17 +834,17 @@ class TransactionSize(PerfBase):
                  ('couch_vbucket_batch_count', '4')])
 
     def test_TS1_7(self):
-        self.spec('TS1.6')
+        self.spec('TS1.7')
         self.go([('max_txn_size', '8000'),
                  ('couch_vbucket_batch_count', '8')])
 
     def test_TS1_8(self):
-        self.spec('TS1.6')
+        self.spec('TS1.8')
         self.go([('max_txn_size', '10000'),
                  ('couch_vbucket_batch_count', '4')])
 
     def test_TS1_9(self):
-        self.spec('TS1.6')
+        self.spec('TS1.9')
         self.go([('max_txn_size', '10000'),
                  ('couch_vbucket_batch_count', '8')])
 
