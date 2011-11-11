@@ -26,6 +26,7 @@ class EPerfMaster(perf.PerfBase):
     def setUp(self):
         self.dgm = False
         self.is_master = True
+        self.input = TestInputSingleton.input
         self.mem_quota = self.parami("mem_quota", 10000)
         super(EPerfMaster, self).setUp()
 
@@ -82,6 +83,7 @@ class EPerfMaster(perf.PerfBase):
         if (not self.is_master) or self.parami("access_phase", 0) > 0:
             self.loop(num_ops        = 0,
                       num_items      = self.parami("items", items),
+                      max_items      = -1,
                       max_creates    = self.parami("max_creates", max_creates),
                       min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),

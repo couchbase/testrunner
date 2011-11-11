@@ -306,6 +306,7 @@ class PerfBase(unittest.TestCase):
 
     def loop(self, num_ops=None,
              num_items=None,
+             max_items=None,
              max_creates=None,
              min_value_size=None,
              kind='binary',
@@ -320,7 +321,7 @@ class PerfBase(unittest.TestCase):
              collect_server_stats=True):
         num_items = num_items or self.num_items_loaded
 
-        cfg = { 'max-items': num_items,
+        cfg = { 'max-items': max_items or num_items,
                 'max-creates': max_creates or 0,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
                 'ratio-sets': ratio_sets,
