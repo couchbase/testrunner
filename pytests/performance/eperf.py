@@ -51,7 +51,8 @@ class EPerfMaster(perf.PerfBase):
         return mvs
 
     def gated_start(self, clients):
-        pass
+        if not self.is_master:
+            self.setUpBase1()
 
     def gated_finish(self, clients, notify):
         pass

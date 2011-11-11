@@ -16,7 +16,7 @@ TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
 
 class EPerfMasterWrapper(eperf.EPerfMaster):
     def __init__(self):
-	pass
+        pass
 
 obj = EPerfMasterWrapper()
 
