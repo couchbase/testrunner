@@ -78,7 +78,7 @@ class EPerfMaster(perf.PerfBase):
                      max_creates    = 0):
         self.loop_prep()
         self.loop(num_ops        = 0,
-                  num_items      = self.parami("items", 30000000),
+                  num_items      = self.parami("items", items),
                   max_creates    = self.parami("max_creates", max_creates),
                   min_value_size = self.param('size', self.min_value_size()),
                   kind           = self.param('kind', 'json'),
@@ -102,9 +102,10 @@ class EPerfMaster(perf.PerfBase):
 
     def test_ept_read(self):
         self.spec("EPT-READ")
-        self.load_phase(10, 30000000)
+        items = self.parami("items", 30000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
-        self.access_phase(30000000,
+        self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.1),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
                           ratio_creates  = self.paramf('ratio_creates', 0.30),
@@ -117,9 +118,10 @@ class EPerfMaster(perf.PerfBase):
 
     def test_ept_write(self):
         self.spec("EPT-WRITE")
-        self.load_phase(10, 45000000)
+        items = self.parami("items", 45000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
-        self.access_phase(45000000,
+        self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.8),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
                           ratio_creates  = self.paramf('ratio_creates', 0.1875),
@@ -132,9 +134,10 @@ class EPerfMaster(perf.PerfBase):
 
     def test_ept_mixed(self):
         self.spec("EPT-MIXED")
-        self.load_phase(10, 45000000)
+        items = self.parami("items", 45000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
-        self.access_phase(45000000,
+        self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.8),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
                           ratio_creates  = self.paramf('ratio_creates', 0.1875),
