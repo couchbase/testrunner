@@ -24,8 +24,7 @@ class RebalanceBaseTest(unittest.TestCase):
         log = logger.Logger.get_logger()
         servers = input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
-        for server in servers:
-            ClusterOperationHelper.cleanup_cluster([server])
+        ClusterOperationHelper.cleanup_cluster(servers)
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
         serverInfo = servers[0]
 
