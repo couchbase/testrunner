@@ -49,7 +49,6 @@ class PerfBase(unittest.TestCase):
         bucket = self.param("bucket", "default")
 
         self.data_path   = master.data_path
-        self.rest.set_data_path(master.data_path)
         self.rest.init_cluster(master.rest_username, master.rest_password)
         self.rest.init_cluster_memoryQuota(master.rest_username,
                                            master.rest_password,
