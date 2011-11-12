@@ -82,7 +82,10 @@ class EPerfMaster(perf.PerfBase):
                      max_creates    = 0):
         if (not self.is_master) or self.parami("access_phase", 0) > 0:
             items = self.parami("items", items)
-            num_clients = len(self.input.get("clients", [0]))
+
+            num_clients = len(self.input.clients)
+            if not num_clients:
+                num_clients = 1
             start_at = self.parami("prefix", 0) * items / num_clients
             self.loop(num_ops        = 0,
                       num_items      = items,
