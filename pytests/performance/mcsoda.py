@@ -592,28 +592,28 @@ class StoreMemcachedAscii(Store):
 
 # A key is a 16 char hex string.
 def key_to_name(key_num, key_str):
-   return "%s %s" % (key_str[0:4], key_str[-4:-1])
+   return "%s %s" % (key_str[-16:-12], key_str[-4:-1])
 
 def key_to_email(key_num, key_str):
-   return "%s@%s.com" % (key_str[0:4], key_str[3:5])
+   return "%s@%s.com" % (key_str[-16:-12], key_str[-13:-11])
 
 def key_to_city(key_num, key_str):
-   return key_str[4:7]
+   return key_str[-12:-9]
 
 def key_to_country(key_num, key_str):
-   return key_str[7:9]
+   return key_str[-9:-7]
 
 def key_to_realm(key_num, key_str):
-   return key_str[9:11]
+   return key_str[-7:-5]
 
 def key_to_coins(key_num, key_str):
-   sub_key = key_str.split('-')[-1]
+   sub_key = key_str[-16:]
    return max(0.0, int(sub_key[0:4], 16) / 100.0)
 
 def key_to_achievements(key_num, key_str):
    next = 300
    achievements = []
-   sub_key = key_str.split('-')[-1]
+   sub_key = key_str[-16:]
    for i in range(len(sub_key)):
       next = (next + int(sub_key[i], 16) * i) % 500
       if next < 256:
