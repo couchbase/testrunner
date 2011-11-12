@@ -689,7 +689,7 @@ class VBucketAwareMemcached(object):
         vBucketId = crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)
         return self.memcached_for_vbucket(vBucketId)
 
-    def memcached_for_vbucket(self, vBucketId)
+    def memcached_for_vbucket(self, vBucketId):
         if vBucketId not in self.vBucketMap:
             msg = "vbucket map does not have an entry for vb : {0}"
             raise Exception(msg.format(vBucketId))
