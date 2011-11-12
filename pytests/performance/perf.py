@@ -318,7 +318,8 @@ class PerfBase(unittest.TestCase):
              prefix="",
              doc_cache=1,
              use_direct=True,
-             collect_server_stats=True):
+             collect_server_stats=True,
+             start_at=None):
         num_items = num_items or self.num_items_loaded
 
         cfg = { 'max-items': max_items or num_items,
@@ -346,6 +347,8 @@ class PerfBase(unittest.TestCase):
                               collect_server_stats = collect_server_stats)
 
         cur = { 'cur-items': num_items }
+        if start_at:
+            cur['cur-gets'] = start_at
         if num_ops is None:
             num_ops = num_items
         if type(num_ops) == type(0):

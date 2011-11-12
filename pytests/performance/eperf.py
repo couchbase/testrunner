@@ -81,8 +81,11 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot_sets = 0,
                      max_creates    = 0):
         if (not self.is_master) or self.parami("access_phase", 0) > 0:
+            items = self.parami("items", items)
+            num_clients = len(self.input.get("clients", [0]))
+            start_at = self.parami("prefix", 0) * items / num_clients
             self.loop(num_ops        = 0,
-                      num_items      = self.parami("items", items),
+                      num_items      = items,
                       max_items      = -1,
                       max_creates    = self.parami("max_creates", max_creates),
                       min_value_size = self.param('size', self.min_value_size()),
@@ -101,7 +104,8 @@ class EPerfMaster(perf.PerfBase):
                       doc_cache      = self.parami('doc_cache', 0),
                       prefix         = self.param("prefix", ""),
                       collect_server_stats = self.parami("collect_server_stats",
-                                                         self.is_master))
+                                                         self.is_master),
+                      start_at       = start_at)
 
     # ---------------------------------------------
 
