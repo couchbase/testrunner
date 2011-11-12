@@ -335,10 +335,7 @@ class StoreMemcachedBinary(Store):
         self.target = target
         self.host_port = (target + ":11211").split(':')[0:2]
         self.host_port[1] = int(self.host_port[1])
-        self.conn = mc_bin_client.MemcachedClient(self.host_port[0],
-                                                  self.host_port[1])
-        if user:
-           self.conn.sasl_auth_plain(user, pswd)
+        self.connect_host_port(self.host_port[0], self.host_port[1], user, pswd)
         self.inflight_reinit()
         self.queue = []
         self.ops = 0
@@ -349,6 +346,11 @@ class StoreMemcachedBinary(Store):
                       (CMD_APPEND,  False),
                       (CMD_PREPEND, False) ]
 
+    def connect_host_port(self, host, port, user, pswd):
+        self.conn = mc_bin_client.MemcachedClient(host, port)
+        if user:
+           self.conn.sasl_auth_plain(user, pswd)
+
     def inflight_reinit(self, inflight=0):
         self.inflight = inflight
         self.inflight_num_gets = 0
@@ -357,6 +359,20 @@ class StoreMemcachedBinary(Store):
         self.inflight_num_arpas = 0
         self.inflight_start_time = 0
         self.inflight_end_time = 0
+        self.inflight_grp = None
+
+    def inflight_start(self):
+        return []
+
+    def inflight_complete(self, inflight_arr):
+        return ''.join(inflight_arr)
+
+    def inflight_send(self, inflight_msg):
+        self.conn.s.send(inflight_msg)
+
+    def inflight_recv(self, inflight, inflight_arr):
+       for i in range(inflight):
+          self.recvMsg()
 
     def command(self, c):
         self.queue.append(c)
@@ -384,14 +400,14 @@ class StoreMemcachedBinary(Store):
         next_inflight_num_deletes = 0
         next_inflight_num_arpas = 0
 
-        next_arr = []
+        next_grp = self.inflight_start()
 
         i = 1 # Start a 1, not 0, due to the single latency measurement request.
         n = len(self.queue)
         while i < n:
             cmd, key_num, key_str, data = self.queue[i]
             delta_gets, delta_sets, delta_deletes, delta_arpas = \
-                self.cmd_append(cmd, key_num, key_str, data, next_arr, extra)
+                self.cmd_append(cmd, key_num, key_str, data, next_grp, extra)
             next_inflight += 1
             next_inflight_num_gets += delta_gets
             next_inflight_num_sets += delta_sets
@@ -399,7 +415,7 @@ class StoreMemcachedBinary(Store):
             next_inflight_num_arpas += delta_arpas
             i = i + 1
 
-        next_msg = ''.join(next_arr)
+        next_msg = self.inflight_complete(next_grp)
 
         latency_cmd = None
         latency_start = 0
@@ -412,8 +428,7 @@ class StoreMemcachedBinary(Store):
 
         if self.inflight > 0:
            # Receive replies from the previous batch of infight requests.
-           for i in range(self.inflight):
-              self.recvMsg()
+           self.inflight_recv(self.inflight, self.inflight_grp)
            self.inflight_end_time = time.time()
            self.ops += self.inflight
            if self.sc:
@@ -427,15 +442,15 @@ class StoreMemcachedBinary(Store):
         if len(self.queue) > 0:
            # Use the first request in the batch to measure single
            # request latency.
-           arr = []
+           grp = self.inflight_start()
            latency_cmd, key_num, key_str, data = self.queue[0]
            delta_gets, delta_sets, delta_deletes, delta_arpas = \
-                self.cmd_append(latency_cmd, key_num, key_str, data, arr, extra)
-           msg = ''.join(arr)
+                self.cmd_append(latency_cmd, key_num, key_str, data, grp, extra)
+           msg = self.inflight_complete(grp)
 
            latency_start = time.time()
-           self.conn.s.send(msg)
-           self.recvMsg()
+           self.inflight_send(msg)
+           self.inflight_recv(1, grp)
            latency_end = time.time()
 
            self.ops += 1
@@ -450,13 +465,14 @@ class StoreMemcachedBinary(Store):
            self.inflight_num_deletes = next_inflight_num_deletes
            self.inflight_num_arpas = next_inflight_num_arpas
            self.inflight_start_time = time.time()
-           self.conn.s.send(next_msg)
+           self.inflight_grp = next_grp
+           self.inflight_send(next_msg)
 
         if latency_cmd:
             self.add_timing_sample(latency_cmd, latency_end - latency_start)
 
         if self.sc:
-            if  self.ops - self.previous_ops >  10000:
+            if self.ops - self.previous_ops > 10000:
                 self.previous_ops = self.ops
                 self.save_stats()
 
