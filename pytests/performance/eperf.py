@@ -88,7 +88,9 @@ class EPerfMaster(perf.PerfBase):
             num_clients = len(self.input.clients)
             if not num_clients:
                 num_clients = 1
-            start_at = self.parami("prefix", 0) * items / num_clients
+            start_at = int(self.paramf("start_at", 1.0) * \
+                           (self.parami("prefix", 0) * items /
+                            num_clients))
             max_creates = self.parami("max_creates", max_creates)
             self.loop(num_ops        = 0,
                       num_items      = items,
