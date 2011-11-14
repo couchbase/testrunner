@@ -76,7 +76,6 @@ class StatsCollector(object):
         pass
 
     def export(self, name, test_params):
-
         commands = ['latency-set', 'latency-get']
         for latency in commands:
             histos = self._task["latency"].get(latency, [])
@@ -86,19 +85,19 @@ class StatsCollector(object):
                 p = histo_percentile(histo, [0.90, 0.99])
                 self._task["latency"][key].append(p)
 
-        obj = {"buildinfo": self._task["buildstats"],
-               "machineinfo": self._task["machinestats"],
-               "membasestats": self._task["membasestats"],
-               "systemstats": self._task["systemstats"],
+        obj = {"buildinfo": self._task.get("buildstats", {}),
+               "machineinfo": self._task.get("machinestats", {}),
+               "membasestats": self._task.get("membasestats", []),
+               "systemstats": self._task.get("systemstats", []),
                "name": name,
                "totalops":self._task["totalops"],
                "ops":self._task["ops"],
                "time": self._task["time"],
                "info": test_params,
-               "ns_server_data": self._task["ns_server_stats"],
-               "timings": self._task["timings"],
-               "dispatcher": self._task["dispatcher"],
-               "bucket_size":self._task["bucket_size"],
+               "ns_server_data": self._task.get("ns_server_stats", []),
+               "timings": self._task.get("timings", []),
+               "dispatcher": self._task.get("dispatcher", []),
+               "bucket_size":self._task.get("bucket_size", []),
                "latency-set":self._task["latency"].get('percentile-latency-set', []),
                "latency-get":self._task["latency"].get('percentile-latency-get', [])
         }
