@@ -440,7 +440,7 @@ class ViewTests(unittest.TestCase):
                 #full_set=true&connection_timeout=60000&limit=10&skip=0
                 params = {"connection_timeout": "60000"}
                 if view.find("dev_") == 0:
-                    params["full_set"] = "true"
+                    params["full_set"] = True
                 results = rest.view_results(bucket, view, params, limit)
                 delta = time.time() - start
                 if results:
