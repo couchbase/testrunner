@@ -110,7 +110,8 @@ class EPerfMaster(perf.PerfBase):
                       collect_server_stats = self.parami("collect_server_stats",
                                                          self.is_master),
                       start_at       = start_at,
-                      report         = int(max_creates * 0.1))
+                      report         = int(max_creates * 0.1),
+                      exit_after_creates = 1)
 
     # ---------------------------------------------
 
