@@ -204,12 +204,15 @@ class PerfBase(unittest.TestCase):
         self.spec_reference = reference
         self.log.info("spec: " + reference)
 
+    def mk_stats(self, verbosity):
+        return StatsCollector(False)
+
     def start_stats(self, test_name, servers=None,
                     process_names=['memcached', 'beam.smp', 'couchjs'],
                     test_params = None,
                     collect_server_stats = True):
         servers = servers or self.input.servers
-        sc = StatsCollector(False)
+        sc = self.mk_stats(False)
         sc.start(servers, "default", process_names, test_name, 10,
                  collect_server_stats = collect_server_stats)
         self.test_params = test_params
