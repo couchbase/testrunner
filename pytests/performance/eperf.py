@@ -87,10 +87,11 @@ class EPerfMaster(perf.PerfBase):
             if not num_clients:
                 num_clients = 1
             start_at = self.parami("prefix", 0) * items / num_clients
+            max_creates = self.parami("max_creates", max_creates)
             self.loop(num_ops        = 0,
                       num_items      = items,
                       max_items      = -1,
-                      max_creates    = self.parami("max_creates", max_creates),
+                      max_creates    = max_creates,
                       min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),
                       protocol       = self.param('protocol', 'binary'),
@@ -108,7 +109,8 @@ class EPerfMaster(perf.PerfBase):
                       prefix         = self.param("prefix", ""),
                       collect_server_stats = self.parami("collect_server_stats",
                                                          self.is_master),
-                      start_at       = start_at)
+                      start_at       = start_at,
+                      report         = int(max_creates * 0.1))
 
     # ---------------------------------------------
 

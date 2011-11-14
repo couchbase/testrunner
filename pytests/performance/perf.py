@@ -231,7 +231,8 @@ class PerfBase(unittest.TestCase):
              ratio_hot_gets=0.0,
              prefix="",
              doc_cache=1,
-             use_direct=True):
+             use_direct=True,
+             report=0):
         cfg = { 'max-items': num_items,
                 'max-creates': num_items,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -246,7 +247,8 @@ class PerfBase(unittest.TestCase):
                 'batch': 1000,
                 'vbuckets': self.vbucket_count,
                 'doc-cache': doc_cache,
-                'prefix': prefix
+                'prefix': prefix,
+                'report': report
                 }
         self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=use_direct))
         self.log.info("mcsoda - cfg: " + str(cfg))
@@ -319,7 +321,8 @@ class PerfBase(unittest.TestCase):
              doc_cache=1,
              use_direct=True,
              collect_server_stats=True,
-             start_at=None):
+             start_at=None,
+             report=0):
         num_items = num_items or self.num_items_loaded
 
         cfg = { 'max-items': max_items or num_items,
@@ -337,7 +340,8 @@ class PerfBase(unittest.TestCase):
                 'batch': 1000,
                 'vbuckets': self.vbucket_count,
                 'doc-cache': doc_cache,
-                'prefix': prefix
+                'prefix': prefix,
+                'report': report
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
@@ -359,6 +363,7 @@ class PerfBase(unittest.TestCase):
             cfg['time'] = num_ops[1]
         self.log.info("mcsoda - moxi: " + self.target_moxi(use_direct=use_direct))
         self.log.info("mcsoda - cfg: " + str(cfg))
+        self.log.info("mcsoda - cur: " + str(cur))
         cur, start_time, end_time = mcsoda.run(cfg, cur,
                                                'memcached-' + protocol,
                                                self.target_moxi(use_direct=use_direct),
