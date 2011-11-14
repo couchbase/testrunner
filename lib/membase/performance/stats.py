@@ -72,6 +72,9 @@ class StatsCollector(object):
 
         self._task["time"] = time.time() - self._task["time"]
 
+    def sample(self, cur):
+        pass
+
     def export(self, name, test_params):
 
         commands = ['latency-set', 'latency-get']
@@ -268,6 +271,23 @@ class StatsCollector(object):
 
     def _aborted(self):
         return self._task["state"] == "stopped"
+
+# Invokes optional callback when registered levels have been reached
+# during stats sample()'ing.
+#
+class CallbackStatsCollector(StatsCollector):
+
+    def __init__(self, verbosity):
+        # Tuples of level_name, level, callback.
+        self.level_callbacks = []
+        super(CallbackStatsCollector, self).__init__(verbosity)
+
+    def sample(self, cur):
+        for level_name, level, callback in self.level_callbacks:
+            if level < cur.get(level_name, -1):
+                callback(self, cur)
+
+        return super(CallbackStatsCollector, self).sample(cur)
 
 class StatUtil(object):
 
