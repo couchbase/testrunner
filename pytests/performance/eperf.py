@@ -28,6 +28,8 @@ class EPerfMaster(perf.PerfBase):
         self.is_master = True
         self.input = TestInputSingleton.input
         self.mem_quota = self.parami("mem_quota", 10000)
+        self.level_callbacks = []
+        self.latched_rebalance_done = False
         super(EPerfMaster, self).setUp()
 
     def tearDown(self):
@@ -113,6 +115,11 @@ class EPerfMaster(perf.PerfBase):
                       report         = int(max_creates * 0.1),
                       exit_after_creates = 1)
 
+    def latched_rebalance(self, cur):
+        if not self.latched_rebalance_done:
+            self.latched_rebalance_done = True
+            self.delayed_rebalance(self.parami("num_nodes_after", 15), 0.01)
+
     # ---------------------------------------------
 
     def test_ept_read(self):
@@ -163,11 +170,39 @@ class EPerfMaster(perf.PerfBase):
                           max_creates    = self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
-    def TODO_test_ept_rebalance_low(self):
+    def test_ept_rebalance_low(self):
         self.spec("EPT-REBALANCE-LOW-FETCH")
+        items = self.parami("items", 45000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        notify = self.gated_start(self.input.clients)
+        self.level_callbacks = [('cur-creates', 2000000, getattr(self, "latched_rebalance"))]
+        self.access_phase(items,
+                          ratio_sets     = self.paramf('ratio_sets', 0.8),
+                          ratio_misses   = self.paramf('ratio_misses', 0.05),
+                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes  = self.paramf('ratio_deletes', 0.0833),
+                          ratio_hot      = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          max_creates    = self.parami("max_creates", 30000000))
+        self.gated_finish(self.input.clients, notify)
 
-    def TODO_test_ept_rebalance_med(self):
-        self.spec("EPT-REBALANCE_MED_FETCH")
+    def test_ept_rebalance_med(self):
+        self.spec("EPT-REBALANCE-MED-FETCH")
+        items = self.parami("items", 45000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        notify = self.gated_start(self.input.clients)
+        self.level_callbacks = [('cur-creates', 2000000, getattr(self, "latched_rebalance"))]
+        self.access_phase(items,
+                          ratio_sets     = self.paramf('ratio_sets', 0.8),
+                          ratio_misses   = self.paramf('ratio_misses', 0.05),
+                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes  = self.paramf('ratio_deletes', 0.0833),
+                          ratio_hot      = self.paramf('ratio_hot', 0.6),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          max_creates    = self.parami("max_creates", 30000000))
+        self.gated_finish(self.input.clients, notify)
 
 
 class EPerfClient(EPerfMaster):
@@ -175,6 +210,8 @@ class EPerfClient(EPerfMaster):
     def setUp(self):
         self.dgm = False
         self.is_master = False
+        self.level_callbacks = []
+        self.latched_rebalance_done = False
         self.setUpBase0()
 
         pass # Skip super's setUp().  The master should do the real work.
@@ -186,6 +223,14 @@ class EPerfClient(EPerfMaster):
 
         pass # Skip super's tearDown().  The master should do the real work.
 
+    def mk_stats(self, verbosity):
+        if self.parami("prefix", 0) == 0 and self.level_callbacks:
+            sc = CallbackStatsCollector(verbosity)
+            sc.level_callbacks = self.level_callbacks
+            return sc
+
+        return super(EPerfMaster, self).mk_stats(verbosity)
+
     def test_ept_read(self):
         super(EPerfClient, self).test_ept_read()
 
@@ -195,3 +240,8 @@ class EPerfClient(EPerfMaster):
     def test_ept_mixed(self):
         super(EPerfClient, self).test_ept_mixed()
 
+    def test_ept_rebalance_low(self):
+        super(EPerfClient, self).test_ept_rebalance_low()
+
+    def test_ept_rebalance_med(self):
+        super(EPerfClient, self).test_ept_rebalance_med()
