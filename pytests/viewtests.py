@@ -434,7 +434,7 @@ class ViewTests(unittest.TestCase):
 
     def _get_view_results(self, rest, bucket, view, limit=20, full_set=True):
         #if view name starts with "dev" then we should append the full_set
-        for i in range(0, 20):
+        for i in range(0, 4):
             try:
                 start = time.time()
                 #full_set=true&connection_timeout=60000&limit=10&skip=0
@@ -450,6 +450,8 @@ class ViewTests(unittest.TestCase):
             except Exception as ex:
                 self.log.error("view_results not ready yet , try again in 5 seconds... , error {0}".format(ex))
                 time.sleep(5)
+        self.fail("unable to get view_results for {0} after 4 tries".format(view))
+
 
     def tearDown(self):
         master = self.servers[0]
