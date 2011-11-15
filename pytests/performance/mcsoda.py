@@ -12,6 +12,7 @@ import struct
 import threading
 
 sys.path.append("lib")
+sys.path.append(".")
 
 try:
    import logger
@@ -375,6 +376,9 @@ class StoreMemcachedBinary(Store):
        for i in range(inflight):
           self.recvMsg()
 
+    def inflight_buffers(self, grp, vbucketId):
+        return grp
+
     def command(self, c):
         self.queue.append(c)
         if len(self.queue) > (self.cur.get('batch') or \
@@ -485,14 +489,16 @@ class StoreMemcachedBinary(Store):
                 self.sc.latency_stats(latency, histo)
         self.sc.sample(self.cur)
 
-    def cmd_append(self, cmd, key_num, key_str, data, m, extra):
+    def cmd_append(self, cmd, key_num, key_str, data, grp, extra):
        if cmd[0] == 'g':
           hdr, vbucketId = self.header(CMD_GET, key_str, '')
+          m = self.inflight_buffers(grp, vbucketId)
           m.append(hdr)
           m.append(key_str)
           return 1, 0, 0, 0
        elif cmd[0] == 'd':
           hdr, vbucketId = self.header(CMD_DELETE, key_str, '')
+          m = self.inflight_buffers(grp, vbucketId)
           m.append(hdr)
           m.append(key_str)
           return 0, 0, 1, 0
@@ -508,6 +514,7 @@ class StoreMemcachedBinary(Store):
              curr_extra = ''
 
        hdr, vbucketId = self.header(curr_cmd, key_str, data, extra=curr_extra)
+       m = self.inflight_buffers(grp, vbucketId)
        m.append(hdr)
        if curr_extra:
           m.append(extra)
@@ -518,35 +525,71 @@ class StoreMemcachedBinary(Store):
     def num_ops(self, cur):
         return self.ops
 
-    def recvMsg(self, sock = None):
+    def recvMsg(self, sock=None, buf=None):
         sock = sock or self.conn.s
-        buf = self.buf
+        buf = buf or self.buf
         pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf)
         magic, cmd, keylen, extralen, dtype, errcode, datalen, opaque, cas = \
             struct.unpack(RES_PKT_FMT, pkt)
         val, buf = self.readbytes(sock, datalen, buf)
         self.buf = buf
+        return buf
 
 
 class StoreMembaseBinary(StoreMemcachedBinary):
 
     def connect_host_port(self, host, port, user, pswd):
-        self.conn = mc_bin_client.MemcachedClient(host, port)
-        if user:
-           self.conn.sasl_auth_plain(user, pswd)
+        from membase.api.rest_client import RestConnection
+        from memcached.helper.data_helper import VBucketAwareMemcached
+        info = { "ip": host, "port": port,
+                 'username': user or 'Administrator',
+                 'password': pswd or 'password' }
+        rest = RestConnection(info)
+        self.awareness = VBucketAwareMemcached(rest, user or 'default')
 
     def inflight_start(self):
-        return []
+        return { 'v_arr': {}, # Key is vbucketId, value is [] of buffer.
+                 'v_num': {}  # Key is vbucketId, value is int (number of cmds).
+               }
 
-    def inflight_complete(self, inflight_arr):
-        return ''.join(inflight_arr)
+    def inflight_complete(self, inflight_grp):
+        rv = [] # Array of tuples (vbucket, buffer).
+        v_arr = inflight_grp['v_arr']
+        v_num = inflight_grp['v_num']
+        vbuckets = v_arr.keys()
+        for vbucket in vbuckets:
+           buffers = v_arr[vbucket]
+           rv.append((vbucket, ''.join(buffers)))
+        inflight_grp['vbuckets'] = vbuckets
+        return rv
 
     def inflight_send(self, inflight_msg):
-        self.conn.s.send(inflight_msg)
+        for vbucket, buf in inflight_msg:
+           conn = self.awareness.memcached_for_vbucket(vbucket)
+           conn.s.send(buf)
 
-    def inflight_recv(self, inflight, inflight_arr):
-       for i in range(inflight):
-          self.recvMsg()
+    def inflight_recv(self, inflight, inflight_grp):
+        v_num = inflight_grp['v_num']
+        for vbucket in inflight_grp['vbuckets']:
+           conn = self.awareness.memcached_for_vbucket(vbucket)
+           try:
+              buf = conn.recvBuf
+           except:
+              buf = ''
+           for i in range(v_num[vbucket]):
+              buf = self.recvMsg(conn.s, buf)
+           conn.recvBuf = buf
+
+    def inflight_buffers(self, grp, vbucketId):
+       v_arr = grp['v_arr']
+       v_num = grp['v_num']
+       m = v_arr.get(vbucketId, None)
+       if m is None:
+          m = []
+          v_arr[vbucketId] = m
+          v_num[vbucketId] = 0
+       v_num[vbucketId] += 1
+       return m
 
 
 class StoreMemcachedAscii(Store):
