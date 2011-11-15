@@ -515,13 +515,41 @@ class StoreMemcachedBinary(Store):
     def num_ops(self, cur):
         return self.ops
 
-    def recvMsg(self):
+    def recvMsg(self, sock = None):
+        sock = sock or self.conn.s
         buf = self.buf
-        pkt, buf = self.readbytes(self.conn.s, MIN_RECV_PACKET, buf)
+        pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf)
         magic, cmd, keylen, extralen, dtype, errcode, datalen, opaque, cas = \
             struct.unpack(RES_PKT_FMT, pkt)
-        val, buf = self.readbytes(self.conn.s, datalen, buf)
+        val, buf = self.readbytes(sock, datalen, buf)
         self.buf = buf
+
+
+class StoreMembaseBinary(StoreMemcachedBinary):
+
+    def connect_host_port(self, host, port, user, pswd):
+        self.conn = mc_bin_client.MemcachedClient(host, port)
+        if user:
+           self.conn.sasl_auth_plain(user, pswd)
+
+    def inflight_start(self):
+        return []
+
+    def inflight_complete(self, inflight_arr):
+        return ''.join(inflight_arr)
+
+    def inflight_send(self, inflight_msg):
+        self.conn.s.send(inflight_msg)
+
+    def inflight_recv(self, inflight, inflight_arr):
+       for i in range(inflight):
+          self.recvMsg()
+
+    def command(self, c):
+        self.queue.append(c)
+        if len(self.queue) > (self.cur.get('batch') or \
+                              self.cfg.get('batch', 100)):
+            self.flush()
 
 
 class StoreMemcachedAscii(Store):
@@ -678,7 +706,8 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 # --------------------------------------------------------
 
 PROTOCOL_STORE = { 'memcached-ascii': StoreMemcachedAscii,
-                   'memcached-binary': StoreMemcachedBinary }
+                   'memcached-binary': StoreMemcachedBinary,
+                   'membase-binary': StoreMembaseBinary}
 
 def run(cfg, cur, protocol, host_port, user, pswd,
         stats_collector = None, stores = None):
