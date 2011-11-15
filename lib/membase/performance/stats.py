@@ -193,13 +193,13 @@ class StatsCollector(object):
         d = {"snapshots": []}
         #        "pname":"x","pid":"y","snapshots":[{"time":time,"value":value}]
 
-        time = self._task["time"]
+        start_time = self._task["time"]
         while not self._aborted():
             time.sleep(frequency)
             i = 0
             for shell in shells:
                 node = nodes[i]
-                unique_id = md5(node.ip+ self._task["time"])
+                unique_id = md5(node.ip+ start_time)
                 for pname in pnames:
                     obj = RemoteMachineHelper(shell).is_process_running(pname)
                     if obj and obj.pid:
@@ -207,7 +207,7 @@ class StatsCollector(object):
                         value["name"] = pname
                         value["id"] = obj.pid
                         value["unique_id"] = unique_id
-                        value["time"] = time
+                        value["time"] = start_time
                         value["ip"] = node.ip
                         d["snapshots"].append(value)
                 i +=  1
@@ -245,23 +245,23 @@ class StatsCollector(object):
                 dispatcher = mc.stats('dispatcher')
                 d[mc.host]["dispatcher"].append(dispatcher)
 
+        start_time = self._task["time"]
         for mc in mcs:
-            unique_id = md5(mc.host+ self._task["time"])
-            time = self._task["time"]
+            unique_id = md5(mc.host+ start_time)
             ip = mc.host
             for snapshot in d[mc.host]["snapshots"]:
                 snapshot['unique_id'] = unique_id
-                snapshot['time'] = time
+                snapshot['time'] = start_time
                 snapshot['ip'] = ip
                 self._task["membasestats"].append(snapshot)
             for timing in d[mc.host]["timings"]:
                 timing['unique_id'] = unique_id
-                timing['time'] = time
+                timing['time'] = start_time
                 timing['ip'] = ip
                 self._task["timings"].append(timing)
             for dispatcher in d[mc.host]["dispatcher"]:
                 dispatcher['unique_id'] = unique_id
-                dispatcher['time'] = time
+                dispatcher['time'] = start_time
                 dispatcher['ip'] = ip
                 self._task["dispatcher"].append(dispatcher)
 
