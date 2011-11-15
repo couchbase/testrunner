@@ -193,13 +193,13 @@ class StatsCollector(object):
         d = {"snapshots": []}
         #        "pname":"x","pid":"y","snapshots":[{"time":time,"value":value}]
 
-        start_time = self._task["time"]
+        start_time = str(self._task["time"])
         while not self._aborted():
             time.sleep(frequency)
             i = 0
             for shell in shells:
                 node = nodes[i]
-                unique_id = md5(node.ip+ start_time)
+                unique_id = md5(node.ip+ start_time).hexdigest()
                 for pname in pnames:
                     obj = RemoteMachineHelper(shell).is_process_running(pname)
                     if obj and obj.pid:
@@ -245,9 +245,9 @@ class StatsCollector(object):
                 dispatcher = mc.stats('dispatcher')
                 d[mc.host]["dispatcher"].append(dispatcher)
 
-        start_time = self._task["time"]
+        start_time = str(self._task["time"])
         for mc in mcs:
-            unique_id = md5(mc.host+ start_time)
+            unique_id = md5(mc.host+ start_time).hexdigest()
             ip = mc.host
             for snapshot in d[mc.host]["snapshots"]:
                 snapshot['unique_id'] = unique_id
