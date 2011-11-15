@@ -125,15 +125,15 @@ class PerfBase(unittest.TestCase):
                           self.rest.get_bucket(bucket).nodes[0].moxi)
 
     def protocol_parse(self, protocol_in, use_direct=False):
-        if protocol_in.find('://'):
+        if protocol_in.find('://') >= 0:
             protocol = \
                 '-'.join(((["membase"] + \
                                protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
             host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":8091"
             user, pswd = (('@' + protocol_in.split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
         else:
-            protocol = 'memcached-' + protocol
-            self.target_host_port(use_direct=use_direct)
+            protocol = 'memcached-' + protocol_in
+            host_port = self.target_host_port(use_direct=use_direct)
             user = ''
             pswd = ''
         return protocol, host_port, user, pswd
@@ -378,6 +378,7 @@ class PerfBase(unittest.TestCase):
             # Here, we num_ops looks like "time to run" tuple of...
             # ('seconds', integer_num_of_seconds_to_run)
             cfg['time'] = num_ops[1]
+        self.log.info("mcsoda - protocol %s" % (protocol))
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
