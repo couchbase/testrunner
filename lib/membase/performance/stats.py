@@ -90,7 +90,7 @@ class StatsCollector(object):
             self._task["latency"][key] = []
             for histo in histos:
                 p = []
-                p = histo_percentile(histo, [0.90, 0.99])
+                p = histo_percentile(histo, [0.90, 0.95, 0.99])
                 p.append(self.client_id)
                 self._task["latency"][key].append(p)
 

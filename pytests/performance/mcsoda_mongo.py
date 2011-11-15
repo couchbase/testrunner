@@ -9,8 +9,6 @@ import pymongo # Use: pip install pymongo==2.0
 
 from pymongo import Connection
 
-PERCENTILES = [0.90, 0.99]
-
 mongoDocCache = {}
 
 class StoreMongo(mcsoda.Store):
@@ -69,7 +67,7 @@ class StoreMongo(mcsoda.Store):
 
         histo = self.add_timing_sample(cmd, cmd_end - cmd_start)
         if self.sc:
-            p = self.histo_percentile(histo, PERCENTILES)
+            p = self.histo_percentile(histo, [0.90, 0.95, 0.99])
             self.sc.latency_stats(cmd, p)
 
 
