@@ -5,7 +5,7 @@ import time
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
-from hashlib import md5
+import testconstants
 
 # The histo dict is returned by add_timing_sample().
 # The percentiles must be sorted, ascending, like [0.90, 0.99].
@@ -46,6 +46,7 @@ class StatsCollector(object):
         self._task["totalops"] = []
         self._task["ops-temp"] = []
         self._task["latency"] = {}
+        self._task["data_size_stats"] = []
 
         if collect_server_stats:
             mbstats_thread = Thread(target=self.membase_stats,
@@ -61,8 +62,11 @@ class StatsCollector(object):
             bucket_size_thead = Thread(target=self.get_bucket_size,
                                        args=(bucket, rest, frequency))
             bucket_size_thead.start()
+            data_size_thread = Thread(target=self.get_data_file_size,
+                                    args=(nodes, 60, bucket))
+            data_size_thread.start()
             self._task["threads"] = [mbstats_thread, sysstats_thread,
-                                     ns_server_stats_thread, bucket_size_thead]
+                                     ns_server_stats_thread, bucket_size_thead, data_size_thread]
             # Getting build/machine stats from only one node in the cluster
             self.build_stats(nodes)
             self.machine_stats(nodes)
@@ -99,7 +103,8 @@ class StatsCollector(object):
                "ns_server_data": self._task.get("ns_server_stats", []),
                "timings": self._task.get("timings", []),
                "dispatcher": self._task.get("dispatcher", []),
-               "bucket_size":self._task.get("bucket_size", []),
+               "bucket-size":self._task.get("bucket_size", []),
+               "data-size": self._task.get("data_size_stats", []),
                "latency-set":self._task["latency"].get('percentile-latency-set', []),
                "latency-get":self._task["latency"].get('percentile-latency-get', [])
         }
@@ -120,6 +125,45 @@ class StatsCollector(object):
 
         self._task["bucket_size"] = d
         print "finished bucket size stats"
+
+    def get_data_file_size(self, nodes, frequency, bucket):
+        shells = []
+        for node in nodes:
+            try:
+                shells.append(RemoteMachineShellConnection(node))
+            except:
+                pass
+        paths = []
+        if shells[0].is_membase_installed:
+            paths.append(testconstants.MEMBASE_DATA_PATH+'/{0}-data'.format(bucket))
+        else:
+            bucket_path = testconstants.COUCHBASE_DATA_PATH+'/{0}'.format(bucket)
+            paths.append(bucket_path)
+            view_path = bucket_path +'/set_view_{0}_design'.format(bucket)
+            paths.append(view_path)
+        print paths
+        d = {"snapshots": []}
+        start_time = str(self._task["time"])
+
+        while not self._aborted():
+            time.sleep(frequency)
+            current_time = time.time()
+            i = 0
+            for shell in shells:
+                node = nodes[i]
+                unique_id = node.ip+'-'+start_time
+                value = {}
+                for path in paths:
+                    size = shell.get_data_file_size(path)
+                    value["file"] = path.split('/')[-1]
+                    value["size"] = size
+                    value["unique_id"] = unique_id
+                    value["time"] = current_time
+                    value["ip"] = node.ip
+                    d["snapshots"].append(value)
+                i +=  1
+        self._task["data_size_stats"] = d["snapshots"]
+        print " finished data_size_stats"
 
     #ops stats
     #{'tot-sets': 899999, 'tot-gets': 1, 'tot-items': 899999, 'tot-creates': 899999}
@@ -200,7 +244,7 @@ class StatsCollector(object):
             i = 0
             for shell in shells:
                 node = nodes[i]
-                unique_id = start_time
+                unique_id = node.ip+'-'+start_time
                 for pname in pnames:
                     obj = RemoteMachineHelper(shell).is_process_running(pname)
                     if obj and obj.pid:
@@ -248,8 +292,8 @@ class StatsCollector(object):
 
         start_time = str(self._task["time"])
         for mc in mcs:
-            unique_id = start_time
             ip = mc.host
+            unique_id = ip+'-'+start_time
             current_time = time.time()
             for snapshot in d[mc.host]["snapshots"]:
                 snapshot['unique_id'] = unique_id

@@ -1019,3 +1019,15 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.log_command_output(o, r)
             o, r = self.execute_command("echo 3 > /proc/sys/vm/drop_caches")
             self.log_command_output(o, r)
+
+    def get_data_file_size(self, path=None):
+
+        output, error = self.execute_command('du -b {0}'.format(path))
+        if output:
+            for line in output:
+                size = line.strip().split('\t')
+                if size:
+                    print size[0]
+                    return size[0]
+        else:
+            return 0
