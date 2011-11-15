@@ -111,8 +111,7 @@ class EPerfMaster(perf.PerfBase):
                       use_direct     = self.parami('use_direct', 1),
                       doc_cache      = self.parami('doc_cache', 0),
                       prefix         = self.param("prefix", ""),
-                      collect_server_stats = self.parami("collect_server_stats",
-                                                         self.is_master),
+                      collect_server_stats = self.is_leader,
                       start_at       = start_at,
                       report         = int(max_creates * 0.1),
                       exit_after_creates = 1)
@@ -221,6 +220,7 @@ class EPerfClient(EPerfMaster):
         self.level_callbacks = []
         self.latched_rebalance_done = False
         self.setUpBase0()
+        self.is_leader = self.parami("prefix", 0) == 0
 
         pass # Skip super's setUp().  The master should do the real work.
 
@@ -237,7 +237,7 @@ class EPerfClient(EPerfMaster):
             sc.level_callbacks = self.level_callbacks
         else:
             sc = super(EPerfMaster, self).mk_stats(verbosity)
-        sc.is_leader = self.parami("prefix", 0) == 0
+
         return sc
 
     def test_ept_read(self):
