@@ -84,14 +84,11 @@ class EPerfMaster(perf.PerfBase):
                      max_creates    = 0):
         if (not self.is_master) or self.parami("access_phase", 0) > 0:
             items = self.parami("items", items)
-
-            num_clients = len(self.input.clients)
-            if not num_clients:
-                num_clients = 1
+            num_clients = len(self.input.clients) or 1
             start_at = int(self.paramf("start_at", 1.0) * \
                            (self.parami("prefix", 0) * items /
                             num_clients))
-            start_delay = self.parami("start_delay", 0)
+            start_delay = self.parami("start_delay", 2 * 60) # 2 minute delay.
             if start_delay > 0:
                 time.sleep(start_delay * self.parami("prefix", 0))
             max_creates = self.parami("max_creates", max_creates)
@@ -180,7 +177,10 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", 45000000)
         self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
-        self.level_callbacks = [('cur-creates', 2000000, getattr(self, "latched_rebalance"))]
+        num_clients = len(self.input.clients) or 1
+        rebalance_after = self.parami("rebalance_after", 2000000)
+        self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
+                                 getattr(self, "latched_rebalance"))]
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.8),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
@@ -197,7 +197,10 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", 45000000)
         self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
-        self.level_callbacks = [('cur-creates', 2000000, getattr(self, "latched_rebalance"))]
+        num_clients = len(self.input.clients) or 1
+        rebalance_after = self.parami("rebalance_after", 2000000)
+        self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
+                                 getattr(self, "latched_rebalance"))]
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.8),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
