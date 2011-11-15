@@ -340,6 +340,7 @@ class StoreMemcachedBinary(Store):
         self.connect_host_port(self.host_port[0], self.host_port[1], user, pswd)
         self.inflight_reinit()
         self.queue = []
+        self.cmds = 0
         self.ops = 0
         self.previous_ops = 0
         self.buf = ''
@@ -372,11 +373,11 @@ class StoreMemcachedBinary(Store):
     def inflight_send(self, inflight_msg):
         self.conn.s.send(inflight_msg)
 
-    def inflight_recv(self, inflight, inflight_arr):
+    def inflight_recv(self, inflight, inflight_arr, expectBuffer=None):
        for i in range(inflight):
           self.recvMsg()
 
-    def inflight_buffers(self, grp, vbucketId):
+    def inflight_append_buffer(self, grp, vbucketId, opcode, opaque):
         return grp
 
     def command(self, c):
@@ -455,7 +456,7 @@ class StoreMemcachedBinary(Store):
 
            latency_start = time.time()
            self.inflight_send(msg)
-           self.inflight_recv(1, grp)
+           self.inflight_recv(1, grp, expectBuffer=False)
            latency_end = time.time()
 
            self.ops += 1
@@ -490,15 +491,16 @@ class StoreMemcachedBinary(Store):
         self.sc.sample(self.cur)
 
     def cmd_append(self, cmd, key_num, key_str, data, grp, extra):
+       self.cmds += 1
        if cmd[0] == 'g':
-          hdr, vbucketId = self.header(CMD_GET, key_str, '')
-          m = self.inflight_buffers(grp, vbucketId)
+          hdr, vbucketId = self.header(CMD_GET, key_str, '', opaque=self.cmds)
+          m = self.inflight_append_buffer(grp, vbucketId, CMD_GET, self.cmds)
           m.append(hdr)
           m.append(key_str)
           return 1, 0, 0, 0
        elif cmd[0] == 'd':
-          hdr, vbucketId = self.header(CMD_DELETE, key_str, '')
-          m = self.inflight_buffers(grp, vbucketId)
+          hdr, vbucketId = self.header(CMD_DELETE, key_str, '', opaque=self.cmds)
+          m = self.inflight_append_buffer(grp, vbucketId, CMD_DELETE, self.cmds)
           m.append(hdr)
           m.append(key_str)
           return 0, 0, 1, 0
@@ -513,8 +515,9 @@ class StoreMemcachedBinary(Store):
           if not have_extra:
              curr_extra = ''
 
-       hdr, vbucketId = self.header(curr_cmd, key_str, data, extra=curr_extra)
-       m = self.inflight_buffers(grp, vbucketId)
+       hdr, vbucketId = self.header(curr_cmd, key_str, data,
+                                    extra=curr_extra, opaque=self.cmds)
+       m = self.inflight_append_buffer(grp, vbucketId, curr_cmd, self.cmds)
        m.append(hdr)
        if curr_extra:
           m.append(extra)
@@ -525,15 +528,17 @@ class StoreMemcachedBinary(Store):
     def num_ops(self, cur):
         return self.ops
 
-    def recvMsg(self, sock=None, buf=None):
-        sock = sock or self.conn.s
-        buf = buf or self.buf
+    def recvMsg(self):
+        sock = self.conn.s
+        buf = self.buf
         pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf)
         magic, cmd, keylen, extralen, dtype, errcode, datalen, opaque, cas = \
             struct.unpack(RES_PKT_FMT, pkt)
+        if magic != RES_MAGIC_BYTE:
+           raise Exception("Unexpected recvMsg magic: " + str(magic))
         val, buf = self.readbytes(sock, datalen, buf)
         self.buf = buf
-        return pkt, val, buf
+        return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
 
 
 class StoreMembaseBinary(StoreMemcachedBinary):
@@ -548,16 +553,16 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         self.awareness = VBucketAwareMemcached(rest, user or 'default')
 
     def inflight_start(self):
-        return { 'v_arr': {}, # Key is vbucketId, value is [] of buffer.
-                 'v_num': {}  # Key is vbucketId, value is int (number of cmds).
+        return { 'v_bufs': {}, # Key is vbucketId, value is [] of buffer.
+                 'v_cmds': {}  # Key is vbucketId, value is int (number of cmds).
                }
 
     def inflight_complete(self, inflight_grp):
         rv = [] # Array of tuples (vbucket, buffer).
-        v_arr = inflight_grp['v_arr']
-        vbuckets = v_arr.keys()
+        v_bufs = inflight_grp['v_bufs']
+        vbuckets = v_bufs.keys()
         for vbucket in vbuckets:
-           buffers = v_arr[vbucket]
+           buffers = v_bufs[vbucket]
            rv.append((vbucket, ''.join(buffers)))
         inflight_grp['vbuckets'] = vbuckets
         return rv
@@ -567,27 +572,44 @@ class StoreMembaseBinary(StoreMemcachedBinary):
            conn = self.awareness.memcached_for_vbucket(vbucket)
            conn.s.send(buf)
 
-    def inflight_recv(self, inflight, inflight_grp):
-        v_num = inflight_grp['v_num']
+    def inflight_recv(self, inflight, inflight_grp, expectBuffer=None):
+        v_cmds = inflight_grp['v_cmds']
         for vbucket in inflight_grp['vbuckets']:
            conn = self.awareness.memcached_for_vbucket(vbucket)
            try:
-              buf = conn.recvBuf
+              recvBuf = conn.recvBuf
            except:
-              buf = ''
-           for i in range(v_num[vbucket]):
-              pkg, val, buf = self.recvMsg(conn.s, buf)
-           conn.recvBuf = buf
+              recvBuf = ''
+           if expectBuffer == False and recvBuf != '':
+              raise Exception("Was expecting empty buffer, but have (" + \
+                                 str(len(recvBuf)) + "): " + recvBuf)
+           cmds = v_cmds[vbucket]
+           for cmd, opaque in cmds:
+              rcmd, keylen, extralen, errcode, datalen, ropaque, val, recvBuf = \
+                  self.recvMsgSockBuf(conn.s, recvBuf)
+              if rcmd != cmd or ropaque != opaque:
+                 raise Exception("Mismatch recv: %s=%s, %s=%s" % \
+                                    (rcmd, cmd, ropaque, opaque))
+           conn.recvBuf = recvBuf
 
-    def inflight_buffers(self, grp, vbucketId):
-       v_arr = grp['v_arr']
-       v_num = grp['v_num']
-       m = v_arr.get(vbucketId, None)
+    def recvMsgSockBuf(self, sock, buf):
+        pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf)
+        magic, cmd, keylen, extralen, dtype, errcode, datalen, opaque, cas = \
+            struct.unpack(RES_PKT_FMT, pkt)
+        if magic != RES_MAGIC_BYTE:
+           raise Exception("Unexpected recvMsg magic: " + str(magic))
+        val, buf = self.readbytes(sock, datalen, buf)
+        return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
+
+    def inflight_append_buffer(self, grp, vbucketId, opcode, opaque):
+       v_bufs = grp['v_bufs']
+       v_cmds = grp['v_cmds']
+       m = v_bufs.get(vbucketId, None)
        if m is None:
           m = []
-          v_arr[vbucketId] = m
-          v_num[vbucketId] = 0
-       v_num[vbucketId] += 1
+          v_bufs[vbucketId] = m
+          v_cmds[vbucketId] = []
+       v_cmds[vbucketId].append((opcode, opaque))
        return m
 
 
