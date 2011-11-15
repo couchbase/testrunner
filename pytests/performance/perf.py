@@ -777,6 +777,43 @@ class MapReduce(PerfBase):
         self.end_stats(sc, ops)
 
 
+class ErlangAsyncDrainingTests(PerfBase):
+
+    def setUp(self):
+        self.dgm = False
+        super(ErlangAsyncDrainingTests, self).setUp()
+
+    def go(self, original, modified, mode):
+        ClusterOperationHelper.change_erlang_async(self.input.servers, original, modified)
+        #restart
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        ClusterOperationHelper.start_cluster(self.input.servers)
+
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
+                                                                'test_time':time.time()})
+        ops, start_time, end_time = self.load(self.parami("items", 1000000),
+                                              self.parami('size', 2048),
+                                              kind=self.param('kind', mode))
+        ops['end-time'] = self.wait_until_drained()
+        self.end_stats(sc, ops)
+
+    def test_EA_B_0(self):
+        self.spec('EA.0')
+        self.go(0, 16, "binary")
+
+    def test_EA_B_16(self):
+        self.spec('EA.0')
+        self.go(16, 0, "binary")
+
+    def test_EA_J_0(self):
+        self.spec('EA.0')
+        self.go(0, 16, "json")
+
+    def test_EA_J_16(self):
+        self.spec('EA.0')
+        self.go(16, 0, "json")
+
+
 class TransactionSize(PerfBase):
 
     def setUp(self):
