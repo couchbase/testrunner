@@ -677,6 +677,9 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 
 # --------------------------------------------------------
 
+PROTOCOL_STORE = { 'memcached-ascii': StoreMemcachedAscii,
+                   'memcached-binary': StoreMemcachedBinary }
+
 def run(cfg, cur, protocol, host_port, user, pswd,
         stats_collector = None, stores = None):
    if type(cfg['min-value-size']) == type(""):
@@ -706,12 +709,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
           store = stores[i]
 
       if store is None:
-          store = Store()
-          if protocol.split('-')[0].find('memcache') >= 0:
-             if protocol.split('-')[1] == 'ascii':
-                store = StoreMemcachedAscii()
-             else:
-                store = StoreMemcachedBinary()
+         store = PROTOCOL_STORE[protocol]()
 
       log.info("store: %s - %s" % (i, store.__class__))
 
@@ -885,7 +883,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      for k in sorted(o.iterkeys()):
         log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
 
-  protocol = protocol or (["memcached"] + argv[1].split("://"))[-2] + "-binary"
+  protocol = protocol or '-'.join(((["memcached"] + \
+                                    argv[1].split("://"))[-2] + "-binary").split('-')[0:2])
   host_port = ('@' + argv[1].split("://")[-1]).split('@')[-1] + ":11211"
   user, pswd = (('@' + argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
 
