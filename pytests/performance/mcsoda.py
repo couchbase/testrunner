@@ -533,7 +533,7 @@ class StoreMemcachedBinary(Store):
             struct.unpack(RES_PKT_FMT, pkt)
         val, buf = self.readbytes(sock, datalen, buf)
         self.buf = buf
-        return buf
+        return pkt, val, buf
 
 
 class StoreMembaseBinary(StoreMemcachedBinary):
@@ -555,7 +555,6 @@ class StoreMembaseBinary(StoreMemcachedBinary):
     def inflight_complete(self, inflight_grp):
         rv = [] # Array of tuples (vbucket, buffer).
         v_arr = inflight_grp['v_arr']
-        v_num = inflight_grp['v_num']
         vbuckets = v_arr.keys()
         for vbucket in vbuckets:
            buffers = v_arr[vbucket]
@@ -577,7 +576,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
            except:
               buf = ''
            for i in range(v_num[vbucket]):
-              buf = self.recvMsg(conn.s, buf)
+              pkg, val, buf = self.recvMsg(conn.s, buf)
            conn.recvBuf = buf
 
     def inflight_buffers(self, grp, vbucketId):
