@@ -111,7 +111,7 @@ class PerfBase(unittest.TestCase):
             shell.disconnect()
 
     # Returns "host:port" of moxi to hit.
-    def target_moxi(self, bucket='default', use_direct=False):
+    def target_host_port(self, bucket='default', use_direct=False):
         rv = self.param('moxi', None)
         if use_direct:
             return "%s:%s" % (self.input.servers[0].ip,
@@ -123,6 +123,20 @@ class PerfBase(unittest.TestCase):
                               self.input.moxis[0].port)
         return "%s:%s" % (self.input.servers[0].ip,
                           self.rest.get_bucket(bucket).nodes[0].moxi)
+
+    def protocol_parse(self, protocol_in, use_direct=False):
+        if protocol_in.find('://'):
+            protocol = \
+                '-'.join(((["membase"] + \
+                               protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
+            host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":8091"
+            user, pswd = (('@' + protocol_in.split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
+        else:
+            protocol = 'memcached-' + protocol
+            self.target_host_port(use_direct=use_direct)
+            user = ''
+            pswd = ''
+        return protocol, host_port, user, pswd
 
     def restart_moxi(self, bucket=None):
         self.tearDown_moxi()
@@ -253,12 +267,10 @@ class PerfBase(unittest.TestCase):
                 'prefix': prefix,
                 'report': report
                 }
-        self.log.info("mcsoda - host_port: " + self.target_moxi(use_direct=use_direct))
+        protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
+        self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
-        cur, start_time, end_time = mcsoda.run(cfg, {},
-                                               'memcached-' + protocol,
-                                               self.target_moxi(use_direct=use_direct),
-                                               '', '')
+        cur, start_time, end_time = mcsoda.run(cfg, {}, protocol, host_port, user, pswd)
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
@@ -366,13 +378,11 @@ class PerfBase(unittest.TestCase):
             # Here, we num_ops looks like "time to run" tuple of...
             # ('seconds', integer_num_of_seconds_to_run)
             cfg['time'] = num_ops[1]
-        self.log.info("mcsoda - moxi: " + self.target_moxi(use_direct=use_direct))
+        protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
+        self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
-        cur, start_time, end_time = mcsoda.run(cfg, cur,
-                                               'memcached-' + protocol,
-                                               self.target_moxi(use_direct=use_direct),
-                                               '', '', sc)
+        cur, start_time, end_time = mcsoda.run(cfg, cur, protocol, host_port, user, pswd, sc)
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
                 'tot-items': cur.get('cur-items', 0),
