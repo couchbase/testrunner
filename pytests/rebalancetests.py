@@ -158,7 +158,7 @@ class RebalanceBaseTest(unittest.TestCase):
         return picked
 
     @staticmethod
-    def load_data(master, bucket, keys_count=-1, load_ratio=-1, delete_ratio=0, expiry_ratio=0):
+    def load_data(master, bucket, keys_count=-1, load_ratio=-1, delete_ratio=0, expiry_ratio=0, test=None):
         log = logger.Logger.get_logger()
         inserted_keys, rejected_keys =\
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
@@ -170,8 +170,10 @@ class RebalanceBaseTest(unittest.TestCase):
                                                               delete_ratio=delete_ratio,
                                                               expiry_ratio=expiry_ratio)
         log.info("wait until data is completely persisted on the disk")
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, timeout_in_seconds=120)
+        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0, timeout_in_seconds=120)
+        test.assertTrue(ready, "wait_for ep_flusher_todo == 0 failed")
         return inserted_keys
 
     @staticmethod
@@ -226,7 +228,7 @@ class IncrementalRebalanceComboTests(unittest.TestCase):
         buckets = rest.get_buckets()
         inserted_keys = []
         for bucket in buckets:
-            inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, -1, load_ratio)
+            inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, -1, load_ratio, test=self)
             temp_bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
             temp_bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
             self.log.info("inserted {0} keys".format(len(inserted_keys)))
@@ -300,7 +302,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         while len(nodes) < len(self._servers):
             buckets = rest.get_buckets()
             for bucket in buckets:
-                inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, keys_count, load_ratio, delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO)
+                inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, keys_count, load_ratio, delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO, test=self)
                 bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
                 bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
 
