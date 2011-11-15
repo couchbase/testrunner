@@ -654,10 +654,22 @@ class WorkerThread(threading.Thread):
 
 
 class VBucketAwareMemcached(object):
-    def __init__(self, rest, bucket):
+    def __init__(self, rest, bucket, info=None):
         self.log = logger.Logger.get_logger()
+        self.info = info
+        self.bucket = bucket
         self.memcacheds = {}
         self.vBucketMap = {}
+        self.reset(rest)
+
+    def reset(self, rest=None):
+        m, v = self.request_map(rest or RestConnection(self.info), self.bucket)
+        self.memcacheds = m
+        self.vBucketMap = v
+
+    def request_map(self, rest, bucket):
+        memcacheds = {}
+        vBucketMap = {}
         vb_ready = RestHelper(rest).vbucket_map_ready(bucket, 60)
         if not vb_ready:
             raise Exception("vbucket map is not ready for bucket {0}".format(bucket))
@@ -666,8 +678,8 @@ class VBucketAwareMemcached(object):
         for vBucket in vBuckets:
             masterIp = vBucket.master.split(":")[0]
             masterPort = int(vBucket.master.split(":")[1])
-            self.vBucketMap[vBucket.id] = vBucket.master
-            if not vBucket.master in self.memcacheds:
+            vBucketMap[vBucket.id] = vBucket.master
+            if not vBucket.master in memcacheds:
                 server = TestInputServer()
                 server.ip = masterIp
                 server.port = rest.port
@@ -676,14 +688,15 @@ class VBucketAwareMemcached(object):
                 try:
                     for node in nodes:
                         if node.ip == masterIp and node.memcached == masterPort:
-                            self.memcacheds[vBucket.master] =\
-                            MemcachedClientHelper.direct_client(server, bucket)
+                            memcacheds[vBucket.master] =\
+                                MemcachedClientHelper.direct_client(server, bucket)
                             break
                 except Exception as ex:
                     msg = "unable to establish connection to {0}.cleanup open connections"
                     self.log.warn(msg.format(masterIp))
                     self.done()
                     raise ex
+        return memcacheds, vBucketMap
 
     def memcached(self, key):
         vBucketId = crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)

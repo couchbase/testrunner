@@ -32,7 +32,7 @@ import crc32
 import mc_bin_client
 import memcacheConstants
 
-from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
+from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, ERR_NOT_MY_VBUCKET
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
 from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "ARPA"
@@ -550,7 +550,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                  'username': user or 'Administrator',
                  'password': pswd or 'password' }
         rest = RestConnection(info)
-        self.awareness = VBucketAwareMemcached(rest, user or 'default')
+        self.awareness = VBucketAwareMemcached(rest, user or 'default', info)
 
     def inflight_start(self):
         return { 'v_bufs': {}, # Key is vbucketId, value is [] of buffer.
@@ -590,6 +590,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
               if rcmd != cmd or ropaque != opaque:
                  raise Exception("Mismatch recv: %s=%s, %s=%s" % \
                                     (rcmd, cmd, ropaque, opaque))
+              if errcode == ERR_NOT_MY_VBUCKET:
+                 self.awareness.reset()
            conn.recvBuf = recvBuf
 
     def recvMsgSockBuf(self, sock, buf):
