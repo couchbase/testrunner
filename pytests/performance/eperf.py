@@ -14,7 +14,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from membase.performance.stats import StatsCollector
+from membase.performance.stats import StatsCollector, CallbackStatsCollector
 
 import testconstants
 import mcsoda
@@ -235,9 +235,10 @@ class EPerfClient(EPerfMaster):
         if self.parami("prefix", 0) == 0 and self.level_callbacks:
             sc = CallbackStatsCollector(verbosity)
             sc.level_callbacks = self.level_callbacks
-            return sc
-
-        return super(EPerfMaster, self).mk_stats(verbosity)
+        else:
+            sc = super(EPerfMaster, self).mk_stats(verbosity)
+        sc.is_leader = self.parami("prefix", 0) == 0
+        return sc
 
     def test_ept_read(self):
         super(EPerfClient, self).test_ept_read()

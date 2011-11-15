@@ -32,6 +32,7 @@ class StatsCollector(object):
 
     def __init__(self, verbosity):
         self._verbosity = verbosity
+        self.is_leader = False
 
     #this function starts collecting stats from all nodes with the given
     #frequency
