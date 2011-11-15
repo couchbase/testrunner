@@ -5,6 +5,7 @@ import time
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
+from hashlib import md5
 
 # The histo dict is returned by add_timing_sample().
 # The percentiles must be sorted, ascending, like [0.90, 0.99].
@@ -54,7 +55,7 @@ class StatsCollector(object):
                                      args=(nodes, pnames, frequency, self._verbosity))
             sysstats_thread.start()
             ns_server_stats_thread = Thread(target=self.ns_server_stats,
-                                            args=(nodes, bucket, 60, self._verbosity))
+                                            args=([nodes[0]], bucket, 60, self._verbosity))
             ns_server_stats_thread.start()
             rest = RestConnection(nodes[0])
             bucket_size_thead = Thread(target=self.get_bucket_size,
@@ -191,17 +192,25 @@ class StatsCollector(object):
                 pass
         d = {"snapshots": []}
         #        "pname":"x","pid":"y","snapshots":[{"time":time,"value":value}]
+
+        time = self._task["time"]
         while not self._aborted():
             time.sleep(frequency)
+            i = 0
             for shell in shells:
+                node = nodes[i]
+                unique_id = md5(node.ip+ self._task["time"])
                 for pname in pnames:
                     obj = RemoteMachineHelper(shell).is_process_running(pname)
                     if obj and obj.pid:
                         value = self._extract_proc_info(shell, obj.pid)
-                        value["time"] = time.time()
                         value["name"] = pname
                         value["id"] = obj.pid
+                        value["unique_id"] = unique_id
+                        value["time"] = time
+                        value["ip"] = node.ip
                         d["snapshots"].append(value)
+                i +=  1
         self._task["systemstats"] = d["snapshots"]
         print " finished system_stats"
 
@@ -237,11 +246,23 @@ class StatsCollector(object):
                 d[mc.host]["dispatcher"].append(dispatcher)
 
         for mc in mcs:
+            unique_id = md5(mc.host+ self._task["time"])
+            time = self._task["time"]
+            ip = mc.host
             for snapshot in d[mc.host]["snapshots"]:
+                snapshot['unique_id'] = unique_id
+                snapshot['time'] = time
+                snapshot['ip'] = ip
                 self._task["membasestats"].append(snapshot)
             for timing in d[mc.host]["timings"]:
+                timing['unique_id'] = unique_id
+                timing['time'] = time
+                timing['ip'] = ip
                 self._task["timings"].append(timing)
             for dispatcher in d[mc.host]["dispatcher"]:
+                dispatcher['unique_id'] = unique_id
+                dispatcher['time'] = time
+                dispatcher['ip'] = ip
                 self._task["dispatcher"].append(dispatcher)
 
         print " finished membase_stats"
