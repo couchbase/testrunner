@@ -196,10 +196,11 @@ class StatsCollector(object):
         start_time = str(self._task["time"])
         while not self._aborted():
             time.sleep(frequency)
+            current_time = time.time()
             i = 0
             for shell in shells:
                 node = nodes[i]
-                unique_id = md5(node.ip+ start_time).hexdigest()
+                unique_id = start_time
                 for pname in pnames:
                     obj = RemoteMachineHelper(shell).is_process_running(pname)
                     if obj and obj.pid:
@@ -207,7 +208,7 @@ class StatsCollector(object):
                         value["name"] = pname
                         value["id"] = obj.pid
                         value["unique_id"] = unique_id
-                        value["time"] = start_time
+                        value["time"] = current_time
                         value["ip"] = node.ip
                         d["snapshots"].append(value)
                 i +=  1
@@ -247,21 +248,22 @@ class StatsCollector(object):
 
         start_time = str(self._task["time"])
         for mc in mcs:
-            unique_id = md5(mc.host+ start_time).hexdigest()
+            unique_id = start_time
             ip = mc.host
+            current_time = time.time()
             for snapshot in d[mc.host]["snapshots"]:
                 snapshot['unique_id'] = unique_id
-                snapshot['time'] = start_time
+                snapshot['time'] = current_time
                 snapshot['ip'] = ip
                 self._task["membasestats"].append(snapshot)
             for timing in d[mc.host]["timings"]:
                 timing['unique_id'] = unique_id
-                timing['time'] = start_time
+                timing['time'] = current_time
                 timing['ip'] = ip
                 self._task["timings"].append(timing)
             for dispatcher in d[mc.host]["dispatcher"]:
                 dispatcher['unique_id'] = unique_id
-                dispatcher['time'] = start_time
+                dispatcher['time'] = current_time
                 dispatcher['ip'] = ip
                 self._task["dispatcher"].append(dispatcher)
 
