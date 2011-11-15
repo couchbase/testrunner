@@ -37,7 +37,7 @@ class StatsCollector(object):
 
     #this function starts collecting stats from all nodes with the given
     #frequency
-    def start(self, nodes, bucket, pnames, name, frequency,
+    def start(self, nodes, bucket, pnames, name, frequency, client_id='',
               collect_server_stats = True):
         self._task = {"state": "running", "threads": []}
         self._task["name"] = name
@@ -47,6 +47,7 @@ class StatsCollector(object):
         self._task["ops-temp"] = []
         self._task["latency"] = {}
         self._task["data_size_stats"] = []
+        self.client_id = client_id
 
         if collect_server_stats:
             mbstats_thread = Thread(target=self.membase_stats,
@@ -82,13 +83,15 @@ class StatsCollector(object):
         pass
 
     def export(self, name, test_params):
-        commands = ['latency-set', 'latency-get']
+        commands = ['latency-set', 'latency-get', 'latency-delete']
         for latency in commands:
             histos = self._task["latency"].get(latency, [])
             key = 'percentile-' + latency
             self._task["latency"][key] = []
             for histo in histos:
+                p = []
                 p = histo_percentile(histo, [0.90, 0.99])
+                p.append(self.client_id)
                 self._task["latency"][key].append(p)
 
         obj = {"buildinfo": self._task.get("buildstats", {}),
@@ -106,7 +109,8 @@ class StatsCollector(object):
                "bucket-size":self._task.get("bucket_size", []),
                "data-size": self._task.get("data_size_stats", []),
                "latency-set":self._task["latency"].get('percentile-latency-set', []),
-               "latency-get":self._task["latency"].get('percentile-latency-get', [])
+               "latency-get":self._task["latency"].get('percentile-latency-get', []),
+               "latency-delete":self._task["latency"].get('percentile-latency-delete', [])
         }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
@@ -141,7 +145,7 @@ class StatsCollector(object):
             paths.append(bucket_path)
             view_path = bucket_path +'/set_view_{0}_design'.format(bucket)
             paths.append(view_path)
-        print paths
+
         d = {"snapshots": []}
         start_time = str(self._task["time"])
 

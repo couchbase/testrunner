@@ -209,11 +209,11 @@ class PerfBase(unittest.TestCase):
 
     def start_stats(self, test_name, servers=None,
                     process_names=['memcached', 'beam.smp', 'couchjs'],
-                    test_params = None,
+                    test_params = None, client_id = '',
                     collect_server_stats = True):
         servers = servers or self.input.servers
         sc = self.mk_stats(False)
-        sc.start(servers, "default", process_names, test_name, 10,
+        sc.start(servers, "default", process_names, test_name, 10, client_id,
                  collect_server_stats = collect_server_stats)
         self.test_params = test_params
         self.sc = sc
@@ -352,7 +352,7 @@ class PerfBase(unittest.TestCase):
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
         sc = self.start_stats(self.spec_reference + ".loop",
-                              test_params = cfg_params,
+                              test_params = cfg_params, client_id = prefix,
                               collect_server_stats = collect_server_stats)
 
         cur = { 'cur-items': num_items }
