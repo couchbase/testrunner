@@ -390,7 +390,7 @@ class StoreMemcachedBinary(Store):
            vbucketId = crc32.crc32_hash(key) & (vbuckets - 1)
         return struct.pack(fmt, magic, op,
                            len(key), len(extra), dtype, vbucketId,
-                           len(key) + len(extra) + len(val), opaque, cas)
+                           len(key) + len(extra) + len(val), opaque, cas), vbucketId
 
     def flush(self):
         extra = struct.pack(SET_PKT_FMT, 0, self.cfg.get('expiration', 0))
@@ -487,11 +487,13 @@ class StoreMemcachedBinary(Store):
 
     def cmd_append(self, cmd, key_num, key_str, data, m, extra):
        if cmd[0] == 'g':
-          m.append(self.header(CMD_GET, key_str, ''))
+          hdr, vbucketId = self.header(CMD_GET, key_str, '')
+          m.append(hdr)
           m.append(key_str)
           return 1, 0, 0, 0
        elif cmd[0] == 'd':
-          m.append(self.header(CMD_DELETE, key_str, ''))
+          hdr, vbucketId = self.header(CMD_DELETE, key_str, '')
+          m.append(hdr)
           m.append(key_str)
           return 0, 0, 1, 0
 
@@ -505,7 +507,8 @@ class StoreMemcachedBinary(Store):
           if not have_extra:
              curr_extra = ''
 
-       m.append(self.header(curr_cmd, key_str, data, extra=curr_extra))
+       hdr, vbucketId = self.header(curr_cmd, key_str, data, extra=curr_extra)
+       m.append(hdr)
        if curr_extra:
           m.append(extra)
        m.append(key_str)
@@ -544,12 +547,6 @@ class StoreMembaseBinary(StoreMemcachedBinary):
     def inflight_recv(self, inflight, inflight_arr):
        for i in range(inflight):
           self.recvMsg()
-
-    def command(self, c):
-        self.queue.append(c)
-        if len(self.queue) > (self.cur.get('batch') or \
-                              self.cfg.get('batch', 100)):
-            self.flush()
 
 
 class StoreMemcachedAscii(Store):
