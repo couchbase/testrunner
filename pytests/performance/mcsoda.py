@@ -561,30 +561,28 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         self.awareness = VBucketAwareMemcached(rest, user or 'default', info)
 
     def inflight_start(self):
-        return { 'v_bufs': {}, # Key is vbucketId, value is [] of buffer.
-                 'v_cmds': {}  # Key is vbucketId, value is int (number of cmds).
+        return { 's_bufs': {}, # Key is server str, value is [] of buffer.
+                 's_cmds': {}  # Key is server str, value is int (number of cmds).
                }
 
     def inflight_complete(self, inflight_grp):
-        rv = [] # Array of tuples (vbucket, buffer).
-        v_bufs = inflight_grp['v_bufs']
-        vbuckets = v_bufs.keys()
-        for vbucket in vbuckets:
-           buffers = v_bufs[vbucket]
-           rv.append((vbucket, ''.join(buffers)))
-        inflight_grp['vbuckets'] = vbuckets
+        rv = [] # Array of tuples (server, buffer).
+        s_bufs = inflight_grp['s_bufs']
+        for server in s_bufs.keys():
+           buffers = s_bufs[server]
+           rv.append((server, ''.join(buffers)))
         return rv
 
     def inflight_send(self, inflight_msg):
-        for vbucket, buf in inflight_msg:
-           conn = self.awareness.memcached_for_vbucket(vbucket)
+        for server, buf in inflight_msg:
+           conn = self.awareness.memcacheds[server]
            conn.s.send(buf)
 
     def inflight_recv(self, inflight, inflight_grp, expectBuffer=None):
-        v_cmds = inflight_grp['v_cmds']
+        s_cmds = inflight_grp['s_cmds']
         reset_my_awareness = False
-        for vbucket in inflight_grp['vbuckets']:
-           conn = self.awareness.memcached_for_vbucket(vbucket)
+        for server in s_cmds.keys():
+           conn = self.awareness.memcacheds[server]
            try:
               recvBuf = conn.recvBuf
            except:
@@ -592,7 +590,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
            if expectBuffer == False and recvBuf != '':
               raise Exception("Was expecting empty buffer, but have (" + \
                                  str(len(recvBuf)) + "): " + recvBuf)
-           cmds = v_cmds[vbucket]
+           cmds = s_cmds[server]
            for i in range(cmds):
               rcmd, keylen, extralen, errcode, datalen, ropaque, val, recvBuf = \
                   self.recvMsgSockBuf(conn.s, recvBuf)
@@ -612,14 +610,15 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
 
     def inflight_append_buffer(self, grp, vbucketId, opcode, opaque):
-       v_bufs = grp['v_bufs']
-       v_cmds = grp['v_cmds']
-       m = v_bufs.get(vbucketId, None)
+       s_bufs = grp['s_bufs']
+       s_cmds = grp['s_cmds']
+       s = self.awareness.vBucketMap[vbucketId]
+       m = s_bufs.get(s, None)
        if m is None:
           m = []
-          v_bufs[vbucketId] = m
-          v_cmds[vbucketId] = 0
-       v_cmds[vbucketId] += 1
+          s_bufs[s] = m
+          s_cmds[s] = 0
+       s_cmds[s] += 1
        return m
 
 
