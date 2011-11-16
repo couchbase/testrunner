@@ -317,13 +317,15 @@ class Store:
         return buf[:nbytes], buf[nbytes:]
 
     def add_timing_sample(self, cmd, delta, prefix="latency-"):
-       histo = self.cur.get(prefix + cmd, None)
-       if histo is None:
-          histo = {}
-          self.cur[prefix + cmd] = histo
-       bucket = round(self.histo_bucket(delta), 6)
-       histo[bucket] = histo.get(bucket, 0) + 1
-       return histo
+       base = prefix + cmd
+       for suffix in ["", "-recent"]:
+          key = base + suffix
+          histo = self.cur.get(key, None)
+          if histo is None:
+             histo = {}
+             self.cur[key] = histo
+          bucket = round(self.histo_bucket(delta), 6)
+          histo[bucket] = histo.get(bucket, 0) + 1
 
     def histo_bucket(self, samp):
        hp = self.cfg.get("histo-precision", 2)
@@ -494,11 +496,13 @@ class StoreMemcachedBinary(Store):
                 self.save_stats()
 
     def save_stats(self):
-        commands = ['latency-set', 'latency-get']
-        for latency in commands:
-            histo = self.cur.get(latency, [])
-            if histo:
-                self.sc.latency_stats(latency, histo)
+        for key in self.cur:
+           if key.startswith('latency-'):
+              histo = self.cur.get(key, None)
+              if histo:
+                 self.sc.latency_stats(key, histo)
+                 if key.endswith('-recent'):
+                    self.cur[key] = {}
         self.sc.sample(self.cur)
 
     def cmd_append(self, cmd, key_num, key_str, data, expiration, grp):
