@@ -806,6 +806,8 @@ class ErlangAsyncDrainingTests(PerfBase):
         #restart
         ClusterOperationHelper.stop_cluster(self.input.servers)
         ClusterOperationHelper.start_cluster(self.input.servers)
+        time.sleep(10)
+        self.wait_until_warmed_up()
 
         sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
                                                                 'test_time':time.time()})
@@ -816,19 +818,19 @@ class ErlangAsyncDrainingTests(PerfBase):
         self.end_stats(sc, ops)
 
     def test_EA_B_0(self):
-        self.spec('EA.0')
+        self.spec('EA.B.0')
         self.go(0, 16, "binary")
 
     def test_EA_B_16(self):
-        self.spec('EA.0')
+        self.spec('EA.B.16')
         self.go(16, 0, "binary")
 
     def test_EA_J_0(self):
-        self.spec('EA.0')
+        self.spec('EA.J.0')
         self.go(0, 16, "json")
 
     def test_EA_J_16(self):
-        self.spec('EA.0')
+        self.spec('EA.J.16')
         self.go(16, 0, "json")
 
 
