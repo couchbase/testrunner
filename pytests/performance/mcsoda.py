@@ -184,7 +184,8 @@ def next_cmd(cfg, cur, store):
         itm_gen = True
 
         cmd = 'set'
-        cur['cur-sets'] = cur.get('cur-sets', 0) + 1
+        cur_sets = cur.get('cur-sets', 0) + 1
+        cur['cur-sets'] = cur_sets
 
         do_set_create = ((cfg.get('max-items', 0) <= 0 or
                           cfg.get('max-items', 0) > cur.get('cur-items', 0)) and
@@ -221,13 +222,17 @@ def next_cmd(cfg, cur, store):
                                      cfg.get('ratio-hot-sets', 0),
                                      cur.get('cur-sets', 0))
 
+        expiration = 0
+        if cmd[0] == 's' and cfg.get('ratio-expirations', 0.0) * 100 > cur_sets % 100:
+           expiration = cfg.get('expiration', 0)
+
         key_str = prepare_key(key_num, cfg.get('prefix', ''))
         if itm_gen:
            itm_val = store.gen_doc(key_num, key_str,
                                    choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
                                                 num_ops))
 
-        return (cmd, key_num, key_str, itm_val)
+        return (cmd, key_num, key_str, itm_val, expiration)
     else:
         cmd = 'get'
         cur['cur-gets'] = cur.get('cur-gets', 0) + 1
@@ -240,10 +245,10 @@ def next_cmd(cfg, cur, store):
                                      cur.get('cur-gets', 0))
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
 
-            return (cmd, key_num, key_str, itm_val)
+            return (cmd, key_num, key_str, itm_val, 0)
         else:
             cur['cur-misses'] = cur.get('cur-misses', 0) + 1
-            return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None)
+            return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None, 0)
 
 def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops):
     hit_hot_range = (ratio_hot_choice * 100) > (num_ops % 100)
@@ -282,7 +287,7 @@ class Store:
         self.sc = sc
 
     def command(self, c):
-        log.info("%s %s %s %s" % c)
+        log.info("%s %s %s %s %s" % c)
 
     def flush(self):
         pass
@@ -402,8 +407,6 @@ class StoreMemcachedBinary(Store):
                            len(key) + len(extra) + len(val), opaque, cas), vbucketId
 
     def flush(self):
-        extra = struct.pack(SET_PKT_FMT, 0, self.cfg.get('expiration', 0))
-
         next_inflight = 0
         next_inflight_num_gets = 0
         next_inflight_num_sets = 0
@@ -415,9 +418,9 @@ class StoreMemcachedBinary(Store):
         i = 1 # Start a 1, not 0, due to the single latency measurement request.
         n = len(self.queue)
         while i < n:
-            cmd, key_num, key_str, data = self.queue[i]
+            cmd, key_num, key_str, data, expiration = self.queue[i]
             delta_gets, delta_sets, delta_deletes, delta_arpas = \
-                self.cmd_append(cmd, key_num, key_str, data, next_grp, extra)
+                self.cmd_append(cmd, key_num, key_str, data, expiration, next_grp)
             next_inflight += 1
             next_inflight_num_gets += delta_gets
             next_inflight_num_sets += delta_sets
@@ -453,9 +456,10 @@ class StoreMemcachedBinary(Store):
            # Use the first request in the batch to measure single
            # request latency.
            grp = self.inflight_start()
-           latency_cmd, key_num, key_str, data = self.queue[0]
+           latency_cmd, key_num, key_str, data, expiration = self.queue[0]
            delta_gets, delta_sets, delta_deletes, delta_arpas = \
-                self.cmd_append(latency_cmd, key_num, key_str, data, grp, extra)
+                self.cmd_append(latency_cmd,
+                                key_num, key_str, data, expiration, grp)
            msg = self.inflight_complete(grp)
 
            latency_start = time.time()
@@ -494,7 +498,7 @@ class StoreMemcachedBinary(Store):
                 self.sc.latency_stats(latency, histo)
         self.sc.sample(self.cur)
 
-    def cmd_append(self, cmd, key_num, key_str, data, grp, extra):
+    def cmd_append(self, cmd, key_num, key_str, data, expiration, grp):
        self.cmds += 1
        if cmd[0] == 'g':
           hdr, vbucketId = self.header(CMD_GET, key_str, '', opaque=self.cmds)
@@ -511,7 +515,7 @@ class StoreMemcachedBinary(Store):
 
        rv = (0, 1, 0, 0)
        curr_cmd = CMD_SET
-       curr_extra = extra
+       curr_extra = struct.pack(SET_PKT_FMT, 0, expiration)
 
        if cmd[0] == 'a':
           rv = (0, 0, 0, 1)
@@ -524,7 +528,7 @@ class StoreMemcachedBinary(Store):
        m = self.inflight_append_buffer(grp, vbucketId, curr_cmd, self.cmds)
        m.append(hdr)
        if curr_extra:
-          m.append(extra)
+          m.append(curr_extra)
        m.append(key_str)
        m.append(data)
        return rv
@@ -642,7 +646,7 @@ class StoreMemcachedAscii(Store):
                               self.cfg.get('batch', 100)):
             self.flush()
 
-    def command_send(self, cmd, key_num, key_str, data):
+    def command_send(self, cmd, key_num, key_str, data, expiration):
         if cmd[0] == 'g':
             return 'get ' + key_str + '\r\n'
         if cmd[0] == 'd':
@@ -651,10 +655,10 @@ class StoreMemcachedAscii(Store):
         c = 'set'
         if cmd[0] == 'a':
            c = self.arpa[self.cur.get('cur-sets', 0) % len(self.arpa)]
-        return "%s %s 0 %s %s\r\n%s\r\n" % (c, key_str, self.cfg.get('expiration', 0),
+        return "%s %s 0 %s %s\r\n%s\r\n" % (c, key_str, expiration,
                                             len(data), data)
 
-    def command_recv(self, cmd, key_num, key_str, data):
+    def command_recv(self, cmd, key_num, key_str, data, expiration):
         buf = self.buf
         if cmd[0] == 'g':
             # GET...
@@ -675,14 +679,14 @@ class StoreMemcachedAscii(Store):
     def flush(self):
         m = []
         for c in self.queue:
-            cmd, key_num, key_str, data = c
-            m.append(self.command_send(cmd, key_num, key_str, data))
+            cmd, key_num, key_str, data, expiration = c
+            m.append(self.command_send(cmd, key_num, key_str, data, expiration))
 
         self.skt.send(''.join(m))
 
         for c in self.queue:
-            cmd, key_num, key_str, data = c
-            self.command_recv(cmd, key_num, key_str, data)
+            cmd, key_num, key_str, data, expiration = c
+            self.command_recv(cmd, key_num, key_str, data, expiration)
 
         self.ops += len(self.queue)
         self.queue = []
@@ -893,6 +897,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "ratio-hot-gets":     (0.95,  "Fraction of GET's that hit the hot item subset."),
      "ratio-deletes":      (0.0,   "Fraction of SET updates that should be DELETE's instead."),
      "ratio-arpas":        (0.0,   "Fraction of SET non-DELETE'S to be 'a-r-p-a' cmds."),
+     "ratio-expirations":  (0.0,   "Fraction of SET's that use the provided expiration."),
      "expiration":         (0,     "Expiration time parameter for SET's"),
      "exit-after-creates": (0,     "Exit after max-creates is reached."),
      "threads":            (1,     "Number of client worker threads to use."),
