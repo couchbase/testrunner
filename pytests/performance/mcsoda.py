@@ -584,12 +584,9 @@ class StoreMembaseBinary(StoreMemcachedBinary):
               raise Exception("Was expecting empty buffer, but have (" + \
                                  str(len(recvBuf)) + "): " + recvBuf)
            cmds = v_cmds[vbucket]
-           for cmd, opaque in cmds:
+           for i in range(cmds):
               rcmd, keylen, extralen, errcode, datalen, ropaque, val, recvBuf = \
                   self.recvMsgSockBuf(conn.s, recvBuf)
-              if rcmd != cmd or ropaque != opaque:
-                 raise Exception("Mismatch recv: %s=%s, %s=%s" % \
-                                    (rcmd, cmd, ropaque, opaque))
               if errcode == ERR_NOT_MY_VBUCKET:
                  self.awareness.reset()
            conn.recvBuf = recvBuf
@@ -610,8 +607,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
        if m is None:
           m = []
           v_bufs[vbucketId] = m
-          v_cmds[vbucketId] = []
-       v_cmds[vbucketId].append((opcode, opaque))
+          v_cmds[vbucketId] = 0
+       v_cmds[vbucketId] += 1
        return m
 
 
