@@ -184,7 +184,7 @@ class StatsCollector(object):
     def latency_stats(self, latency_cmd, latency_stat):
         if self._task["latency"].get(latency_cmd) is None:
             self._task["latency"][latency_cmd] = []
-        self._task["latency"][latency_cmd].append(latency_stat)
+        self._task["latency"][latency_cmd].append(latency_stat.copy())
 
     def _merge(self):
         first = self._task["ops-temp"][0]
