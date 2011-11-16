@@ -43,10 +43,15 @@ INT_TYPE = type(123)
 FLOAT_TYPE = type(0.1)
 DICT_TYPE = type({})
 
-def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
+def dict_to_s(d, level="", res=None, suffix=", ", ljust=None):
+   res = res or []
+   return ''.join(dict_to_s_inner(d, level, res, suffix, ljust))
+
+def dict_to_s_inner(d, level, res, suffix, ljust):
    dtype = DICT_TYPE
    scalars = []
    complex = []
+
    for key in d.keys():
       if type(d[key]) == dtype:
          complex.append(key)
@@ -88,10 +93,10 @@ def dict_to_s(d, level="", res=[], suffix=", ", ljust=None):
    if complex:
       res.append("\n")
    for key in complex:
-      res.append(level + str(key) + ":\n")
-      dict_to_s(d[key], level + "  ", res=res, suffix="\n", ljust=9)
+      res.append(level   + str(key) + ":\n")
+      dict_to_s_inner(d[key], level + "  ", res, "\n", 9)
 
-   return ''.join(res)
+   return res
 
 # The histo dict is returned by add_timing_sample().
 # The percentiles must be sorted, ascending, like [0.90, 0.99].
@@ -149,7 +154,6 @@ def run_worker(ctl, cfg, cur, store, prefix):
             o_delta = o_curr - o_last
 
             ops_per_sec = o_delta / t_delta
-
             log.info(prefix + dict_to_s(cur))
             log.info("%s    ops: %s secs: %s ops/sec: %s" %
                      (prefix,
