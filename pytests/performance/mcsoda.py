@@ -578,6 +578,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
 
     def inflight_recv(self, inflight, inflight_grp, expectBuffer=None):
         v_cmds = inflight_grp['v_cmds']
+        reset_my_awareness = False
         for vbucket in inflight_grp['vbuckets']:
            conn = self.awareness.memcached_for_vbucket(vbucket)
            try:
@@ -592,8 +593,10 @@ class StoreMembaseBinary(StoreMemcachedBinary):
               rcmd, keylen, extralen, errcode, datalen, ropaque, val, recvBuf = \
                   self.recvMsgSockBuf(conn.s, recvBuf)
               if errcode == ERR_NOT_MY_VBUCKET:
-                 self.awareness.reset()
+                 reset_my_awareness = True
            conn.recvBuf = recvBuf
+        if reset_my_awareness:
+           self.awareness.reset()
 
     def recvMsgSockBuf(self, sock, buf):
         pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf)
