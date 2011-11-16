@@ -391,9 +391,12 @@ class StoreMemcachedBinary(Store):
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > (self.cur.get('batch') or \
-                              self.cfg.get('batch', 100)):
+        if len(self.queue) > self.flush_level():
             self.flush()
+
+    def flush_level(self):
+        return self.cur.get('batch') or \
+               self.cfg.get('batch', 100)
 
     def header(self, op, key, val, opaque=0, extra='', cas=0,
                dtype=0, vbucketId=0,
@@ -559,6 +562,10 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                  'password': pswd or 'password' }
         rest = RestConnection(info)
         self.awareness = VBucketAwareMemcached(rest, user or 'default', info)
+
+    def flush_level(self):
+        f = StoreMemcachedBinary.flush_level(self)
+        return f * len(self.awareness.memcacheds)
 
     def inflight_start(self):
         return { 's_bufs': {}, # Key is server str, value is [] of buffer.
@@ -900,7 +907,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "expiration":         (0,     "Expiration time parameter for SET's"),
      "exit-after-creates": (0,     "Exit after max-creates is reached."),
      "threads":            (1,     "Number of client worker threads to use."),
-     "batch":              (100,   "Batch / pipeline up this number of commands."),
+     "batch":              (100,   "Batch / pipeline up this number of commands per server."),
      "json":               (1,     "Use JSON documents. 0 to generate binary documents."),
      "time":               (0,     "Stop after this many seconds if > 0."),
      # TODO: "max-ops-per-sec":    (0,     "Max ops/second, which overrides the batch parameter."),
