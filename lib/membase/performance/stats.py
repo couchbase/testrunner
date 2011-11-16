@@ -83,8 +83,7 @@ class StatsCollector(object):
         pass
 
     def export(self, name, test_params):
-        commands = ['latency-set', 'latency-get', 'latency-delete']
-        for latency in commands:
+        for latency in self._task["latency"].keys():
             histos = self._task["latency"].get(latency, [])
             key = 'percentile-' + latency
             self._task["latency"][key] = []
