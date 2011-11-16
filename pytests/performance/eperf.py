@@ -83,6 +83,7 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot      = 0,
                      ratio_hot_gets = 0,
                      ratio_hot_sets = 0,
+                     ratio_expirations = 0,
                      max_creates    = 0):
         if (not self.is_master) or self.parami("access_phase", 0) > 0:
             items = self.parami("items", items)
@@ -111,6 +112,8 @@ class EPerfMaster(perf.PerfBase):
                       ratio_hot      = ratio_hot,
                       ratio_hot_gets = ratio_hot_gets,
                       ratio_hot_sets = ratio_hot_sets,
+                      ratio_expirations = ratio_expirations,
+                      expiration     = self.parami('expiration', 60 * 5), # 5 minutes.
                       test_name      = self.id(),
                       use_direct     = self.parami('use_direct', 1),
                       doc_cache      = self.parami('doc_cache', 0),
@@ -141,6 +144,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot      = self.paramf('ratio_hot', 0.2),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.005),
                           max_creates    = self.parami("max_creates", 10800000))
         self.gated_finish(self.input.clients, notify)
 
@@ -158,6 +162,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot      = self.paramf('ratio_hot', 0.2),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
                           max_creates    = self.parami("max_creates", 20000000))
         self.gated_finish(self.input.clients, notify)
 
@@ -175,6 +180,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot      = self.paramf('ratio_hot', 0.2),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
                           max_creates    = self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
@@ -195,6 +201,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot      = self.paramf('ratio_hot', 0.2),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
                           max_creates    = self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
@@ -215,6 +222,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot      = self.paramf('ratio_hot', 0.6),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.parami('ratio_expirations', 0.03),
                           max_creates    = self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
