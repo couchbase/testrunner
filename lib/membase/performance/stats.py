@@ -113,6 +113,12 @@ class StatsCollector(object):
         }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
+        file.close()
+
+        if self.client_id:
+            file = open("/tmp/{0}.json".format(self.client_id), 'w')
+            file.write("{0}".format(json.dumps(obj)))
+            file.close()
 
     def get_bucket_size(self, bucket, rest, frequency):
         self._task["bucket_size"] = []

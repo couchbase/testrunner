@@ -15,6 +15,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.performance.stats import StatsCollector, CallbackStatsCollector
+from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 
 import testconstants
 import mcsoda
@@ -33,14 +34,37 @@ class EPerfMaster(perf.PerfBase):
         super(EPerfMaster, self).setUp()
 
     def tearDown(self):
-        self.aggregate_all_stats()
+        self.get_all_stats()
         super(EPerfMaster, self).tearDown()
 
-    def aggregate_all_stats(self):
+    def get_all_stats(self):
         # One node, the 'master', should aggregate stats from client and server nodes
         # and push results to couchdb.
-        # TODO: Karan.
+        # Assuming clients ssh_username/password are same as server
+        # Save servers list as clients
+        # Replace servers ip with clients ip
+        clients = self.input.servers
+        for i  in range(len(clients)):
+            clients[i].ip = self.input.clients[i]
+        remotepath = '/tmp'
+        filename = ''
+        i = 0
+        for client in clients:
+            shell = RemoteMachineShellConnection(client)
+            filename = '{0}.json'.format(i)
+            destination = "{0}/{1}".format(os.getcwd(), filename)
+            print "Getting client stats file {0} from {1}".format(filename, client)
+            if not shell.get_file(remotepath, filename, destination):
+                print "Unable to fetch the json file {0} on Client {1} @ {2}".format(remotepath+'/'+filename \
+                                                                                     , i, client.ip)
+                exit(1)
+            i += 1
+
+        self.aggregate_all_stats()
+
+    def aggregate_all_stats(self):
         pass
+
 
     def min_value_size(self):
         # Returns an array of different value sizes so that
