@@ -221,3 +221,14 @@ class ClusterOperationHelper(object):
             value = c.stats().get(key, None)
             log.info("Get flush param on server {0}, {1}".format(server, value))
             c.close()
+
+    @staticmethod
+    def change_erlang_async(servers, original, modified):
+        log = logger.Logger.get_logger()
+        for server in servers:
+            sh = RemoteMachineShellConnection(server)
+            command = "sed -i 's/+A {0}/+A {1}/g' /opt/couchbase/bin/membase-server".format(original, modified)
+            o, r = sh.execute_command(command)
+            sh.log_command_output(o, r)
+            msg = "modified erlang +A from {0} to {1} for server {2}"
+            log.info(msg.format(original, modified, server.ip))
