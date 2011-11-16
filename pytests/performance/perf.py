@@ -64,6 +64,9 @@ class PerfBase(unittest.TestCase):
                         msg="wait_for_memcached failed for {0}".format(bucket))
         self.assertTrue(self.rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
+
+        self.rest.reset_auto_compaction()
+
         # Number of items loaded by load() method.
         # Does not include or count any items that came from setUp_dgm().
         #
