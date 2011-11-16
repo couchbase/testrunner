@@ -132,6 +132,7 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", 30000000)
         self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        # Read:Insert:Update:Delete Ratio = 90:3:6:1.
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.1),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
@@ -148,11 +149,12 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", 45000000)
         self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.8),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
                           ratio_creates  = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.0833),
+                          ratio_deletes  = self.paramf('ratio_deletes', 0.0769),
                           ratio_hot      = self.paramf('ratio_hot', 0.2),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
@@ -164,6 +166,7 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", 45000000)
         self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.5),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
@@ -185,10 +188,10 @@ class EPerfMaster(perf.PerfBase):
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                  getattr(self, "latched_rebalance"))]
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.8),
+                          ratio_sets     = self.paramf('ratio_sets', 0.5),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.0833),
+                          ratio_creates  = self.paramf('ratio_creates', 0.08),
+                          ratio_deletes  = self.paramf('ratio_deletes', 0.13),
                           ratio_hot      = self.paramf('ratio_hot', 0.2),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
@@ -205,10 +208,10 @@ class EPerfMaster(perf.PerfBase):
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                  getattr(self, "latched_rebalance"))]
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.8),
+                          ratio_sets     = self.paramf('ratio_sets', 0.5),
                           ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.0833),
+                          ratio_creates  = self.paramf('ratio_creates', 0.08),
+                          ratio_deletes  = self.paramf('ratio_deletes', 0.13),
                           ratio_hot      = self.paramf('ratio_hot', 0.6),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
