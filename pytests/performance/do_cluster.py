@@ -55,5 +55,5 @@ if "setUp" in sys.argv:
     meth = getattr(obj, what)
     meth()
 else:
-    obj.tearDown() # This will call tearDown on our behalf.
-
+    obj.setUpBase0() # This will call tearDown on our behalf.
+    obj.get_all_stats()

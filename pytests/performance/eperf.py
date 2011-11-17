@@ -34,7 +34,6 @@ class EPerfMaster(perf.PerfBase):
         super(EPerfMaster, self).setUp()
 
     def tearDown(self):
-        self.get_all_stats()
         super(EPerfMaster, self).tearDown()
 
     def get_all_stats(self):
