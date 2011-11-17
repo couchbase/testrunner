@@ -18,6 +18,7 @@ class DrainRateTests(unittest.TestCase):
         self.number_of_items = -1
         self._create_default_bucket()
         self.drained_in_seconds = -1
+        self.drained = False
         self.reader_shutdown = False
 
     def _create_default_bucket(self):
@@ -69,23 +70,21 @@ class DrainRateTests(unittest.TestCase):
         #start whenever drain_queue is > 0
         rest = RestConnection(self.master)
         start = time.time()
-        while (time.time() - start) < 10:
-            stats = rest.get_bucket_stats(self.bucket)
-            if stats and "ep_queue_size" in stats and stats["ep_queue_size"] > 0:
-                self.log.info(stats["ep_queue_size"])
-                start = time.time()
-                RebalanceHelper.wait_for_stats(self.master, self.bucket, 'ep_queue_size', 0, verbose=False)
-                self.drained_in_seconds = time.time() - start
-                break
+        stats = rest.get_bucket_stats(self.bucket)
+        self.log.info("current ep_queue_size: {0}".format(stats["ep_queue_size"]))
+        verified = RebalanceHelper.wait_for_stats(self.master, self.bucket, 'ep_queue_size', 0, timeout_in_seconds=300, verbose=False)
+        self.drained = verified
+        self.drained_in_seconds = time.time() - start
+
 
     def _test_drain(self, parallel_read=False):
         reader = None
         loader = Thread(target=self._load_data_for_buckets)
-        wait_for_queue = Thread(target=self._monitor_drain_queue)
         loader.start()
-        wait_for_queue.start()
         self.log.info("waiting for loader thread to insert {0} items".format(self.number_of_items))
         loader.join()
+        wait_for_queue = Thread(target=self._monitor_drain_queue)
+        wait_for_queue.start()
         if parallel_read:
             reader = Thread(target=self._parallel_read)
             reader.start()
@@ -95,6 +94,7 @@ class DrainRateTests(unittest.TestCase):
         if parallel_read:
             self.reader_shutdown = True
             reader.join()
+        self.assertTrue(self.drained, "failed to drain all items")
 
     def test_drain_10k_items_parallel_read(self):
         self.number_of_items = 10 * 1000
