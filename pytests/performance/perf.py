@@ -752,7 +752,6 @@ class MapReduce(PerfBase):
 
     def test_VP_001(self):
         self.spec('VP-001')
-
         items  = self.parami("items", 1000000)
         limit  = self.parami('limit', 1)
         bucket = "default"
@@ -762,33 +761,33 @@ class MapReduce(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
         self.loop_prep()
-
-        rest = RestConnection(self.input.servers[0])
-        self.create_view(rest, bucket, view,
+        self.create_view(self.rest, bucket, view,
                          "function(doc) { emit(doc.email, doc); }")
 
-        ops = {}
-
         self.log.info("building view: %s" % (view,))
+        ops = {}
         ops["view-build-start-time"] = time.time()
-        rest.view_results(bucket, view, { "startkey":"a" }, limit)
+        self.rest.view_results(bucket, view, { "startkey":"a" }, limit)
         ops["view-build-end-time"] = time.time()
 
         sc = self.start_stats(self.spec_reference,
                               test_params={'test_name':self.id(),
                                            'test_time':time.time()})
-
         self.log.info("accessing view: %s" % (view,))
         ops["start-time"] = time.time()
         for i in range(self.parami("ops", 10000)):
             k = i % items
             e = mcsoda.key_to_email(k, mcsoda.prepare_key(k))
             start = time.time()
-            rest.view_results(bucket, view, { "startkey":e, "endkey":e }, limit)
+            self.rest.view_results(bucket, view, { "startkey":e, "endkey":e }, limit)
             end = time.time()
-            self.sc.latency_stats({ 'tot-views': 1,
-                                    'start-time': start,
-                                    'end-time': end })
+            self.sc.ops_stats({ 'tot-gets': 0,
+                                'tot-sets': 0,
+                                'tot-deletes': 0,
+                                'tot-arpas': 0,
+                                'tot-views': 1,
+                                'start-time': start,
+                                'end-time': end })
         ops["end-time"] = time.time()
         ops["tot-views"] = i
         self.end_stats(sc, ops)
