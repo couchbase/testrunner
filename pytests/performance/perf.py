@@ -250,10 +250,11 @@ class PerfBase(unittest.TestCase):
     def load(self, num_items, min_value_size=None,
              kind='binary',
              protocol='binary',
-             expiration=None,
              ratio_sets=1.0,
              ratio_hot_sets=0.0,
              ratio_hot_gets=0.0,
+             ratio_expirations=0.0,
+             expiration=None,
              prefix="",
              doc_cache=1,
              use_direct=True,
@@ -267,6 +268,8 @@ class PerfBase(unittest.TestCase):
                 'ratio-hot': 0.0,
                 'ratio-hot-sets': ratio_hot_sets,
                 'ratio-hot-gets': ratio_hot_gets,
+                'ratio-expirations': ratio_expirations,
+                'expiration': expiration or 0,
                 'exit-after-creates': 1,
                 'json': int(kind == 'json'),
                 'batch': 1000,
@@ -946,6 +949,24 @@ class Warmup(PerfBase):
         end_time = time.time()
         self.end_stats(sc, { 'tot-items': self.num_items_loaded,
                              "start-time": start_time,
+                             "end-time": end_time })
+
+    def test_WARM_02(self):
+        self.spec('WARM-02')
+        expiration = self.parami("expiration", 20) # 20 seconds.
+        self.load(self.parami("items", 10000000),
+                  expiration=expiration,
+                  ratio_expirations=self.paramf("ratio_expirations", 0.1))
+        self.wait_until_drained()
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        ClusterOperationHelper.start_cluster(self.input.servers)
+        time.sleep(expiration + 2) # Sleep longer than expiration.
+        start_time = time.time()
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
+                                                                'test_time':start_time})
+        self.wait_until_warmed_up()
+        end_time = time.time()
+        self.end_stats(sc, { "start-time": start_time,
                              "end-time": end_time })
 
 
