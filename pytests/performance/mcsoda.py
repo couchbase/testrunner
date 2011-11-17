@@ -318,7 +318,7 @@ class Store:
 
     def add_timing_sample(self, cmd, delta, prefix="latency-"):
        base = prefix + cmd
-       for suffix in ["", "-recent"]:
+       for suffix in self.cfg.get("timing-suffixes", ["", "-recent"]):
           key = base + suffix
           histo = self.cur.get(key, None)
           if histo is None:
@@ -998,6 +998,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
                                     argv[1].split("://"))[-2] + "-binary").split('-')[0:2])
   host_port = ('@' + argv[1].split("://")[-1]).split('@')[-1] + ":11211"
   user, pswd = (('@' + argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
+
+  cfg["timing-suffixes"] = [""]
 
   run(cfg, cur, protocol, host_port, user, pswd, stores=stores)
 
