@@ -936,27 +936,11 @@ class Warmup(PerfBase):
         self.dgm = self.parami("dgm", 0)
         super(Warmup, self).setUp()
 
-    def test_WARM_01(self):
-        self.spec('WARM-01')
-        self.load(self.parami("items", 10000000))
-        self.wait_until_drained()
-        ClusterOperationHelper.stop_cluster(self.input.servers)
-        ClusterOperationHelper.start_cluster(self.input.servers)
-        start_time = time.time()
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
-                                                                'test_time':start_time})
-        self.wait_until_warmed_up()
-        end_time = time.time()
-        self.end_stats(sc, { 'tot-items': self.num_items_loaded,
-                             "start-time": start_time,
-                             "end-time": end_time })
-
-    def test_WARM_02(self):
-        self.spec('WARM-02')
-        expiration = self.parami("expiration", 20) # 20 seconds.
+    def go(self, kind='binary', expiration=0, ratio_expirations=0.0):
         self.load(self.parami("items", 10000000),
+                  kind=kind,
                   expiration=expiration,
-                  ratio_expirations=self.paramf("ratio_expirations", 0.1))
+                  ratio_expirations=ratio_expirations)
         self.wait_until_drained()
         ClusterOperationHelper.stop_cluster(self.input.servers)
         ClusterOperationHelper.start_cluster(self.input.servers)
@@ -966,8 +950,23 @@ class Warmup(PerfBase):
                                                                 'test_time':start_time})
         self.wait_until_warmed_up()
         end_time = time.time()
-        self.end_stats(sc, { "start-time": start_time,
+        self.end_stats(sc, { 'tot-items': self.num_items_loaded,
+                             "start-time": start_time,
                              "end-time": end_time })
+
+    def test_WARM_01(self):
+        self.spec('WARM-01')
+        self.go(kind='binary')
+
+    def test_WARM_01j(self):
+        self.spec('WARM-01j')
+        self.go(kind='json')
+
+    def test_WARM_02(self):
+        self.spec('WARM-02')
+        self.go(kind='binary',
+                expiration=self.parami("expiration", 20), # 20 seconds.
+                ratio_expirations=self.paramf("ratio_expirations", 0.1))
 
 
 class TODO_PerfBase():
