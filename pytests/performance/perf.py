@@ -25,13 +25,7 @@ class PerfBase(unittest.TestCase):
     specURL = "http://hub.internal.couchbase.org/confluence/display/cbit/Black+Box+Performance+Test+Matrix"
 
     def ram_quota(self):
-        try:
-            if self.mem_quota is None:
-                self.mem_quota = self.parami("mem_quota", 6000) # In MB.
-        except AttributeError:
-            self.mem_quota = self.parami("mem_quota", 6000) # In MB.
-
-        return self.mem_quota
+        return self.parami("mem_quota", getattr(self, "mem_quota", 6000))
 
     # The setUpBaseX() methods allow subclasses to resequence the
     # setUp() and skip cluster configuration.
@@ -59,7 +53,8 @@ class PerfBase(unittest.TestCase):
         self.rest.init_cluster_memoryQuota(master.rest_username,
                                            master.rest_password,
                                            memoryQuota=self.ram_quota())
-        self.rest.create_bucket(bucket=bucket, ramQuotaMB=self.ram_quota())
+        self.rest.create_bucket(bucket=bucket,
+                                ramQuotaMB=self.ram_quota())
         self.assertTrue(BucketOperationHelper.wait_for_memcached(master, bucket),
                         msg="wait_for_memcached failed for {0}".format(bucket))
         self.assertTrue(self.rest_helper.bucket_exists(bucket),
@@ -77,12 +72,7 @@ class PerfBase(unittest.TestCase):
 
         self.setUp_moxi()
 
-        try:
-            if self.dgm is None:
-                self.dgm = self.parami("dgm", 1)
-        except AttributeError:
-            self.dgm = self.parami("dgm", 1)
-        if self.dgm:
+        if self.parami("dgm", getattr(self, "dgm", 1)):
             self.setUp_dgm()
 
         self.setUpBase1()
