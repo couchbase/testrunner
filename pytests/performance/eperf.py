@@ -47,7 +47,7 @@ class EPerfMaster(perf.PerfBase):
         for i  in range(len(clients)):
             clients[i].ip = self.input.clients[i]
         remotepath = '/tmp'
-        filename = ''
+
         i = 0
         for client in clients:
             shell = RemoteMachineShellConnection(client)
@@ -60,11 +60,30 @@ class EPerfMaster(perf.PerfBase):
                 exit(1)
             i += 1
 
-        self.aggregate_all_stats()
+        self.aggregate_all_stats(len(clients))
 
-    def aggregate_all_stats(self):
-        pass
+    def aggregate_all_stats(self, len_clients):
+        i = 0
+        final_json = open("{0}.json".format(i)).read()
+        final_json = json.loads(final_json)
+        i += 1
+        merge_keys = []
+        for latency in final_json.keys():
+             if latency.startswith('latency'):
+                 merge_keys.append(str(latency))
 
+        for i in range(i, len_clients):
+             file  = open("{0}.json".format(i))
+             dict = file.read()
+             file.close()
+             dict = json.loads(dict)
+             for key, value in dict.items():
+                 if key in merge_keys:
+                     final_json[key].extend(value)
+
+        file = open("{0}.json".format('final'), 'w')
+        file.write("{0}".format(json.dumps(final_json)))
+        file.close()
 
     def min_value_size(self):
         # Returns an array of different value sizes so that

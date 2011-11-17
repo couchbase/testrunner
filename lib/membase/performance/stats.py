@@ -88,13 +88,16 @@ class StatsCollector(object):
             key = 'percentile-' + latency
             self._task["latency"][key] = []
             for histo in histos:
-                p = []
+                temp = []
                 delta = histo['delta']
                 del histo['delta']
                 p = histo_percentile(histo, [0.90, 0.95, 0.99])
-                p.append(self.client_id)
-                p.append(delta)
-                self._task["latency"][key].append(p)
+                # p is list of tuples
+                for val in p:
+                    temp.append(val[-1])
+                temp.append(self.client_id)
+                temp.append(delta)
+                self._task["latency"][key].append(temp)
 
         obj = {"buildinfo": self._task.get("buildstats", {}),
                "machineinfo": self._task.get("machinestats", {}),
