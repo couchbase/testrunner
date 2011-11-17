@@ -922,11 +922,11 @@ class TransactionSize(PerfBase):
 class Warmup(PerfBase):
 
     def setUp(self):
-        self.dgm = self.parami("dgm", 0)
+        self.dgm = self.parami("dgm", 0) # By default, no DGM for Warmup tests.
         super(Warmup, self).setUp()
 
     def go(self, items=None, kind='binary', expiration=0, ratio_expirations=0.0):
-        items = items or self.parami("items", 10000000)
+        items = items or self.parami("items", 2000000)
         self.load(items,
                   kind=kind,
                   expiration=expiration,
@@ -944,24 +944,22 @@ class Warmup(PerfBase):
                              "start-time": start_time,
                              "end-time": end_time })
 
-    def test_WARM_01(self):
-        self.spec('WARM-01')
+    def test_WARM_01_1(self):
+        self.spec('WARM-01-1')
         self.go(kind='binary')
 
-    def test_WARM_01j(self):
-        self.spec('WARM-01j')
+    def test_WARM_01j_1(self):
+        self.spec('WARM-01j-1')
         self.go(kind='json')
 
-    def test_WARM_02(self):
-        self.spec('WARM-02')
+
+class WarmupDGM(PerfBase): # Inherit from PerfBase to get DGM setUp.
+
+    def test_WARM_02_1(self):
+        self.spec('WARM-02.1')
         self.go(kind='binary',
                 expiration=self.parami("expiration", 20), # 20 seconds.
-                ratio_expirations=self.paramf("ratio_expirations", 0.1))
-
-    def TODO_test_WARM_04(self):
-        self.spec('WARM-04')
-        self.nodes(2)
-        self.go(kind='binary')
+                ratio_expirations=self.paramf("ratio_expirations", 1.0))
 
 
 class WarmupWithMoreReplicas(Warmup):
