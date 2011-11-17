@@ -114,8 +114,11 @@ class StatsCollector(object):
                "bucket-size":self._task.get("bucket_size", []),
                "data-size": self._task.get("data_size_stats", []),
                "latency-set":self._task["latency"].get('percentile-latency-set', []),
+               "latency-set-recent":self._task["latency"].get('percentile-latency-set-recent', []),
                "latency-get":self._task["latency"].get('percentile-latency-get', []),
-               "latency-delete":self._task["latency"].get('percentile-latency-delete', [])
+               "latency-get-recent":self._task["latency"].get('percentile-latency-get-recent', []),
+               "latency-delete":self._task["latency"].get('percentile-latency-delete', []),
+               "latency-delete-recent":self._task["latency"].get('percentile-latency-delete-recent', []),
         }
         file = open("{0}.json".format(name), 'w')
         file.write("{0}".format(json.dumps(obj)))
