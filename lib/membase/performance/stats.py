@@ -89,8 +89,11 @@ class StatsCollector(object):
             self._task["latency"][key] = []
             for histo in histos:
                 p = []
+                delta = histo['delta']
+                del histo['delta']
                 p = histo_percentile(histo, [0.90, 0.95, 0.99])
                 p.append(self.client_id)
+                p.append(delta)
                 self._task["latency"][key].append(p)
 
         obj = {"buildinfo": self._task.get("buildstats", {}),
@@ -143,7 +146,7 @@ class StatsCollector(object):
             except:
                 pass
         paths = []
-        if shells[0].is_membase_installed:
+        if shells[0].is_membase_installed():
             paths.append(testconstants.MEMBASE_DATA_PATH+'/{0}-data'.format(bucket))
         else:
             bucket_path = testconstants.COUCHBASE_DATA_PATH+'/{0}'.format(bucket)
@@ -189,7 +192,9 @@ class StatsCollector(object):
     def latency_stats(self, latency_cmd, latency_stat):
         if self._task["latency"].get(latency_cmd) is None:
             self._task["latency"][latency_cmd] = []
-        self._task["latency"][latency_cmd].append(latency_stat.copy())
+        temp_latency_stat = latency_stat.copy()
+        temp_latency_stat['delta'] =  time.time() - self._task['time']
+        self._task["latency"][latency_cmd].append(temp_latency_stat)
 
     def _merge(self):
         first = self._task["ops-temp"][0]
