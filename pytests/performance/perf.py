@@ -925,8 +925,9 @@ class Warmup(PerfBase):
         self.dgm = self.parami("dgm", 0)
         super(Warmup, self).setUp()
 
-    def go(self, kind='binary', expiration=0, ratio_expirations=0.0):
-        self.load(self.parami("items", 10000000),
+    def go(self, items=None, kind='binary', expiration=0, ratio_expirations=0.0):
+        items = items or self.parami("items", 10000000)
+        self.load(items,
                   kind=kind,
                   expiration=expiration,
                   ratio_expirations=ratio_expirations)
@@ -956,6 +957,24 @@ class Warmup(PerfBase):
         self.go(kind='binary',
                 expiration=self.parami("expiration", 20), # 20 seconds.
                 ratio_expirations=self.paramf("ratio_expirations", 0.1))
+
+    def TODO_test_WARM_04(self):
+        self.spec('WARM-04')
+        self.nodes(2)
+        self.go(kind='binary')
+
+
+class WarmupWithMoreReplicas(Warmup):
+
+    def setUp(self):
+        self.replicas = self.parami("replicas", 2)
+        super(WarmupWithMoreReplicas, self).setUp()
+
+    def test_WARM_03(self):
+        self.spec('WARM-03')
+        self.nodes(3)
+        self.go(items=15000000,
+                kind='binary')
 
 
 class TODO_PerfBase():
