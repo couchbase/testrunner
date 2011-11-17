@@ -54,7 +54,9 @@ class PerfBase(unittest.TestCase):
                                            master.rest_password,
                                            memoryQuota=self.ram_quota())
         self.rest.create_bucket(bucket=bucket,
-                                ramQuotaMB=self.ram_quota())
+                                ramQuotaMB=self.ram_quota(),
+                                replicaNumber=self.parami("replicas",
+                                                          getattr(self, "replicas", 1)))
         self.assertTrue(BucketOperationHelper.wait_for_memcached(master, bucket),
                         msg="wait_for_memcached failed for {0}".format(bucket))
         self.assertTrue(self.rest_helper.bucket_exists(bucket),
@@ -454,9 +456,8 @@ class PerfBase(unittest.TestCase):
         TODO()
 
     def param(self, name, default_value):
-        if name in self.input.test_params:
-            return self.input.test_params[name]
-        return default_value
+        input = getattr(self, "input", TestInputSingleton.input)
+        return input.test_params.get(name, default_value)
     def parami(self, name, default_int):
         return int(self.param(name, default_int))
     def paramf(self, name, default_float):
@@ -921,8 +922,6 @@ class TransactionSize(PerfBase):
 class Warmup(PerfBase):
 
     def setUp(self):
-        self.log = logger.Logger.get_logger()
-        self.input = TestInputSingleton.input
         self.dgm = self.parami("dgm", 0)
         super(Warmup, self).setUp()
 
