@@ -168,26 +168,28 @@ class PerfBase(unittest.TestCase):
         ClusterOperationHelper.start_cluster(self.input.servers)
 
     def get_data_files(self, remote, bucket, num_nodes, db_size):
+        base = 'https://s3.amazonaws.com/database-analysis'
         dir = '/tmp/'
         if remote.is_membase_installed():
             dir = dir + '/membase/{0}-{1}-{2}/'.format(num_nodes, 1024, db_size)
             output, error = remote.execute_command('mkdir -p {0}'.format(dir))
             remote.log_command_output(output, error)
             file = '{0}_mb.tar.gz'.format(bucket)
-            base_url = 'https://s3.amazonaws.com/database-analysis/membase/{0}-{1}-{2}/{3}'.format(num_nodes, \
-                                                                                                1024, db_size, file)
+            base_url = base + '/membase/{0}-{1}-{2}/{3}'.format(num_nodes, \
+                                                                    1024, db_size, file)
         else:
             dir = dir + '/couchbase/{0}-{1}-{2}/'.format(num_nodes, 256, db_size)
             output, error = remote.execute_command('mkdir -p {0}'.format(dir))
             remote.log_command_output(output, error)
             file = '{0}_cb.tar.gz'.format(bucket)
-            base_url = 'https://s3.amazonaws.com/database-analysis/couchbase/{0}-{1}-{2}/{3}'.format(num_nodes, \
-                                                                                                  256, db_size, file)
+            base_url = base + '/couchbase/{0}-{1}-{2}/{3}'.format(num_nodes, \
+                                                               256, db_size, file)
 
         info = remote.extract_remote_info()
         wget_command = 'wget'
         if info.type.lower() == 'windows':
-            wget_command = "cd {0} ;cmd /c 'c:\\automation\\wget.exe --no-check-certificate".format(dir)
+            wget_command = \
+                "cd {0} ;cmd /c 'c:\\automation\\wget.exe --no-check-certificate".format(dir)
 
         # Check if the file exists on the remote server else download the gzipped version
         # Extract if necessary
