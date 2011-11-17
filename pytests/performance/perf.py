@@ -65,7 +65,10 @@ class PerfBase(unittest.TestCase):
         self.assertTrue(self.rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
 
-        self.rest.reset_auto_compaction()
+        try:
+            self.rest.reset_auto_compaction()
+        except:
+            pass # For example, membase doesn't support auto compaction.
 
         # Number of items loaded by load() method.
         # Does not include or count any items that came from setUp_dgm().
