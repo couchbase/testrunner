@@ -925,6 +925,30 @@ class TransactionSize(PerfBase):
                  ('couch_vbucket_batch_count', '8')])
 
 
+class Warmup(PerfBase):
+
+    def setUp(self):
+        self.log = logger.Logger.get_logger()
+        self.input = TestInputSingleton.input
+        self.dgm = self.parami("dgm", 0)
+        super(Warmup, self).setUp()
+
+    def test_WARM_01(self):
+        self.spec('WARM-01')
+        self.load(self.parami("items", 10000000))
+        self.wait_until_drained()
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+        ClusterOperationHelper.start_cluster(self.input.servers)
+        start_time = time.time()
+        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
+                                                                'test_time':start_time})
+        self.wait_until_warmed_up()
+        end_time = time.time()
+        self.end_stats(sc, { 'tot-items': self.num_items_loaded,
+                             "start-time": start_time,
+                             "end-time": end_time })
+
+
 class TODO_PerfBase():
     TODO()
 
@@ -942,37 +966,6 @@ class TODO_RAMUsage(TODO_PerfBase):
     #     self.spec('RU-002')
     #     self.loop(1000000, ratio_sets=0.5, ratio_advanced_mutation=0.5)
     #     self.assert_perf_was_ok()
-
-
-class TODO_DiskBackfill(TODO_PerfBase):
-
-    def test_10M_ops(self):
-        self.spec('DBF-001')
-        self.load(10000000)
-        self.wait_until_drained()
-        ClusterOperationHelper.stop_cluster(self.input.servers)
-        ClusterOperationHelper.start_cluster(self.input.servers)
-        self.wait_until_warmed_up()
-
-    def test_All_ops(self):
-        expiration = 20 # In seconds.
-        self.spec('DBF-002')
-        self.load(10000000, expiration=[0.1, expiration])
-        self.wait_until_drained()
-        ClusterOperationHelper.stop_cluster(self.input.servers)
-        self.log.info("sleepng {0} seconds to ensure expirations".format(expiration + 2))
-        time.sleep(expiration + 2)
-        ClusterOperationHelper.start_cluster(self.input.servers)
-        self.wait_until_warmed_up()
-
-    def test_2nodes(self):
-        self.spec('DBF-003')
-        self.nodes(2)
-        self.load(10000000)
-        self.wait_until_drained()
-        ClusterOperationHelper.stop_cluster(self.input.servers)
-        ClusterOperationHelper.start_cluster(self.input.servers)
-        self.wait_until_warmed_up()
 
 
 class TODO_CacheMisses(TODO_PerfBase):
