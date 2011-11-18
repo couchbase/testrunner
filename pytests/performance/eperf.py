@@ -129,7 +129,7 @@ class EPerfMaster(perf.PerfBase):
                      max_creates    = 0):
         if (not self.is_master) or self.parami("access_phase", 0) > 0:
             items = self.parami("items", items)
-            num_clients = len(self.input.clients) or 1
+            num_clients = self.parami("num_clients", len(self.input.clients) or 1)
             start_at = int(self.paramf("start_at", 1.0) * \
                            (self.parami("prefix", 0) * items /
                             num_clients))
@@ -137,6 +137,7 @@ class EPerfMaster(perf.PerfBase):
             if start_delay > 0:
                 time.sleep(start_delay * self.parami("prefix", 0))
             max_creates = self.parami("max_creates", max_creates) / num_clients
+
             self.loop(num_ops        = 0,
                       num_items      = items,
                       max_items      = -1,
@@ -231,7 +232,7 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", 45000000)
         self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
-        num_clients = len(self.input.clients) or 1
+        num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", 2000000)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                  getattr(self, "latched_rebalance"))]
@@ -253,7 +254,7 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", 45000000)
         self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
-        num_clients = len(self.input.clients) or 1
+        num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", 2000000)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                  getattr(self, "latched_rebalance"))]
