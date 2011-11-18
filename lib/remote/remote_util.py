@@ -109,6 +109,7 @@ class RemoteMachineShellConnection:
             else:
                 self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
                                          key_filename=serverInfo.ssh_key)
+
         except paramiko.AuthenticationException:
             log.info("Authentication failed")
             exit(1)
@@ -219,13 +220,13 @@ class RemoteMachineShellConnection:
         #build.product has the full name
         #first remove the previous file if it exist ?
         #fix this :
-            output, error = self.execute_command('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
+            output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
             self.log_command_output(output, error)
             log.info('get md5 sum for local and remote')
-            output, error = self.execute_command('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
+            output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
             self.log_command_output(output, error)
             log.info('comparing md5 sum and downloading if needed')
-            output, error = self.execute_command('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
+            output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
             self.log_command_output(output, error)
             #check if the file exists there now ?
             return self.file_exists('/tmp', filename)
@@ -841,8 +842,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             log.info(line)
 
     def execute_command(self, command, info=None, debug=True):
-        if debug:
-            log.info("running command  {0}".format(command))
 
         info = info or getattr(self, "info", None)
         if info is None:
@@ -852,7 +851,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if info.type.lower() == 'windows':
             self.use_sudo = False
 
-        if False and self.use_sudo and self.username != 'root':
+        if self.use_sudo and self.username != 'root':
             command = "sudo " + command
 
         return self.execute_command_raw(command, debug=debug)
@@ -860,15 +859,34 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
     def execute_command_raw(self, command, debug=True):
         if debug:
             log.info("running command.raw  {0}".format(command))
-
-        stdin, stdout, stderro = self._ssh_client.exec_command(command)
-        stdin.close()
         output = []
         error = []
+        temp = []
+        if self.use_sudo:
+            channel = self._ssh_client.get_transport().open_session()
+            channel.get_pty()
+            stdin = channel.makefile('wb')
+            stdout = channel.makefile('rb')
+            stderro = channel.makefile_stderr('rb')
+            channel.exec_command(command)
+            data = channel.recv(1024)
+            temp.append(data)
+            while data:
+                temp.append(data)
+                data = channel.recv(1024)
+            channel.close()
+        else:
+            stdin, stdout, stderro = self._ssh_client.exec_command(command)
+
+        stdin.close()
+
         for line in stdout.read().splitlines():
             output.append(line)
         for line in stderro.read().splitlines():
             error.append(line)
+        for line in temp:
+            output.append(line.strip())
+
         if debug:
             log.info('command executed successfully')
         stdout.close()
