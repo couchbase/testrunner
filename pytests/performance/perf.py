@@ -880,8 +880,7 @@ class MapReduce(PerfBase):
                 view_clients=self.parami('view_clients', 4),
                 load=False)
 
-    def test_VP_008(self):
-        self.spec('VP-008')
+    def go_with_mcsoda(self):
         self.go_load()
         cfg = { 'min-value-size': self.parami("min_value_size", 1024),
                 'vbuckets': self.vbucket_count,
@@ -906,6 +905,15 @@ class MapReduce(PerfBase):
             t.join()
         except KeyboardInterrupt:
             ctl['run_ok'] = False
+
+    def test_VP_008(self):
+        self.spec('VP-008')
+        self.go_with_mcsoda()
+
+    def test_VP_009(self):
+        self.spec('VP-009')
+        self.nodes(self.parami("nodes", 2))
+        self.go_with_mcsoda()
 
 
 class ErlangAsyncDrainingTests(PerfBase):
