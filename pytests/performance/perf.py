@@ -77,9 +77,8 @@ class PerfBase(unittest.TestCase):
         if self.parami("dgm", getattr(self, "dgm", 1)):
             self.setUp_dgm()
 
-        self.setUpBase1()
-
         time.sleep(10)
+        self.setUpBase1()
         self.wait_until_warmed_up()
         ClusterOperationHelper.flush_os_caches(self.input.servers)
 
@@ -343,7 +342,8 @@ class PerfBase(unittest.TestCase):
              use_direct=True,
              collect_server_stats=True,
              start_at=None,
-             report=0):
+             report=0,
+             ctl=None):
         num_items = num_items or self.num_items_loaded
 
         cfg = { 'max-items': max_items or num_items,
@@ -390,7 +390,10 @@ class PerfBase(unittest.TestCase):
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
-        cur, start_time, end_time = mcsoda.run(cfg, cur, protocol, host_port, user, pswd, sc)
+        cur, start_time, end_time = mcsoda.run(cfg, cur,
+                                               protocol, host_port, user, pswd,
+                                               stats_collector=sc,
+                                               ctl=ctl)
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
                 'tot-items': cur.get('cur-items', 0),
@@ -750,16 +753,23 @@ class MapReduce(PerfBase):
 
         rest.create_view(bucket, view, json.dumps(dict))
 
-    def go(self, key_name, map_fun, reduce_fun=None, limit=1):
+    def go_load(self):
+        items  = self.parami("items", 1000000)
+        self.load(items,
+                  self.parami('size', 1024),
+                  kind=self.param('kind', 'json'))
+        self.loop_prep()
+
+    def go(self, key_name, map_fun, reduce_fun=None,
+           limit=1, view_clients=1, load=True):
+        if load:
+            self.go_load()
+
         items  = self.parami("items", 1000000)
         limit  = self.parami('limit', limit)
         bucket = "default"
         view   = "myview"
 
-        self.load(items,
-                  self.parami('size', 1024),
-                  kind=self.param('kind', 'json'))
-        self.loop_prep()
         self.create_view(self.rest, bucket, view, map_fun, reduce=reduce_fun);
 
         self.log.info("building view: %s = %s; %s" % (view, map_fun, reduce_fun))
@@ -773,27 +783,61 @@ class MapReduce(PerfBase):
                                            'test_time':time.time()})
         self.log.info("accessing view: %s" % (view,))
         ops["start-time"] = time.time()
-        keymaker = getattr(mcsoda, key_name)
+        key_maker = getattr(mcsoda, key_name)
         n = self.parami("ops", 10000)
         report = int(n * 0.1)
-        for i in range(n):
-            k = i % items
-            e = keymaker(k, mcsoda.prepare_key(k))
-            start = time.time()
-            r = self.rest.view_results(bucket, view, { "startkey":e, "endkey":e }, limit)
-            if i % report == 0:
-                self.log.info("ex: view result for %s, %s = %s" % (key_name, e, r))
-            end = time.time()
-            self.sc.ops_stats({ 'tot-gets': 0,
-                                'tot-sets': 0,
-                                'tot-deletes': 0,
-                                'tot-arpas': 0,
-                                'tot-views': 1,
-                                'start-time': start,
-                                'end-time': end })
+
+        ctl = { 'run_ok': True }
+        if view_clients <= 1:
+            MapReduce.go_view_worker(ctl, self.rest, 0, n, items,
+                                     key_name, key_maker,
+                                     bucket, view, limit,
+                                     self.sc, report)
+        else:
+            threads = []
+            offset = items / view_clients
+            try:
+                for x in range(view_clients):
+                    t = threading.Thread(target=MapReduce.go_view_worker,
+                                         args=(ctl, self.rest, offset, n, items,
+                                               key_name, key_maker,
+                                               bucket, view, limit,
+                                               self.sc, report))
+                    threads.append(t)
+                    t.daemon = True
+                    t.start()
+                    while len(threads) > 0:
+                        threads[0].join(1)
+                        threads = [t for t in threads if t.isAlive()]
+            except KeyboardInterrupt:
+                ctl['run_ok'] = False
+
         ops["end-time"] = time.time()
-        ops["tot-views"] = i
+        ops["tot-views"] = n * view_clients
         self.end_stats(sc, ops)
+
+    @staticmethod
+    def go_view_worker(ctl, rest, offset, n, items,
+                       key_name, key_maker, bucket, view, limit, sc, report):
+        for i in range(n):
+            if not ctl['run_ok']:
+                return
+            k = (i + offset) % items
+            e = key_maker(k, mcsoda.prepare_key(k))
+            start = time.time()
+            r = rest.view_results(bucket, view,
+                                  { "startkey":e, "endkey":e }, limit)
+            if i % report == 0:
+                print("ex: view result for %s, %s = %s" % \
+                          (key_name, e, r))
+            end = time.time()
+            sc.ops_stats({ 'tot-gets': 0,
+                           'tot-sets': 0,
+                           'tot-deletes': 0,
+                           'tot-arpas': 0,
+                           'tot-views': 1,
+                           'start-time': start,
+                           'end-time': end })
 
     def test_VP_001(self):
         self.spec('VP-001')
@@ -806,17 +850,62 @@ class MapReduce(PerfBase):
                 "function(doc) { emit(doc.realm, 1); }",
                 reduce_fun="_count", limit=10)
 
+    def test_VP_004(self):
+        self.spec('VP-004')
+        self.go("key_to_email",
+                "function(doc) { emit(doc.email, 1); }",
+                view_clients=self.parami('view_clients', 4))
+
     def test_VP_005(self):
         self.spec('VP-005')
-        self.nodes(2)
+        self.nodes(self.parami("nodes", 2))
         self.go("key_to_email",
-                "function(doc) { emit(doc.email, 1); }")
+                "function(doc) { emit(doc.email, 1); }",
+                view_clients=self.parami('view_clients', 4))
 
     def test_VP_006(self):
         self.spec('VP-006')
         self.delayed_compaction()
         self.go("key_to_email",
-                "function(doc) { emit(doc.email, 1); }")
+                "function(doc) { emit(doc.email, 1); }",
+                view_clients=self.parami('view_clients', 4))
+
+    def test_VP_007(self):
+        self.spec('VP-007')
+        self.nodes(self.parami("nodes", 2))
+        self.go_load()
+        self.delayed_rebalance(self.parami("nodes_after", 4))
+        self.go("key_to_email",
+                "function(doc) { emit(doc.email, 1); }",
+                view_clients=self.parami('view_clients', 4),
+                load=False)
+
+    def test_VP_008(self):
+        self.spec('VP-008')
+        self.go_load()
+        cfg = { 'min-value-size': self.parami("min_value_size", 1024),
+                'vbuckets': self.vbucket_count,
+                'batch': 1000,
+                'json': 1 }
+        cur = { 'cur-items': self.parami("items", 1000000) }
+        ctl = { 'run_ok': True }
+        protocol = self.param('protocol', 'binary')
+        protocol, host_port, user, pswd = \
+            self.protocol_parse(protocol, use_direct=True)
+        try:
+            t = threading.Thread(target=mcsoda.run,
+                                 args=(cfg, cur, protocol, host_port,
+                                       user, pswd, None, None, ctl))
+            t.daemon = True
+            t.start()
+            self.go("key_to_email",
+                    "function(doc) { emit(doc.email, 1); }",
+                    view_clients=self.parami('view_clients', 4),
+                    load=False)
+            ctl['run_ok'] = False
+            t.join()
+        except KeyboardInterrupt:
+            ctl['run_ok'] = False
 
 
 class ErlangAsyncDrainingTests(PerfBase):
@@ -959,8 +1048,8 @@ class Warmup(PerfBase):
         self.wait_until_drained()
         ClusterOperationHelper.stop_cluster(self.input.servers)
         ClusterOperationHelper.start_cluster(self.input.servers)
-        time.sleep(expiration + 2) # Sleep longer than expiration.
         start_time = time.time()
+        time.sleep(max(10, expiration + 2)) # Sleep longer than expiration.
         sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
                                                                 'test_time':start_time})
         self.wait_until_warmed_up()
@@ -978,7 +1067,10 @@ class Warmup(PerfBase):
         self.go(kind='json')
 
 
-class WarmupDGM(PerfBase): # Inherit from PerfBase to get DGM setUp.
+class WarmupDGM(Warmup):
+
+    def setUp(self):
+        PerfBase.setUp(self) # Skip Warmup.setUp() to get default DGM behavior.
 
     def test_WARM_02_1(self):
         self.spec('WARM-02.1')
@@ -995,8 +1087,8 @@ class WarmupWithMoreReplicas(Warmup):
 
     def test_WARM_03(self):
         self.spec('WARM-03')
-        self.nodes(3)
-        self.go(items=15000000,
+        self.nodes(self.parami("nodes", 3))
+        self.go(self.parami("items", 15000000),
                 kind='binary')
 
 
