@@ -71,10 +71,12 @@ class RemoteMachineHelper(object):
 
 class RemoteMachineShellConnection:
     _ssh_client = None
+    use_sudo = True
 
     def __init__(self, username='root',
                  pkey_location='',
                  ip=''):
+        self.username = username
         #let's create a connection
         self._ssh_client = paramiko.SSHClient()
         self.ip = ip
@@ -94,6 +96,7 @@ class RemoteMachineShellConnection:
 
     def __init__(self, serverInfo):
         #let's create a connection
+        self.username = serverInfo.ssh_username
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -115,6 +118,7 @@ class RemoteMachineShellConnection:
         except Exception:
             log.info("Can't establish SSH session")
             exit(1)
+        log.info("Connected")
 
     def get_running_processes(self):
         #if its linux ,then parse each line
@@ -836,9 +840,27 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         for line in output:
             log.info(line)
 
-    def execute_command(self, command, debug=True):
+    def execute_command(self, command, info=None, debug=True):
         if debug:
             log.info("running command  {0}".format(command))
+
+        info = info or getattr(self, "info", None)
+        if info is None:
+            info = self.extract_remote_info()
+            self.info = info
+
+        if info.type.lower() == 'windows':
+            self.use_sudo = False
+
+        if False and self.use_sudo and self.username != 'root':
+            command = "sudo " + command
+
+        return self.execute_command_raw(command, debug=debug)
+
+    def execute_command_raw(self, command, debug=True):
+        if debug:
+            log.info("running command.raw  {0}".format(command))
+
         stdin, stdout, stderro = self._ssh_client.exec_command(command)
         stdin.close()
         output = []
@@ -972,25 +994,25 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     #TODO: Windows
     def get_hostname(self):
-        o, r = self.execute_command('hostname')
+        o, r = self.execute_command_raw('hostname')
         if o:
             return o
 
     #TODO: Windows
     def get_cpu_info(self):
-        o, r = self.execute_command('cat /proc/cpuinfo')
+        o, r = self.execute_command_raw('sudo cat /proc/cpuinfo')
         if o:
             return o
 
     #TODO: Windows
     def get_ram_info(self):
-        o, r = self.execute_command('cat /proc/meminfo')
+        o, r = self.execute_command_raw('sudo cat /proc/meminfo')
         if o:
             return o
 
     #TODO: Windows
     def get_disk_info(self):
-        o, r = self.execute_command('df -Th')
+        o, r = self.execute_command_raw('df -Th')
         if o:
             return o
 
