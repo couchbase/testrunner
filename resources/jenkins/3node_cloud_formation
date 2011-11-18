@@ -44,13 +44,37 @@
   },
 
   "Outputs" : {
+    "InstanceId1" : {
+      "Description" : "InstanceId of the newly created EC2 instance",
+      "Value" : { "Ref" : "Ec2Instance1" }
+    },
+    "PublicIP1" : {
+      "Description" : "Public IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance1", "PublicIp" ] }
+    },
     "PrivateIP1" : {
       "Description" : "Private IP address of the newly created EC2 instance",
       "Value" : { "Fn::GetAtt" : [ "Ec2Instance1", "PrivateIp" ] }
     },
+    "InstanceId2" : {
+      "Description" : "InstanceId of the newly created EC2 instance",
+      "Value" : { "Ref" : "Ec2Instance2" }
+    },
+    "PublicIP2" : {
+      "Description" : "Public IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance2", "PublicIp" ] }
+    },
     "PrivateIP2" : {
       "Description" : "Private IP address of the newly created EC2 instance",
       "Value" : { "Fn::GetAtt" : [ "Ec2Instance2", "PrivateIp" ] }
+    },
+    "InstanceId3" : {
+      "Description" : "InstanceId of the newly created EC2 instance",
+      "Value" : { "Ref" : "Ec2Instance3" }
+    },
+    "PublicIP3" : {
+      "Description" : "Public IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance3", "PublicIp" ] }
     },
     "PrivateIP3" : {
       "Description" : "Private IP address of the newly created EC2 instance",
