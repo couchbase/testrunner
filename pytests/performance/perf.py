@@ -735,7 +735,7 @@ class DiskDrainRate(PerfBase):
 
 class MapReduce(PerfBase):
 
-    def create_view(self, rest, bucket, view, map, reduce=''):
+    def create_view(self, rest, bucket, view, map, reduce=None):
         dict = {"language": "javascript", "_id": "_design/{0}".format(view)}
         try:
             view_response = rest.get_view(bucket, view)
@@ -750,10 +750,9 @@ class MapReduce(PerfBase):
 
         rest.create_view(bucket, view, json.dumps(dict))
 
-    def test_VP_001(self):
-        self.spec('VP-001')
+    def go(self, key_name, map_fun, reduce_fun=None, limit=1):
         items  = self.parami("items", 1000000)
-        limit  = self.parami('limit', 1)
+        limit  = self.parami('limit', limit)
         bucket = "default"
         view   = "myview"
 
@@ -761,10 +760,9 @@ class MapReduce(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
         self.loop_prep()
-        self.create_view(self.rest, bucket, view,
-                         "function(doc) { emit(doc.email, doc); }")
+        self.create_view(self.rest, bucket, view, map_fun, reduce=reduce_fun);
 
-        self.log.info("building view: %s" % (view,))
+        self.log.info("building view: %s = %s; %s" % (view, map_fun, reduce_fun))
         ops = {}
         ops["view-build-start-time"] = time.time()
         self.rest.view_results(bucket, view, { "startkey":"a" }, limit)
@@ -775,11 +773,16 @@ class MapReduce(PerfBase):
                                            'test_time':time.time()})
         self.log.info("accessing view: %s" % (view,))
         ops["start-time"] = time.time()
-        for i in range(self.parami("ops", 10000)):
+        keymaker = getattr(mcsoda, key_name)
+        n = self.parami("ops", 10000)
+        report = int(n * 0.1)
+        for i in range(n):
             k = i % items
-            e = mcsoda.key_to_email(k, mcsoda.prepare_key(k))
+            e = keymaker(k, mcsoda.prepare_key(k))
             start = time.time()
-            self.rest.view_results(bucket, view, { "startkey":e, "endkey":e }, limit)
+            r = self.rest.view_results(bucket, view, { "startkey":e, "endkey":e }, limit)
+            if i % report == 0:
+                self.log.info("ex: view result for %s, %s = %s" % (key_name, e, r))
             end = time.time()
             self.sc.ops_stats({ 'tot-gets': 0,
                                 'tot-sets': 0,
@@ -791,6 +794,17 @@ class MapReduce(PerfBase):
         ops["end-time"] = time.time()
         ops["tot-views"] = i
         self.end_stats(sc, ops)
+
+    def test_VP_001(self):
+        self.spec('VP-001')
+        self.go("key_to_email",
+                "function(doc) { emit(doc.email, 1); }")
+
+    def test_VP_002(self):
+        self.spec('VP-002')
+        self.go("key_to_realm",
+                "function(doc) { emit(doc.realm, 1); }",
+                reduce_fun="_count", limit=10)
 
 
 class ErlangAsyncDrainingTests(PerfBase):
