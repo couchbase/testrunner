@@ -806,6 +806,18 @@ class MapReduce(PerfBase):
                 "function(doc) { emit(doc.realm, 1); }",
                 reduce_fun="_count", limit=10)
 
+    def test_VP_005(self):
+        self.spec('VP-005')
+        self.nodes(2)
+        self.go("key_to_email",
+                "function(doc) { emit(doc.email, 1); }")
+
+    def test_VP_006(self):
+        self.spec('VP-006')
+        self.delayed_compaction()
+        self.go("key_to_email",
+                "function(doc) { emit(doc.email, 1); }")
+
 
 class ErlangAsyncDrainingTests(PerfBase):
 
