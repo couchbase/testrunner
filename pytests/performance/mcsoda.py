@@ -791,7 +791,7 @@ PROTOCOL_STORE = { 'memcached-ascii': StoreMemcachedAscii,
                    'membase-binary': StoreMembaseBinary}
 
 def run(cfg, cur, protocol, host_port, user, pswd,
-        stats_collector = None, stores = None):
+        stats_collector = None, stores = None, ctl = None):
    if type(cfg['min-value-size']) == type(""):
        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
    if type(cfg['min-value-size']) != type([]):
@@ -809,7 +809,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
                              md5(str(len(cfg['body'][mvs]))).hexdigest()
        cfg['suffix'][mvs] = "\"body\":\"" + cfg['body'][mvs] + "\"}"
 
-   ctl = { 'run_ok': True }
+   ctl = ctl or { 'run_ok': True }
 
    threads = []
 
