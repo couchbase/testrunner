@@ -806,9 +806,9 @@ class MapReduce(PerfBase):
                     threads.append(t)
                     t.daemon = True
                     t.start()
-                    while len(threads) > 0:
-                        threads[0].join(1)
-                        threads = [t for t in threads if t.isAlive()]
+                while len(threads) > 0:
+                    threads[0].join(1)
+                    threads = [t for t in threads if t.isAlive()]
             except KeyboardInterrupt:
                 ctl['run_ok'] = False
 
