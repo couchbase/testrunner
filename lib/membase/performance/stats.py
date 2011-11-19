@@ -47,6 +47,9 @@ class StatsCollector(object):
         self._task["ops-temp"] = []
         self._task["latency"] = {}
         self._task["data_size_stats"] = []
+        rest = RestConnection(nodes[0])
+        info = rest.get_nodes_self()
+        self.data_path = info.storage[0].get_data_path()
         self.client_id = client_id
 
         if collect_server_stats:
@@ -153,9 +156,9 @@ class StatsCollector(object):
                 pass
         paths = []
         if shells[0].is_membase_installed():
-            paths.append(testconstants.MEMBASE_DATA_PATH+'/{0}-data'.format(bucket))
+            paths.append(self.data_path+'/{0}-data'.format(bucket))
         else:
-            bucket_path = testconstants.COUCHBASE_DATA_PATH+'/{0}'.format(bucket)
+            bucket_path = self.data_path+'/{0}'.format(bucket)
             paths.append(bucket_path)
             view_path = bucket_path +'/set_view_{0}_design'.format(bucket)
             paths.append(view_path)
@@ -178,7 +181,7 @@ class StatsCollector(object):
                     value["unique_id"] = unique_id
                     value["time"] = current_time
                     value["ip"] = node.ip
-                    d["snapshots"].append(value)
+                    d["snapshots"].append(value.copy())
                 i +=  1
         self._task["data_size_stats"] = d["snapshots"]
         print " finished data_size_stats"

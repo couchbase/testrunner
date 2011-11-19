@@ -1064,11 +1064,13 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
     def get_data_file_size(self, path=None):
 
         output, error = self.execute_command('du -b {0}'.format(path))
-        if output:
+        if error:
+            return 0
+        else:
             for line in output:
                 size = line.strip().split('\t')
-                if size:
+                if size[0].isdigit():
                     print size[0]
                     return size[0]
-        else:
-            return 0
+                else:
+                    return 0

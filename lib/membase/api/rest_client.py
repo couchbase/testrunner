@@ -965,6 +965,9 @@ class NodeDataStorage(object):
                              'quotaMb': self.quotaMb,
                              'state': self.state})
 
+    def get_data_path(self):
+        return self.path
+
 
 class NodeDiskStorage(object):
     def __init__(self):
