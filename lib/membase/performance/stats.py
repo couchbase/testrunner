@@ -128,7 +128,7 @@ class StatsCollector(object):
         file.close()
 
         if self.client_id:
-            file = open("/tmp/{0}.json".format(self.client_id), 'w')
+            file = open("{0}.json".format(self.client_id), 'w')
             file.write("{0}".format(json.dumps(obj)))
             file.close()
 
