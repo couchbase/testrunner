@@ -20,6 +20,11 @@ def compress(data):
     except Exception as ex:
         log.error("unable to bzip data",ex)
 
+def sortedDictValues1(adict):
+    items = adict.items()
+    items.sort()
+    return [value for key, value in items]
+
 
 def flatten(keys,json):
     result = {}
@@ -71,13 +76,20 @@ if __name__ == "__main__":
                     samples = item["op"]["samples"]
                     _time = 0
                     _new_samples = []
-                    for i in range(0, 59):
+                    max_length = 1
+                    for sample in samples:
+                        if len(samples[sample]) > max_length:
+                            max_length = len(samples[sample])
+                    print "max_length",max_length
+                    for i in range(0, max_length):
                         _new_sample = {}
                         for sample in samples:
                             if len(samples[sample]) > i:
                                 _new_sample[sample] = samples[sample][i]
                         _new_sample.update(z)
                         _new_sample.update({"row":index})
+#                        _new_sample = sortedDictValues1(_new_sample)
+#                        print _new_sample
                         attachments["ns_server_data"].append(_new_sample)
                         index = index + 1
             del input_json["ns_server_data"]
