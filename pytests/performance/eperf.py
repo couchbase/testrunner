@@ -140,7 +140,7 @@ class EPerfMaster(perf.PerfBase):
 
             self.loop(num_ops        = 0,
                       num_items      = items,
-                      max_items      = -1,
+                      max_items      = items + max_creates + 1,
                       max_creates    = max_creates,
                       min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),
