@@ -44,7 +44,7 @@ class RebalanceHelper():
         rest = RestConnection(master)
         stats = rest.get_bucket_stats(bucket)
 
-        while stats[stat_key] != stat_value:
+        while stats.get(stat_key, -1) != stat_value:
             stats = rest.get_bucket_stats(bucket)
             if verbose:
                 log.info("{0} : {1}".format(stat_key, stats[stat_key]))
