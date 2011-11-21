@@ -51,7 +51,7 @@ obj.input = TestInputSingleton.input
 
 if "setUp" in sys.argv:
     obj.setUp()
-    what = obj.param("test", "test_ept_read")
+    what = obj.param("test", "test_ept_read_1")
     meth = getattr(obj, what)
     meth()
 else:
