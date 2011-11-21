@@ -71,12 +71,14 @@ class RemoteMachineHelper(object):
 
 class RemoteMachineShellConnection:
     _ssh_client = None
-    use_sudo = True
 
     def __init__(self, username='root',
                  pkey_location='',
                  ip=''):
         self.username = username
+        self.use_sudo = True
+        if self.username == 'root':
+           self.use_sudo = False
         #let's create a connection
         self._ssh_client = paramiko.SSHClient()
         self.ip = ip
@@ -97,6 +99,9 @@ class RemoteMachineShellConnection:
     def __init__(self, serverInfo):
         #let's create a connection
         self.username = serverInfo.ssh_username
+        self.use_sudo = True
+        if self.username == 'root':
+           self.use_sudo = False
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -851,7 +856,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if info.type.lower() == 'windows':
             self.use_sudo = False
 
-        if self.use_sudo and self.username != 'root':
+        if self.use_sudo :
             command = "sudo " + command
 
         return self.execute_command_raw(command, debug=debug)
@@ -861,7 +866,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             log.info("running command.raw  {0}".format(command))
         output = []
         error = []
-        temp = []
+        temp = ''
         if self.use_sudo:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()
@@ -870,9 +875,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             stderro = channel.makefile_stderr('rb')
             channel.exec_command(command)
             data = channel.recv(1024)
-            temp.append(data)
             while data:
-                temp.append(data)
+                temp += data
                 data = channel.recv(1024)
             channel.close()
         else:
@@ -884,9 +888,9 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             output.append(line)
         for line in stderro.read().splitlines():
             error.append(line)
-        for line in temp:
-            output.append(line.strip())
-
+        if temp:
+            line = temp.splitlines()
+            output.extend(line)
         if debug:
             log.info('command executed successfully')
         stdout.close()
@@ -1030,7 +1034,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     #TODO: Windows
     def get_disk_info(self):
-        o, r = self.execute_command_raw('df -Th')
+        o, r = self.execute_command_raw('sudo df -Th')
         if o:
             return o
 
