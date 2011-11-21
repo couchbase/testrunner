@@ -3,7 +3,6 @@
 *~
 *.DS_*
 *.idea
-*.json
 *.log
 *.log.*
 *tmp-
