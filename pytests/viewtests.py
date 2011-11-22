@@ -656,22 +656,30 @@ class ViewTests(unittest.TestCase):
                     self.log.info("retrieving view results again in {0} seconds".format(delay))
                 self.log.info(".")
 
-    def _insert_data_till_stopped(self, bucket, view_name, prefix, number_of_items):
+    def _insert_data_till_stopped(self, bucket, view_name, prefix, number_of_items, timeout=300):
+        # timeout is the length of time that this function will accept failures
+        # if no new items are set for timeout seconds, we abort
         self.docs_inserted = []
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         MemcachedClientHelper.direct_client(self.servers[0], bucket).flush()
         inserted_index = []
+        time_to_timeout = 0
         while not self.shutdown_load_data:
             for i in range(0, number_of_items):
                 key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
                 value = {"name": doc_name, "age": 1100}
                 try:
                     moxi.set(key, 0, 0, json.dumps(value))
+                    time_to_timeout = 0
                     if i not in inserted_index:
                         inserted_index.append(i)
                         self.docs_inserted.append(doc_name)
                 except Exception as ex:
-                    self.log.error("unable to set item , error {0}".format(ex))
+                    self.log.error("unable to set item to bucket {0}, error {1}".format(bucket, ex))
+                    if time_to_timeout == 0:
+                        time_to_timeout = time.time() + timeout
+                    if time_to_timeout < time.time():
+                        self.fail("inserts timeout after {0} seconds".format(ex))
         self.log.info("inserted {0} json documents".format(len(self.docs_inserted)))
 
 
