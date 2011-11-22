@@ -86,11 +86,11 @@
     },
     "PrivateIP5" : {
       "Description" : "Private IP address of the newly created EC2 instance",
-      "Value" : { "Fn::GetAtt" : [ "Ec2Instance3", "PrivateIp" ] }
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance5", "PrivateIp" ] }
     },
     "PrivateIP6" : {
       "Description" : "Private IP address of the newly created EC2 instance",
-      "Value" : { "Fn::GetAtt" : [ "Ec2Instance3", "PrivateIp" ] }
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance6", "PrivateIp" ] }
     }
   }
 }
