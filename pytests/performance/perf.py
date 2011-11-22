@@ -681,7 +681,8 @@ class DiskDrainRate(PerfBase):
                                                                 'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 2048),
-                                              kind=self.param('kind', 'binary'))
+                                              kind=self.param('kind', 'binary'),
+                                              doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
@@ -692,7 +693,8 @@ class DiskDrainRate(PerfBase):
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
                                               kind=self.param('kind', 'binary'),
-                                              ratio_sets=self.paramf('ratio-sets', 0.9))
+                                              ratio_sets=self.paramf('ratio-sets', 0.9),
+                                              doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
@@ -704,7 +706,8 @@ class DiskDrainRate(PerfBase):
                                                                 'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
-                                              kind=self.param('kind', 'binary'))
+                                              kind=self.param('kind', 'binary'),
+                                              doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
@@ -715,7 +718,8 @@ class DiskDrainRate(PerfBase):
                                                                 'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 1024),
-                                              kind=self.param('kind', 'binary'))
+                                              kind=self.param('kind', 'binary'),
+                                              doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
@@ -724,7 +728,8 @@ class DiskDrainRate(PerfBase):
         self.clog_cluster()
         ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),
                                                         self.parami('size', 1024),
-                                                        kind=self.param('kind', 'binary'))
+                                                        kind=self.param('kind', 'binary'),
+                                                        doc_cache=self.parami('doc_cache', 0))
         sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
                                                                 'test_time':time.time()})
         start_time_unclog = time.time()
@@ -757,7 +762,8 @@ class MapReduce(PerfBase):
         items  = self.parami("items", 1000000)
         self.load(items,
                   self.parami('size', 1024),
-                  kind=self.param('kind', 'json'))
+                  kind=self.param('kind', 'json'),
+                  doc_cache=self.parami('doc_cache', 0))
         self.loop_prep()
 
     def go(self, key_name, map_fun, reduce_fun=None,
@@ -934,7 +940,8 @@ class ErlangAsyncDrainingTests(PerfBase):
                                                                 'test_time':time.time()})
         ops, start_time, end_time = self.load(self.parami("items", 1000000),
                                               self.parami('size', 2048),
-                                              kind=self.param('kind', mode))
+                                              kind=self.param('kind', mode),
+                                              doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
@@ -1052,7 +1059,8 @@ class Warmup(PerfBase):
         self.load(items,
                   kind=kind,
                   expiration=expiration,
-                  ratio_expirations=ratio_expirations)
+                  ratio_expirations=ratio_expirations,
+                  doc_cache=self.parami('doc_cache', 0))
         self.wait_until_drained()
         ClusterOperationHelper.stop_cluster(self.input.servers)
         ClusterOperationHelper.start_cluster(self.input.servers)
