@@ -375,7 +375,7 @@ class CallbackStatsCollector(StatsCollector):
     def sample(self, cur):
         for level_name, level, callback in self.level_callbacks:
             if level < cur.get(level_name, -1):
-                callback(self, cur)
+                callback(cur)
 
         return super(CallbackStatsCollector, self).sample(cur)
 
