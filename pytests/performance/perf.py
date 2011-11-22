@@ -284,7 +284,7 @@ class PerfBase(unittest.TestCase):
         return ops, start_time, end_time
 
     def nodes(self, num_nodes):
-        self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1))
+        self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1, do_shuffle=False))
 
     @staticmethod
     def delayed_rebalance_worker(servers, num_nodes, delay_seconds):

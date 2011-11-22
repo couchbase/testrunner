@@ -332,7 +332,7 @@ class RebalanceHelper():
     #rest api instead of passing it to the fucntions
 
     @staticmethod
-    def rebalance_in(servers, how_many):
+    def rebalance_in(servers, how_many, do_shuffle=True):
         servers_rebalanced = []
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
@@ -343,7 +343,8 @@ class RebalanceHelper():
         log.info("current nodes : {0}".format(nodeIps))
         toBeAdded = []
         selection = servers[1:]
-        shuffle(selection)
+        if do_shuffle:
+            shuffle(selection)
         for server in selection:
             if not server.ip in nodeIps:
                 toBeAdded.append(server)
