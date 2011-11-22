@@ -956,13 +956,13 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             arch = ''
             os_version = 'unknown windows'
             #let's run 'systeminfo grep 'System Type:'
-            system_type_response, error = self.execute_command("systeminfo | grep 'System Type:'")
+            system_type_response, error = self.execute_command_raw("systeminfo | grep 'System Type:'")
 
             if system_type_response and system_type_response[0].find('x64') != -1:
                 arch = 'x86_64'
             else:
                 arch = 'x86'
-            os_name_response, error = self.execute_command("systeminfo | grep 'OS Name: '")
+            os_name_response, error = self.execute_command_raw("systeminfo | grep 'OS Name: '")
             os_name_type = os_name_response[0].split(" ")
             for name in os_name_type:
                 if name == "2008":
