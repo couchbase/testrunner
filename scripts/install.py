@@ -244,12 +244,14 @@ class CouchbaseServerInstaller(Installer):
                 if server.data_path:
                     time.sleep(3)
                     # Make sure that data_path is writable by couchbase user
-                    remote_client.execute_command("chown -R couchbase.couchbase {0}".format(server.data_path))
                     remote_client.stop_couchbase()
+                    remote_client.execute_command('rm -rf {0}/*'.format(server.data_path))
+                    remote_client.execute_command("chown -R couchbase:couchbase {0}".format(server.data_path))
                     # TODO: Go back to rest based client
                     #rest.set_data_path(data_path=server.data_path)
                     remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
                     remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
+                    remote_client.execute_command("chown -h couchbase:couchbase /opt/couchbase/var")
                     remote_client.start_couchbase()
                     time.sleep(3)
                 cluster_initialized = True
