@@ -18,9 +18,11 @@ class RebalanceHelper():
     def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
                                                                                 stat_value, master.ip))
-        start = time.time()
+        time_to_timeout = 0
+        previous_stat_value = -1
+        curr_stat_value = -1
         verified = False
-        while (time.time() - start) <= timeout_in_seconds:
+        while not verified:
             rest = RestConnection(master)
             stats = rest.get_bucket_stats(bucket)
             if stats and stat_key in stats and stats[stat_key] == stat_value:
@@ -31,6 +33,20 @@ class RebalanceHelper():
                 if stats and stat_key in stats:
                     if verbose:
                         log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                    curr_stat_value = stats[stat_key]
+
+                # values are changing so clear any timeout
+                if curr_stat_value != previous_stat_value:
+                    time_to_timeout = 0
+                else:
+                    if time_to_timeout == 0:
+                        time_to_timeout = time.time() + timeout_in_seconds
+                    if time_to_timeout < time.time():
+                        log.info("no change in {0} stat after {1} seconds (value = {2})".format(stat_key, timeout_in_seconds, curr_stat_value))
+                        break
+
+                previous_stat_value = curr_stat_value
+
                 if not verbose:
                     time.sleep(0.1)
                 else:
@@ -138,12 +154,13 @@ class RebalanceHelper():
         rest = RestConnection(master)
         servers = rest.get_nodes()
         verified = False
+        start_time = time.time()
         for server in servers:
             verified = fn(server, bucket, stat_key, stat_value, \
                           timeout_in_seconds=timeout_in_seconds)
             if not verified:
                 log.info("bucket {0}: stat_key {1} for server {2} timed out in {3}".format(bucket, stat_key, \
-                                                                                           server.ip, timeout_in_seconds))
+                                                                                           server.ip, time.time()-start_time))
                 break
 
         return verified
