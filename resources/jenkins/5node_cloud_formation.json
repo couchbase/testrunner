@@ -22,7 +22,7 @@
       "Properties" : {
         "KeyName" : { "Ref" : "KeyName" },
         "ImageId" : "ami-1b458c72",
-        "InstanceType" : "m1.large"
+        "InstanceType" : "m1.xlarge"
       }
     },
     "Ec2Instance2" : {
@@ -30,7 +30,7 @@
       "Properties" : {
         "KeyName" : { "Ref" : "KeyName" },
         "ImageId" : "ami-1b458c72",
-        "InstanceType" : "m1.large"
+        "InstanceType" : "m1.xlarge"
       }
     },
     "Ec2Instance3" : {
@@ -38,7 +38,7 @@
       "Properties" : {
         "KeyName" : { "Ref" : "KeyName" },
         "ImageId" : "ami-1b458c72",
-        "InstanceType" : "m1.large"
+        "InstanceType" : "m1.xlarge"
       }
     },
     "Ec2Instance3" : {
@@ -46,7 +46,7 @@
       "Properties" : {
         "KeyName" : { "Ref" : "KeyName" },
         "ImageId" : "ami-1b458c72",
-        "InstanceType" : "m1.large"
+        "InstanceType" : "m1.xlarge"
       }
     },
     "Ec2Instance4" : {
@@ -54,7 +54,7 @@
       "Properties" : {
         "KeyName" : { "Ref" : "KeyName" },
         "ImageId" : "ami-1b458c72",
-        "InstanceType" : "m1.large"
+        "InstanceType" : "m1.xlarge"
       }
     },
     "Ec2Instance5" : {
@@ -62,7 +62,7 @@
       "Properties" : {
         "KeyName" : { "Ref" : "KeyName" },
         "ImageId" : "ami-1b458c72",
-        "InstanceType" : "m1.large"
+        "InstanceType" : "m1.xlarge"
       }
     }
   },
