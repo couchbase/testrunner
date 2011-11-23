@@ -64,6 +64,12 @@ if __name__ == "__main__":
         info = {"info.test_time": info["info.test_time"]}
         name = {"name":input_json["name"]}
         z = dict(build_info.items() + info.items() + name.items())
+        if "buildinfo.thisNode" in z:
+            del z["buildinfo.thisNode"]
+        if "buildinfo.couchApiBase" in z:
+            del z["buildinfo.couchApiBase"]
+        if "time" in z:
+            del z["time"]
 
         if "ns_server_data" in input_json:
             attachments["ns_server_data"] = []
@@ -127,8 +133,18 @@ if __name__ == "__main__":
             for row in attachments["systemstats"]:
                 row.update(z)
                 row.update({"row":index})
+                print row["stime"],row["comm"],row["row"]
                 index = index + 1
             del input_json["systemstats"]
+        if "data-size" in input_json:
+            print "flattening data-size"
+            attachments["data-size"] = input_json["data-size"]
+            index = 1
+            for row in attachments["data-size"]:
+                row.update(z)
+                row.update({"row":index})
+                index = index + 1
+            del input_json["data-size"]
         if "membasestats" in input_json:
             print "flattening membasestats"
             attachments["membasestats"] = input_json["membasestats"]
