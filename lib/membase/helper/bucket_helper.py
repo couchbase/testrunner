@@ -215,6 +215,7 @@ class BucketOperationHelper():
         rest = RestConnection(node)
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vbucket_count = len(rest.get_vbuckets(bucket))
+        '''
         while len(keys) < vbucket_count:
             key = str(uuid.uuid4())
             vBucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
@@ -243,9 +244,12 @@ class BucketOperationHelper():
                 client.close()
                 client = None
             time.sleep(5)
+        '''
+        time.sleep(10)
         all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
                                                                                  bucket, timeout_in_seconds)
-        return (counter == vbucket_count) and all_vbuckets_ready
+        #return (counter == vbucket_count) and all_vbuckets_ready
+        return all_vbuckets_ready
 
     @staticmethod
     def verify_data(server, keys, value_equal_to_key, verify_flags, test, debug=False, bucket="default"):

@@ -57,7 +57,8 @@ class PerfBase(unittest.TestCase):
                                 ramQuotaMB=self.ram_quota(),
                                 replicaNumber=self.parami("replicas",
                                                           getattr(self, "replicas", 1)))
-        self.assertTrue(BucketOperationHelper.wait_for_memcached(master, bucket),
+        RestHelper(self.rest).vbucket_map_ready(bucket, 60)
+        self.assertTrue(BucketOperationHelper.wait_for_vbuckets_ready_state(master, bucket),
                         msg="wait_for_memcached failed for {0}".format(bucket))
         self.assertTrue(self.rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
