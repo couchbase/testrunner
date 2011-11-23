@@ -244,10 +244,10 @@ class CouchbaseServerInstaller(Installer):
                     remote_client.execute_command("chown -R couchbase.couchbase {0}".format(server.data_path))
                     # TODO: Go back to rest based client
                     #rest.set_data_path(data_path=server.data_path)
-                    if server.data_path:
-                        remote_client = RemoteMachineShellConnection(params["server"])
-                        remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
-                        remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
+                    #if server.data_path:
+                    #    remote_client = RemoteMachineShellConnection(params["server"])
+                    #    remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
+                    #    remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 cluster_initialized = True
