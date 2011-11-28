@@ -460,8 +460,9 @@ if __name__ == "__main__":
         usage()
     except getopt.GetoptError, err:
         usage("ERROR: " + str(err))
-
-    check_build(input)
+    #TODO: This is not broken, but could be something better
+    #      like a validator, to check SSH, input params etc
+    #check_build(input)
     if "parallel" in input.test_params:
         # workaround for a python2.6 bug of using strptime with threads
         datetime.strptime("30 Nov 00", "%d %b %y")
