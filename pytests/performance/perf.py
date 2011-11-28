@@ -59,9 +59,8 @@ class PerfBase(unittest.TestCase):
                                 replicaNumber=self.parami("replicas",
                                                           getattr(self, "replicas", 1)))
 
-        RestHelper(self.rest).vbucket_map_ready(bucket, 60)
-        self.assertTrue(BucketOperationHelper.wait_for_vbuckets_ready_state(master, bucket),
-                        msg="wait_for_memcached failed for {0}".format(bucket))
+        self.assertTrue(RestHelper(self.rest).vbucket_map_ready(bucket, 60),
+                        msg="vbucket_map not ready .. timed out".format(bucket))
         self.assertTrue(self.rest_helper.bucket_exists(bucket),
                         msg="unable to create {0} bucket".format(bucket))
 
