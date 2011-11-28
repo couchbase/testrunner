@@ -250,7 +250,8 @@ class PerfBase(unittest.TestCase):
              prefix="",
              doc_cache=1,
              use_direct=True,
-             report=0):
+             report=0,
+             start_at=-1):
         cfg = { 'max-items': num_items,
                 'max-creates': num_items,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -270,10 +271,16 @@ class PerfBase(unittest.TestCase):
                 'prefix': prefix,
                 'report': report
                 }
+        cur = {}
+        if start_at >= 0:
+            cur['cur-gets'] = start_at
+
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
-        cur, start_time, end_time = mcsoda.run(cfg, {}, protocol, host_port, user, pswd)
+        self.log.info("mcsoda - cur: " + str(cur))
+
+        cur, start_time, end_time = mcsoda.run(cfg, cur, protocol, host_port, user, pswd)
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
@@ -342,7 +349,7 @@ class PerfBase(unittest.TestCase):
              doc_cache=1,
              use_direct=True,
              collect_server_stats=True,
-             start_at=None,
+             start_at=-1,
              report=0,
              ctl=None):
         num_items = num_items or self.num_items_loaded
@@ -376,7 +383,7 @@ class PerfBase(unittest.TestCase):
                               collect_server_stats = collect_server_stats)
 
         cur = { 'cur-items': num_items }
-        if start_at:
+        if start_at >= 0:
             cur['cur-gets'] = start_at
         if num_ops is None:
             num_ops = num_items

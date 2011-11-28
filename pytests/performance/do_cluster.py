@@ -49,6 +49,7 @@ class EPerfMasterWrapper(eperf.EPerfMaster):
 obj = EPerfMasterWrapper()
 obj.input = TestInputSingleton.input
 
+# Run setUp with load_phase=0 and access_phase=0
 if "setUp" in sys.argv:
     obj.setUp()
     what = obj.param("test", "test_ept_read_1")

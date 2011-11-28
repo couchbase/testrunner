@@ -96,6 +96,7 @@ class EPerfMaster(perf.PerfBase):
         mvs.append(10240)
         return mvs
 
+    # Gets the vbucket count
     def gated_start(self, clients):
         if not self.is_master:
             self.setUpBase1()
@@ -104,8 +105,17 @@ class EPerfMaster(perf.PerfBase):
         pass
 
     def load_phase(self, num_nodes, num_items):
-        if self.is_master or self.parami("load_phase", 0) > 0:
+        # Cluster nodes if master
+        if self.is_master:
             self.nodes(num_nodes)
+
+        if  self.parami("load_phase", 1) > 0:
+            print "Loading"
+            num_clients = self.parami("num_clients", len(self.input.clients) or 1)
+            start_at = int(self.paramf("start_at", 1.0) * \
+                           (self.parami("prefix", 0) * num_items /
+                            num_clients))
+
             self.load(self.parami("items", num_items),
                       self.param('size', self.min_value_size()),
                       kind=self.param('kind', 'json'),
@@ -114,7 +124,8 @@ class EPerfMaster(perf.PerfBase):
                                               self.input.servers[0].ip + ":8091"),
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
-                      prefix=self.param("prefix", ""))
+                      prefix=self.param("prefix", ""),
+                      start_at=start_at)
             self.loop_prep()
 
     def access_phase(self, items,
@@ -127,7 +138,8 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot_sets = 0,
                      ratio_expirations = 0,
                      max_creates    = 0):
-        if (not self.is_master) or self.parami("access_phase", 0) > 0:
+        if self.parami("access_phase", 1) > 0:
+            print "Accessing"
             items = self.parami("items", items)
             num_clients = self.parami("num_clients", len(self.input.clients) or 1)
             start_at = int(self.paramf("start_at", 1.0) * \
@@ -176,8 +188,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_read_1(self):
         self.spec("EPT-READ.1")
         items = self.parami("items", 5000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 90:3:6:1.
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.1),
@@ -194,8 +206,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_write_1(self):
         self.spec("EPT-WRITE.1")
         items = self.parami("items", 7000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.8),
@@ -212,8 +224,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_mixed_1(self):
         self.spec("EPT-MIXED.1")
         items = self.parami("items", 7000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.5),
@@ -230,8 +242,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_rebalance_low_1(self):
         self.spec("EPT-REBALANCE-LOW-FETCH.1")
         items = self.parami("items", 7000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", 2000000)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
@@ -252,8 +264,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_rebalance_med_1(self):
         self.spec("EPT-REBALANCE-MED-FETCH.1")
         items = self.parami("items", 7000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", 2000000)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
@@ -276,8 +288,8 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", 7000000)
         if self.is_master:
             self.rest.set_autoCompaction("false", 100, 100) # 100% fragmentation thresholds.
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
                           ratio_sets     = self.paramf('ratio_sets', 0.5),
