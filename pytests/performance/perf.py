@@ -48,6 +48,7 @@ class PerfBase(unittest.TestCase):
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
+        self.is_multi_node = False
         self.data_path   = master.data_path
         self.rest.init_cluster(master.rest_username, master.rest_password)
         self.rest.init_cluster_memoryQuota(master.rest_username,
@@ -57,6 +58,7 @@ class PerfBase(unittest.TestCase):
                                 ramQuotaMB=self.ram_quota(),
                                 replicaNumber=self.parami("replicas",
                                                           getattr(self, "replicas", 1)))
+
         RestHelper(self.rest).vbucket_map_ready(bucket, 60)
         self.assertTrue(BucketOperationHelper.wait_for_vbuckets_ready_state(master, bucket),
                         msg="wait_for_memcached failed for {0}".format(bucket))
@@ -275,6 +277,11 @@ class PerfBase(unittest.TestCase):
         if start_at >= 0:
             cur['cur-gets'] = start_at
 
+        # For Black box, multi node tests
+        # always use membase-binary
+        if self.is_multi_node:
+            protocol=self.param('protocol', 'membase-binary://' + \
+                                            self.input.servers[0].ip + ":8091")
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
@@ -292,6 +299,7 @@ class PerfBase(unittest.TestCase):
         return ops, start_time, end_time
 
     def nodes(self, num_nodes):
+        self.is_multi_node = True
         self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1, do_shuffle=False))
 
     @staticmethod
@@ -393,7 +401,14 @@ class PerfBase(unittest.TestCase):
             # Here, we num_ops looks like "time to run" tuple of...
             # ('seconds', integer_num_of_seconds_to_run)
             cfg['time'] = num_ops[1]
-        self.log.info("mcsoda - protocol %s" % (protocol))
+
+        # For Black box, multi node tests
+        # always use membase-binary
+        if self.is_multi_node:
+            protocol=self.param('protocol', 'membase-binary://' + \
+                                            self.input.servers[0].ip + ":8091")
+
+        self.log.info("mcsoda - protocol %s" % protocol)
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
