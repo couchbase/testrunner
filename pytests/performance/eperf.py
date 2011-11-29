@@ -63,7 +63,7 @@ class EPerfMaster(perf.PerfBase):
         self.aggregate_all_stats(len(clients))
 
     def aggregate_all_stats(self, len_clients):
-        i = 0
+        i = 1
         final_json = open("{0}.json".format(i)).read()
         final_json = json.loads(final_json)
         i += 1
@@ -114,7 +114,7 @@ class EPerfMaster(perf.PerfBase):
             print "Loading"
             num_clients = self.parami("num_clients", len(self.input.clients) or 1)
             start_at = int(self.paramf("start_at", 1.0) * \
-                           (self.parami("prefix", 0) * num_items /
+                           ((self.parami("prefix", 1) - 1) * num_items /
                             num_clients))
             items = self.parami("num_items", num_items) / num_clients
             self.is_multi_node = False
@@ -126,7 +126,7 @@ class EPerfMaster(perf.PerfBase):
                                               self.input.servers[0].ip + ":8091"),
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
-                      prefix=self.param("prefix", ""),
+                      prefix=self.parami("prefix", 1),
                       start_at=start_at)
             self.loop_prep()
 
@@ -146,11 +146,11 @@ class EPerfMaster(perf.PerfBase):
             items = self.parami("items", items)
             num_clients = self.parami("num_clients", len(self.input.clients) or 1)
             start_at = int(self.paramf("start_at", 1.0) * \
-                           (self.parami("prefix", 0) * items /
+                           ((self.parami("prefix", 1) - 1) * items /
                             num_clients))
             start_delay = self.parami("start_delay", 2 * 60) # 2 minute delay.
             if start_delay > 0:
-                time.sleep(start_delay * self.parami("prefix", 0))
+                time.sleep(start_delay * (self.parami("prefix", 0) - 1))
             max_creates = self.parami("max_creates", max_creates) / num_clients
             self.is_multi_node = False
             self.loop(num_ops        = 0,
@@ -175,7 +175,7 @@ class EPerfMaster(perf.PerfBase):
                       test_name      = self.id(),
                       use_direct     = self.parami('use_direct', 1),
                       doc_cache      = self.parami('doc_cache', 0),
-                      prefix         = self.param("prefix", ""),
+                      prefix         = self.parami("prefix", 1),
                       collect_server_stats = self.is_leader,
                       start_at       = start_at,
                       report         = int(max_creates * 0.1),
@@ -315,7 +315,7 @@ class EPerfClient(EPerfMaster):
         self.level_callbacks = []
         self.latched_rebalance_done = False
         self.setUpBase0()
-        self.is_leader = self.parami("prefix", 0) == 0
+        self.is_leader = self.parami("prefix", 1) == 0
 
         pass # Skip super's setUp().  The master should do the real work.
 
@@ -327,7 +327,7 @@ class EPerfClient(EPerfMaster):
         pass # Skip super's tearDown().  The master should do the real work.
 
     def mk_stats(self, verbosity):
-        if self.parami("prefix", 0) == 0 and self.level_callbacks:
+        if self.parami("prefix", 1) == 0 and self.level_callbacks:
             sc = CallbackStatsCollector(verbosity)
             sc.level_callbacks = self.level_callbacks
         else:
