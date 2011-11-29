@@ -116,8 +116,9 @@ class EPerfMaster(perf.PerfBase):
             start_at = int(self.paramf("start_at", 1.0) * \
                            (self.parami("prefix", 0) * num_items /
                             num_clients))
+            items = self.parami("num_items", num_items) / num_clients
             self.is_multi_node = False
-            self.load(self.parami("items", num_items),
+            self.load(items,
                       self.param('size', self.min_value_size()),
                       kind=self.param('kind', 'json'),
                       protocol=self.param('protocol',
