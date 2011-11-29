@@ -150,7 +150,7 @@ class EPerfMaster(perf.PerfBase):
                             num_clients))
             start_delay = self.parami("start_delay", 2 * 60) # 2 minute delay.
             if start_delay > 0:
-                time.sleep(start_delay * (self.parami("prefix", 0) - 1))
+                time.sleep(start_delay * (self.parami("prefix", 1) - 1))
             max_creates = self.parami("max_creates", max_creates) / num_clients
             self.is_multi_node = False
             self.loop(num_ops        = 0,
