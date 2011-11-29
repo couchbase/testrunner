@@ -354,24 +354,21 @@ class RebalanceHelper():
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
         nodes = rest.node_statuses()
-        #choose how_many nodes from self._servers which are not part of
-        # nodes
-        nodeIps = [node.ip for node in nodes]
+        nodeIps = ["{0}:{1}".format(node.ip,node.port) for node in nodes]
         log.info("current nodes : {0}".format(nodeIps))
         toBeAdded = []
         selection = servers[1:]
         if do_shuffle:
             shuffle(selection)
         for server in selection:
-            if not server.ip in nodeIps:
+            if not "{0}:{1}".format(server.ip,server.port) in nodeIps:
                 toBeAdded.append(server)
                 servers_rebalanced.append(server)
             if len(toBeAdded) == int(how_many):
                 break
 
         for server in toBeAdded:
-            rest.add_node('Administrator', 'password', server.ip)
-            #check if its added ?
+            rest.add_node('Administrator', 'password', server.ip, server.port)
         otpNodes = [node.id for node in rest.node_statuses()]
         started = rest.rebalance(otpNodes, [])
         msg = "rebalance operation started ? {0}"
