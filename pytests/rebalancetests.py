@@ -168,7 +168,8 @@ class RebalanceBaseTest(unittest.TestCase):
                                                               number_of_threads=2,
                                                               write_only=True,
                                                               delete_ratio=delete_ratio,
-                                                              expiry_ratio=expiry_ratio)
+                                                              expiry_ratio=expiry_ratio,
+                                                              moxi=True)
         log.info("wait until data is completely persisted on the disk")
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, timeout_in_seconds=120)
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
@@ -293,7 +294,6 @@ class IncrementalRebalanceInTests(unittest.TestCase):
     #load data add one node , rebalance add another node rebalance
     def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1, rebalance_in=2, verify=True):
         master = self._servers[0]
-        creds = self._input.membase_settings
         rest = RestConnection(master)
         rebalanced_servers = [master]
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
@@ -324,6 +324,8 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
     def test_load(self):
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        log = logger.Logger().get_logger()
+        log.info("keys_count, replica, load_ratio: {0} {1} {2}".format(keys_count, replica, load_ratio))
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
         self._common_test_body(keys_count, load_ratio, replica, verify=False)
 
