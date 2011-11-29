@@ -126,8 +126,12 @@ class ClusterOperationHelper(object):
         stats = []
         # Collect stats data points
         while time.time() - start <= timeout:
-            stats.append(rest.get_bucket_stats(bucket)[stat_key])
-            time.sleep(2)
+            _new_stats = rest.get_bucket_stats(bucket)
+            if _new_stats and 'ep_flusher_todo' in _new_stats:
+                stats.append(_new_stats[stat_key])
+                time.sleep(2)
+            else:
+                log.error("unable to obtain stats for bucket : {0}".format(bucket))
         value_90th = ClusterOperationHelper.percentile(stats, 90)
         average = float(sum(stats)) / len(stats)
         log.info("90th percentile value is {0} and average {1}".format(value_90th, average))
