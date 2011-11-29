@@ -31,6 +31,7 @@ class EPerfMaster(perf.PerfBase):
         self.mem_quota = self.parami("mem_quota", 10000)
         self.level_callbacks = []
         self.latched_rebalance_done = False
+        self.is_multi_node = False
         super(EPerfMaster, self).setUp()
 
     def tearDown(self):
