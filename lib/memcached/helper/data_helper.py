@@ -1,6 +1,7 @@
 import copy
 from multiprocessing.process import Process
 from multiprocessing.queues import Queue
+import random
 import time
 from random import Random
 import uuid
@@ -12,6 +13,7 @@ import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
 from membase.api.rest_client import RestConnection, RestHelper
+import json
 from threading import Thread
 
 
@@ -57,16 +59,18 @@ class MemcachedClientHelper(object):
             space_to_fill = (int((emptySpace * ram_load_ratio) / 100.0))
             log.info('space_to_fill : {0}, emptySpace : {1}'.format(space_to_fill, emptySpace))
             for size, probability in value_size_distribution.items():
-                #let's assume overhead per key is 64 bytes ?
                 how_many = int(space_to_fill / (size + 250) * probability)
-                payload = MemcachedClientHelper.create_value('*', size)
-                log.info("payload size {0}".format(len(payload)))
-                list.append({'size': size, 'value': payload, 'how_many': how_many})
+                payload_generator = DocumentGenerator.make_docs(number_of_items,
+                        {"name": "user-${prefix}", "payload": "memcached-json-${prefix}-${padding}",
+                         "size": size, "seed": str(uuid.uuid4())})
+                list.append({'size': size, 'value': payload_generator, 'how_many': how_many})
         else:
             for size, probability in value_size_distribution.items():
-                how_many = (number_of_items * probability)
-                payload = MemcachedClientHelper.create_value('*', size)
-                list.append({'size': size, 'value': payload, 'how_many': how_many})
+                how_many = ((number_of_items / number_of_threads)* probability)
+                payload_generator = DocumentGenerator.make_docs(number_of_items,
+                        {"name": "user-${prefix}", "payload": "memcached-json-${prefix}-${padding}",
+                         "size": size, "seed": str(uuid.uuid4())})
+                list.append({'size': size, 'value': payload_generator, 'how_many': how_many})
 
         for item in list:
             item['how_many'] /= int(number_of_threads)
@@ -259,7 +263,11 @@ class MemcachedClientHelper(object):
         rest = RestConnection(server)
         node = rest.get_nodes_self()
         log = logger.Logger.get_logger()
-        log.info("creating direct client {0}:{1} {2}".format(server.ip, node.memcached, bucket))
+        if isinstance(server, dict):
+            log.info("dict:{0}".format(server))
+            log.info("creating direct client {0}:{1} {2}".format(server["ip"], node.memcached, bucket))
+        else:
+            log.info("creating direct client {0}:{1} {2}".format(server.ip, node.memcached, bucket))
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vBuckets = RestConnection(server).get_vbuckets(bucket)
         client = MemcachedClient(server.ip, node.memcached, timeout=timeout)
@@ -277,9 +285,10 @@ class MemcachedClientHelper(object):
         log = logger.Logger.get_logger()
         bucket_info = rest.get_bucket(bucket)
         nodes = bucket_info.nodes
-        if ("ascii" in TestInputSingleton.input.test_params \
-                and TestInputSingleton.input.test_params["ascii"].lower() == "true") \
-                or force_ascii:
+
+        if (TestInputSingleton.input and "ascii" in TestInputSingleton.input.test_params\
+            and TestInputSingleton.input.test_params["ascii"].lower() == "true")\
+            or force_ascii:
             ascii = True
         else:
             ascii = False
@@ -292,14 +301,21 @@ class MemcachedClientHelper(object):
                 client = MemcachedAsciiClient(server.ip, bucket_info.port, timeout=timeout)
             else:
                 log = logger.Logger.get_logger()
-                log.info("creating proxy client {0}:{1} {2}".format(server.ip, node.moxi, bucket))
-                client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
+                if isinstance(server, dict):
+                    log.info("creating proxy client {0}:{1} {2}".format(server["ip"], node.moxi, bucket))
+                    client = MemcachedClient(server["ip"], node.moxi, timeout=timeout)
+                else:
+                    log.info("creating proxy client {0}:{1} {2}".format(server.ip, node.moxi, bucket))
+                    client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
                 client.vbucket_count = len(vBuckets)
                 if bucket_info.authType == "sasl":
                     client.sasl_auth_plain(bucket_info.name.encode('ascii'),
                                            bucket_info.saslPassword.encode('ascii'))
             return client
-        raise Exception("unable to find {0} in get_nodes()".format(server.ip))
+        if isinstance(server, dict):
+            raise Exception("unable to find {0} in get_nodes()".format(server["ip"]))
+        else:
+            raise Exception("unable to find {0} in get_nodes()".format(server.ip))
 
     @staticmethod
     def flush_bucket(server, bucket):
@@ -323,29 +339,27 @@ class MemcachedClientHelper(object):
 
 class MutationThread(threading.Thread):
     def run(self):
+        values = DocumentGenerator.make_docs(len(self.keys),
+                {"name": "user-${prefix}", "payload": "memcached-json-${prefix}-${padding}",
+                 "size": 1024, "seed": str(uuid.uuid4())})
         client = MemcachedClientHelper.proxy_client(self.serverInfo, self.name)
-        vbucket_count = len(RestConnection(self.serverInfo).get_vbuckets(self.name))
-        for key in self.keys:
-            #every two minutes print the status
-            vId = crc32.crc32_hash(key) & (vbucket_count - 1)
-            client.vbucketId = vId
+        counter = 0
+        for value in values:
             try:
                 if self.op == "set":
-                    client.set(key, 0, 0, self.seed)
+                    client.set(self.keys[counter], 0, 0, value)
                     self._mutated_count += 1
             except MemcachedError:
                 self._rejected_count += 1
-                self._rejected_keys.append(key)
-            #                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
+                self._rejected_keys.append({"key": self.keys[counter], "value": value})
             except Exception as e:
-                self.log.info(e)
+                self.log.info("unable to mutate {0} due to {1}".format(self.keys[counter], e))
                 self._rejected_count += 1
-                self._rejected_keys.append(key)
-                #                self.log.info("mutation failed for {0},{1}".format(key, self.seed))
+                self._rejected_keys.append({"key": self.keys[counter], "value": value})
                 client.close()
                 client = MemcachedClientHelper.proxy_client(self.serverInfo, self.name)
+            counter = counter + 1
         self.log.info("mutation failed {0} times".format(self._rejected_count))
-        #print some of those rejected keys...
         client.close()
 
     def __init__(self, serverInfo,
@@ -353,7 +367,6 @@ class MutationThread(threading.Thread):
                  op,
                  seed,
                  name='default'):
-
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
@@ -409,6 +422,7 @@ class ReaderThread(object):
 class WorkerThread(threading.Thread):
     #too flags : stop after x errors
     #slow down after every seeing y errors
+    #value_list is a list of document generators
     def __init__(self,
                  serverInfo,
                  name,
@@ -480,18 +494,20 @@ class WorkerThread(threading.Thread):
         msg = msg.format(self.write_only, self.async_write, self.moxi)
         self.log.info(msg)
         awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), self.name)
-        vbucket_count = len(RestConnection(self.serverInfo).get_vbuckets(self.name))
         client = None
         if self.moxi:
             try:
                 client = MemcachedClientHelper.proxy_client(self.serverInfo, self.name)
-            except Exception:
-                self.log.info("unable to create memcached client. stop thread...")
+            except Exception as ex:
+                self.log.info("unable to create memcached client due to {0}. stop thread...".format(ex))
+                import traceback
+
+                traceback.print_exc()
                 return
                 #keeping keys in the memory is not such a good idea because
                 #we run out of memory so best is to just keep a counter ?
-            #if someone asks for the keys we can give them the formula which is
-        # baseuuid-{0}-{1} , size and counter , which is between n-0 except those
+                #if someone asks for the keys we can give them the formula which is
+            # baseuuid-{0}-{1} , size and counter , which is between n-0 except those
         #keys which were rejected
         #let's print out some status every 5 minutes..
 
@@ -534,32 +550,35 @@ class WorkerThread(threading.Thread):
                 client = awareness.memcached(key)
                 if not client:
                     self.log.error("client should not be null")
-            vId = crc32.crc32_hash(key) & (vbucket_count - 1)
-            client.vbucketId = vId
+            value = "*"
+            try:
+                value = selected["value"].next()
+            except StopIteration:
+                pass
             try:
                 if self.override_vBucketId >= 0:
                     client.vbucketId = self.override_vBucketId
                 if self.async_write:
-                    client.send_set(key, 0, 0, selected['value'])
+                    client.send_set(key, 0, 0, value)
                 else:
-                    client.set(key, 0, 0, selected['value'])
+                    client.set(key, 0, 0, value)
                 self._inserted_keys_count += 1
                 backoff_count = 0
                 # do expiry sets, 30 second expiry time
                 if Random().random() < self._expiry_ratio:
-                    client.set(key+"-exp", 30, 0, selected['value'])
+                    client.set(key + "-exp", 30, 0, value)
                     self._expiry_count += 1
-                # do deletes if we have 100 pending
+                    # do deletes if we have 100 pending
                 # at the end delete the remaining
                 if len(self._delete) >= 100:
-#                    self.log.info("deleting {0} keys".format(len(self._delete)))
+                #                    self.log.info("deleting {0} keys".format(len(self._delete)))
                     for key_del in self._delete:
                         client.delete(key_del)
                     self._delete = []
-                # do delete sets
+                    # do delete sets
                 if Random().random() < self._delete_ratio:
-                    client.set(key+"-del", 0, 0, selected['value'])
-                    self._delete.append(key+"-del")
+                    client.set(key + "-del", 0, 0, value)
+                    self._delete.append(key + "-del")
                     self._delete_count += 1
             except MemcachedError as error:
                 if not self.moxi:
@@ -571,7 +590,12 @@ class WorkerThread(threading.Thread):
                         time.sleep(5)
                         awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), self.name)
                     self.log.info("now connected to {0} memcacheds".format(len(awareness.memcacheds)))
-                self.log.error("memcached error {0} {1} from {2}".format(error.status, error.msg, self.serverInfo.ip))
+                    if isinstance(self.serverInfo, dict):
+                        self.log.error(
+                            "memcached error {0} {1} from {2}".format(error.status, error.msg, self.serverInfo["ip"]))
+                    else:
+                        self.log.error(
+                            "memcached error {0} {1} from {2}".format(error.status, error.msg, self.serverInfo.ip))
                 if error.status == 134:
                     backoff_count += 1
                     if backoff_count < 5:
@@ -591,13 +615,16 @@ class WorkerThread(threading.Thread):
                     try:
                         awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), self.name)
                     except Exception:
-                        #vbucket map is changing . sleep 5 seconds
-                        time.sleep(5)
                         awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), self.name)
                     self.log.info("now connected to {0} memcacheds".format(len(awareness.memcacheds)))
-                self.log.error("error {0} from {1}".format(ex, self.serverInfo.ip))
+                if isinstance(self.serverInfo, dict):
+                    self.log.error("error {0} from {1}".format(ex, self.serverInfo["ip"]))
+                    import  traceback
+                    traceback.print_exc()
+                else:
+                    self.log.error("error {0} from {1}".format(ex, self.serverInfo.ip))
                 self._rejected_keys_count += 1
-                self._rejected_keys.append(key)
+                self._rejected_keys.append({"key": key, "value": value})
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
                     break
 
@@ -607,26 +634,24 @@ class WorkerThread(threading.Thread):
             rejected_after_retry = []
             self._rejected_keys_count = 0
             for key in self._rejected_keys:
-                vId = crc32.crc32_hash(key) & (vbucket_count - 1)
-                client.vbucketId = vId
                 try:
                     if self.override_vBucketId >= 0:
                         client.vbucketId = self.override_vBucketId
                     if self.async_write:
-                        client.send_set(key, 0, 0, selected['value'])
+                        client.send_set(key, 0, 0, self._rejected_keys[key])
                     else:
-                        client.set(key, 0, 0, selected['value'])
+                        client.set(key, 0, 0, self._rejected_keys[key])
                     self._inserted_keys_count += 1
                 except MemcachedError:
                     self._rejected_keys_count += 1
-                    rejected_after_retry.append(key)
+                    rejected_after_retry.append({"key": key, "value": self._rejected_keys[key]})
                     if len(rejected_after_retry) > self.ignore_how_many_errors:
                         break
             self._rejected_keys = rejected_after_retry
             retry = - 1
             # clean up the rest of the deleted keys
             if len(self._delete) > 0:
-#                self.log.info("deleting {0} keys".format(len(self._delete)))
+            #                self.log.info("deleting {0} keys".format(len(self._delete)))
                 for key_del in self._delete:
                     client.delete(key_del)
                 self._delete = []
@@ -689,7 +714,7 @@ class VBucketAwareMemcached(object):
                     for node in nodes:
                         if node.ip == masterIp and node.memcached == masterPort:
                             memcacheds[vBucket.master] =\
-                                MemcachedClientHelper.direct_client(server, bucket)
+                            MemcachedClientHelper.direct_client(server, bucket)
                             break
                 except Exception as ex:
                     msg = "unable to establish connection to {0}.cleanup open connections"
@@ -724,3 +749,57 @@ class VBucketAwareMemcached(object):
 
 def start_reader_process(info, keyset, queue):
     ReaderThread(info, keyset, queue).start()
+
+
+class GeneratedDocuments(object):
+    def __init__(self, items, kv_template, options=dict(size=1024)):
+        self._items = items
+        self._kv_template = kv_template
+        self._options = options
+        self._pointer = 0
+        self._pad = DocumentGenerator._random_string(options["size"])
+
+    # Required for the for-in syntax
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self._items
+
+    # Returns the next value of the iterator
+    def next(self):
+        if self._pointer == self._items:
+            raise StopIteration
+        else:
+            i = self._pointer
+            doc = {"_id": "{0}-{1}".format(i, self._options["seed"])}
+            for k in self._kv_template:
+                v = self._kv_template[k]
+                if isinstance(v, str) and v.find("${prefix}") != -1:
+                    v = v.replace("${prefix}", "{0}".format(i))
+                    #how about the value size
+                if isinstance(v, str) and v.find("${padding}") != -1:
+                    v = v.replace("${padding}", self._pad)
+                doc[k] = v
+        self._pointer += 1
+        return json.dumps(doc)
+
+
+class DocumentGenerator(object):
+    #will loop over all values in props and replace ${prefix} with ${i}
+    @staticmethod
+    def make_docs(items, kv_template, options=dict(size=1024, seed=str(uuid.uuid4()))):
+        return GeneratedDocuments(items, kv_template, options)
+
+    @staticmethod
+    def _random_string(length):
+        return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).decode("ascii")
+
+    @staticmethod
+    def create_value(pattern, size):
+        return (pattern * (size / len(pattern))) + pattern[0:(size % len(pattern))]
+
+
+#        docs = DocumentGenerator.make_docs(number_of_items,
+#                {"name": "user-${prefix}", "payload": "payload-${prefix}-${padding}"},
+#                {"size": 1024, "seed": str(uuid.uuid4())})
