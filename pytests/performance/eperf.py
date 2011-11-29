@@ -116,7 +116,7 @@ class EPerfMaster(perf.PerfBase):
             start_at = int(self.paramf("start_at", 1.0) * \
                            (self.parami("prefix", 0) * num_items /
                             num_clients))
-
+            self.is_multi_node = False
             self.load(self.parami("items", num_items),
                       self.param('size', self.min_value_size()),
                       kind=self.param('kind', 'json'),
@@ -139,6 +139,7 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot_sets = 0,
                      ratio_expirations = 0,
                      max_creates    = 0):
+
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
             items = self.parami("items", items)
@@ -150,7 +151,7 @@ class EPerfMaster(perf.PerfBase):
             if start_delay > 0:
                 time.sleep(start_delay * self.parami("prefix", 0))
             max_creates = self.parami("max_creates", max_creates) / num_clients
-
+            self.is_multi_node = False
             self.loop(num_ops        = 0,
                       num_items      = items,
                       max_items      = items + max_creates + 1,
