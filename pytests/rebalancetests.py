@@ -320,7 +320,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             final_replication_state = RestHelper(rest).wait_for_replication(300)
             msg = "replication state after waiting for up to 5 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
-            ClusterOperationHelper.verify_persistence(self._servers, self)
+            ClusterOperationHelper.verify_persistence(self._servers, self, 20000, 120)
 
     def test_load(self):
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
