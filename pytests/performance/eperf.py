@@ -73,7 +73,7 @@ class EPerfMaster(perf.PerfBase):
                  merge_keys.append(str(latency))
 
         for i in range(i, len_clients):
-             file  = open("{0}.json".format(i))
+             file  = open("{0}.loop.json".format(i))
              dict = file.read()
              file.close()
              dict = json.loads(dict)
