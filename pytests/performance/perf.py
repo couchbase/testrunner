@@ -94,8 +94,6 @@ class PerfBase(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
-        ClusterOperationHelper.stop_cluster(self.input.servers)
-        ClusterOperationHelper.start_cluster(self.input.servers)
 
     def setUp_moxi(self, bucket=None):
         bucket = bucket or self.param("bucket", "default")
