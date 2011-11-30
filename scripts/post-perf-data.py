@@ -145,6 +145,20 @@ if __name__ == "__main__":
                 row.update({"row":index})
                 index = index + 1
             del input_json["data-size"]
+        if "bucket-size" in input_json:
+            print "flattening bucket-size"
+            values = input_json["bucket-size"]
+            index = 1
+            bucket_sizes = []
+            for row in values:
+                row_dict = {}
+                row_dict['size'] = row
+                row_dict.update(z)
+                row_dict.update({"row":index})
+                index = index + 1
+                bucket_sizes.append(row_dict.copy())
+            del input_json["bucket-size"]
+        attachments["bucket-size"] = bucket_sizes
         if "membasestats" in input_json:
             print "flattening membasestats"
             attachments["membasestats"] = input_json["membasestats"]
@@ -154,60 +168,35 @@ if __name__ == "__main__":
                 row.update({"row":index})
                 index = index + 1
             del input_json["membasestats"]
-        if "latency-get" in input_json:
-            print "flattening latency-get"
-            attachments["latency-get"] = []
-            index = 1
-            for row in input_json["latency-get"]:
-                if isinstance(row[0],list):
-                    lr = {"percentile_90th":row[0][1],
-                          "percentile_95th":0,
-                          "percentile_99th":row[1][1],
-                          "client_id":"UNKNOWN",
-                          "mystery":""}
-                    lr.update(z)
-                    lr.update({"row":index})
-                    index = index + 1
-                    attachments["latency-get"].append(lr)
-                else:
-                #create a new dict
-                    lr = {"percentile_90th":row[0],
-                          "percentile_95th":row[1],
-                          "percentile_99th":row[2],
-                          "client_id":row[3],
-                          "mystery":row[4]}
-                    lr.update(z)
-                    lr.update({"row":index})
-                    index = index + 1
-                    attachments["latency-get"].append(lr)
-            del input_json["latency-get"]
-        if "latency-set" in input_json:
-            attachments["latency-set"] = []
-            index = 1
-            for row in input_json["latency-set"]:
 
-                if isinstance(row[0],list):
-                    lr = {"percentile_90th":row[0][1],
-                          "percentile_95th":0,
-                          "percentile_99th":row[1][1],
-                          "client_id":"UNKNOWN",
-                          "mystery":""}
-                    lr.update(z)
-                    lr.update({"row":index})
-                    index = index + 1
-                    attachments["latency-set"].append(lr)
-                else:
-                #create a new dict
-                    lr = {"percentile_90th":row[0],
-                          "percentile_95th":row[1],
-                          "percentile_99th":row[2],
-                          "client_id":row[3],
-                          "mystery":row[4]}
-                    lr.update(z)
-                    lr.update({"row":index})
-                    index = index + 1
-                    attachments["latency-set"].append(lr)
-            del input_json["latency-set"]
+        for latency in input_json.keys():
+            if latency.startswith('latency'):
+                print "flattening {0}".format(latency)
+                attachments[latency] = []
+                index = 1
+                for row in input_json[latency]:
+                    if isinstance(row[0],list):
+                        lr = {"percentile_90th":row[0][1],
+                              "percentile_95th":0,
+                              "percentile_99th":row[1][1],
+                              "client_id":"UNKNOWN",
+                              "mystery":""}
+                        lr.update(z)
+                        lr.update({"row":index})
+                        index = index + 1
+                        attachments[latency].append(lr)
+                    else:
+                    #create a new dict
+                        lr = {"percentile_90th":row[0],
+                              "percentile_95th":row[1],
+                              "percentile_99th":row[2],
+                              "client_id":row[3],
+                              "mystery":row[4]}
+                        lr.update(z)
+                        lr.update({"row":index})
+                        index = index + 1
+                        attachments[latency].append(lr)
+                del input_json[latency]
 
 
         log.info("attachments has {0} objects".format(len(attachments)))
