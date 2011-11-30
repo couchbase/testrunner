@@ -64,7 +64,7 @@ class EPerfMaster(perf.PerfBase):
 
     def aggregate_all_stats(self, len_clients):
         i = 0
-        final_json = open("{0}.json".format(i)).read()
+        final_json = open("{0}.loop.json".format(i)).read()
         final_json = json.loads(final_json)
         i += 1
         merge_keys = []
@@ -127,7 +127,8 @@ class EPerfMaster(perf.PerfBase):
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
                       prefix=self.param("prefix", ""),
-                      start_at=start_at)
+                      start_at=start_at,
+                      is_eperf=True)
             self.loop_prep()
 
     def access_phase(self, items,

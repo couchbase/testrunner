@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from threading import Thread
 import time
 from membase.api.rest_client import RestConnection
@@ -128,7 +129,10 @@ class StatsCollector(object):
         file.close()
 
         if self.client_id:
-            file = open("{0}.json".format(self.client_id), 'w')
+            filename = self.client_id+'.loop'
+            if re.search('load$', self._task["name"]):
+                filename = self.client_id+'.load'
+            file = open("{0}.json".format(filename), 'w')
             file.write("{0}".format(json.dumps(obj)))
             file.close()
 

@@ -252,7 +252,9 @@ class PerfBase(unittest.TestCase):
              doc_cache=1,
              use_direct=True,
              report=0,
-             start_at=-1):
+             start_at=-1,
+             collect_server_stats=True,
+             is_eperf=False):
         cfg = { 'max-items': num_items,
                 'max-creates': num_items,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -276,6 +278,13 @@ class PerfBase(unittest.TestCase):
         if start_at >= 0:
             cur['cur-gets'] = start_at
 
+        if is_eperf:
+            collect_server_stats = self.parami("prefix", 0) == 0
+            sc = self.start_stats(self.spec_reference + ".load",
+                              test_params = cfg, client_id = prefix,
+                              collect_server_stats = collect_server_stats)
+
+
         # For Black box, multi node tests
         # always use membase-binary
         if self.is_multi_node:
@@ -295,6 +304,11 @@ class PerfBase(unittest.TestCase):
                 'tot-misses': cur.get('cur-misses', 0),
                 "start-time": start_time,
                 "end-time": end_time }
+
+        if is_eperf:
+            self.wait_until_drained()
+            self.end_stats(sc, ops)
+
         return ops, start_time, end_time
 
     def nodes(self, num_nodes):
