@@ -76,18 +76,20 @@ class ClusterOperationHelper(object):
         buckets = rest.get_buckets()
         for bucket in buckets:
            #Load some data
-           thread = Thread(target=MemcachedClientHelper.load_bucket,
-                           name="loading thread for bucket {0}".format(bucket.name),
-                           args=([master], bucket.name, -1, keys_count, None, 3, -1, True, True))
+            l_threads = MemcachedClientHelper.create_threads([master], bucket.name,
+                -1, keys_count, {1024: 0.50, 512: 0.50}, 2, -1,True, True)
+            [t.start() for t in l_threads]
+            # Do persistence verification
+            ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, timeout_in_seconds)
+            log.info("Persistence Verification returned ? {0}".format(ready))
+            log.info("waiting for persistence threads to finish...")
+            for t in l_threads:
+                t.aborted = True
+            for t in l_threads:
+                t.join()
+            log.info("persistence thread has finished...")
+            test.assertTrue(ready, msg="Cannot verify persistence")
 
-           thread.start()
-           # Do persistence verification
-           ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, timeout_in_seconds)
-           log.info("Persistence Verification returned ? {0}".format(ready))
-           log.info("waiting for persistence threads to finish...")
-           thread.join()
-           log.info("persistence thread has finished...")
-           test.assertTrue(ready, msg="Cannot verify persistence")
 
     @staticmethod
     def persistence_verification(servers, bucket, timeout_in_seconds=1260):
@@ -129,7 +131,7 @@ class ClusterOperationHelper(object):
             _new_stats = rest.get_bucket_stats(bucket)
             if _new_stats and 'ep_flusher_todo' in _new_stats:
                 stats.append(_new_stats[stat_key])
-                time.sleep(2)
+                time.sleep(0.5)
             else:
                 log.error("unable to obtain stats for bucket : {0}".format(bucket))
         value_90th = ClusterOperationHelper.percentile(stats, 90)
