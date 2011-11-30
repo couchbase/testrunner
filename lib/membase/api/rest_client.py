@@ -907,11 +907,14 @@ class RestConnection(object):
                 return True, i
         return False, i
 
-    def reset_auto_compaction(self):
+    # Reset compaction values to default
+    def reset_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 80,
+                              viewFragmntThreshold = 80):
         api = self.baseUrl + "controller/setAutoCompaction"
-        params = urllib.urlencode({"just_validate":"1",
-                                   "parallelDBAndViewCompaction":"false",
-                                   "databaseFragmemtationThreshold":""})
+        params = urllib.urlencode({"just_validate": "1",
+                                   "parallelDBAndViewCompaction": parallelDBAndVC,
+                                   "databaseFragmentationThreshold": dbFragmentThreshold,
+                                   "viewFragmentationThreshold": viewFragmntThreshold})
         status, content = self._http_request(api, "POST", params)
         return status
 
