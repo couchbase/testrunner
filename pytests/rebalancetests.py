@@ -443,53 +443,28 @@ class IncrementalRebalanceOut(unittest.TestCase):
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
 
-    def test_rebalance_out_small_load(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self.test_rebalance_out(1.0, replica=1)
 
-    def test_rebalance_out_small_load_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self.test_rebalance_out(1.0, replica=2)
+    def test_load(self):
+        keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        log = logger.Logger().get_logger()
+        log.info("keys_count, replica, load_ratio: {0} {1} {2}".format(keys_count, replica, load_ratio))
+        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
+        self._common_test_body(keys_count, load_ratio, replica)
 
-    def test_rebalance_out_small_load_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self.test_rebalance_out(1.0, replica=3)
 
-    def test_rebalance_out_medium_load(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self.test_rebalance_out(15.0, replica=1)
-
-    def test_rebalance_out_medium_load_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self.test_rebalance_out(15.0, replica=2)
-
-    def test_rebalance_out_medium_load_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self.test_rebalance_out(15.0, replica=3)
-
-    def test_rebalance_out_dgm(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self.test_rebalance_out(200.0, replica=1)
-
-    def test_rebalance_out_dgm_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self.test_rebalance_out(200.0, replica=2)
-
-    def test_rebalance_out_dgm_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self.test_rebalance_out(200.0, replica=3)
-
-    def test_rebalance_out(self, ratio, replica):
-        ram_ratio = (ratio / (len(self._servers)))
+    def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1):
         #the ratio is relative to the number of nodes ?
         master = self._servers[0]
         rest = RestConnection(master)
         creds = self._input.membase_settings
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
-        distribution = RebalanceBaseTest.get_distribution(ram_ratio)
+        distribution = RebalanceBaseTest.get_distribution(load_ratio)
 
         ClusterHelper.add_all_nodes_or_assert(master, self._servers, creds, self)
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+        self.assertTrue(rest.monitorRebalance(),
+                        msg="rebalance operation failed after adding nodes {0}".format([node.id for node in rest.node_statuses()]))
         #remove nodes one by one and rebalance , add some item and
         #rebalance ?
         rebalanced_servers = []
@@ -502,7 +477,11 @@ class IncrementalRebalanceOut(unittest.TestCase):
             #pick a node that is not the master node
             toBeEjectedNode = RebalanceBaseTest.pick_node(master)
 
-            RebalanceBaseTest.load_data_for_buckets(rest, ram_ratio, distribution, [master], bucket_data, self)
+            for bucket in rest.get_buckets():
+                RebalanceBaseTest.load_data(master, bucket.name,
+                                                    keys_count, load_ratio,
+                                                    delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO,
+                                                    test=self)
 
             self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
             self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
