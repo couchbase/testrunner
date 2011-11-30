@@ -606,7 +606,7 @@ class WorkerThread(threading.Thread):
                     time.sleep(backoff_seconds)
 
                 self._rejected_keys_count += 1
-                self._rejected_keys.append(key)
+                self._rejected_keys.append({"key": key, "value": value})
                 if len(self._rejected_keys) > self.ignore_how_many_errors:
                     break
             except Exception as ex:
@@ -633,18 +633,18 @@ class WorkerThread(threading.Thread):
         while retry > 0 and self._rejected_keys_count > 0:
             rejected_after_retry = []
             self._rejected_keys_count = 0
-            for key in self._rejected_keys:
+            for item in self._rejected_keys:
                 try:
                     if self.override_vBucketId >= 0:
                         client.vbucketId = self.override_vBucketId
                     if self.async_write:
-                        client.send_set(key, 0, 0, self._rejected_keys[key])
+                        client.send_set(item["key"], 0, 0, item["value"])
                     else:
-                        client.set(key, 0, 0, self._rejected_keys[key])
+                        client.set(item["key"], 0, 0, item["value"])
                     self._inserted_keys_count += 1
                 except MemcachedError:
                     self._rejected_keys_count += 1
-                    rejected_after_retry.append({"key": key, "value": self._rejected_keys[key]})
+                    rejected_after_retry.append({"key": item["key"], "value": item["value"]})
                     if len(rejected_after_retry) > self.ignore_how_many_errors:
                         break
             self._rejected_keys = rejected_after_retry

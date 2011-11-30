@@ -8,13 +8,14 @@ import testconstants
 import time
 import Queue
 from threading import Thread
+import traceback
 
 
 class ClusterOperationHelper(object):
     #the first ip is taken as the master ip
 
     @staticmethod
-    def add_and_rebalance(servers,rest_password):
+    def add_and_rebalance(servers, rest_password):
         log = logger.Logger.get_logger()
         master = servers[0]
         all_nodes_added = True
@@ -35,7 +36,7 @@ class ClusterOperationHelper(object):
         return all_nodes_added and rebalanced
 
     @staticmethod
-    def add_all_nodes_or_assert(master,all_servers,rest_settings,test_case):
+    def add_all_nodes_or_assert(master, all_servers, rest_settings, test_case):
         log = logger.Logger.get_logger()
         otpNodes = []
         all_nodes_added = True
@@ -60,13 +61,14 @@ class ClusterOperationHelper(object):
         return otpNodes
 
     @staticmethod
-    def wait_for_ns_servers_or_assert(servers,testcase):
+    def wait_for_ns_servers_or_assert(servers, testcase):
         for server in servers:
             rest = RestConnection(server)
             log = logger.Logger.get_logger()
             log.info("waiting for ns_server @ {0}:{1}".format(server.ip, server.port))
             testcase.assertTrue(RestHelper(rest).is_ns_server_running(),
-                            "ns_server is not running in {0}".format(server.ip))
+                                "ns_server is not running in {0}".format(server.ip))
+
     @staticmethod
     def verify_persistence(servers, test, keys_count=400000, timeout_in_seconds=300):
         log = logger.Logger.get_logger()
@@ -75,9 +77,10 @@ class ClusterOperationHelper(object):
         log.info("Verifying Persistence")
         buckets = rest.get_buckets()
         for bucket in buckets:
-           #Load some data
+        #Load some data
             l_threads = MemcachedClientHelper.create_threads([master], bucket.name,
-                -1, keys_count, {1024: 0.50, 512: 0.50}, 2, -1,True, True)
+                                                                     -1, keys_count, {1024: 0.50, 512: 0.50}, 2, -1,
+                                                                     True, True)
             [t.start() for t in l_threads]
             # Do persistence verification
             ready = ClusterOperationHelper.persistence_verification(servers, bucket.name, timeout_in_seconds)
@@ -124,7 +127,7 @@ class ClusterOperationHelper(object):
     def persistence_verification_per_node(rest, bucket, queue=None, timeout=1260):
         log = logger.Logger.get_logger()
         stat_key = 'ep_flusher_todo'
-        start=time.time()
+        start = time.time()
         stats = []
         # Collect stats data points
         while time.time() - start <= timeout:
@@ -175,11 +178,11 @@ class ClusterOperationHelper(object):
         nodes = rest.node_statuses()
         master_id = rest.get_nodes_self().id
         if len(nodes) > 1:
-                log.info("rebalancing all nodes in order to remove nodes")
-                helper = RestHelper(rest)
-                removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
-                                              ejectedNodes=[node.id for node in nodes if node.id != master_id])
-                log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], removed))
+            log.info("rebalancing all nodes in order to remove nodes")
+            helper = RestHelper(rest)
+            removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
+                                          ejectedNodes=[node.id for node in nodes if node.id != master_id])
+            log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], removed))
 
     @staticmethod
     def flushctl_start(servers, username=None, password=None):
@@ -217,6 +220,24 @@ class ClusterOperationHelper(object):
             rv = c.set_flush_param(key, val)
             log.info("Setting flush param on server {0}, {1} to {2}, result: {3}".format(server, key, val, rv))
             c.close()
+
+
+    @staticmethod
+    def set_expiry_pager_sleep_time(master, bucket, value=30):
+        log = logger.Logger.get_logger()
+        rest = RestConnection(master)
+        servers = rest.get_nodes()
+        for server in servers:
+            #this is not bucket specific so no need to pass in the bucketname
+            log.info("connecting to memcached {0}:{1}".format(server.ip, server.memcached))
+            mc = MemcachedClientHelper.direct_client(server, bucket)
+            log.info("Set exp_pager_stime flush param on server {0}:{1}".format(server.ip, server.port))
+            try:
+                mc.set_flush_param("exp_pager_stime", str(value))
+                log.info("Set exp_pager_stime flush param on server {0}:{1}".format(server.ip, server.port))
+            except Exception as ex:
+                traceback.print_exc()
+                log.error("Unable to set exp_pager_stime flush param on server {0}:{1}".format(server.ip, server.port))
 
     @staticmethod
     def get_mb_stats(servers, key):
