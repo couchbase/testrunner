@@ -425,8 +425,8 @@ class PerfBase(unittest.TestCase):
                 'tot-misses': cur.get('cur-misses', 0),
                 "start-time": start_time,
                 "end-time": end_time }
-        self.end_stats(sc, ops)
         self.wait_until_drained()
+        self.end_stats(sc, ops)
         return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
