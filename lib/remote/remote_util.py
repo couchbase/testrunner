@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 import paramiko
 import logger
@@ -390,14 +391,22 @@ class RemoteMachineShellConnection:
     def modify_bat_file(self, remote_path, file_name, name, os_type, os_version, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
+
+        product_version = ""
+        if "2.0.0" in version:
+            product_version = "2.0.0"
+        else:
+            log.error('Windows automation does not support {0} version yet'.format(version))
+            sys.exit()
+
         try:
             f = sftp.open(found, 'w')
-            log.info('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}_{5}.iss'.format(name, version, name,
-                                                                                       os_type, os_version, task))
+            log.info('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}_{5}_{6}.iss'.format(name, version, name,
+                                                                    product_version, os_type, os_version, task))
             name = name.rstrip()
             version = version.rstrip()
-            f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}_{5}.iss'.format(name, version, name,
-                                                                                       os_type, os_version, task))
+            f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}_{5}_{6}.iss'.format(name, version, name,
+                                                                    product_version, os_type, os_version, task))
             log.info('Successful write to {0}'.format(found))
             sftp.close()
         except IOError:
