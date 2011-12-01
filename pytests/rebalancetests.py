@@ -297,7 +297,10 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1, rebalance_in=2, verify=True):
+    def _common_test_body(self, keys_count=-1,
+                          load_ratio=-1, replica=1,
+                          rebalance_in=2, verify=True,
+                          delete_ratio=0, expiry_ratio=0):
         master = self._servers[0]
         rest = RestConnection(master)
         rebalanced_servers = [master]
@@ -307,7 +310,8 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         while len(nodes) < len(self._servers):
             buckets = rest.get_buckets()
             for bucket in buckets:
-                inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, keys_count, load_ratio, delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO, test=self)
+                inserted_keys = RebalanceBaseTest.load_data(master, bucket.name, keys_count, load_ratio, delete_ratio,
+                                                            expiry_ratio, self)
                 bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
                 bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
 
@@ -328,11 +332,17 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 #            ClusterOperationHelper.verify_persistence(self._servers, self, 20000, 120)
 
     def test_load(self):
-        keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
         log = logger.Logger().get_logger()
+        keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        delete_ratio = 0
+        expiry_ratio = 0
+        if "delete-ratio" in self._input.test_params:
+            delete_ratio = float(_input.test_params["expiry-ratio"])
+        if "expiry-ratio" in self._input.test_params:
+            expiry_ratio = float(_input.test_params["expiry-ratio"])
         log.info("keys_count, replica, load_ratio: {0} {1} {2}".format(keys_count, replica, load_ratio))
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
-        self._common_test_body(keys_count, load_ratio, replica, verify=True)
+        self._common_test_body(keys_count, load_ratio, replica, True, delete_ratio, expiry_ratio)
 
 
 class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
@@ -485,7 +495,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
             for bucket in rest.get_buckets():
                 RebalanceBaseTest.load_data(master, bucket.name,
                                                     keys_count, load_ratio,
-                                                    delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO,
+                                                    delete_ratio=0, expiry_ratio=0,
                                                     test=self)
 
             self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))

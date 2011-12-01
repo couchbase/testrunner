@@ -464,7 +464,7 @@ class RestConnection(object):
                                    'ejectedNodes': ejectedNodesString,
                                    'user': self.username,
                                    'password': self.password})
-        log.info('rebalanace params : {0}'.format(params))
+        log.info('rebalance params : {0}'.format(params))
 
         api = self.baseUrl + "controller/rebalance"
 

@@ -89,22 +89,70 @@ class ViewTests(unittest.TestCase):
     def test_count_reduce_100k_docs(self):
         self._test_count_reduce_multiple_docs(100000)
 
-    def test_delete_doc(self):
+    def test_delete_10k_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_docs = 100
+        num_of_docs = 100000
+        num_of_deleted_docs = 10000
+        # verify we are fully clustered
+        self._begin_rebalance_in()
+        self._end_rebalance()
         self._create_view_doc_name(prefix)
         self._load_docs(num_of_docs, prefix)
-        doc_names = self._delete_docs(num_of_docs, 1, prefix)
+        doc_names = self._delete_docs(num_of_docs, num_of_deleted_docs, prefix)
         self._verify_docs_doc_name(doc_names, prefix)
 
-    def test_readd_docs(self):
+    def test_readd_10k_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_docs = 10000
+        num_of_docs = 100000
+        num_of_readd_docs = 10000
+        # verify we are fully clustered
+        self._begin_rebalance_in()
+        self._end_rebalance()
         self._create_view_doc_name(prefix)
         self._load_docs(num_of_docs, prefix)
-        doc_names = self._delete_docs(num_of_docs, 100, prefix)
+        doc_names = self._delete_docs(num_of_docs, num_of_readd_docs, prefix)
         self._verify_docs_doc_name(doc_names, prefix)
-        doc_names = self._update_docs(num_of_docs, 100, prefix)
+        doc_names = self._update_docs(num_of_docs, num_of_readd_docs, prefix)
+        self._verify_docs_doc_name(doc_names, prefix)
+
+    def test_update_10k_docs(self):
+        prefix = str(uuid.uuid4())[:7]
+        num_of_docs = 100000
+        num_of_update_docs = 10000
+        # verify we are fully clustered
+        self._begin_rebalance_in()
+        self._end_rebalance()
+        self._create_view_doc_name(prefix)
+        self._load_docs(num_of_docs, prefix)
+        doc_names = self._update_docs(num_of_docs, num_of_update_docs, prefix)
+        self._verify_docs_doc_name(doc_names, prefix)
+
+    def test_delete_10k_docs_rebalance_in(self):
+        prefix = str(uuid.uuid4())[:7]
+        num_of_docs = 100000
+        num_of_deleted_docs = 10000
+        # verify we are fully de-clustered
+        self._begin_rebalance_out()
+        self._end_rebalance()
+        self._create_view_doc_name(prefix)
+        self._load_docs(num_of_docs, prefix)
+        self._begin_rebalance_in()
+        doc_names = self._delete_docs(num_of_docs, num_of_deleted_docs, prefix)
+        self._end_rebalance()
+        self._verify_docs_doc_name(doc_names, prefix)
+
+    def test_delete_10k_docs_rebalance_out(self):
+        prefix = str(uuid.uuid4())[:7]
+        num_of_docs = 100000
+        num_of_deleted_docs = 10000
+        # verify we are fully clustered
+        self._begin_rebalance_in()
+        self._end_rebalance()
+        self._create_view_doc_name(prefix)
+        self._load_docs(num_of_docs, prefix)
+        self._begin_rebalance_out()
+        doc_names = self._delete_docs(num_of_docs, num_of_deleted_docs, prefix)
+        self._end_rebalance()
         self._verify_docs_doc_name(doc_names, prefix)
 
 
@@ -695,6 +743,11 @@ class ViewTests(unittest.TestCase):
         self.created_views[view_name] = bucket
 
     def _load_docs(self, num_of_docs, prefix):
+        rest = RestConnection(self.servers[0])
+        command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [moxi], 20000)]."
+        moxis_restarted = rest.diag_eval(command)
+        #wait until memcached starts
+        self.assertTrue(moxis_restarted, "unable to restart moxi process through diag/eval")
         bucket = "default"
         moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
         doc_names = []
@@ -723,19 +776,17 @@ class ViewTests(unittest.TestCase):
             value = {"name": doc_name, "age": 1000}
             if i < num_of_updated_docs:
                 moxi.set(key, 0, 0, json.dumps(value))
-        self.log.info("inserted {0} json documents".format(num_of_updated_docs))
+        self.log.info("updated {0} json documents".format(num_of_updated_docs))
         self._verify_docs_doc_name(doc_names, prefix)
         return doc_names
 
 
     def _delete_docs(self, num_of_docs, num_of_deleted_docs, prefix):
         bucket = "default"
-        view_name = "dev_test_view-{0}".format(prefix)
         moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
         doc_names = []
         for i in range(0, num_of_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
-            value = {"name": doc_name, "age": 1000}
             if i < num_of_deleted_docs:
                 moxi.delete(key)
             else:
@@ -756,10 +807,10 @@ class ViewTests(unittest.TestCase):
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
         # try this for maximum 1 minute
         attempt = 0
-        delay = 10
+        delay = 5
         # first verify all keys get reported in the view
-        while attempt < 6 and len(keys) != len(doc_names):
-            msg = "view returned {0} items , expected to return {1} items"
+        while attempt < 12 and len(keys) != len(doc_names) and sorted(keys) != sorted(doc_names):
+            msg = "view returned {0} items, expected to return {1} items"
             self.log.info(msg.format(len(keys), len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(delay)
@@ -767,4 +818,51 @@ class ViewTests(unittest.TestCase):
             results = self._get_view_results(rest, bucket, view_name, limit=2*len(doc_names))
             keys = self._get_keys(results)
         if sorted(keys) != sorted(doc_names):
-            self.fail("returned keys have different values that expected keys")
+            self.fail("returned keys have different values than expected keys")
+
+    def _begin_rebalance_in(self):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        for server in self.servers[1:]:
+            self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
+            otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
+            msg = "unable to add node {0}:{1} to the cluster"
+            self.assertTrue(otpNode, msg.format(server.ip, server.port))
+        self.log.info("beginning rebalance in")
+        try:
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+        except:
+            self.log.error("rebalance failed, trying again after 5 seconds")
+            time.sleep(5)
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+
+
+    def _begin_rebalance_out(self):
+        master = self.servers[0]
+        rest = RestConnection(master)
+
+        allNodes = []
+        ejectedNodes = []
+        nodes = rest.node_statuses()
+#        for node in nodes:
+#            allNodes.append(node.id)
+        for server in self.servers[1:]:
+            self.log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
+            for node in nodes:
+                if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
+                    ejectedNodes.append(node.id)
+        self.log.info("beginning rebalance out")
+        try:
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
+        except:
+            self.log.error("rebalance failed, trying again after 5 seconds")
+            time.sleep(5)
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
+
+
+    def _end_rebalance(self):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        self.assertTrue(rest.monitorRebalance(),
+                        msg="rebalance operation failed after adding nodes")
+        self.log.info("rebalance finished")
