@@ -307,6 +307,124 @@ class EPerfMaster(perf.PerfBase):
                           max_creates    = self.parami("max_creates", 5000000))
         self.gated_finish(self.input.clients, notify)
 
+    def test_ept_read_original(self):
+        self.spec("EPT-READ-original")
+        items = self.parami("items", 30000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        notify = self.gated_start(self.input.clients)
+        # Read:Insert:Update:Delete Ratio = 90:3:6:1.
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.1),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.30),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.1428),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.005),
+                          max_creates = self.parami("max_creates", 10800000))
+        self.gated_finish(self.input.clients, notify)
+
+    def test_ept_write_original(self):
+        self.spec("EPT-WRITE-original")
+        items = self.parami("items", 45000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        notify = self.gated_start(self.input.clients)
+        # Read:Insert:Update:Delete Ratio = 20:15:60:5.
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.8),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
+                          max_creates = self.parami("max_creates", 20000000))
+        self.gated_finish(self.input.clients, notify)
+
+    def test_ept_mixed_original(self):
+        self.spec("EPT-MIXED-original")
+        items = self.parami("items", 45000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        notify = self.gated_start(self.input.clients)
+        # Read:Insert:Update:Delete Ratio = 50:4:40:6.
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.08),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
+                          max_creates = self.parami("max_creates", 30000000))
+        self.gated_finish(self.input.clients, notify)
+
+    def test_ept_rebalance_low_original(self):
+        self.spec("EPT-REBALANCE-LOW-FETCH-original")
+        items = self.parami("items", 45000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        notify = self.gated_start(self.input.clients)
+        num_clients = self.parami("num_clients", len(self.input.clients) or 1)
+        rebalance_after = self.parami("rebalance_after", 2000000)
+        self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
+                                 getattr(self, "latched_rebalance"))]
+        # Read:Insert:Update:Delete Ratio = 50:4:40:6.
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.08),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
+                          max_creates = self.parami("max_creates", 30000000))
+        self.gated_finish(self.input.clients, notify)
+
+    def test_ept_rebalance_med_original(self):
+        self.spec("EPT-REBALANCE-MED-FETCH-original")
+        items = self.parami("items", 45000000)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        notify = self.gated_start(self.input.clients)
+        num_clients = self.parami("num_clients", len(self.input.clients) or 1)
+        rebalance_after = self.parami("rebalance_after", 2000000)
+        self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
+                                 getattr(self, "latched_rebalance"))]
+        # Read:Insert:Update:Delete Ratio = 50:4:40:6.
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.08),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
+                          ratio_hot = self.paramf('ratio_hot', 0.6),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.parami('ratio_expirations', 0.03),
+                          max_creates = self.parami("max_creates", 30000000))
+        self.gated_finish(self.input.clients, notify)
+
+    def test_ept_mixed_nocompact_original(self):
+        self.spec("EPT-MIXED-NOCOMPACT-original")
+        items = self.parami("items", 45000000)
+        if self.is_master:
+            self.rest.set_autoCompaction("false", 100, 100) # 100% fragmentation thresholds.
+        self.load_phase(self.parami("num_nodes", 10), items)
+        notify = self.gated_start(self.input.clients)
+        # Read:Insert:Update:Delete Ratio = 50:4:40:6.
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.08),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
+                          max_creates = self.parami("max_creates", 30000000))
+        self.gated_finish(self.input.clients, notify)
+
 
 class EPerfClient(EPerfMaster):
 
