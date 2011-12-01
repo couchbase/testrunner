@@ -32,7 +32,8 @@ import crc32
 import mc_bin_client
 import memcacheConstants
 
-from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, ERR_NOT_MY_VBUCKET
+from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
+from memcacheConstants import ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETMPFAIL
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
 from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "ARPA"
@@ -566,6 +567,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                  'password': pswd or 'password' }
         rest = RestConnection(info)
         self.awareness = VBucketAwareMemcached(rest, user or 'default', info)
+        self.backoff = 0
 
     def flush_level(self):
         f = StoreMemcachedBinary.flush_level(self)
@@ -592,6 +594,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
     def inflight_recv(self, inflight, inflight_grp, expectBuffer=None):
         s_cmds = inflight_grp['s_cmds']
         reset_my_awareness = False
+        backoff = False
         for server in s_cmds.keys():
            conn = self.awareness.memcacheds[server]
            try:
@@ -607,7 +610,19 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                   self.recvMsgSockBuf(conn.s, recvBuf)
               if errcode == ERR_NOT_MY_VBUCKET:
                  reset_my_awareness = True
+              elif errcode == ERR_ENOMEM or \
+                   errcode == ERR_EBUSY or \
+                   errcode == ERR_ETMPFAIL:
+                 backoff = True
            conn.recvBuf = recvBuf
+        if backoff:
+           self.backoff = max(self.backoff, 0.1) * \
+                          self.cfg.get('backoff-factor', 2.0)
+           if self.backoff > 0:
+              self.cur['cur-backoffs'] = self.cur.get('cur-backoffs', 0) + 1
+              time.sleep(self.backoff)
+        else:
+           self.backoff = 0
         if reset_my_awareness:
            self.awareness.reset()
 
@@ -920,6 +935,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "vbuckets":           (0,     "When > 0, vbucket hash during memcached-binary protocol."),
      "doc-cache":          (1,     "When 1, cache generated docs; faster but uses memory."),
      "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs before main loop."),
+     "backoff-factor":     (2.0,   "Expoential backoff factor on ETMPFAIL errors.")
      }
 
   cur_defaults = cur_defaults or {
