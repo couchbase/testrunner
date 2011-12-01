@@ -310,8 +310,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_read_original(self):
         self.spec("EPT-READ-original")
         items = self.parami("items", 30000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 90:3:6:1.
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.1),
@@ -328,8 +328,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_write_original(self):
         self.spec("EPT-WRITE-original")
         items = self.parami("items", 45000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.8),
@@ -346,8 +346,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_mixed_original(self):
         self.spec("EPT-MIXED-original")
         items = self.parami("items", 45000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.5),
@@ -364,8 +364,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_rebalance_low_original(self):
         self.spec("EPT-REBALANCE-LOW-FETCH-original")
         items = self.parami("items", 45000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", 2000000)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
@@ -386,8 +386,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_rebalance_med_original(self):
         self.spec("EPT-REBALANCE-MED-FETCH-original")
         items = self.parami("items", 45000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
         notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", 2000000)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
@@ -408,10 +408,10 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_mixed_nocompact_original(self):
         self.spec("EPT-MIXED-NOCOMPACT-original")
         items = self.parami("items", 45000000)
+        notify = self.gated_start(self.input.clients)
         if self.is_master:
             self.rest.set_autoCompaction("false", 100, 100) # 100% fragmentation thresholds.
         self.load_phase(self.parami("num_nodes", 10), items)
-        notify = self.gated_start(self.input.clients)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.5),
