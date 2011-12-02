@@ -285,8 +285,9 @@ class PerfBase(unittest.TestCase):
 
         if is_eperf:
             collect_server_stats = self.parami("prefix", 0) == 0
+            client_id = self.parami("prefix", 0)
             sc = self.start_stats(self.spec_reference + ".load",
-                              test_params = cfg, client_id = prefix,
+                              test_params = cfg, client_id = client_id,
                               collect_server_stats = collect_server_stats)
 
 
@@ -404,8 +405,9 @@ class PerfBase(unittest.TestCase):
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
+        client_id = self.parami("prefix", 0)
         sc = self.start_stats(self.spec_reference + ".loop",
-                              test_params = cfg_params, client_id = prefix,
+                              test_params = cfg_params, client_id = client_id,
                               collect_server_stats = collect_server_stats)
 
         cur = { 'cur-items': num_items }
