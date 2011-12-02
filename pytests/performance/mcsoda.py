@@ -221,7 +221,8 @@ def next_cmd(cfg, cur, store):
             key_num = choose_key_num(cur.get('cur-items', 0),
                                      cfg.get('ratio-hot', 0),
                                      cfg.get('ratio-hot-sets', 0),
-                                     cur.get('cur-sets', 0))
+                                     cur.get('cur-sets', 0),
+                                     cur.get('cur-base', 0))
 
         expiration = 0
         if cmd[0] == 's' and cfg.get('ratio-expirations', 0.0) * 100 > cur_sets % 100:
@@ -243,7 +244,8 @@ def next_cmd(cfg, cur, store):
             key_num = choose_key_num(cur.get('cur-items', 0),
                                      cfg.get('ratio-hot', 0),
                                      cfg.get('ratio-hot-gets', 0),
-                                     cur.get('cur-gets', 0))
+                                     cur.get('cur-gets', 0),
+                                     cur.get('cur-base', 0))
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
 
             return (cmd, key_num, key_str, itm_val, 0)
@@ -251,13 +253,12 @@ def next_cmd(cfg, cur, store):
             cur['cur-misses'] = cur.get('cur-misses', 0) + 1
             return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None, 0)
 
-def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops):
+def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops, base):
     hit_hot_range = (ratio_hot_choice * 100) > (num_ops % 100)
     if hit_hot_range:
-        base  = 0
         range = math.floor(ratio_hot * num_items)
     else:
-        base  = math.floor(ratio_hot * num_items)
+        base  = base + math.floor(ratio_hot * num_items)
         range = math.floor((1.0 - ratio_hot) * num_items)
 
     return int(base + (num_ops % positive(range)))
@@ -945,6 +946,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "cur-gets":     (0, "Number of gets already done."),
      "cur-deletes":  (0, "Number of deletes already done."),
      "cur-arpas":    (0, "Number of add/replace/prepend/append's (a-r-p-a) commands."),
+     "cur-base":     (0, "Base of numeric key range. 0 by default.")
      }
 
   if len(argv) < 2 or "-h" in argv or "--help" in argv:
