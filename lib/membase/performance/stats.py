@@ -129,7 +129,7 @@ class StatsCollector(object):
         file.close()
 
         if self.client_id:
-            filename = self.client_id+'.loop'
+            filename = str(self.client_id)+'.loop'
             if re.search('load$', self._task["name"]):
                 filename = self.client_id+'.load'
             file = open("{0}.json".format(filename), 'w')
