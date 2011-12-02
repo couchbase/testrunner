@@ -126,7 +126,7 @@ class EPerfMaster(perf.PerfBase):
                                               self.input.servers[0].ip + ":8091"),
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
-                      prefix=self.param("prefix", ""),
+                      prefix="",
                       start_at=start_at,
                       is_eperf=True)
             self.loop_prep()
@@ -176,7 +176,7 @@ class EPerfMaster(perf.PerfBase):
                       test_name      = self.id(),
                       use_direct     = self.parami('use_direct', 1),
                       doc_cache      = self.parami('doc_cache', 0),
-                      prefix         = self.param("prefix", ""),
+                      prefix         = "",
                       collect_server_stats = self.is_leader,
                       start_at       = start_at,
                       report         = int(max_creates * 0.1),
