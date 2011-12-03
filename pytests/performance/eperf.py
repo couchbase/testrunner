@@ -140,7 +140,8 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot_gets = 0,
                      ratio_hot_sets = 0,
                      ratio_expirations = 0,
-                     max_creates    = 0):
+                     max_creates    = 0,
+                     hot_shift = 0):
 
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
@@ -180,7 +181,8 @@ class EPerfMaster(perf.PerfBase):
                       collect_server_stats = self.is_leader,
                       start_at       = start_at,
                       report         = int(max_creates * 0.1),
-                      exit_after_creates = 1)
+                      exit_after_creates = 1,
+                      hot_shift = self.parami('hot_shift', hot_shift))
 
     def latched_rebalance(self, cur):
         if not self.latched_rebalance_done:

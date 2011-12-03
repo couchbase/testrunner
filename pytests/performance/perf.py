@@ -254,7 +254,8 @@ class PerfBase(unittest.TestCase):
              report=0,
              start_at=-1,
              collect_server_stats=True,
-             is_eperf=False):
+             is_eperf=False,
+             hot_shift=0):
         cfg = { 'max-items': num_items,
                 'max-creates': num_items,
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
@@ -272,7 +273,8 @@ class PerfBase(unittest.TestCase):
                 'vbuckets': self.vbucket_count,
                 'doc-cache': doc_cache,
                 'prefix': prefix,
-                'report': report
+                'report': report,
+                'hot-shift': hot_shift
                 }
         cur = {}
         if start_at >= 0:
