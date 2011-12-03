@@ -51,7 +51,7 @@ class StatsCollector(object):
         rest = RestConnection(nodes[0])
         info = rest.get_nodes_self()
         self.data_path = info.storage[0].get_data_path()
-        self.client_id = client_id
+        self.client_id = str(client_id)
 
         if collect_server_stats:
             mbstats_thread = Thread(target=self.membase_stats,
