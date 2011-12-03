@@ -125,6 +125,7 @@ MIN_VALUE_SIZE = [10]
 
 def run_worker(ctl, cfg, cur, store, prefix):
     i = 0
+    t_last_shift = time.time()
     t_last = time.time()
     o_last = store.num_ops(cur)
     ops_per_sec_prev = []
@@ -144,7 +145,7 @@ def run_worker(ctl, cfg, cur, store, prefix):
            cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
             break
 
-        store.command(next_cmd(cfg, cur, store))
+        flushed = store.command(next_cmd(cfg, cur, store))
         i += 1
 
         if report > 0 and i % report == 0:
@@ -173,6 +174,14 @@ def run_worker(ctl, cfg, cur, store, prefix):
                # TODO: Do something clever here to prevent going over
                # the max-ops-per-sec.
                pass
+
+        if flushed:
+           hot_shift = cfg.get('hot-shift', 0)
+           if hot_shift:
+              t_curr_shift = time.time()
+              d = t_curr_shift - t_last_shift
+              cur['cur-base'] = cur.get('cur-base', 0) + (hot_shift * d)
+              t_last_shift = t_curr_shift
 
     store.flush()
 
@@ -290,6 +299,7 @@ class Store:
 
     def command(self, c):
         log.info("%s %s %s %s %s" % c)
+        return False
 
     def flush(self):
         pass
@@ -397,6 +407,8 @@ class StoreMemcachedBinary(Store):
         self.queue.append(c)
         if len(self.queue) > self.flush_level():
             self.flush()
+            return True
+        return False
 
     def flush_level(self):
         return self.cur.get('batch') or \
@@ -671,6 +683,8 @@ class StoreMemcachedAscii(Store):
         if len(self.queue) > (self.cur.get('batch') or \
                               self.cfg.get('batch', 100)):
             self.flush()
+            return True
+        return False
 
     def command_send(self, cmd, key_num, key_str, data, expiration):
         if cmd[0] == 'g':
@@ -936,7 +950,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "vbuckets":           (0,     "When > 0, vbucket hash during memcached-binary protocol."),
      "doc-cache":          (1,     "When 1, cache generated docs; faster but uses memory."),
      "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs before main loop."),
-     "backoff-factor":     (2.0,   "Expoential backoff factor on ETMPFAIL errors.")
+     "backoff-factor":     (2.0,   "Expoential backoff factor on ETMPFAIL errors."),
+     "hot-shift":          (0,     "Number of keys/sec that hot item subset should shift.")
      }
 
   cur_defaults = cur_defaults or {
