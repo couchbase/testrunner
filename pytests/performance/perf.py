@@ -380,7 +380,8 @@ class PerfBase(unittest.TestCase):
              collect_server_stats=True,
              start_at=-1,
              report=0,
-             ctl=None):
+             ctl=None,
+             hot_shift=0):
         num_items = num_items or self.num_items_loaded
 
         cfg = { 'max-items': max_items or num_items,
