@@ -341,9 +341,10 @@ class Store:
 
     def histo_bucket(self, samp):
        hp = self.cfg.get("histo-precision", 2)
-       p = 10 ** (math.floor(math.log10(samp)) - (hp - 1))
-       r = round(samp / p)
-       return r * p
+       if samp > 0:
+          p = 10 ** (math.floor(math.log10(samp)) - (hp - 1))
+          r = round(samp / p)
+          return r * p
 
     def drange(self, start, stop, step):
         r = start
