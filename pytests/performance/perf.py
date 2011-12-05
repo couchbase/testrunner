@@ -65,7 +65,10 @@ class PerfBase(unittest.TestCase):
                         msg="unable to create {0} bucket".format(bucket))
 
         try:
-            self.rest.reset_auto_compaction()
+            db_compaction  = self.parami("db_compaction", 80)
+            view_compaction  = self.parami("view_compaction", 80)
+            self.rest.reset_auto_compaction(dbFragmentThreshold = db_compaction,
+                              viewFragmntThreshold = view_compaction)
         except:
             pass # For example, membase doesn't support auto compaction.
 
