@@ -395,6 +395,8 @@ class RemoteMachineShellConnection:
         product_version = ""
         if "2.0.0" in version:
             product_version = "2.0.0"
+        elif "1.8.0" in version:
+            product_version = "1.8.0"
         else:
             log.error('Windows automation does not support {0} version yet'.format(version))
             sys.exit()
