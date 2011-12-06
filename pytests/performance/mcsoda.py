@@ -125,12 +125,15 @@ MIN_VALUE_SIZE = [10]
 
 def run_worker(ctl, cfg, cur, store, prefix):
     i = 0
-    t_last_shift = time.time()
+    t_last_flush = time.time()
+    o_last_flush = store.num_ops(cur)
     t_last = time.time()
     o_last = store.num_ops(cur)
     ops_per_sec_prev = []
 
     report = cfg.get('report', 0)
+    hot_shift = cfg.get('hot-shift', 0)
+    max_ops_per_sec = cfg.get('max-ops-per-sec', 0)
 
     if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
        cur['batch'] = 10
@@ -176,12 +179,23 @@ def run_worker(ctl, cfg, cur, store, prefix):
                pass
 
         if flushed:
-           hot_shift = cfg.get('hot-shift', 0)
-           if hot_shift:
-              t_curr_shift = time.time()
-              d = t_curr_shift - t_last_shift
+           t_curr_flush = time.time()
+           o_curr_flush = store.num_ops(cur)
+
+           d = t_curr_flush - t_last_flush
+
+           if hot_shift > 0:
               cur['cur-base'] = cur.get('cur-base', 0) + (hot_shift * d)
-              t_last_shift = t_curr_shift
+
+           if max_ops_per_sec > 0:
+              ops = o_curr_flush - o_last_flush
+              ops_per_sec = float(ops) / d
+              if ops_per_sec > max_ops_per_sec:
+                 s = (float(ops) / float(max_ops_per_sec)) - d
+                 time.sleep(s)
+
+           t_last_flush = t_curr_flush
+           o_last_flush = o_curr_flush
 
     store.flush()
 
@@ -945,7 +959,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "batch":              (100,   "Batch / pipeline up this number of commands per server."),
      "json":               (1,     "Use JSON documents. 0 to generate binary documents."),
      "time":               (0,     "Stop after this many seconds if > 0."),
-     # TODO: "max-ops-per-sec":    (0,     "Max ops/second, which overrides the batch parameter."),
+     "max-ops-per-sec":    (0,     "When > 0, max ops/second target performance."),
      "report":             (40000, "Emit performance output after this many requests."),
      "histo-precision":    (1,     "Precision of histogram bins."),
      "vbuckets":           (0,     "When > 0, vbucket hash during memcached-binary protocol."),
