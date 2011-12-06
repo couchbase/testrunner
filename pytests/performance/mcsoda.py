@@ -965,7 +965,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "vbuckets":           (0,     "When > 0, vbucket hash during memcached-binary protocol."),
      "doc-cache":          (1,     "When 1, cache generated docs; faster but uses memory."),
      "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs before main loop."),
-     "backoff-factor":     (2.0,   "Expoential backoff factor on ETMPFAIL errors."),
+     "backoff-factor":     (2.0,   "Exponential backoff factor on ETMPFAIL errors."),
      "hot-shift":          (0,     "Number of keys/sec that hot item subset should shift.")
      }
 
