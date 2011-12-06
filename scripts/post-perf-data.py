@@ -99,6 +99,16 @@ if __name__ == "__main__":
                         attachments["ns_server_data"].append(_new_sample)
                         index = index + 1
             del input_json["ns_server_data"]
+        if "ns_server_data_system" in input_json:
+            print "flattening ns_server_data_system"
+            attachments["ns_server_data_system"] = input_json["ns_server_data_system"]
+            index = 1
+            for row in attachments["ns_server_data_system"]:
+
+                row.update(z)
+                row.update({"row":index})
+                index = index + 1
+            del input_json["ns_server_data_system"]
         if "dispatcher" in input_json:
             print "flattening dispatcher"
             attachments["dispatcher"] = input_json["dispatcher"]

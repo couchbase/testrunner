@@ -67,11 +67,12 @@ class StatsCollector(object):
             bucket_size_thead = Thread(target=self.get_bucket_size,
                                        args=(bucket, rest, frequency))
             bucket_size_thead.start()
-            data_size_thread = Thread(target=self.get_data_file_size,
-                                    args=(nodes, 60, bucket))
-            data_size_thread.start()
+            #data_size_thread = Thread(target=self.get_data_file_size,
+            #                        args=(nodes, 60, bucket))
+            #data_size_thread.start()
             self._task["threads"] = [mbstats_thread, sysstats_thread,
-                                     ns_server_stats_thread, bucket_size_thead, data_size_thread]
+                                     ns_server_stats_thread, bucket_size_thead]
+                                     #data_size_thread]
             # Getting build/machine stats from only one node in the cluster
             self.build_stats(nodes)
             self.machine_stats(nodes)
@@ -113,6 +114,7 @@ class StatsCollector(object):
                "time": self._task["time"],
                "info": test_params,
                "ns_server_data": self._task.get("ns_server_stats", []),
+               "ns_server_data_system": self._task.get("ns_server_stats_system", []),
                "timings": self._task.get("timings", []),
                "dispatcher": self._task.get("dispatcher", []),
                "bucket-size":self._task.get("bucket_size", []),
@@ -343,9 +345,10 @@ class StatsCollector(object):
     def ns_server_stats(self, nodes, bucket, frequency, verbose=False):
 
         self._task["ns_server_stats"] = []
+        self._task["ns_server_stats_system"] = []
         d = {}
         for node in nodes:
-            d[node] = {"snapshots": [] }
+            d[node] = {"snapshots": [], "system_snapshots": [] }
 
         while not self._aborted():
             time.sleep(frequency)
@@ -356,10 +359,17 @@ class StatsCollector(object):
                 dict  = open("./ns_server_data","r").read()
                 data_json = json.loads(dict)
                 d[node]["snapshots"].append(data_json)
+                f = os.popen("curl -X GET http://Administrator:password@{1}:8091/pools/{0} -o  ns_server_data_system_stats".format(bucket, node.ip))
+                f.close()
+                dict  = open("./ns_server_data_system_stats","r").read()
+                data_json = json.loads(dict)
+                d[node]["system_snapshots"].append(data_json)
 
         for node in nodes:
            for snapshot in d[node]["snapshots"]:
                self._task["ns_server_stats"].append(snapshot)
+           for snapshot in d[node]["system_snapshots"]:
+               self._task["ns_server_stats_system"].append(snapshot)
 
         print " finished ns_server_stats"
 
