@@ -368,19 +368,15 @@ class RemoteMachineShellConnection:
         except IOError:
             pass
 
-    def find_build_version(self, path_to_version, version_file):
+    def find_build_version(self, path_to_version, version_file, product):
         sftp = self._ssh_client.open_sftp()
         ex_type = "exe"
         try:
-            if path_to_version == "/cygdrive/c/Program Files/Couchbase/Server/":
-                product_name = 'cb'
-            elif path_to_version == "/cygdrive/c/Program Files (x86)/Couchbase/Server/":
-                product_name = 'css'
             log.info(path_to_version)
             f = sftp.open(os.path.join(path_to_version, version_file), 'r+')
             full_version = f.read().rstrip()
             tmp = full_version.split("-")
-            build_name = "{0}_{1}-{2}".format(product_name, tmp[0], tmp[1])
+            build_name = "{0}_{1}-{2}".format(product, tmp[0], tmp[1])
             short_version = "{0}-{1}".format(tmp[0], tmp[1])
             return build_name, short_version, full_version
         except IOError:
@@ -397,6 +393,8 @@ class RemoteMachineShellConnection:
             product_version = "2.0.0"
         elif "1.8.0" in version:
             product_version = "1.8.0"
+        elif "1.7.2" in version:
+            product_version = "1.7.2"
         else:
             log.error('Windows automation does not support {0} version yet'.format(version))
             sys.exit()
@@ -522,7 +520,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             raise Exception("its not a membase or couchbase ?")
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
-        info = self.extract_remote_info()
         if info.type.lower() == 'windows':
             win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
                              "firefox.*", "WerFault.*", "iexplore.*"]
@@ -676,7 +673,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.terminate_processes(info, terminate_process_list)
             self.remove_folders(linux_folders)
 
-    def couchbase_uninstall(self, product):
+    def couchbase_uninstall(self):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase"]
@@ -687,21 +684,20 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         log.info(info.distribution_type)
         type = info.distribution_type.lower()
         if type == 'windows':
+            product = "cb"
             query = BuildQuery()
             builds, changes = query.get_all_builds()
             os_type = "exe"
             task = "uninstall"
             bat_file = "uninstall.bat"
-
-            if product == "cb":
-                product_name = "couchbase-server-enterprise"
-                version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
+            product_name = "couchbase-server-enterprise"
+            version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
 
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed? {0}".format(exist))
             if exist:
                 log.info("VERSION file exists.  Start to uninstall {0} server".format(product))
-                build_name, short_version, full_version = self.find_build_version(version_path, version_file)
+                build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
                 log.info('Build name: {0}'.format(build_name))
                 build_name = build_name.rstrip() + ".exe"
                 log.info('Check if {0} is in tmp directory'.format(build_name))
@@ -728,7 +724,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 log.info('sleep 30 seconds before running the next job ...')
                 time.sleep(30)
             else:
-                log.info('No {0} on this server'.format(product_name))
+                log.info("No couchbase server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
             #uninstallation command is different
             if type == "ubuntu":
@@ -805,31 +801,50 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*"]
         terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
                                   "couchdb", "epmd"]
+        version_file = "VERSION.txt"
         info = self.extract_remote_info()
         log.info(info.distribution_type)
         type = info.distribution_type.lower()
         if type == 'windows':
-            exists = self.file_exists("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt')
-            log.info("exists ? {0}".format(exists))
-            if exists:
-                log.info("start to uninstall membase server")
-                install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_install.iss' > \
-                                   /cygdrive/c/automation/install.bat"
-                output, error = self.execute_command(install_command)
-                uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\win2k8_64_uninstall.iss' > \
-                                    /cygdrive/c/automation/uninstall.bat"
-                self.log_command_output(output, error)
-                output, error = self.execute_command(uninstall_command)
-                self.log_command_output(output, error)
-                win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
-                                 "firefox.*", "WerFault.*", "iexplore.*"]
-                self.terminate_processes(info, win_processes)
-                self.remove_folders([" /cygdrive/c/Program Files/Membase/Server/"])
+            product = "mb"
+            query = BuildQuery()
+            builds, changes = query.get_all_builds()
+            os_type = "exe"
+            task = "uninstall"
+            bat_file = "uninstall.bat"
+            product_name = "membase-server-enterprise"
+            version_path = "/cygdrive/c/Program Files/Membase/Server/"
+
+            exist = self.file_exists(version_path, version_file)
+            log.info("Is VERSION file existed? {0}".format(exist))
+            if exist:
+                log.info("VERSION file exists.  Start to uninstall Membase server")
+                build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
+                log.info('Build name: {0}'.format(build_name))
+                build_name = build_name.rstrip() + ".exe"
+                log.info('Check if {0} is in tmp directory'.format(build_name))
+                exist = self.file_exists("/cygdrive/c/tmp/", build_name)
+                if not exist:   # if not exist in tmp dir, start to download that verion build
+                    build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
+                    downloaded = self.download_binary_in_win(build.url, product, short_version)
+                    if downloaded:
+                        log.info('Successful download {0}_{1}.exe'.format(product, short_version))
+                    else:
+                        log.error('Download {0}_{1}.exe failed'.format(product, short_version))
+                dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
+                self.create_multiple_dir(dir_paths)
+                self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+                # modify bat file to run uninstall schedule task
+                self.modify_bat_file('/cygdrive/c/automation', bat_file,
+                                       product, info.architecture_type, info.windows_name, short_version, task)
+                log.info('sleep for 5 seconds before running task schedule uninstall')
+                time.sleep(5)
+                # run schedule task uninstall Membase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                self.wait_till_file_deleted("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
-                                            timeout_in_seconds=120)
-                time.sleep(60)
+                self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+                log.info('sleep 30 seconds before running the next job ...')
+                time.sleep(30)
             else:
                 log.info("No membase server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:

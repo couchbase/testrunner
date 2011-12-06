@@ -80,7 +80,7 @@ class Installer(object):
     def uninstall(self, params):
         remote_client = RemoteMachineShellConnection(params["server"])
         remote_client.membase_uninstall()
-        remote_client.couchbase_uninstall(params["product"])
+        remote_client.couchbase_uninstall()
         remote_client.couchbase_single_uninstall()
 
     def build_url(self, params):
@@ -188,15 +188,44 @@ class MembaseServerInstaller(Installer):
         log = logger.new_logger("Installer")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
-        downloaded = remote_client.download_build(build)
-        if not downloaded:
-            log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        remote_client.membase_install(build)
-        ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
-        if not ready:
-            log.error("membase-server did not start...")
-        log.info('wait 5 seconds for membase server to start')
-        time.sleep(5)
+        info = remote_client.extract_remote_info()
+
+        type = info.type.lower()
+        if type == "windows":
+            task = "install"
+            bat_file = "install.bat"
+            server_path = "/cygdrive/c/Program Files/Membase/Server/"
+            dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
+            log = logger.new_logger("Installer")
+            build = self.build_url(params)
+            remote_client.create_multiple_dir(dir_paths)
+            remote_client.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+            downloaded = remote_client.download_binary_in_win(build.url, params["product"], params["version"])
+            if downloaded:
+                log.info('Successful download {0}_{1}.exe'.format(params["product"], params["version"]))
+            else:
+                log.error('Download {0}_{1}.exe failed'.format(params["product"], params["version"]))
+            # modify bat file to update new build version
+            remote_client.modify_bat_file('/cygdrive/c/automation', bat_file, params["product"],
+                                           info.architecture_type, info.windows_name, params["version"], task)
+            log.info('sleep for 5 seconds before running task schedule install me')
+            time.sleep(5)
+            # run task schedule to install Membase server
+            output, error = remote_client.execute_command("cmd /c schtasks /run /tn installme")
+            remote_client.log_command_output(output, error)
+            remote_client.wait_till_file_added(server_path, "VERSION.txt", timeout_in_seconds=600)
+            log.info('wait 30 seconds for server to start up completely')
+            time.sleep(30)
+        else:
+            downloaded = remote_client.download_build(build)
+            if not downloaded:
+                log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
+            remote_client.membase_install(build)
+            ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
+            if not ready:
+                log.error("membase-server did not start...")
+            log.info('wait 5 seconds for membase server to start')
+            time.sleep(5)
 
 
 class MembaseServerStandaloneInstaller(Installer):
