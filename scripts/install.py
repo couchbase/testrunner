@@ -169,8 +169,9 @@ class MembaseServerInstaller(Installer):
             rest = RestConnection(server)
             try:
                 if server.data_path:
-                    # Make sure that data_path is writable by membase user
                     remote_client = RemoteMachineShellConnection(server)
+                    remote_client.execute_command('rm -rf {0}/*'.format(server.data_path))
+                    # Make sure that data_path is writable by membase user
                     remote_client.execute_command("chown -R membase.membase {0}".format(server.data_path))
                     rest.set_data_path(data_path=server.data_path)
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
