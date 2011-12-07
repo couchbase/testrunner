@@ -262,7 +262,7 @@ def next_cmd(cfg, cur, store):
         cmd = 'get'
         cur['cur-gets'] = cur.get('cur-gets', 0) + 1
 
-        do_get_hit = (cfg.get('ratio-misses', 0) * 100) < (cur.get('cur-gets', 0) % 100)
+        do_get_hit = (cfg.get('ratio-misses', 0) * 100) <= (cur.get('cur-gets', 0) % 100)
         if do_get_hit:
             key_num = choose_key_num(cur.get('cur-items', 0),
                                      cfg.get('ratio-hot', 0),
