@@ -180,20 +180,32 @@ class ViewTests(unittest.TestCase):
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = self._get_view_results(rest, bucket, view_name, num_of_docs)
         value = self._get_built_in_reduce_results(results)
+        results_without_reduce = self._get_view_results(rest, bucket, view_name, num_of_docs,extra_params={"reduce":False})
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
         RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
         # try this for maximum 3 minutes
         attempt = 0
         delay = 10
+        num_of_results_without_reduce = len(self._get_keys(results_without_reduce))
         while attempt < 6 and value != num_of_docs:
-            msg = "view returned {0} items , expected to return {1} items"
+            msg = "reduce returned {0}, expected to return {1}"
             self.log.info(msg.format(value, len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(10)
             attempt += 1
+            #get the results without reduce ?
+            results_without_reduce = self._get_view_results(rest, bucket, view_name, num_of_docs,extra_params={"reduce":False})
+            keys = self._get_keys(results_without_reduce)
+            num_of_results_without_reduce = len(keys)
+            msg = "view with reduce=false returned {0} items, expected to return {1} items"
+            self.log.info(msg.format(len(keys), len(doc_names)))
             results = self._get_view_results(rest, bucket, view_name, num_of_docs)
             value = self._get_built_in_reduce_results(results)
+            msg = "reduce returned {0}, expected to return {1}"
+            self.log.info(msg.format(value, len(doc_names)))
         self.assertEquals(value, num_of_docs)
+        self.assertEquals(num_of_results_without_reduce, num_of_docs)
+        #now try to get the view without reduce
 
     def _test_sum_reduce_multiple_docs(self, num_of_docs):
         self.log.info("description : create a view on 10 thousand documents")
@@ -442,7 +454,7 @@ class ViewTests(unittest.TestCase):
             dict["views"] = {view: {"map": function, "reduce": reduce}}
         else:
             dict["views"] = {view: {"map": function}}
-        print dict
+        self.log.info("dict {0}".format(dict))
         return json.dumps(dict)
 
     def _verify_views_replicated(self, bucket, view_name, map_fn):
@@ -459,7 +471,8 @@ class ViewTests(unittest.TestCase):
                 all_valid = True
                 for vb in views_per_vbucket:
                     view_definition = views_per_vbucket[vb]
-                    print view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn
+                    self.log.info(
+                        "{0} {1}".format(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn))
                     if view_definition["views"][view_name]["map"].encode("ascii", "ignore") != map_fn:
                         self.log.info("view map_function is not replicated to all vbuckets yet. try again in 5 seconds")
                         all_valid = False
@@ -480,13 +493,14 @@ class ViewTests(unittest.TestCase):
             self.assertEquals(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn)
 
 
-    def _get_view_results(self, rest, bucket, view, limit=20, full_set=True):
+    def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}):
         #if view name starts with "dev" then we should append the full_set
         for i in range(0, 4):
             try:
                 start = time.time()
                 #full_set=true&connection_timeout=60000&limit=10&skip=0
                 params = {"connection_timeout": "60000"}
+                params.update(extra_params)
                 if view.find("dev_") == 0:
                     params["full_set"] = True
                 results = rest.view_results(bucket, view, params, limit)
