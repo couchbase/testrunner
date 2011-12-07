@@ -7,6 +7,7 @@ from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import testconstants
+import gzip
 
 # The histo dict is returned by add_timing_sample().
 # The percentiles must be sorted, ascending, like [0.90, 0.99].
@@ -126,15 +127,16 @@ class StatsCollector(object):
                "latency-delete":self._task["latency"].get('percentile-latency-delete', []),
                "latency-delete-recent":self._task["latency"].get('percentile-latency-delete-recent', []),
         }
-        file = open("{0}.json".format(name), 'w')
-        file.write("{0}".format(json.dumps(obj)))
-        file.close()
 
         if self.client_id:
             filename = str(self.client_id)+'.loop'
             if re.search('load$', self._task["name"]):
                 filename = str(self.client_id)+'.load'
-            file = open("{0}.json".format(filename), 'w')
+            file = gzip.open("{0}.json.gz".format(filename), 'wb')
+            file.write("{0}".format(json.dumps(obj)))
+            file.close()
+        else:
+            file = gzip.open("{0}.json.gz".format(name), 'wb')
             file.write("{0}".format(json.dumps(obj)))
             file.close()
 

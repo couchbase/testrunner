@@ -7,6 +7,7 @@ import time
 import json
 import os
 import threading
+import gzip
 
 from TestInput import TestInputSingleton
 
@@ -64,7 +65,9 @@ class EPerfMaster(perf.PerfBase):
 
     def aggregate_all_stats(self, len_clients):
         i = 0
-        final_json = open("{0}.loop.json".format(i)).read()
+        file = gzip.open("{0}.loop.json.gz".format(i), 'rb')
+        final_json = file.read()
+        file.close()
         final_json = json.loads(final_json)
         i += 1
         merge_keys = []
@@ -73,7 +76,7 @@ class EPerfMaster(perf.PerfBase):
                  merge_keys.append(str(latency))
 
         for i in range(i, len_clients):
-             file  = open("{0}.loop.json".format(i))
+             file  = gzip.open("{0}.loop.json.gz".format(i),'rb')
              dict = file.read()
              file.close()
              dict = json.loads(dict)
@@ -81,7 +84,7 @@ class EPerfMaster(perf.PerfBase):
                  if key in merge_keys:
                      final_json[key].extend(value)
 
-        file = open("{0}.json".format('final'), 'w')
+        file = gzip.open("{0}.json.gz".format('final'), 'wb')
         file.write("{0}".format(json.dumps(final_json)))
         file.close()
 
