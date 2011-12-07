@@ -430,6 +430,17 @@ class ViewTests(unittest.TestCase):
             self.log.info("key_set has {0} elements".format(len(key_set)))
         return key_set
 
+
+    def _get_doc_names(self, results):
+        doc_names = []
+        if results:
+            rows = results["rows"]
+            for row in rows:
+                doc_names.append(row["value"]["name"].encode("ascii", "ignore"))
+            self.log.info("doc_names has {0} elements".format(len(doc_names)))
+        return doc_names
+
+
     def _get_built_in_reduce_results(self, results):
         self.assertTrue(results, "results are null")
         rows = results["rows"]
@@ -817,22 +828,22 @@ class ViewTests(unittest.TestCase):
         view_name = "dev_test_view-{0}".format(prefix)
 
         results = self._get_view_results(rest, bucket, view_name, limit=2*len(doc_names))
-        keys = self._get_keys(results)
+        doc_names_view = self._get_doc_names(results)
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
         # try this for maximum 1 minute
         attempt = 0
         delay = 5
-        # first verify all keys get reported in the view
-        while attempt < 12 and len(keys) != len(doc_names) and sorted(keys) != sorted(doc_names):
+        # first verify all doc_names get reported in the view
+        while attempt < 12 and sorted(doc_names_view) != sorted(doc_names):
             msg = "view returned {0} items, expected to return {1} items"
-            self.log.info(msg.format(len(keys), len(doc_names)))
+            self.log.info(msg.format(len(doc_names_view), len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(delay)
             attempt += 1
             results = self._get_view_results(rest, bucket, view_name, limit=2*len(doc_names))
-            keys = self._get_keys(results)
-        if sorted(keys) != sorted(doc_names):
-            self.fail("returned keys have different values than expected keys")
+            doc_names_view = self._get_doc_names(results)
+        if sorted(doc_names_view) != sorted(doc_names):
+            self.fail("returned doc names have different values than expected")
 
     def _begin_rebalance_in(self):
         master = self.servers[0]
