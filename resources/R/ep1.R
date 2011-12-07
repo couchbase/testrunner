@@ -1,0 +1,687 @@
+source("executive.R")
+
+require(reshape, quietly=TRUE)
+require(plyr, quietly=TRUE)
+require(rjson, quietly=TRUE)
+require(ggplot2, quietly=TRUE)
+require(gridExtra, quietly=TRUE)
+
+library(plotrix)
+library(methods)
+
+args <- commandArgs(TRUE)
+args <- unlist(strsplit(args," "))
+
+new_build = args[1]
+dbip = args[2]
+dbname = args[3]
+pdfname = args[4]
+
+pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
+#new_build = "2.0.0r-266-g480746a"
+#dbip = "couchdb2.couchbaseqe.com"
+#dbname= "eperf"
+i_builds = c("1.7.2r-22-geaf53ef", new_build)
+
+cat(paste("args : ",args,""),sep="\n")
+
+commaize <- function(x, ...) {
+	prettySize(x)
+#	format(x, decimal.mark = ",", trim = TRUE, scientific = FALSE, ...)
+}
+
+makeFootnote <- function(footnoteText=
+                         format(Sys.time(), "%d %b %Y"),
+                         size= .7, color= grey(.5))
+{
+   require(grid)
+   pushViewport(viewport())
+   grid.text(label= footnoteText ,
+             x = unit(1,"npc") - unit(2, "mm"),
+             y= unit(2, "mm"),
+             just=c("right", "bottom"),
+             gp=gpar(cex= size, col=color))
+   popViewport()
+}
+
+
+prettySize <- function(s, fmt="%.2f") {
+    sizes <- c('', 'K', 'M', 'G', 'T', 'P', 'E')
+    f <- ifelse(s == 0, NA, e <- floor(log(s, 1024)))
+    suffix <- ifelse(s == 0, '', sizes[f+1])
+	prefix <- ifelse(s == 0, s, sprintf(fmt, s/(1024 ^ floor(e))))
+    paste(prefix, suffix, sep="")
+}
+
+createAllProcessesUsageDataFrame <- function(bb) {
+        (temp_data_frame <- bb[FALSE, ])
+        builds = factor(bb$buildinfo.version)
+        tests = factor(bb$name)
+        processes = factor(bb$comm)
+        for(a_process in levels(processes)) {
+                for(a_test in levels(tests)) {
+                        for(a_build in levels(builds)) {
+                                filtered <- bb[bb$buildinfo.version == a_build & bb$name == a_test,]
+                                max_time <- max(filtered$info.test_time)
+                                graphed <- bb[bb$buildinfo.version == a_build & bb$info.test_time == max_time & bb$name== a_test & bb$comm == a_process,]
+                                graphed <- transform(graphed,cpu_time = as.numeric(utime) + as.numeric(stime))
+                            counterdiff <- diff(graphed$cpu_time)
+                                graphed[,"cpu_time_diff"] <- append(c(0), counterdiff)
+                                temp_data_frame <- rbind(temp_data_frame,  graphed)
+                        }
+                }
+        }
+        temp_data_frame
+}
+
+
+ggplotAllProcessesCpuUsageWithFacets <- function(df,title) {
+
+        builds = factor(df$buildinfo.version)
+#       for(a_build in levels(builds)) {
+                p <- ggplot(df, aes(row, cpu_time_diff, color= buildinfo.version ,fill=comm, label=comma(cpu_time_diff)))
+                p <- ggplot(df, aes(row, cpu_time_diff, color= buildinfo.version ,fill=comm, label= comma(cpu_time_diff)))
+#               p <- p + geom_line(aes(row, cpu_time_diff, color=buildinfo.version))
+                p <- p + stat_smooth(se = TRUE)
+                p <- p + labs(y='stime+utime', x="----time (every 10 secs) --->")
+                p <- p + opts(title=paste(title))
+                p <- p + scale_y_continuous(formatter="commaize",expand=c(0,0),limits = c(min(temp_data_frame$cpu_time_diff),quantile(temp_data_frame$cpu_time_diff,0.99)))
+                p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+            p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))
+                p <- p + facet_wrap(~buildinfo.version, ncol=3, scales='free')
+            print(p)
+#    }
+}
+
+createProcessUsageDataFrame <- function(bb,process) {
+ 	(temp_data_frame <- bb[FALSE, ])
+	builds = factor(bb$buildinfo.version)
+	print(builds)
+	tests = factor(bb$name)
+	ips = factor(bb$ip)
+	id <- unique(bb[bb$buildinfo.version==build,]$unique_id)[1]
+	print(id)
+	for(a_test in levels(tests)) {
+		for(a_build in levels(builds)) {
+				filtered <- bb[bb$buildinfo.version == a_build & bb$name == a_test & bb$unique_id ==id,]
+				print(unqiue(filtered$unique_id))
+				graphed <- bb[bb$buildinfo.version == a_build & bb$comm == process & bb$name == a_test & bb$unique_id ==id,]
+                print(unqiue(graphed$unique_id))
+				graphed <- transform(graphed,cpu_time = as.numeric(utime) + as.numeric(stime))
+			    counterdiff <- diff(graphed$cpu_time)
+				graphed[,"cpu_time_diff"] <- append(c(0), counterdiff)		
+				temp_data_frame <- rbind(temp_data_frame,  graphed)
+		}
+	}
+	temp_data_frame
+}
+
+
+builds_json <- fromJSON(file=paste("http://",dbip,":5984/",dbname,"/","/_design/data/_view/by_test_time", sep=''))$rows
+builds_list <- plyr::ldply(builds_json, unlist)
+
+names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','test_time')
+
+ (fbl <- builds_list[FALSE, ])
+ for(name in levels(factor(builds_list$test_name))) {
+	 for(a_build in levels(factor(builds_list[builds_list$test_name == name,]$build))) {
+		 filtered = builds_list[builds_list$build==a_build & builds_list$test_name == name,]
+		 max_time = max(filtered$test_time)
+		 filtered = filtered[filtered $test_time == max_time,]
+		 # print(filtered)
+		 fbl <- rbind(fbl,filtered)	
+	 }
+ }
+builds_list <- fbl
+builds_list <- builds_list[builds_list$build %in% i_builds,]
+
+# Following metrics are to be fetch from CouchDB and plotted
+metric_list = c('ns_server_data', 'systemstats', 'latency-get','latency-set')
+
+# Get ns_server_data
+
+cat("generating ns_server_data ")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data", sep='')
+	# cat(paste(url,"\n"))
+	doc_json <- fromJSON(file=url)
+	# cat(paste(builds_list[index,]$id,"\n"))
+	unlisted <- plyr::ldply(doc_json, unlist)
+	# print(ncol(unlisted))
+	# print(nrow(unlisted))
+	# print(unlisted[1,])
+	result <- rbind(result,unlisted)
+}
+cat("generated ns_server_data data frame\n")
+cat(paste("result has ", nrow(result)," rows \n"))
+
+ns_server_data <- result
+ns_server_data $row <- as.numeric(ns_server_data $row)
+ns_server_data $ep_queue_size <- as.numeric(ns_server_data $ep_queue_size)
+ns_server_data $ep_diskqueue_drain <- as.numeric(ns_server_data $ep_diskqueue_drain)
+ns_server_data $ops <- as.numeric(ns_server_data $ops)
+
+
+# Get systemstats
+cat("generating system stats\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","systemstats", sep='')
+	cat(paste(url,"\n"))
+	doc_json <- fromJSON(file=url)
+	# cat(paste(builds_list[index,]$id,"\n"))
+	unlisted <- plyr::ldply(doc_json, unlist)
+	print(ncol(unlisted))
+	result <- rbind(result,unlisted)
+}
+cat("generated system stats data frame\n")
+cat(paste("result has ", nrow(result)," rows \n"))
+system_stats <- result
+system_stats = transform(system_stats,utime=as.numeric(utime),stime=as.numeric(stime),rss=(as.numeric(rss) * 4096) / (1024 * 1024))
+system_stats$row <- as.numeric(factor(system_stats$row))
+
+
+# Get Latency-get
+cat("generating latency-get\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-get", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-get"))
+}
+latency_get <- result
+latency_get$row <- as.numeric(latency_get$row)
+latency_get$mystery <- as.numeric(latency_get$mystery)
+latency_get$percentile_99th <- as.numeric(latency_get$percentile_99th) * 1000
+latency_get$percentile_95th <- as.numeric(latency_get$percentile_95th) * 1000
+latency_get$percentile_90th <- as.numeric(latency_get$percentile_90th) * 1000
+
+# Get Latency-set
+cat("generating latency-set\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-set", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-set"))
+}
+latency_set <- result
+latency_set$row <- as.numeric(latency_set$row)
+latency_set$mystery <- as.numeric(latency_set$mystery)
+latency_set$percentile_99th <- as.numeric(latency_set$percentile_99th) * 1000
+latency_set$percentile_95th <- as.numeric(latency_set$percentile_95th) * 1000
+latency_set$percentile_90th <- as.numeric(latency_set$percentile_90th) * 1000
+
+# Get Data size on disk
+cat("generating disk usage over time")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","bucket-size", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		print(ncol(unlisted))
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting bucket disk size"))
+}
+disk_data <- result
+disk_data$row <- as.numeric(disk_data$row)
+disk_data$size <- as.numeric(disk_data$size)
+disk_data$row <- as.numeric(factor(disk_data$row))
+
+
+builds_list$runtime = as.numeric(builds_list$runtime)
+baseline= c("1.7.2r-22-geaf53ef")
+
+first_row <- c("system","test","value")
+combined <- data.frame(t(rep(NA,3)))
+names(combined)<- c("system","test","value")
+p <- combined[2:nrow(combined), ]
+
+# Test runtime is present in builds_list
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+	fi <-builds_list[builds_list$build==build, ]
+	d <- fi$runtime
+	print(d)	
+	if(build == baseline){
+		row <-c ("baseline", "runtime", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "runtime", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+
+}
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ep_diskqueue_drain!=0, ]
+	d <- mean(fi$ep_diskqueue_drain)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "drain rate", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "drain rate", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+
+
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
+	d <- mean(fi$percentile_95th)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "latency-get (95th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-get (95th)", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]	
+	d <- mean(fi$percentile_95th)
+
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "latency-set (95th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-set (95th)", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-disk_data[disk_data$buildinfo.version==build, ]
+	d <- max(fi$size)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "peak disk", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "peak disk", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+
+
+builds = factor(system_stats$buildinfo.version)
+for(build in levels(builds)) {	
+    id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
+	fi_memcached <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id == id, ]
+	fi_beam <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(beam.smp)" & system_stats$unique_id == id, ]
+
+	print("here")
+	d <- max(fi_memcached$rss + fi_beam$rss)
+	
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "peak mem", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "peak mem", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+
+
+p <- combined[2:nrow(combined), ]
+p$value <- as.numeric(p$value)
+df <- fixupData(buildComparison(p , 'system', 'baseline'))
+
+ggplot(data=df[df$system != 'baseline',], aes(test, position, fill=color)) +
+  geom_hline(yintercept=0, lwd=1, col='#777777') +
+geom_bar(stat='identity', position='dodge') +
+  scale_fill_manual('Result', values=colors, legend=FALSE) +
+  geom_hline(yintercept=.10, lty=3) +
+  geom_hline(yintercept=-.10, lty=3) +
+  scale_y_continuous(limits=c(-1 * (magnitude_limit - 1), magnitude_limit - 1),
+                     formatter=function(n) sprintf("%.1fx", abs(n) + 1)) +
+  opts(title=paste(builds_list$test_name,': Difference from 1.7.2')) +
+  labs(y='(righter is better)', x='') +
+  geom_text(aes(x=test, y=ifelse(abs(position) < .5, .5, sign(position) * -.5),
+                label=sprintf("%.02fx", abs(offpercent))),
+            size=4, colour="#999999") +
+coord_flip() +
+  theme_bw()
+footnote <- paste(builds_list$test_name, format(Sys.time(), "%d %b %Y"), sep=" / ")
+
+makeFootnote(footnote)
+
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ops !=0, ]			         
+	print("here")
+	d <- mean(fi$ops)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "ops", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "ops", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+	
+}
+
+builds = factor(system_stats$buildinfo.version)
+for(build in levels(builds)) {
+	id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
+    print(id)	
+	fi_memcached <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id==id, ]
+
+	print("here")
+	d <- mean(fi_memcached$rss)
+	
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "Avg. mem memcached", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "Avg. mem memcached", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+
+builds = factor(system_stats$buildinfo.version)
+for(build in levels(builds)) {	
+    id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
+    print(id)
+	fi_beam <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(beam.smp)" & system_stats$unique_id ==id, ]
+
+	print("here")
+	d <- mean(fi_beam$rss)
+	
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "Avg. mem beam.smp", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "Avg. mem beam.smp", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
+	d <- mean(fi$percentile_90th)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "latency-get (90th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-get (90th)", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
+	d1 <- mean(fi$percentile_99th)
+	print(d)
+	print(d1)
+	if(build == baseline){
+		row <-c ("baseline", "latency-get (99th)", as.numeric(d1))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-get (99th)", as.numeric(d1))
+		combined <- rbind(combined, row)	
+	}
+	
+}
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]
+	d <- mean(fi$percentile_90th)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "latency-set (90th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-set (90th)", as.numeric(d))
+		combined <- rbind(combined, row)	
+	}
+}
+
+
+builds = factor(ns_server_data$buildinfo.version)
+for(build in levels(builds)) {	
+
+	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]
+	d1 <- mean(fi$percentile_99th)
+	print(d1)
+	if(build == baseline){
+		row <-c ("baseline", "latency-set (99th)", as.numeric(d1))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-set (99th)", as.numeric(d1))
+		combined <- rbind(combined, row)	
+	}
+}
+
+
+
+p <- combined[2:nrow(combined), ]
+p$value <- as.numeric(p$value)
+
+MB <- p[p[,'system'] == 'baseline',]$value
+MB <- as.numeric(sprintf("%.2f", MB))
+CB <- p[p[,'system'] != 'baseline',]$value
+CB <- as.numeric(sprintf("%.2f", CB))
+MB1 <- c()
+MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[1]/3600)))
+MB1 <- append(MB1, commaize(MB[2]))
+MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[5]/1024)))
+MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[6]/1024)))
+MB1 <- append(MB1, commaize(MB[7]))
+MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[8]/1024)))
+MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[9])))
+MB1 <- append(MB1, commaize(MB[10]))
+MB1 <- append(MB1, commaize(MB[3]))
+MB1 <- append(MB1, commaize(MB[11]))
+MB1 <- append(MB1, commaize(MB[12]))
+MB1 <- append(MB1, commaize(MB[4]))
+MB1 <- append(MB1, commaize(MB[13]))
+
+
+CB1 <- c()
+CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[1]/3600)))
+CB1 <- append(CB1, commaize(CB[2]))
+CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[5]/1024)))
+CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[6]/1024)))
+CB1 <- append(CB1, commaize(CB[7]))
+CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[8]/1024)))
+CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[9])))
+CB1 <- append(CB1, commaize(CB[10]))
+CB1 <- append(CB1, commaize(CB[3]))
+CB1 <- append(CB1, commaize(CB[11]))
+CB1 <- append(CB1, commaize(CB[12]))
+CB1 <- append(CB1, commaize(CB[4]))
+CB1 <- append(CB1, commaize(CB[13]))
+
+testdf <- data.frame(MB1,CB1)
+rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)")
+plot.new()
+grid.table(testdf, h.even.alpha=1, h.odd.alpha=1,  v.even.alpha=0.5, v.odd.alpha=1)
+makeFootnote(footnote)
+
+cat("generating ops/per second \n")
+p <- ggplot(ns_server_data, aes(row, ops, color=buildinfo.version ,fill= buildinfo.version, label=ops)) + labs(x="----time (sec)--->", y="ops/sec")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("ops/per second", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$ops),max(ns_server_data$ops)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+cat("generating disk write queue graph\n")
+p <- ggplot(ns_server_data, aes(row, ep_queue_size, color=buildinfo.version ,fill=buildinfo.version, label=ep_queue_size)) + labs(x="----time (sec)--->", y="dwq")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("ep_queue_size", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$ep_queue_size),max(ns_server_data$ep_queue_size)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+cat("generating disk drain rate graph\n")
+p <- ggplot(ns_server_data, aes(row, ep_diskqueue_drain, color=buildinfo.version, fill=buildinfo.version, label=ep_diskqueue_drain))
+p <- p + labs(x="----time (sec)--->", y="drain_rate")
+p  <-  p + stat_smooth(se = TRUE)
+#       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$ep_diskqueue_drain),quantile(ns_server_data$ep_diskqueue_drain,0.999)))
+p <- p + opts(title=paste("Drain Rate", sep=''))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free_y')
+print(p)
+
+cat("generating data disk size\n")
+p <- ggplot(disk_data, aes(row,size, color=buildinfo.version ,fill=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="size (MB)")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("data disk size", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(disk_data$size),max(disk_data$size)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+cat("Latency-get 90th\n")
+temp <- latency_get[latency_get$client_id ==0,]
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_90th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("Latency-get 90th  percentile", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_90th),max(temp$percentile_90th)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+
+cat("Latency-get 95th\n")
+temp <- latency_get[latency_get$client_id ==0,]
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_95th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("Latency-get 95th  percentile", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_95th),max(temp$percentile_95th)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+
+cat("Latency-get 99th\n")
+temp <- latency_get[latency_get$client_id ==0,]
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_99th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("Latency-get 99th  percentile", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_99th),max(temp$percentile_99th)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+cat("Latency-set 90th\n")
+temp <- latency_set[latency_set$client_id ==0,]
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_90th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("Latency-set 90th  percentile", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_90th),max(temp$percentile_90th)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+
+cat("Latency-set 95th\n")
+temp <- latency_set[latency_set$client_id ==0,]
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_95th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("Latency-set 95th  percentile", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_95th),max(temp$percentile_95th)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+
+cat("Latency-set 99th\n")
+temp <- latency_set[latency_set$client_id ==0,]
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_99th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
+p  <-  p + stat_smooth(se = TRUE)
+p <- p + opts(title=paste("Latency-set 99th percentile", sep=''))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_99th),max(temp$percentile_99th)))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free')
+print(p)
+makeFootnote(footnote)
+
+
+#cat("Generating Memory/CPU usage for beam.smp and memcached\n")
+#temp_data_frame  = createProcessUsageDataFrame(system_stats, "(beam.smp)")
+#ggplotCpuUsageWithFacets(temp_data_frame,"beam.smp cpu ticks")
+#ggplotMemoryUsageWithFacets(temp_data_frame,"beam.smp memory profile")
+
+
+dev.off()
+
