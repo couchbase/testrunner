@@ -190,8 +190,8 @@ class MembaseServerInstaller(Installer):
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
         info = remote_client.extract_remote_info()
-
         type = info.type.lower()
+        server = params["server"]
         if type == "windows":
             task = "install"
             bat_file = "install.bat"
@@ -221,7 +221,8 @@ class MembaseServerInstaller(Installer):
             downloaded = remote_client.download_build(build)
             if not downloaded:
                 log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-            remote_client.membase_install(build)
+            path = server.data_path or '/tmp'
+            remote_client.membase_install(build, path=path)
             ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
             if not ready:
                 log.error("membase-server did not start...")
@@ -299,6 +300,7 @@ class CouchbaseServerInstaller(Installer):
         remote_client = RemoteMachineShellConnection(params["server"])
         info = remote_client.extract_remote_info()
         type = info.type.lower()
+        server = params["server"]
         if type == "windows":
             task = "install"
             bat_file = "install.bat"
@@ -330,7 +332,8 @@ class CouchbaseServerInstaller(Installer):
             if not downloaded:
                 log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
             #TODO: need separate methods in remote_util for couchbase and membase install
-            remote_client.membase_install(build)
+            path = server.data_path or '/tmp'
+            remote_client.membase_install(build, path=path)
             log.info('wait 5 seconds for membase server to start')
             time.sleep(5)
 
