@@ -673,13 +673,17 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         builds, changes = BuildQuery().get_all_builds()
         log.info("finding build {0} for machine {1}".format(version, master))
         result = re.search('r', version)
+        product = 'membase-server-enterprise'
+        if re.search('1.8.0',version):
+            product = 'couchbase-server-enterprise'
+
         if result is None:
-            appropriate_build = BuildQuery().find_membase_release_build('membase-server-enterprise',
+            appropriate_build = BuildQuery().find_membase_release_build(product,
                                                                         info.deliverable_type,
                                                                         info.architecture_type,
                                                                         version.strip())
         else:
-            appropriate_build = BuildQuery().find_membase_build(builds, 'membase-server-enterprise',
+            appropriate_build = BuildQuery().find_membase_build(builds, product,
                                                                 info.deliverable_type,
                                                                 info.architecture_type,
                                                                 version.strip())
