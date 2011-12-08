@@ -869,10 +869,13 @@ class WarmUpMemcachedTest(unittest.TestCase):
         #look at warmup time
         #loo
 
+    def measure_warmup_2(self):
+        warmup_max_time = 10 * 1000
+        self._measure_warmup(2, warmup_max_time)
+
     def measure_warmup_10k(self):
         warmup_max_time = 200 * 1000
         self._measure_warmup(10000, warmup_max_time)
-
 
     def measure_warmup_100k(self):
         warmup_max_time = 600 * 1000
