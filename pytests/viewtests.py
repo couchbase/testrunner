@@ -11,6 +11,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedError
 
 class ViewTests(unittest.TestCase):
     #if we create a bucket and a view let's delete them in the end
@@ -780,7 +781,23 @@ class ViewTests(unittest.TestCase):
             key = doc_name = "{0}-{1}".format(prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
-            moxi.set(key, 0, 0, json.dumps(value))
+            # loop till value is set
+            fail_count = 0
+            while True:
+                try:
+                    moxi.set(key, 0, 0, json.dumps(value))
+                    break
+                except MemcachedError as e:
+                    fail_count += 1
+                    if (e.status == 133 or e.status == 132) and fail_count < 60:
+                        if i == 0:
+                            self.log.error("moxi not fully restarted, waiting 5 seconds. error {0}".format(e))
+                            time.sleep(5)
+                        else:
+                            self.log.error(e)
+                            time.sleep(1)
+                    else:
+                        raise e
         self.log.info("inserted {0} json documents".format(num_of_docs))
         self._verify_docs_doc_name(doc_names, prefix)
         return doc_names
