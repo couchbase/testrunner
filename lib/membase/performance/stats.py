@@ -55,9 +55,9 @@ class StatsCollector(object):
         self.client_id = str(client_id)
 
         if collect_server_stats:
-            mbstats_thread = Thread(target=self.membase_stats,
-                                    args=(nodes, bucket, frequency, self._verbosity))
-            mbstats_thread.start()
+            #mbstats_thread = Thread(target=self.membase_stats,
+            #                        args=(nodes, bucket, frequency, self._verbosity))
+            #mbstats_thread.start()
             sysstats_thread = Thread(target=self.system_stats,
                                      args=(nodes, pnames, frequency, self._verbosity))
             sysstats_thread.start()
@@ -71,9 +71,8 @@ class StatsCollector(object):
             #data_size_thread = Thread(target=self.get_data_file_size,
             #                        args=(nodes, 60, bucket))
             #data_size_thread.start()
-            self._task["threads"] = [mbstats_thread, sysstats_thread,
-                                     ns_server_stats_thread, bucket_size_thead]
-                                     #data_size_thread]
+            self._task["threads"] = [sysstats_thread, ns_server_stats_thread, bucket_size_thead]
+                                     #data_size_thread, mbstats_thread ]
             # Getting build/machine stats from only one node in the cluster
             self.build_stats(nodes)
             self.machine_stats(nodes)
