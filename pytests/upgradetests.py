@@ -14,6 +14,29 @@ import testconstants
 
 TIMEOUT_SECS = 30
 
+def _get_build(master, version):
+    log = logger.Logger.get_logger()
+    remote = RemoteMachineShellConnection(master)
+    info = remote.extract_remote_info()
+    remote.disconnect()
+    builds, changes = BuildQuery().get_all_builds()
+    log.info("finding build {0} for machine {1}".format(version, master))
+    result = re.search('r', version)
+    product = 'membase-server-enterprise'
+    if re.search('1.8',version):
+        product = 'couchbase-server-enterprise'
+
+    if result is None:
+        appropriate_build = BuildQuery().find_membase_release_build(product,
+                                                                    info.deliverable_type,
+                                                                    info.architecture_type,
+                                                                    version.strip())
+    else:
+        appropriate_build = BuildQuery().find_membase_build(builds, product,
+                                                            info.deliverable_type,
+                                                            info.architecture_type,
+                                                            version.strip())
+    return appropriate_build
 
 class SingleNodeUpgradeTests(unittest.TestCase):
     #test descriptions are available http://techzone.couchbase.com/wiki/display/membase/Test+Plan+1.7.0+Upgrade
@@ -27,10 +50,14 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         rest_settings = input.membase_settings
         servers = input.servers
         server = servers[0]
+        save_upgrade_config = False
+        if re.search('1.8',input.test_params['version']):
+            save_upgrade_config = True
         remote = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
         info = remote.extract_remote_info()
         remote.membase_uninstall()
+        remote.couchbase_uninstall()
         builds, changes = BuildQuery().get_all_builds()
         older_build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
                                                               os_architecture=info.architecture_type,
@@ -68,15 +95,12 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                         RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_flusher_todo', 0)
 
         version = input.test_params['version']
-        #pick the first one in the list
-        appropriate_build = BuildQuery().find_membase_build(builds,
-                                 'membase-server-enterprise',
-                                 info.deliverable_type,
-                                 info.architecture_type,
-                                 version.strip())
+
+        appropriate_build = _get_build(servers[0], version)
+        self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
 
         remote.download_build(appropriate_build)
-        remote.membase_upgrade(appropriate_build)
+        remote.membase_upgrade(appropriate_build, save_upgrade_config=save_upgrade_config)
         remote.disconnect()
         RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
 
@@ -460,6 +484,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         input = TestInputSingleton.input
         rest_settings = input.membase_settings
         servers = input.servers
+        save_upgrade_config = False
+        if re.search('1.8',input.test_params['version']):
+            save_upgrade_config = True
 
         # install older build on all nodes
         for server in servers:
@@ -472,6 +499,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                                               product='membase-server-enterprise')
 
             remote.membase_uninstall()
+            remote.couchbase_uninstall()
             remote.execute_command('/etc/init.d/membase-server stop')
             remote.download_build(older_build)
             #now let's install ?
@@ -521,11 +549,12 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 if version is not initial_version:
                     log.info("Upgrading to version {0}".format(version))
                     self._stop_membase_servers(servers)
-                    appropriate_build = self._get_build(servers[0], version)
+                    appropriate_build = _get_build(servers[0], version)
+                    self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
                     for server in servers:
                         remote = RemoteMachineShellConnection(server)
                         remote.download_build(appropriate_build)
-                        remote.membase_upgrade(appropriate_build)
+                        remote.membase_upgrade(appropriate_build, save_upgrade_config=save_upgrade_config)
                         RestHelper(RestConnection(server)).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
 
                         #verify admin_creds still set
@@ -555,7 +584,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         # rolling upgrade
         else:
             version = input.test_params['version']
-            appropriate_build = self._get_build(servers[0], version)
+            appropriate_build = _get_build(servers[0], version)
+            self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
             # rebalance node out
             # remove membase from node
             # install destination version onto node
@@ -578,6 +608,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 self.assertTrue(removed, msg="Unable to remove nodes {0}".format(toBeEjectedNodes))
                 remote = RemoteMachineShellConnection(server)
                 remote.membase_uninstall()
+                remote.couchbase_uninstall()
                 remote.download_build(appropriate_build)
                 remote.membase_install(appropriate_build)
                 RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
@@ -665,29 +696,4 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys, server=master, bucket_name='default',
                                                                    test=self)
 
-    def _get_build(self, master, version):
-        log = logger.Logger.get_logger()
-        remote = RemoteMachineShellConnection(master)
-        info = remote.extract_remote_info()
-        remote.disconnect()
-        builds, changes = BuildQuery().get_all_builds()
-        log.info("finding build {0} for machine {1}".format(version, master))
-        result = re.search('r', version)
-        product = 'membase-server-enterprise'
-        if re.search('1.8.0',version):
-            product = 'couchbase-server-enterprise'
 
-        if result is None:
-            appropriate_build = BuildQuery().find_membase_release_build(product,
-                                                                        info.deliverable_type,
-                                                                        info.architecture_type,
-                                                                        version.strip())
-        else:
-            appropriate_build = BuildQuery().find_membase_build(builds, product,
-                                                                info.deliverable_type,
-                                                                info.architecture_type,
-                                                                version.strip())
-
-        self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
-
-        return appropriate_build

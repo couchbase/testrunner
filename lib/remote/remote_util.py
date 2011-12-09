@@ -443,22 +443,34 @@ class RemoteMachineShellConnection:
         except IOError:
             pass
 
-    def membase_upgrade(self, build):
+    def membase_upgrade(self, build, save_upgrade_config=False):
         #install membase server ?
         #run the right command
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
         info = self.extract_remote_info()
+        log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
+        command = ''
         if info.type.lower() == 'windows':
             log.error('automation does not support windows upgrade yet!')
         elif info.deliverable_type == 'rpm':
             #run rpm -i to install
-            log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
-            output, error = self.execute_command('rpm -U /tmp/{0}'.format(build.name))
-            self.log_command_output(output, error)
+            if save_upgrade_config:
+                self.membase_uninstall(save_upgrade_config=save_upgrade_config)
+                install_command = 'rpm -i /tmp/{0}'.format(build.name)
+                command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/membase/var/lib/membase/config {0}'.format(install_command)
+            else:
+                command = 'rpm -U /tmp/{0}'.format(build.name)
         elif info.deliverable_type == 'deb':
-            output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
-            self.log_command_output(output, error)
+            if save_upgrade_config:
+                self.membase_uninstall(save_upgrade_config=save_upgrade_config)
+                install_command = 'dpkg -i /tmp/{0}'.format(build.name)
+                command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/membase/var/lib/membase/config {0}'.format(install_command)
+            else:
+                command = 'dpkg -i /tmp/{0}'.format(build.name)
+
+        output, error = self.execute_command(command)
+        self.log_command_output(output, error)
 
     def couchbase_single_install(self, build):
         is_couchbase_single = False
@@ -796,7 +808,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         else:
             log.info('No couchbase server on this server')
 
-    def membase_uninstall(self):
+    def membase_uninstall(self, save_upgrade_config = False):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*"]
         terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
@@ -864,7 +876,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
             self.terminate_processes(info, terminate_process_list)
-            self.remove_folders(linux_folders)
+            if not save_upgrade_config:
+                self.remove_folders(linux_folders)
 
     def log_command_output(self, output, error):
         for line in error:
