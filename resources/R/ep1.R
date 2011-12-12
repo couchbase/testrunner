@@ -377,14 +377,14 @@ geom_bar(stat='identity', position='dodge') +
   geom_hline(yintercept=-.10, lty=3) +
   scale_y_continuous(limits=c(-1 * (magnitude_limit - 1), magnitude_limit - 1),
                      formatter=function(n) sprintf("%.1fx", abs(n) + 1)) +
-  opts(title=paste(builds_list$test_name,': Difference from 2.0.0r-266')) +
+  opts(title=paste(builds_list$test_name,': Difference from ', baseline_build)) +
   labs(y='(righter is better)', x='') +
   geom_text(aes(x=test, y=ifelse(abs(position) < .5, .5, sign(position) * -.5),
                 label=sprintf("%.02fx", abs(offpercent))),
             size=4, colour="#999999") +
 coord_flip() +
   theme_bw()
-footnote <- paste(builds_list$test_name, format(Sys.time(), "%d %b %Y"), sep=" / ")
+footnote <- paste(builds_list$test_name, new_build, format(Sys.time(), "%d %b %Y"), sep=" / ")
 
 makeFootnote(footnote)
 
