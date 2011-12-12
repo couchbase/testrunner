@@ -12,20 +12,25 @@ library(methods)
 args <- commandArgs(TRUE)
 args <- unlist(strsplit(args," "))
 
-new_build = args[1]
-dbip = args[2]
-dbname = args[3]
-pdfname = args[4]
+baseline_build = args[1]
+new_build = args[2]
+test_name = args[3]
+dbip = args[4]
+dbname = args[5]
+pdfname = args[6]
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
-#new_build = "2.0.0r-266-g480746a"
+#baseline_build="1.7.2r-22-geaf53ef"
+#new_build = "2.0.0r-388-gf35126e-enterprise"
+#test_name = "EPT-READ-original"
 #dbip = "couchdb2.couchbaseqe.com"
 #dbname= "eperf"
-i_builds = c("1.7.2r-22-geaf53ef", new_build)
+#i_builds = c("1.7.2r-22-geaf53ef", new_build)
+i_builds = c(baseline_build, new_build)
 
 cat(paste("args : ",args,""),sep="\n")
 
-commaize <- function(x, ...) {
+commaize <- function(x, ...) {		
 	prettySize(x)
 #	format(x, decimal.mark = ",", trim = TRUE, scientific = FALSE, ...)
 }
@@ -120,21 +125,22 @@ createProcessUsageDataFrame <- function(bb,process) {
 builds_json <- fromJSON(file=paste("http://",dbip,":5984/",dbname,"/","/_design/data/_view/by_test_time", sep=''))$rows
 builds_list <- plyr::ldply(builds_json, unlist)
 
-names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','test_time')
+names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','is_json','test_time')
 
- (fbl <- builds_list[FALSE, ])
- for(name in levels(factor(builds_list$test_name))) {
-	 for(a_build in levels(factor(builds_list[builds_list$test_name == name,]$build))) {
-		 filtered = builds_list[builds_list$build==a_build & builds_list$test_name == name,]
-		 max_time = max(filtered$test_time)
-		 filtered = filtered[filtered $test_time == max_time,]
-		 # print(filtered)
-		 fbl <- rbind(fbl,filtered)	
-	 }
- }
-builds_list <- fbl
-builds_list <- builds_list[builds_list$build %in% i_builds,]
+ #(fbl <- builds_list[FALSE, ])
+ #for(name in levels(factor(builds_list$test_name))) {
+#	 for(a_build in levels(factor(builds_list[builds_list$test_name == name,]$build))) {
+#		 filtered = builds_list[builds_list$build==a_build & builds_list$test_name == name,]
+#		 max_time = max(filtered$test_time)
+#		 filtered = filtered[filtered $test_time == max_time,]
+#		 # print(filtered)
+#		 fbl <- rbind(fbl,filtered)	
+#	 }
+# }
 
+#builds_list <- fbl
+builds_list <- builds_list[builds_list$build %in% i_builds & builds_list$test_name == test_name & builds_list$is_json=='0',]
+print(builds_list)
 # Following metrics are to be fetch from CouchDB and plotted
 metric_list = c('ns_server_data', 'systemstats', 'latency-get','latency-set')
 
@@ -243,8 +249,8 @@ disk_data$row <- as.numeric(factor(disk_data$row))
 
 
 builds_list$runtime = as.numeric(builds_list$runtime)
-baseline= c("1.7.2r-22-geaf53ef")
-
+#baseline= c("1.7.2r-22-geaf53ef")
+baseline <- baseline_build
 first_row <- c("system","test","value")
 combined <- data.frame(t(rep(NA,3)))
 names(combined)<- c("system","test","value")
@@ -371,7 +377,7 @@ geom_bar(stat='identity', position='dodge') +
   geom_hline(yintercept=-.10, lty=3) +
   scale_y_continuous(limits=c(-1 * (magnitude_limit - 1), magnitude_limit - 1),
                      formatter=function(n) sprintf("%.1fx", abs(n) + 1)) +
-  opts(title=paste(builds_list$test_name,': Difference from 1.7.2')) +
+  opts(title=paste(builds_list$test_name,': Difference from 2.0.0r-266')) +
   labs(y='(righter is better)', x='') +
   geom_text(aes(x=test, y=ifelse(abs(position) < .5, .5, sign(position) * -.5),
                 label=sprintf("%.02fx", abs(offpercent))),
@@ -514,42 +520,42 @@ for(build in levels(builds)) {
 p <- combined[2:nrow(combined), ]
 p$value <- as.numeric(p$value)
 
-MB <- p[p[,'system'] == 'baseline',]$value
-MB <- as.numeric(sprintf("%.2f", MB))
-CB <- p[p[,'system'] != 'baseline',]$value
-CB <- as.numeric(sprintf("%.2f", CB))
-MB1 <- c()
-MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[1]/3600)))
-MB1 <- append(MB1, commaize(MB[2]))
-MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[5]/1024)))
-MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[6]/1024)))
-MB1 <- append(MB1, commaize(MB[7]))
-MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[8]/1024)))
-MB1 <- append(MB1,as.numeric(sprintf("%.2f",MB[9])))
-MB1 <- append(MB1, commaize(MB[10]))
-MB1 <- append(MB1, commaize(MB[3]))
-MB1 <- append(MB1, commaize(MB[11]))
-MB1 <- append(MB1, commaize(MB[12]))
-MB1 <- append(MB1, commaize(MB[4]))
-MB1 <- append(MB1, commaize(MB[13]))
+MB1 <- p[p[,'system'] == 'baseline',]$value
+MB1 <- as.numeric(sprintf("%.2f", MB1))
+CB1 <- p[p[,'system'] != 'baseline',]$value
+CB1 <- as.numeric(sprintf("%.2f", CB1))
+MB <- c()
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[1]/3600)))
+MB <- append(MB, commaize(MB1[2]))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[5]/1024)))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[6]/1024)))
+MB <- append(MB, commaize(MB1[7]))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[8]/1024)))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[9])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[10])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[3])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[11])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[12])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[4])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[13])))
 
 
-CB1 <- c()
-CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[1]/3600)))
-CB1 <- append(CB1, commaize(CB[2]))
-CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[5]/1024)))
-CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[6]/1024)))
-CB1 <- append(CB1, commaize(CB[7]))
-CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[8]/1024)))
-CB1 <- append(CB1,as.numeric(sprintf("%.2f",CB[9])))
-CB1 <- append(CB1, commaize(CB[10]))
-CB1 <- append(CB1, commaize(CB[3]))
-CB1 <- append(CB1, commaize(CB[11]))
-CB1 <- append(CB1, commaize(CB[12]))
-CB1 <- append(CB1, commaize(CB[4]))
-CB1 <- append(CB1, commaize(CB[13]))
+CB <- c()
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[1]/3600)))
+CB <- append(CB, commaize(CB1[2]))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[5]/1024)))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[6]/1024)))
+CB <- append(CB, commaize(CB1[7]))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[8]/1024)))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[9])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[10])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[3])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[11])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[12])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[4])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[13])))
 
-testdf <- data.frame(MB1,CB1)
+testdf <- data.frame(MB,CB)
 rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)")
 plot.new()
 grid.table(testdf, h.even.alpha=1, h.odd.alpha=1,  v.even.alpha=0.5, v.odd.alpha=1)
