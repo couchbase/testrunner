@@ -1,0 +1,97 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "AWS CloudFormation Template for Ubuntu 10.04 64bit East zone",
+
+  "Parameters" : {
+    "KeyName" : {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+      "Type" : "String"
+    }
+  },
+
+  "Mappings" : {
+    "RegionMap" : {
+      "us-east-1"      : { "AMI" : "ami-6fd81206" }
+    }
+  },
+
+  "Resources" : {
+    "Ec2Instance1" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "ImageId" : "ami-6fd81206",
+        "InstanceType" : "m1.large"
+      }
+    },
+    "Ec2Instance2" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "ImageId" : "ami-6fd81206",
+        "InstanceType" : "m1.large"
+      }
+    },
+    "Ec2Instance3" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "ImageId" : "ami-6fd81206",
+        "InstanceType" : "m1.large"
+      }
+    },
+    "Ec2Instance4" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "ImageId" : "ami-6fd81206",
+        "InstanceType" : "m1.large"
+      }
+    },
+    "Ec2Instance5" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "ImageId" : "ami-6fd81206",
+        "InstanceType" : "m1.large"
+      }
+    },
+    "Ec2Instance6" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "KeyName" : { "Ref" : "KeyName" },
+        "ImageId" : "ami-6fd81206",
+        "InstanceType" : "m1.large"
+      }
+    }
+  },
+
+  "Outputs" : {
+    "PrivateIP1" : {
+      "Description" : "Private IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance1", "PrivateIp" ] }
+    },
+    "PrivateIP2" : {
+      "Description" : "Private IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance2", "PrivateIp" ] }
+    },
+    "PrivateIP3" : {
+      "Description" : "Private IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance3", "PrivateIp" ] }
+    },
+    "PrivateIP4" : {
+      "Description" : "Private IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance4", "PrivateIp" ] }
+    },
+    "PrivateIP5" : {
+      "Description" : "Private IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance5", "PrivateIp" ] }
+    },
+    "PrivateIP6" : {
+      "Description" : "Private IP address of the newly created EC2 instance",
+      "Value" : { "Fn::GetAtt" : [ "Ec2Instance6", "PrivateIp" ] }
+    }
+  }
+}
+
