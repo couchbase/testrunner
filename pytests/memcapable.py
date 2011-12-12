@@ -823,6 +823,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
         self.log.info("inserted {0} items".format(howmany))
 
     def _measure_warmup(self, howmany, max_time):
+        # max_time is in micro seconds
         #flush the bucket
         self.onenodemc.flush()
         self._insert_data(howmany)
@@ -870,19 +871,19 @@ class WarmUpMemcachedTest(unittest.TestCase):
         #loo
 
     def measure_warmup_2(self):
-        warmup_max_time = 60 * 1000
+        warmup_max_time = 1 * 1000000
         self._measure_warmup(2, warmup_max_time)
 
     def measure_warmup_10k(self):
-        warmup_max_time = 200 * 1000
+        warmup_max_time = 2 * 1000000
         self._measure_warmup(10000, warmup_max_time)
 
     def measure_warmup_100k(self):
-        warmup_max_time = 600 * 1000
+        warmup_max_time = 12 * 1000000
         self._measure_warmup(100000, warmup_max_time)
 
     def measure_warmup_1M(self):
-        warmup_max_time = 6000 * 1000
+        warmup_max_time = 120 * 1000000
         self._measure_warmup(1000000, warmup_max_time)
 
 
