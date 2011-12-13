@@ -1,5 +1,5 @@
 {
-  "AWSTemplateFormatVersion" : "2011-12-13",
+  "AWSTemplateFormatVersion" : "2010-09-09",
 
   "Description" : "AWS CloudFormation Template for Centos 5.4 64bit East zone",
 
