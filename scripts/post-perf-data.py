@@ -1,3 +1,4 @@
+import collections
 import sys
 
 sys.path.append('.')
@@ -24,6 +25,16 @@ def sortedDictValues1(adict):
     items = adict.items()
     items.sort()
     return [value for key, value in items]
+
+def convert(data):
+    if isinstance(data, unicode):
+        return str(data)
+    elif isinstance(data, collections.Mapping):
+        return dict(map(convert, data.iteritems()))
+    elif isinstance(data, collections.Iterable):
+        return type(data)(map(convert, data))
+    else:
+        return data
 
 
 def flatten(keys,json):
@@ -101,12 +112,22 @@ if __name__ == "__main__":
             del input_json["ns_server_data"]
         if "ns_server_data_system" in input_json:
             print "flattening ns_server_data_system"
-            attachments["ns_server_data_system"] = input_json["ns_server_data_system"]
+            attachments["ns_server_data_system"] = []
             index = 1
-            for row in attachments["ns_server_data_system"]:
-
-                row.update(z)
-                row.update({"row":index})
+            for row in input_json["ns_server_data_system"]:
+                temp_row = convert(row)
+                values = temp_row.get('nodes', {})
+                for row in values:
+                    row_dict = {}
+                    row_dict['cpu_util'] = row['systemStats']['cpu_utilization_rate']
+                    row_dict['swap_used'] = row['systemStats']['swap_used']
+                    row_dict['vb_replica_curr_items'] = row['interestingStats']['vb_replica_curr_items']
+                    row_dict['curr_items_tot'] = row['interestingStats']['curr_items_tot']
+                    row_dict['curr_items'] = row['interestingStats']['curr_items']
+                    row_dict['node'] = row['hostname']
+                    row_dict.update(z)
+                    row_dict.update({"row":index})
+                    attachments["ns_server_data_system"].append(row_dict)
                 index = index + 1
             del input_json["ns_server_data_system"]
         if "dispatcher" in input_json:
