@@ -485,8 +485,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         rest_settings = input.membase_settings
         servers = input.servers
         save_upgrade_config = False
-        if re.search('1.8',input.test_params['version']):
-            save_upgrade_config = True
 
         # install older build on all nodes
         for server in servers:
@@ -549,6 +547,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 if version is not initial_version:
                     log.info("Upgrading to version {0}".format(version))
                     self._stop_membase_servers(servers)
+                    if re.search('1.8', version):
+                        save_upgrade_config = True
+
                     appropriate_build = _get_build(servers[0], version)
                     self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
                     for server in servers:
