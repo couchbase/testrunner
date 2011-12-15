@@ -49,6 +49,23 @@ class ViewTests(unittest.TestCase):
         self.assertTrue(helper.bucket_exists(name),
                         msg="unable to create {0} bucket".format(name))
 
+    def test_invalid_view(self):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        prefix = str(uuid.uuid4())[:7]
+        view = "invalid_view-{0}".format(prefix)
+        bucket = "default"
+        function = '{"views":[]}'
+        num_of_docs = 10000
+
+        api = rest.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
+        status, content = rest._http_request(api, 'PUT', function, headers=rest._create_capi_headers())
+        self.created_views[view] = bucket
+
+        # try to load some documents to see if memcached is running
+        self._load_docs(num_of_docs, prefix, False)
+
+
     def test_create_multiple_development_view(self):
         self.log.info("description : create multiple views without running any view query")
         master = self.servers[0]
@@ -76,7 +93,6 @@ class ViewTests(unittest.TestCase):
 
     def test_view_on_100k_docs(self):
         self._test_view_on_multiple_docs(100000)
-
 
     def test_count_sum_10k_docs(self):
         self._test_sum_reduce_multiple_docs(10000)
@@ -768,7 +784,7 @@ class ViewTests(unittest.TestCase):
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
 
-    def _load_docs(self, num_of_docs, prefix):
+    def _load_docs(self, num_of_docs, prefix, verify=True):
         rest = RestConnection(self.servers[0])
         command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [moxi], 20000)]."
         moxis_restarted = rest.diag_eval(command)
@@ -799,7 +815,8 @@ class ViewTests(unittest.TestCase):
                     else:
                         raise e
         self.log.info("inserted {0} json documents".format(num_of_docs))
-        self._verify_docs_doc_name(doc_names, prefix)
+        if verify:
+            self._verify_docs_doc_name(doc_names, prefix)
         return doc_names
 
 
