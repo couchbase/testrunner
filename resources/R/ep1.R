@@ -168,6 +168,28 @@ ns_server_data $ep_queue_size <- as.numeric(ns_server_data $ep_queue_size)
 ns_server_data $ep_diskqueue_drain <- as.numeric(ns_server_data $ep_diskqueue_drain)
 ns_server_data $ops <- as.numeric(ns_server_data $ops)
 
+cat("generating System stats from ns_server_data ")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+		tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data_system", sep='')
+		#cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+        ncol(unlisted)
+		result <- rbind(result,unlisted)
+		print(nrow(result))
+	},error=function(e)e, finally=print("Error getting system stats from ns_server_data"))
+}
+cat("generated ns_server_data_system data frame\n")
+cat(paste("result has ", nrow(result)," rows \n"))
+
+ns_server_data_system <- result
+ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
+ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
+ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
+
 
 # Get systemstats
 cat("generating system stats\n")
@@ -558,7 +580,9 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[13])))
 testdf <- data.frame(MB,CB)
 rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)")
 plot.new()
-grid.table(testdf, h.even.alpha=1, h.odd.alpha=1,  v.even.alpha=0.5, v.odd.alpha=1)
+col1 <- paste(unlist(strsplit(baseline_build, "-"))[1],"-",unlist(strsplit(baseline_build, "-"))[2])
+col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2]) 
+grid.table(testdf, h.even.alpha=1, h.odd.alpha=1,  v.even.alpha=0.5, v.odd.alpha=1,cols=c(col1, col2))
 makeFootnote(footnote)
 
 cat("generating ops/per second \n")
