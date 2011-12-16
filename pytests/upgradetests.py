@@ -14,7 +14,7 @@ import testconstants
 
 TIMEOUT_SECS = 30
 
-def _get_build(master, version):
+def _get_build(master, version, is_amazon=False):
     log = logger.Logger.get_logger()
     remote = RemoteMachineShellConnection(master)
     info = remote.extract_remote_info()
@@ -30,7 +30,8 @@ def _get_build(master, version):
         appropriate_build = BuildQuery().find_membase_release_build(product,
                                                                     info.deliverable_type,
                                                                     info.architecture_type,
-                                                                    version.strip())
+                                                                    version.strip(),
+                                                                    is_amazon=is_amazon)
     else:
         appropriate_build = BuildQuery().find_membase_build(builds, product,
                                                             info.deliverable_type,
@@ -53,6 +54,9 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         save_upgrade_config = False
         if re.search('1.8',input.test_params['version']):
             save_upgrade_config = True
+        is_amazon = False
+        if input.test_params['amazon']:
+            is_amazon = True
         remote = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
         info = remote.extract_remote_info()
@@ -62,7 +66,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         older_build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
                                                               os_architecture=info.architecture_type,
                                                               build_version=initial_version,
-                                                              product='membase-server-enterprise')
+                                                              product='membase-server-enterprise', is_amazon=is_amazon)
         remote.execute_command('/etc/init.d/membase-server stop')
         remote.download_build(older_build)
         #now let's install ?
@@ -96,7 +100,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
 
         version = input.test_params['version']
 
-        appropriate_build = _get_build(servers[0], version)
+        appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
         self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
 
         remote.download_build(appropriate_build)
@@ -485,7 +489,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         rest_settings = input.membase_settings
         servers = input.servers
         save_upgrade_config = False
-
+        is_amazon = False
+        if input.test_params['amazon']:
+            is_amazon = True
         # install older build on all nodes
         for server in servers:
             remote = RemoteMachineShellConnection(server)
@@ -494,7 +500,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             older_build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
                                                               os_architecture=info.architecture_type,
                                                               build_version=initial_version,
-                                                              product='membase-server-enterprise')
+                                                              product='membase-server-enterprise', is_amazon=is_amazon)
 
             remote.membase_uninstall()
             remote.couchbase_uninstall()
@@ -550,7 +556,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     if re.search('1.8', version):
                         save_upgrade_config = True
 
-                    appropriate_build = _get_build(servers[0], version)
+                    appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
                     self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
                     for server in servers:
                         remote = RemoteMachineShellConnection(server)
@@ -585,7 +591,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         # rolling upgrade
         else:
             version = input.test_params['version']
-            appropriate_build = _get_build(servers[0], version)
+            appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
             # rebalance node out
             # remove membase from node

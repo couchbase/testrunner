@@ -73,7 +73,7 @@ class BuildQuery(object):
                 return build
         return None
 
-    def find_membase_release_build(self, product, deliverable_type, os_architecture, build_version):
+    def find_membase_release_build(self, product, deliverable_type, os_architecture, build_version, is_amazon=False):
         build = MembaseBuild()
         build.deliverable_type = deliverable_type
         build.time = '0'
@@ -84,6 +84,10 @@ class BuildQuery(object):
         build.name = '{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
         build.build_number = 0
         build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
+        # This points to the Internal s3 account to look for release builds
+        if is_amazon:
+            build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
+
         return build
 
     def sort_builds_by_version(self, builds):
