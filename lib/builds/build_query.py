@@ -87,6 +87,8 @@ class BuildQuery(object):
         # This points to the Internal s3 account to look for release builds
         if is_amazon:
             build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
+            build.url = build.url.replace("enterprise", "community")
+            build.name = build.name.replace("enterprise", "community")
 
         return build
 

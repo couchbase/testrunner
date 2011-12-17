@@ -55,7 +55,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         if re.search('1.8',input.test_params['version']):
             save_upgrade_config = True
         is_amazon = False
-        if input.test_params['amazon']:
+        if input.test_params.get('amazon',False):
             is_amazon = True
         remote = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
@@ -530,8 +530,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         servers = input.servers
         save_upgrade_config = False
         is_amazon = False
-        if input.test_params['amazon']:
+        if input.test_params.get('amazon',False):
             is_amazon = True
+        print is_amazon
         # install older build on all nodes
         for server in servers:
             remote = RemoteMachineShellConnection(server)
