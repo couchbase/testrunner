@@ -36,7 +36,8 @@ def _get_build(master, version, is_amazon=False):
         appropriate_build = BuildQuery().find_membase_build(builds, product,
                                                             info.deliverable_type,
                                                             info.architecture_type,
-                                                            version.strip())
+                                                            version.strip(),
+                                                            is_amazon=is_amazon)
     return appropriate_build
 
 class SingleNodeUpgradeTests(unittest.TestCase):

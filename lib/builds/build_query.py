@@ -59,11 +59,22 @@ class BuildQuery(object):
                 return build
         return None
 
-    def find_membase_build(self, builds, product, deliverable_type, os_architecture, build_version):
+    def find_membase_build(self, builds, product, deliverable_type, os_architecture, build_version, is_amazon=False):
+        if is_amazon:
+            build = BuildQuery().find_build(builds, product, deliverable_type,
+                                            os_architecture, build_version)
+            if build:
+                build.url = build.url.replace("http://builds.hq.northscale.net",\
+                                                  "http://packages.northscale.com")
+                build.url = build.url.replace("enterprise", "community")
+                build.name = build.name.replace("enterprise", "community")
+                return build
+
         for build in builds:
             if build.product_version.find(build_version) != -1 and product == build.product\
                and build.architecture_type == os_architecture and deliverable_type == build.deliverable_type:
                 return build
+
         return None
 
     def find_membase_build_with_version(self, builds, build_version):
