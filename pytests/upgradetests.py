@@ -325,6 +325,12 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   insert_data=True,
                                   create_buckets=True)
 
+    def test_single_node_upgrade_s4_1_7_2(self):
+        self._install_and_upgrade(initial_version='1.7.2',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
     def test_single_node_upgrade_s5(self):
         #install the latest version and upgrade to itself
         input = TestInputSingleton.input
@@ -432,6 +438,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_m6_1_7_1_1(self):
         self._install_and_upgrade('1.7.1.1', True, True, True, 10)
 
+    def test_m6_1_7_2(self):
+        self._install_and_upgrade('1.7.2', True, True, True, 10)
+
     # Rolling Upgrades
     def test_multiple_node_rolling_upgrade_1_7_0(self):
         self._install_and_upgrade('1.7.0', True, True, False, -1, True)
@@ -441,6 +450,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
     def test_multiple_node_rolling_upgrade_1_7_1_1(self):
         self._install_and_upgrade('1.7.1.1', True, True, False, -1, True)
+
+    def test_multiple_node_rolling_upgrade_1_7_2(self):
+        self._install_and_upgrade('1.7.2', True, True, False, -1, True)
 
     # Multiple Version Upgrades
     def test_multiple_version_upgrade_start_one_1(self):
@@ -465,6 +477,34 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
     def test_multiple_version_upgrade_start_all_3(self):
         upgrade_path = ['1.7.0']
+        self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_4(self):
+        upgrade_path = ['1.7.0', '1.7.1.1','1.7.2']
+        self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_4(self):
+        upgrade_path = ['1.7.0', '1.7.1.1','1.7.2']
+        self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_2(self):
+        upgrade_path = ['1.7.1.1']
+        self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_5(self):
+        upgrade_path = ['1.7.1.1', '1.7.2']
+        self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_5(self):
+        upgrade_path = ['1.7.1.1', '1.7.2']
+        self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_6(self):
+        upgrade_path = ['1.7.0', '1.7.2']
+        self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_6(self):
+        upgrade_path = ['1.7.0', '1.7.2']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
     #do some bucket/init related operation
