@@ -30,6 +30,10 @@ class BackupRestoreTests(unittest.TestCase):
         self.remote_tmp_folder = None
         self.remote_tmp_folder = "/tmp/{0}-{1}".format("mbbackuptestdefaultbucket", uuid.uuid4())
         self.master = self.servers[0]
+        shell = RemoteMachineShellConnection(self.master)
+        self.is_membase = False
+        if shell.is_membase_installed():
+            self.is_membase = True
 
     def common_setUp(self):
         ClusterOperationHelper.cleanup_cluster(self.servers)
@@ -37,6 +41,8 @@ class BackupRestoreTests(unittest.TestCase):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             shell.stop_membase()
+            shell.stop_couchbase()
+            shell.start_membase()
             shell.start_membase()
             RestHelper(RestConnection(server)).is_ns_server_running(timeout_in_seconds=120)
             shell.disconnect()
@@ -116,6 +122,7 @@ class BackupRestoreTests(unittest.TestCase):
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
                 shell.stop_membase()
+                shell.stop_couchbase()
                 shell.disconnect()
 
         output, error = self.shell.execute_command("sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder))
@@ -128,6 +135,7 @@ class BackupRestoreTests(unittest.TestCase):
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
                 shell.start_membase()
+                shell.start_couchbase()
                 RestHelper(RestConnection(server)).is_ns_server_running()
                 shell.disconnect()
 
@@ -536,7 +544,9 @@ class BackupHelper(object):
 
     #data_file = default-data/default
     def backup(self, bucket, node, backup_location):
-        mbbackup_path = "{0}/{1}".format(self.server.cli_path, "mbbackup")
+        mbbackup_path = "{0}/{1}".format("/opt/couchbase/bin/", "mbbackup")
+        if self.test.is_membase:
+            mbbackup_path = "{0}/{1}".format("/opt/membase/bin/", "mbbackup")
         data_directory = "{0}/{1}-{2}/{3}".format(node.storage[0].path, bucket, "data", bucket)
         command = "{0} {1} {2}".format(mbbackup_path,
                                        data_directory,
@@ -545,7 +555,10 @@ class BackupHelper(object):
         self.test.shell.log_command_output(output, error)
 
     def restore(self, backup_location, moxi_port=None, overwrite_flag=False, username=None, password=None):
-        command = self.server.cli_path + "/mbrestore"
+        command = "{0}/{1}".format("/opt/couchbase/bin/", "mbrestore")
+        if self.test.is_membase:
+            command = "{0}/{1}".format("/opt/membase/bin/", "mbrestore")
+
         if not overwrite_flag:
             command += " -a"
 
