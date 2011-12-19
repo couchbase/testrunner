@@ -43,7 +43,7 @@ class BackupRestoreTests(unittest.TestCase):
             shell.stop_membase()
             shell.stop_couchbase()
             shell.start_membase()
-            shell.start_membase()
+            shell.start_couchbase()
             RestHelper(RestConnection(server)).is_ns_server_running(timeout_in_seconds=120)
             shell.disconnect()
 
