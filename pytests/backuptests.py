@@ -389,7 +389,7 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
                                                                                              write_only=True,
-                                                                                             moxi=False,
+                                                                                             moxi=True,
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
@@ -435,7 +435,7 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
                                                                                              write_only=True,
-                                                                                             moxi=False,
+                                                                                             moxi=True,
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
