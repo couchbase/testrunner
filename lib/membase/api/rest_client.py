@@ -178,36 +178,22 @@ class RestConnection(object):
 
 
     def create_view(self, bucket, view, function):
-        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
-        #check if this view exists and update the rev
-
-        status, content = self._http_request(api, 'PUT', function, headers=self._create_capi_headers())
-
-        json_parsed = json.loads(content)
+        status, json = self._create_design_doc(bucket, view, function)
 
         if status == False:
             raise Exception("unable to create view")
 
-        return json_parsed
+        return json
 
 
     #http://10.1.6.108:8091/couchBase/bucket-0/_design/dev_6ca50/_view/dev_6ca50?limit=10&_=1311107815807
     def view_results(self, bucket, view, params, limit=100):
-        view_query = 'couchBase/{0}/_design/{1}/_view/{2}'
-        api = self.baseUrl + view_query.format(bucket, view, view)
-        api += "?limit={0}".format(limit)
-        for param in params:
-            api += "&{0}={1}".format(param, json.dumps(params[param]))
-
-        status, content = self._http_request(api, headers=self._create_capi_headers())
-
-        json_parsed = json.loads(content)
+        status, json = self._index_results(bucket, "view", view, params, limit)
 
         if not status:
             raise Exception("unable to obtain view results")
 
-        return json_parsed
-
+        return json
 
     def get_views_per_vbucket(self, bucket, view):
         vBuckets = self.get_vbuckets(bucket)
@@ -240,16 +226,12 @@ class RestConnection(object):
 
 
     def get_view(self, bucket, view):
-        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
-
-        status, content = self._http_request(api, headers=self._create_capi_headers())
-
-        json_parsed = json.loads(content)
+        status, json = self._get_design_doc(bucket, view)
 
         if status == False:
             raise Exception("unable to get the view definition")
 
-        return json_parsed
+        return json
 
 
     def run_view(self,bucket,view,name):
@@ -266,20 +248,99 @@ class RestConnection(object):
 
 
     def delete_view(self,bucket,view):
-        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
-        get_view = self.get_view(bucket,view)
-        rev = get_view["_rev"]
-        #pass in the rev
-        api = api + "?rev={0}".format(rev)
-
-        status, content = self._http_request(api, 'DELETE', headers=self._create_capi_headers())
-
-        json_parsed = json.loads(content)
+        status, json = self._delete_design_doc(bucket, view)
 
         if status == False:
             raise Exception("unable to delete the view")
 
-        return json_parsed
+        return json
+
+
+    def spatial_results(self, bucket, spatial, params, limit=100):
+        status, json = self._index_results(bucket, "spatial", spatial,
+                                           params, limit)
+
+        if not status:
+            raise Exception("unable to obtain spatial view results")
+
+        return json
+
+
+    def create_spatial(self, bucket, spatial, function):
+        status, json = self._create_design_doc(bucket, spatial, function)
+
+        if status == False:
+            raise Exception("unable to create spatial view")
+
+        return json
+
+
+    def get_spatial(self, bucket, spatial):
+        status, json = self._get_design_doc(bucket, spatial)
+
+        if status == False:
+            raise Exception("unable to get the spatial view definition")
+
+        return json
+
+
+    def delete_spatial(self, bucket, spatial):
+        status, json = self._delete_design_doc(bucket, spatial)
+
+        if status == False:
+            raise Exception("unable to delete the spatial view")
+
+        return json
+
+
+    # type_ is "view" or "spatial"
+    def _index_results(self, bucket, type_, name, params, limit):
+        query = 'couchBase/{0}/_design/{1}/_{2}/{3}'
+        api = self.baseUrl + query.format(bucket, name, type_, name)
+        api += "?limit={0}".format(limit)
+        for param in params:
+            api += "&{0}={1}".format(param, json.dumps(params[param]))
+        log.debug("vmx: index query url: {0}".format(api))
+        status, content = self._http_request(api, headers=self._create_capi_headers())
+
+        json_parsed = json.loads(content)
+
+        return status, json_parsed
+
+
+    def _create_design_doc(self, bucket, name, function):
+        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, name)
+        #check if this view exists and update the rev
+        status, content = self._http_request(
+            api, 'PUT', function, headers=self._create_capi_headers())
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
+
+    def _get_design_doc(self, bucket, name):
+        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, name)
+        status, content = self._http_request(
+            api, headers=self._create_capi_headers())
+        json_parsed = json.loads(content)
+        return status, json_parsed
+
+
+    def _delete_design_doc(self, bucket, name):
+        api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, name)
+        status, design_doc = self._get_design_doc(bucket, name)
+        if status == False:
+            raise Exception("unable to delete design document")
+
+        rev = design_doc["_rev"]
+        #pass in the rev
+        api = api + "?rev={0}".format(rev)
+
+        status, content = self._http_request(
+            api, 'DELETE', headers=self._create_capi_headers())
+
+        json_parsed = json.loads(content)
+
+        return status, json_parsed
 
 
     def _create_capi_headers(self):
