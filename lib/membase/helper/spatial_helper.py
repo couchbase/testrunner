@@ -27,7 +27,7 @@ class SpatialHelper(unittest.TestCase):
         self._indexes = []
 
 
-    def setup_cluster(self):
+    def setup_cluster(self, do_rebalance=True):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         mem_quota = int(self.rest.get_nodes_self().mcdMemoryReserved *
                         node_ram_ratio)
@@ -40,10 +40,12 @@ class SpatialHelper(unittest.TestCase):
             ClusterOperationHelper.cleanup_cluster([server])
         ClusterOperationHelper.wait_for_ns_servers_or_assert(
             [self.master], self)
-
-        rebalanced = ClusterOperationHelper.add_and_rebalance(self.servers)
-        self.assertTrue(rebalanced, "cluster is not rebalanced")
         self._create_default_bucket()
+
+        if do_rebalance:
+            rebalanced = ClusterOperationHelper.add_and_rebalance(
+                self.servers)
+            self.assertTrue(rebalanced, "cluster is not rebalanced")
 
 
     def cleanup_cluster(self):
@@ -218,3 +220,58 @@ class SpatialHelper(unittest.TestCase):
             self.assertTrue(ready, "wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(self.bucket),
                         "unable to create {0} bucket".format(self.bucket))
+
+
+    # Return the keys (document ids) of a spatial view response
+    def get_keys(self, results):
+        keys = []
+        if results:
+            rows = results["rows"]
+            for row in rows:
+                keys.append(row["id"].encode("ascii", "ignore"))
+            self.log.info("there are {0} keys".format(len(keys)))
+        return keys
+
+
+    # Verify that the built index is correct. The documents might not
+    # be persisted to disk yet, hence give it 5 tries
+    def query_index_for_verification(self, design_name, inserted):
+        attempt = 0
+        delay = 10
+        limit = len(inserted)
+        results = self.get_results(design_name, limit)
+        result_keys = self.get_keys(results)
+        while attempt < 5 and len(result_keys) != limit:
+            msg = "spatial view returned {0} items , expected "\
+                "to return {1} items"
+            self.log.info(msg.format(len(result_keys), limit))
+            self.log.info("trying again in {0} seconds".format(delay))
+            time.sleep(delay)
+            attempt += 1
+            results = self.get_results(design_name, limit)
+            result_keys = self.get_keys(results)
+
+        self.assertEqual(len(inserted), len(result_keys))
+        self.verify_result(inserted, result_keys)
+
+    # Compare the inserted documents with the returned result
+    # Both arguments contain a list of document names
+    def verify_result(self, inserted, result):
+        #not_found = []
+        #for key in inserted:
+        #    if not key in result:
+        #        not_found.append(key)
+        not_found = list(set(inserted) - set(result))
+        if not_found:
+            self._print_keys_not_found(not_found)
+            self.fail("the spatial function did return only {0} docs and "
+                      "not {1} as expected".format(len(result),
+                                                   len(inserted)))
+
+
+    def _print_keys_not_found(self, keys_not_found, how_many=10):
+        how_many = min(how_many, len(keys_not_found))
+
+        for i in range(0, how_many):
+            self.log.error("did not find key {0} in the spatial view results"
+                           .format(keys_not_found[i]))
