@@ -27,13 +27,15 @@ class BackupRestoreTests(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
         self.shell = RemoteMachineShellConnection(self.servers[0])
+        self.is_membase = False
+        self.perm_command = "sudo -u couchbase mkdir -p {0}".format(self.remote_tmp_folder)
+        if self.shell.is_membase_installed():
+            self.is_membase = True
+            self.perm_command = "sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder)
         self.remote_tmp_folder = None
         self.remote_tmp_folder = "/tmp/{0}-{1}".format("mbbackuptestdefaultbucket", uuid.uuid4())
         self.master = self.servers[0]
         shell = RemoteMachineShellConnection(self.master)
-        self.is_membase = False
-        if shell.is_membase_installed():
-            self.is_membase = True
 
     def common_setUp(self):
         ClusterOperationHelper.cleanup_cluster(self.servers)
@@ -125,7 +127,7 @@ class BackupRestoreTests(unittest.TestCase):
                 shell.stop_couchbase()
                 shell.disconnect()
 
-        output, error = self.shell.execute_command("sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder))
+        output, error = self.shell.execute_command(self.perm_command)
         self.shell.log_command_output(output, error)
 
         #now let's back up
@@ -183,7 +185,8 @@ class BackupRestoreTests(unittest.TestCase):
         ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_flusher_todo', 0)
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         node = RestConnection(self.master).get_nodes_self()
-        output, error = self.shell.execute_command("sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder))
+
+        output, error = self.shell.execute_command(self.perm_command)
         self.shell.log_command_output(output, error)
         backupHelper = BackupHelper(self.master, self)
         backupHelper.backup(bucket, node, self.remote_tmp_folder)
@@ -233,7 +236,8 @@ class BackupRestoreTests(unittest.TestCase):
 
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            output, error = shell.execute_command("sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder))
+
+            output, error = shell.execute_command(self.perm_command)
             shell.log_command_output(output, error)
             node = RestConnection(server).get_nodes_self()
             BackupHelper(server, self).backup(bucket, node, self.remote_tmp_folder)
@@ -287,7 +291,7 @@ class BackupRestoreTests(unittest.TestCase):
         #let's create a unique folder in the remote location
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            output, error = shell.execute_command("sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder))
+            output, error = shell.execute_command(self.perm_command)
             shell.log_command_output(output, error)
             node = RestConnection(server).get_nodes_self()
             BackupHelper(server, self).backup(bucket, node, self.remote_tmp_folder)
@@ -346,7 +350,7 @@ class BackupRestoreTests(unittest.TestCase):
         #let's create a unique folder in the remote location
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            output, error = shell.execute_command("sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder))
+            output, error = shell.execute_command(self.perm_command)
             shell.log_command_output(output, error)
             node = RestConnection(server).get_nodes_self()
             BackupHelper(server, self).backup(bucket, node, self.remote_tmp_folder)
@@ -400,7 +404,7 @@ class BackupRestoreTests(unittest.TestCase):
 
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            output, error = shell.execute_command("sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder))
+            output, error = shell.execute_command(self.perm_command)
             shell.log_command_output(output, error)
             node = RestConnection(server).get_nodes_self()
             BackupHelper(server, self).backup(bucket_before_backup, node, self.remote_tmp_folder)
@@ -446,7 +450,7 @@ class BackupRestoreTests(unittest.TestCase):
 
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            output, error = shell.execute_command("sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder))
+            output, error = shell.execute_command(self.perm_command)
             shell.log_command_output(output, error)
             node = RestConnection(server).get_nodes_self()
             BackupHelper(server, self).backup(bucket_before_backup, node, self.remote_tmp_folder)
