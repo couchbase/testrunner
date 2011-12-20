@@ -26,16 +26,20 @@ class BackupRestoreTests(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
-        self.shell = RemoteMachineShellConnection(self.servers[0])
+        self.master = self.servers[0]
+        self.shell = RemoteMachineShellConnection(self.master)
         self.is_membase = False
         self.perm_command = "sudo -u couchbase mkdir -p {0}".format(self.remote_tmp_folder)
         if self.shell.is_membase_installed():
             self.is_membase = True
             self.perm_command = "sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder)
+
+        # When using custom data_paths, (smaller / sizes), creates
+        # backup in those custom paths ( helpful when running on ec2)
+        info = RestConnection(self.master).get_nodes_self()
+        data_path = info.storage[0].get_data_path()
         self.remote_tmp_folder = None
-        self.remote_tmp_folder = "/tmp/{0}-{1}".format("mbbackuptestdefaultbucket", uuid.uuid4())
-        self.master = self.servers[0]
-        shell = RemoteMachineShellConnection(self.master)
+        self.remote_tmp_folder = "{2}/{0}-{1}".format("backup", uuid.uuid4(), data_path)
 
     def common_setUp(self):
         ClusterOperationHelper.cleanup_cluster(self.servers)
@@ -548,7 +552,7 @@ class BackupHelper(object):
 
     #data_file = default-data/default
     def backup(self, bucket, node, backup_location):
-        mbbackup_path = "{0}/{1}".format("/opt/couchbase/bin/", "mbbackup")
+        mbbackup_path = "{0}/{1}".format("/opt/couchbase/bin/", "cbbackup")
         if self.test.is_membase:
             mbbackup_path = "{0}/{1}".format("/opt/membase/bin/", "mbbackup")
         data_directory = "{0}/{1}-{2}/{3}".format(node.storage[0].path, bucket, "data", bucket)
@@ -559,7 +563,7 @@ class BackupHelper(object):
         self.test.shell.log_command_output(output, error)
 
     def restore(self, backup_location, moxi_port=None, overwrite_flag=False, username=None, password=None):
-        command = "{0}/{1}".format("/opt/couchbase/bin/", "mbrestore")
+        command = "{0}/{1}".format("/opt/couchbase/bin/", "cbrestore")
         if self.test.is_membase:
             command = "{0}/{1}".format("/opt/membase/bin/", "mbrestore")
 
