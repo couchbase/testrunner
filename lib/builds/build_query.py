@@ -65,7 +65,7 @@ class BuildQuery(object):
                                             os_architecture, build_version)
             if build:
                 build.url = build.url.replace("http://builds.hq.northscale.net",\
-                                                  "http://packages.northscale.com")
+                                                  "http://packages.northscale.com.s3.amazonaws.com")
                 build.url = build.url.replace("enterprise", "community")
                 build.name = build.name.replace("enterprise", "community")
                 return build
