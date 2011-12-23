@@ -94,13 +94,15 @@ class BuildQuery(object):
         build.product = product
         build.name = '{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
         build.build_number = 0
-        build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
+        if deliverable_type == "exe":
+            build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{0}.setup.{3}'.format(build_version, product, os_architecture, deliverable_type)
+        else:
+            build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
         # This points to the Internal s3 account to look for release builds
         if is_amazon:
             build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
             build.url = build.url.replace("enterprise", "community")
             build.name = build.name.replace("enterprise", "community")
-
         return build
 
     def sort_builds_by_version(self, builds):
