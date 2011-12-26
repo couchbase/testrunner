@@ -371,13 +371,22 @@ class RemoteMachineShellConnection:
     def find_build_version(self, path_to_version, version_file, product):
         sftp = self._ssh_client.open_sftp()
         ex_type = "exe"
+        releases_version = ["1.7.0", "1.7.1", "1.7.1.1"]
         try:
             log.info(path_to_version)
             f = sftp.open(os.path.join(path_to_version, version_file), 'r+')
             full_version = f.read().rstrip()
-            tmp = full_version.split("-")
-            build_name = "{0}_{1}-{2}".format(product, tmp[0], tmp[1])
-            short_version = "{0}-{1}".format(tmp[0], tmp[1])
+            if full_version in releases_version:
+                build_name = "mb_{1}".format(product, full_version)
+                short_version = full_version
+            else:
+                tmp = full_version.split("-")
+                if "1.8.0" in tmp[0]:
+                    product = "cb"
+                if "1.7.2" in tmp[0]:
+                    product = "mb"
+                build_name = "{0}_{1}-{2}".format(product, tmp[0], tmp[1])
+                short_version = "{0}-{1}".format(tmp[0], tmp[1])
             return build_name, short_version, full_version
         except IOError:
             log.error('Can not read version file')
@@ -387,14 +396,20 @@ class RemoteMachineShellConnection:
     def modify_bat_file(self, remote_path, file_name, name, os_type, os_version, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
+        releases_version = ["1.7.0", "1.7.1", "1.7.1.1"]
 
         product_version = ""
         if "2.0.0" in version:
             product_version = "2.0.0"
         elif "1.8.0" in version:
             product_version = "1.8.0"
+            name = "cb"
         elif "1.7.2" in version:
             product_version = "1.7.2"
+            name = "mb"
+        elif version in releases_version:
+            product_version = version
+            name = "mb"
         else:
             log.error('Windows automation does not support {0} version yet'.format(version))
             sys.exit()
