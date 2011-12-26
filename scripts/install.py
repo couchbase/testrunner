@@ -138,10 +138,17 @@ class Installer(object):
         if ok:
             info = RemoteMachineShellConnection(server).extract_remote_info()
             builds, changes = BuildQuery().get_all_builds()
+            releases_version = ["1.7.0", "1.7.1", "1.7.1.1"]
             for name in names:
-                build = BuildQuery().find_build(builds, name, info.deliverable_type,
-                                                info.architecture_type, version)
-
+                if version in releases_version:
+                     build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
+                                                                     os_architecture=info.architecture_type,
+                                                                     build_version=version,
+                                                                     product='membase-server-enterprise')
+                else:
+                    build = BuildQuery().find_build(builds, name, info.deliverable_type,
+                                                    info.architecture_type, version)
+ 
                 if build:
                     if 'amazon' in params:
                         build.url = build.url.replace("http://builds.hq.northscale.net",
