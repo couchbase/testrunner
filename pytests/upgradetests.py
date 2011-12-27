@@ -508,6 +508,30 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         upgrade_path = ['1.7.0', '1.7.2']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
+    def test_multiple_version_upgrade_start_one_7(self):
+        upgrade_path = ['1.7.2']
+        self._install_and_upgrade('1.7.0', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_7(self):
+        upgrade_path = ['1.7.2']
+        self._install_and_upgrade('1.7.0', True, True, False, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_8(self):
+        upgrade_path = ['1.7.2']
+        self._install_and_upgrade('1.7.1', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_8(self):
+        upgrade_path = ['1.7.2']
+        self._install_and_upgrade('1.7.1', True, True, False, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_9(self):
+        upgrade_path = ['1.7.2']
+        self._install_and_upgrade('1.7.1.1', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_9(self):
+        upgrade_path = ['1.7.2']
+        self._install_and_upgrade('1.7.1.1', True, True, False, 10, False, upgrade_path)
+
     #do some bucket/init related operation
     #now only option x nodes
     #power on upgraded ones first and then the non-upgraded ones
