@@ -28,11 +28,6 @@ class BackupRestoreTests(unittest.TestCase):
         self.servers = self.input.servers
         self.master = self.servers[0]
         self.shell = RemoteMachineShellConnection(self.master)
-        self.is_membase = False
-        self.perm_command = "sudo -u couchbase mkdir -p {0}".format(self.remote_tmp_folder)
-        if self.shell.is_membase_installed():
-            self.is_membase = True
-            self.perm_command = "sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder)
 
         # When using custom data_paths, (smaller / sizes), creates
         # backup in those custom paths ( helpful when running on ec2)
@@ -40,6 +35,12 @@ class BackupRestoreTests(unittest.TestCase):
         data_path = info.storage[0].get_data_path()
         self.remote_tmp_folder = None
         self.remote_tmp_folder = "{2}/{0}-{1}".format("backup", uuid.uuid4(), data_path)
+        self.is_membase = False
+        self.perm_command = "sudo -u couchbase mkdir -p {0}".format(self.remote_tmp_folder)
+        if self.shell.is_membase_installed():
+            self.is_membase = True
+            self.perm_command = "sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder)
+
 
     def common_setUp(self):
         ClusterOperationHelper.cleanup_cluster(self.servers)
