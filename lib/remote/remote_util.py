@@ -319,7 +319,6 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM msiexec.exe')
         self.execute_command('taskkill /F /T IM setup.exe')
         self.execute_command('taskkill /F /T /IM ISBEW64.*')
-        self.execute_command('taskkill /F /T /IM firefox.*')
         self.execute_command('taskkill /F /T /IM iexplore.*')
         self.execute_command('taskkill /F /T /IM WerFault.*')
         output, error = self.execute_command(
@@ -371,12 +370,14 @@ class RemoteMachineShellConnection:
     def find_build_version(self, path_to_version, version_file, product):
         sftp = self._ssh_client.open_sftp()
         ex_type = "exe"
-        releases_version = ["1.7.0", "1.7.1", "1.7.1.1"]
+        releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1"]
         try:
             log.info(path_to_version)
             f = sftp.open(os.path.join(path_to_version, version_file), 'r+')
             full_version = f.read().rstrip()
             if full_version in releases_version:
+                if full_version == "1.6.5.4-win64":
+                    full_version = "1.6.5.4"
                 build_name = "mb_{1}".format(product, full_version)
                 short_version = full_version
             else:
@@ -396,7 +397,7 @@ class RemoteMachineShellConnection:
     def modify_bat_file(self, remote_path, file_name, name, os_type, os_version, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
-        releases_version = ["1.7.0", "1.7.1", "1.7.1.1"]
+        releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1"]
 
         product_version = ""
         if "2.0.0" in version:
