@@ -334,12 +334,12 @@ class IncrementalRebalanceInTests(unittest.TestCase):
     def test_load(self):
         log = logger.Logger().get_logger()
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
-        delete_ratio = 0
-        expiry_ratio = 0
+        delete_ratio = DELETE_RATIO
+        expiry_ratio = EXPIRY_RATIO
         if "delete-ratio" in self._input.test_params:
-            delete_ratio = float(_input.test_params["expiry-ratio"])
+            delete_ratio = float(self._input.test_params.get('delete-ratio',DELETE_RATIO))
         if "expiry-ratio" in self._input.test_params:
-            expiry_ratio = float(_input.test_params["expiry-ratio"])
+            expiry_ratio = float(self._input.test_params.get('expiry-ratio',EXPIRY_RATIO))
         log.info("keys_count, replica, load_ratio: {0} {1} {2}".format(keys_count, replica, load_ratio))
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
         self._common_test_body(keys_count, load_ratio, replica, True, delete_ratio, expiry_ratio)
@@ -355,7 +355,10 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
     #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, load_ratio, replica):
+    def _common_test_body(self, keys_count=-1,
+                          load_ratio=-1, replica=1,
+                          rebalance_in=2, verify=True,
+                          delete_ratio=0, expiry_ratio=0):
         master = self._servers[0]
         rest = RestConnection(master)
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
@@ -373,7 +376,7 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
             distribution = RebalanceBaseTest.get_distribution(load_ratio)
             bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers,
                                                                 bucket_data,
-                                                                delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO)
+                                                                delete_ratio=delete_ratio, expiry_ratio=expiry_ratio)
 
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
@@ -385,69 +388,21 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
                     thread.join()
                     bucket_data[name]["items_inserted_count"] += thread.inserted_keys_count()
 
-            RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+            if verify:
+                RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
 
-        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
-
-    def test_small_load(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(1.0, replica=1)
-
-    def test_small_load_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(1.0, replica=2)
-
-    def test_small_load_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(1.0, replica=3)
-
-    def test_medium_load(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(10.0, replica=1)
-
-    def test_medium_load_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(10.0, replica=2)
-
-    def test_medium_load_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(10.0, replica=3)
-
-    def test_heavy_load(self):
-        self._common_test_body(40.0, replica=1)
-        self._common_test_body(40.0, replica=1)
-
-    def test_heavy_load_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(40.0, replica=2)
-
-    def test_heavy_load_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(40.0, replica=3)
-
-    def test_dgm_150(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(150.0, replica=1)
-
-    def test_dgm_150_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(150.0, replica=2)
-
-    def test_dgm_150_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(150.0, replica=3)
-
-    def test_dgm_300(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(300.0, replica=1)
-
-    def test_dgm_300_2_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=2)
-        self._common_test_body(300.0, replica=2)
-
-    def test_dgm_300_3_replica(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=3)
-        self._common_test_body(300.0, replica=3)
+    def test_load(self):
+        log = logger.Logger().get_logger()
+        keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        delete_ratio = DELETE_RATIO
+        expiry_ratio = EXPIRY_RATIO
+        if "delete-ratio" in self._input.test_params:
+            delete_ratio = float(self._input.test_params.get('delete-ratio',DELETE_RATIO))
+        if "expiry-ratio" in self._input.test_params:
+            expiry_ratio = float(self._input.test_params.get('expiry-ratio',EXPIRY_RATIO))
+        log.info("Test inputs {0}".format(self._input.test_params))
+        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
+        self._common_test_body(keys_count, load_ratio, replica, 1, True, delete_ratio, expiry_ratio)
 
 #this test case will add all the nodes and then start removing them one by one
 

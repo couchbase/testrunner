@@ -47,7 +47,7 @@ class MemcachedClientHelper(object):
                                                 message="servers is not set")
         if ram_load_ratio < 0 and number_of_items < 0:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
-                                                message="ram_load_ration or number_of_items must be specified")
+                                                message="ram_load_ratio or number_of_items must be specified")
         if not value_size_distribution:
             value_size_distribution = {16: 0.25, 128: 0.25, 512: 0.25, 1024: 0.25}
 
@@ -114,7 +114,7 @@ class MemcachedClientHelper(object):
                                                 message="serverInfo is not set")
         if ram_load_ratio < 0 and number_of_items < 0:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
-                                                message="ram_load_ration or number_of_items must be specified")
+                                                message="ram_load_ratio or number_of_items must be specified")
         if not value_size_distribution:
             value_size_distribution = {16: 0.33, 128: 0.33, 1024: 0.33}
 
