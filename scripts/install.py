@@ -151,10 +151,20 @@ class Installer(object):
  
                 if build:
                     if 'amazon' in params:
-                        build.url = build.url.replace("http://builds.hq.northscale.net",
-                                                      "http://packages.northscale.com")
-                        build.url = build.url.replace("enterprise", "community")
-                        build.name = build.name.replace("enterprise", "community")
+                        type = info.type.lower()
+                        if type == 'windows' and version in releases_version:
+                            build.url = build.url.replace("http://builds.hq.northscale.net",
+                                                          "https://s3.amazonaws.com/packages.couchbase")
+                            
+                            build.url = build.url.replace("enterprise", "community")
+                            print build.url
+                            build.name = build.name.replace("enterprise", "community")
+                            
+                        else:
+                            build.url = build.url.replace("http://builds.hq.northscale.net",
+                                                          "http://packages.northscale.com")
+                            build.url = build.url.replace("enterprise", "community")
+                            build.name = build.name.replace("enterprise", "community")
                     return build
 
             _errors.append(errors["BUILD-NOT-FOUND"])

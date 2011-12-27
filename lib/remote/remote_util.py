@@ -322,7 +322,7 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM iexplore.*')
         self.execute_command('taskkill /F /T /IM WerFault.*')
         output, error = self.execute_command(
-             "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe -q {0} -O {1}_{2}.exe';ls;".format(
+             "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O {1}_{2}.exe';ls -l;".format(
                 url, name, version))
         self.log_command_output(output, error)
         return self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name, version))
