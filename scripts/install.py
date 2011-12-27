@@ -155,9 +155,7 @@ class Installer(object):
                         if type == 'windows' and version in releases_version:
                             build.url = build.url.replace("http://builds.hq.northscale.net",
                                                           "https://s3.amazonaws.com/packages.couchbase")
-                            
                             build.url = build.url.replace("enterprise", "community")
-                            print build.url
                             build.name = build.name.replace("enterprise", "community")
                             
                         else:
