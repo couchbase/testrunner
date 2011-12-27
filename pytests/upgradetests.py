@@ -704,7 +704,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 rebalanceSucceeded = rest.monitorRebalance()
                 self.assertTrue(rebalanceSucceeded,
                                 "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
-                ClusterOperationHelper.verify_persistence(servers, self)
+                #ClusterOperationHelper.verify_persistence(servers, self)
 
             #TODO: how can i verify that the cluster init config is preserved
             # verify data on upgraded nodes
