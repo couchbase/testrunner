@@ -36,10 +36,10 @@ class BackupRestoreTests(unittest.TestCase):
         self.remote_tmp_folder = None
         self.remote_tmp_folder = "{2}/{0}-{1}".format("backup", uuid.uuid4(), data_path)
         self.is_membase = False
-        self.perm_command = "sudo -u couchbase mkdir -p {0}".format(self.remote_tmp_folder)
+        self.perm_command = "mkdir -p {0}".format(self.remote_tmp_folder)
         if self.shell.is_membase_installed():
             self.is_membase = True
-            self.perm_command = "sudo -u membase mkdir -p {0}".format(self.remote_tmp_folder)
+            self.perm_command = "mkdir -p {0}".format(self.remote_tmp_folder)
 
 
     def common_setUp(self):
@@ -109,7 +109,7 @@ class BackupRestoreTests(unittest.TestCase):
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              name=bucket,
-                                                                                             ram_load_ratio=30,
+                                                                                             ram_load_ratio=1,
                                                                                              value_size_distribution=distribution,
                                                                                              moxi=True,
                                                                                              write_only=True,
