@@ -441,7 +441,7 @@ class BackupRestoreTests(unittest.TestCase):
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
                                                                                              name=bucket_before_backup,
-                                                                                             ram_load_ratio=1,
+                                                                                             ram_load_ratio=20,
                                                                                              value_size_distribution=distribution,
                                                                                              write_only=True,
                                                                                              moxi=True,
