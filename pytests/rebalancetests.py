@@ -1004,7 +1004,7 @@ class RebalanceSwapTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        RebalanceBaseTest.common_setup(self._input, 'default', self)
+        RebalanceBaseTest.common_setup(self._input, self)
 
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self._servers, self)
@@ -1022,34 +1022,34 @@ class RebalanceSwapTests(unittest.TestCase):
         master = self._servers[0]
         rest = RestConnection(master)
         creds = self._input.membase_settings
-        items_inserted_count = 0
 
         self.log.info("inserting some items in the master before adding any nodes")
-        distribution = {10: 0.5, 20: 0.5}
-        inserted_count, rejected_count =\
-        MemcachedClientHelper.load_bucket(servers=[master],
-                                          ram_load_ratio=0.1,
-                                          value_size_distribution=distribution,
-                                          number_of_threads=20)
-        items_inserted_count += inserted_count
 
         self.assertTrue(self.rebalance_in(swap_count - 1))
+
+        MemcachedClientHelper.load_bucket(name="bucket-0",
+                                              servers=[master],
+                                              number_of_items=20000,
+                                              number_of_threads=1,
+                                              write_only=True,
+                                              moxi=True)
         #now add nodes for being swapped
         #eject the current nodes and add new ones
         # add 2 * swap -1 nodes
-        nodeIps = [node.ip for node in rest.node_statuses()]
-        self.log.info("current nodes : {0}".format(nodeIps))
+        nodeIpPorts = ["{0}:{1}".format(node.ip,node.port) for node in rest.node_statuses()]
+        self.log.info("current nodes : {0}".format(nodeIpPorts))
         toBeAdded = []
         selection = self._servers[1:]
         shuffle(selection)
         for server in selection:
-            if not server.ip in nodeIps:
+            if not "{0}:{1}".format(server.ip,server.port) in nodeIpPorts:
                 toBeAdded.append(server)
+                self.log.info("adding {0}:{1} to toBeAdded".format(server.ip, server.port))
             if len(toBeAdded) == swap_count:
                 break
         toBeEjected = [node.id for node in rest.node_statuses()]
         for server in toBeAdded:
-            rest.add_node(creds.rest_username, creds.rest_password, server.ip)
+            rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
 
         currentNodes = [node.id for node in rest.node_statuses()]
         started = rest.rebalance(currentNodes, toBeEjected)
@@ -1060,22 +1060,6 @@ class RebalanceSwapTests(unittest.TestCase):
         msg = "successfully swapped out {0} nodes from the cluster ? {0}"
         self.assertTrue(result, msg.format(swap_count))
         #rest will have to change now?
-        rest = RestConnection(toBeAdded[0])
-        final_replication_state = RestHelper(rest).wait_for_replication()
-        msg = "replication state after waiting for up to 2 minutes : {0}"
-        self.log.info(msg.format(final_replication_state))
-        start_time = time.time()
-        stats = rest.get_bucket_stats()
-        while time.time() < (start_time + 120) and stats["curr_items"] != items_inserted_count:
-            self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
-            time.sleep(5)
-            stats = rest.get_bucket_stats()
-        RebalanceHelper.print_taps_from_all_nodes(rest)
-        self.log.info("curr_items : {0} versus {1}".format(stats["curr_items"], items_inserted_count))
-        stats = rest.get_bucket_stats()
-        msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
-        self.assertEquals(stats["curr_items"], items_inserted_count,
-                          msg=msg.format(stats["curr_items"], items_inserted_count))
 
     def test_swap_1(self):
         self._common_test_body(1)
