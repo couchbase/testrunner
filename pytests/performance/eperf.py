@@ -388,7 +388,7 @@ class EPerfMaster(perf.PerfBase):
                           max_creates = self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
-        def test_ept_rebalance_med_original(self):
+    def test_ept_rebalance_med_original(self):
         self.spec("EPT-REBALANCE-MED-FETCH-original")
         items = self.parami("items", 45000000)
         notify = self.gated_start(self.input.clients)
