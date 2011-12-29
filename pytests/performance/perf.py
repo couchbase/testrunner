@@ -412,9 +412,10 @@ class PerfBase(unittest.TestCase):
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
         client_id = self.parami("prefix", 0)
-        sc = self.start_stats(self.spec_reference + ".loop",
-                              test_params = cfg_params, client_id = client_id,
-                              collect_server_stats = collect_server_stats)
+        if self.parami("collect_stats", 1):
+            sc = self.start_stats(self.spec_reference + ".loop",
+                                  test_params = cfg_params, client_id = client_id,
+                                  collect_server_stats = collect_server_stats)
 
         cur = { 'cur-items': num_items }
         if start_at >= 0:
@@ -451,7 +452,8 @@ class PerfBase(unittest.TestCase):
                 "start-time": start_time,
                 "end-time": end_time }
         self.wait_until_drained()
-        self.end_stats(sc, ops)
+        if self.parami("collect_stats", 1):
+            self.end_stats(sc, ops)
         return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
