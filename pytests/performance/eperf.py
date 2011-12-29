@@ -184,7 +184,7 @@ class EPerfMaster(perf.PerfBase):
                       collect_server_stats = self.is_leader,
                       start_at       = start_at,
                       report         = int(max_creates * 0.1),
-                      exit_after_creates = 1,
+                      exit_after_creates = self.parami('exit_after_creates', 1),
                       hot_shift = self.parami('hot_shift', hot_shift))
 
     def latched_rebalance(self, cur):
