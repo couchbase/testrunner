@@ -40,6 +40,28 @@ def _get_build(master, version, is_amazon=False):
                                                             is_amazon=is_amazon)
     return appropriate_build
 
+def _create_load_multiple_bucket(self, server, bucket_data, howmany=2):
+    created = BucketOperationHelper.create_multiple_buckets(server, 1, howmany=howmany)
+    self.assertTrue(created, "unable to create multiple buckets")
+    rest = RestConnection(server)
+    buckets = rest.get_buckets()
+    for bucket in buckets:
+        bucket_data[bucket.name] = {}
+        ready = BucketOperationHelper.wait_for_memcached(server, bucket.name)
+        self.assertTrue(ready, "wait_for_memcached failed")
+        #let's insert some data
+        distribution = {2 * 1024: 0.5, 20: 0.5}
+        bucket_data[bucket.name]["inserted_keys"], bucket_data[bucket.name]["reject_keys"] =\
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server], name=bucket.name,
+                                                              ram_load_ratio=2.0,
+                                                              number_of_threads=2,
+                                                              value_size_distribution=distribution,
+                                                              write_only=True,
+                                                              moxi=True)
+        RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_flusher_todo', 0)
+
+
 class SingleNodeUpgradeTests(unittest.TestCase):
     #test descriptions are available http://techzone.couchbase.com/wiki/display/membase/Test+Plan+1.7.0+Upgrade
 
@@ -78,27 +100,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         if initialize_cluster:
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             if create_buckets:
-                created = BucketOperationHelper.create_multiple_buckets(server, 1, howmany=2)
-                self.assertTrue(created, "unable to create multiple buckets")
-                buckets = rest.get_buckets()
-                for bucket in buckets:
-                    bucket_data[bucket.name] = {}
-                    ready = BucketOperationHelper.wait_for_memcached(server, bucket.name)
-                    self.assertTrue(ready, "wait_for_memcached failed")
-                    if insert_data:
-                    #let's insert some data
-                        distribution = {2 * 1024: 0.5, 20: 0.5}
-                        bucket_data[bucket.name]["inserted_keys"], bucket_data[bucket.name]["reject_keys"] =\
-                        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
-                                                                              name=bucket.name,
-                                                                              ram_load_ratio=2.0,
-                                                                              number_of_threads=1,
-                                                                              value_size_distribution=distribution,
-                                                                              write_only=True,
-                                                                              moxi=False)
-                        RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_queue_size', 0)
-                        RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_flusher_todo', 0)
-
+                _create_load_multiple_bucket(self, server, bucket_data, howmany=2)
         version = input.test_params['version']
 
         appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
@@ -557,7 +559,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         is_amazon = False
         if input.test_params.get('amazon',False):
             is_amazon = True
-        print is_amazon
         # install older build on all nodes
         for server in servers:
             remote = RemoteMachineShellConnection(server)
@@ -579,15 +580,17 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             remote.disconnect()
 
+        bucket_data = {}
         master = servers[0]
         if create_buckets:
             #let's create buckets
             #wait for the bucket
             #bucket port should also be configurable , pass it as the
             #parameter to this test ? later
+
             self._create_default_bucket(master)
-            if insert_data:
-                inserted_keys = self._load_data(master, load_ratio)
+            inserted_keys = self._load_data(master, load_ratio)
+            _create_load_multiple_bucket(self, master, bucket_data, howmany=2)
 
         # cluster all the nodes together
         ClusterOperationHelper.add_all_nodes_or_assert(master,
@@ -713,6 +716,13 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                 msg="bucket 'default' does not exist..")
             if insert_data:
                 self._verify_data(master, rest, inserted_keys)
+                rest = RestConnection(master)
+                buckets = rest.get_buckets()
+                for bucket in buckets:
+                    BucketOperationHelper.keys_exist_or_assert(bucket_data[bucket.name]["inserted_keys"],
+                                                               master,
+                                                               bucket.name, self)
+
 
     def _save_config(self, rest_settings, server):
         log = logger.Logger.get_logger()
