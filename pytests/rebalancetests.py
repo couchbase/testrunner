@@ -1079,7 +1079,10 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self._servers, self)
 
-    def _common_test_body(self, load_ratio=-1, replica=1, verify=True):
+    def _common_test_body(self, keys_count=-1,
+                          load_ratio=-1, replica=1,
+                          rebalance_in=2, verify=True,
+                          delete_ratio=0, expiry_ratio=0):
         master = self._servers[0]
         rest = RestConnection(master)
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
@@ -1103,7 +1106,7 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
             distribution = RebalanceBaseTest.get_distribution(load_ratio)
             bucket_data = RebalanceBaseTest.threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers,
                                                                 bucket_data,
-                                                                delete_ratio=DELETE_RATIO, expiry_ratio=EXPIRY_RATIO)
+                                                                delete_ratio=delete_ratio, expiry_ratio=expiry_ratio)
 
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
             self.assertTrue(rest.monitorRebalance(),
@@ -1119,7 +1122,16 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
 
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
+
     def test_load(self):
+        log = logger.Logger().get_logger()
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
+        delete_ratio = DELETE_RATIO
+        expiry_ratio = EXPIRY_RATIO
+        if "delete-ratio" in self._input.test_params:
+            delete_ratio = float(self._input.test_params.get('delete-ratio',DELETE_RATIO))
+        if "expiry-ratio" in self._input.test_params:
+            expiry_ratio = float(self._input.test_params.get('expiry-ratio',EXPIRY_RATIO))
+        log.info("Test inputs {0}".format(self._input.test_params))
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
-        self._common_test_body(load_ratio, replica, verify=True)
+        self._common_test_body(keys_count, load_ratio, replica, 1, True, delete_ratio, expiry_ratio)
