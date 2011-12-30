@@ -4,6 +4,7 @@
 from datetime import datetime
 import time
 import urllib2
+import re
 import BeautifulSoup
 
 
@@ -236,8 +237,9 @@ class BuildQuery(object):
         list = build_id.split('_')
         #get list[1] . get rid of .txt
         build_number = list[1].strip()
-        build_number = build_number[:build_number.index('.txt')]
-        return build_number
+        if re.search('.txt', build_number):
+            build_number = build_number[:build_number.index('.txt')]
+            return build_number
 
     def _build_number(self, build):
         #get the first - and then the first - after that
