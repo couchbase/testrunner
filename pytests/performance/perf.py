@@ -412,6 +412,7 @@ class PerfBase(unittest.TestCase):
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
         client_id = self.parami("prefix", 0)
+        sc = None
         if self.parami("collect_stats", 1):
             sc = self.start_stats(self.spec_reference + ".loop",
                                   test_params = cfg_params, client_id = client_id,

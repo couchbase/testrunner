@@ -34,6 +34,7 @@ class CheckpointStatParser(object):
 
 
 class GetCheckpointsHelper(object):
+
     def get_checkpoints_node(self, node, bucket):
         pass
 
