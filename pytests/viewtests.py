@@ -141,7 +141,9 @@ class ViewTests(unittest.TestCase):
         self._end_rebalance()
         self._create_view_doc_name(prefix)
         self._load_docs(num_of_docs, prefix)
+        self.log.info("loaded {0} docs".format(num_of_docs))
         doc_names = self._update_docs(num_of_docs, num_of_update_docs, prefix)
+        self.log.info("updated {0} docs out of {1} docs".format(num_of_update_docs, num_of_docs))
         self._verify_docs_doc_name(doc_names, prefix)
 
     def test_delete_10k_docs_rebalance_in(self):
@@ -527,7 +529,7 @@ class ViewTests(unittest.TestCase):
             try:
                 start = time.time()
                 #full_set=true&connection_timeout=60000&limit=10&skip=0
-                params = {"connection_timeout": "60000"}
+                params = {"connection_timeout": 60000}
                 params.update(extra_params)
                 if view.find("dev_") == 0:
                     params["full_set"] = True
@@ -822,7 +824,6 @@ class ViewTests(unittest.TestCase):
 
     def _update_docs(self, num_of_docs, num_of_updated_docs, prefix):
         bucket = "default"
-        view_name = "dev_test_view-{0}".format(prefix)
         moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
         doc_names = []
         for i in range(0, num_of_docs):
