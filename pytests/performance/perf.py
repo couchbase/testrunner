@@ -833,7 +833,7 @@ class MapReduce(PerfBase):
         self.log.info("building view: %s = %s; %s" % (view, map_fun, reduce_fun))
         ops = {}
         ops["view-build-start-time"] = time.time()
-        self.rest.view_results(bucket, view, { "startkey":"a" }, limit)
+        self.rest.view_results(bucket, view, { "startkey":"a" }, limit, timeout=480)
         ops["view-build-end-time"] = time.time()
 
         sc = self.start_stats(self.spec_reference,

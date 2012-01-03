@@ -187,8 +187,8 @@ class RestConnection(object):
 
 
     #http://10.1.6.108:8091/couchBase/bucket-0/_design/dev_6ca50/_view/dev_6ca50?limit=10&_=1311107815807
-    def view_results(self, bucket, view, params, limit=100):
-        status, json = self._index_results(bucket, "view", view, params, limit)
+    def view_results(self, bucket, view, params, limit=100, timeout=120):
+        status, json = self._index_results(bucket, "view", view, params, limit, timeout=timeout)
 
         if not status:
             raise Exception("unable to obtain view results")
@@ -294,14 +294,14 @@ class RestConnection(object):
 
 
     # type_ is "view" or "spatial"
-    def _index_results(self, bucket, type_, name, params, limit):
+    def _index_results(self, bucket, type_, name, params, limit, timeout=120):
         query = 'couchBase/{0}/_design/{1}/_{2}/{3}'
         api = self.baseUrl + query.format(bucket, name, type_, name)
         api += "?limit={0}".format(limit)
         for param in params:
             api += "&{0}={1}".format(param, json.dumps(params[param]))
         log.debug("vmx: index query url: {0}".format(api))
-        status, content = self._http_request(api, headers=self._create_capi_headers())
+        status, content = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
 
         json_parsed = json.loads(content)
 
