@@ -297,9 +297,22 @@ class RestConnection(object):
     def _index_results(self, bucket, type_, name, params, limit, timeout=120):
         query = 'couchBase/{0}/_design/{1}/_{2}/{3}'
         api = self.baseUrl + query.format(bucket, name, type_, name)
-        api += "?limit={0}".format(limit)
+
+        num_params = 0
+        if limit != None:
+            num_params = 1
+            api += "?limit={0}".format(limit)
         for param in params:
-            api += "&{0}={1}".format(param, json.dumps(params[param]))
+            if num_params > 0:
+                api += "&"
+            else:
+                api += "?"
+            num_params += 1
+            if param in ["key", "startkey", "endkey"]:
+                api += "{0}={1}".format(param, json.dumps(params[param]))
+            else:
+                api += "{0}={1}".format(param, params[param])
+
         log.debug("vmx: index query url: {0}".format(api))
         status, content = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
 
