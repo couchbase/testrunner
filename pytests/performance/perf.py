@@ -488,10 +488,10 @@ class PerfBase(unittest.TestCase):
                                               fn=RebalanceHelper.wait_for_mc_stats_no_timeout)
 
     def clog_cluster(self):
-        ClusterOperationHelper.flushctl_stop(self.input.servers)
+        ClusterOperationHelper.flushctl_stop(self.input.servers[0])
 
     def unclog_cluster(self):
-        ClusterOperationHelper.flushctl_start(self.input.servers)
+        ClusterOperationHelper.flushctl_start(self.input.servers[0])
 
     def view(self, views_per_client, clients=1):
         TODO()
