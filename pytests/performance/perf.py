@@ -487,11 +487,11 @@ class PerfBase(unittest.TestCase):
                                               'ep_warmup_thread', 'complete',
                                               fn=RebalanceHelper.wait_for_mc_stats_no_timeout)
 
-    def clog_cluster(self):
-        ClusterOperationHelper.flushctl_stop(self.input.servers[0])
+    def clog_cluster(self, servers):
+        ClusterOperationHelper.flushctl_stop(servers)
 
-    def unclog_cluster(self):
-        ClusterOperationHelper.flushctl_start(self.input.servers[0])
+    def unclog_cluster(self, servers):
+        ClusterOperationHelper.flushctl_start(servers)
 
     def view(self, views_per_client, clients=1):
         TODO()
@@ -777,7 +777,7 @@ class DiskDrainRate(PerfBase):
 
     def test_1M_clog(self):
         self.spec('DRR-06')
-        self.clog_cluster()
+        self.clog_cluster([self.input.servers[0]])
         ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),
                                                         self.parami('size', 1024),
                                                         kind=self.param('kind', 'binary'),
@@ -785,7 +785,7 @@ class DiskDrainRate(PerfBase):
         sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
                                                                 'test_time':time.time()})
         start_time_unclog = time.time()
-        self.unclog_cluster()
+        self.unclog_cluster([self.input.servers[0]])
         end_time_unclog = self.wait_until_drained()
 
         ops['start-time'] = start_time_unclog
