@@ -2,6 +2,7 @@ from random import shuffle
 import time
 import unittest
 import uuid
+import json
 from TestInput import TestInputSingleton
 import logger
 from membase.api.rest_client import RestConnection, RestHelper
@@ -36,11 +37,13 @@ class RebalanceBaseTest(unittest.TestCase):
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-        if "ascii" in TestInputSingleton.input.test_params \
-                and TestInputSingleton.input.test_params["ascii"].lower() == "true":
-            BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1, sasl=False)
+        if "ascii" in TestInputSingleton.input.test_params\
+        and TestInputSingleton.input.test_params["ascii"].lower() == "true":
+            BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio,
+                                                          howmany=1, sasl=False)
         else:
-            BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio, howmany=1, sasl=True)
+            BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio,
+                                                          howmany=1, sasl=True)
         buckets = rest.get_buckets()
         for bucket in buckets:
             ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket.name)
@@ -67,11 +70,11 @@ class RebalanceBaseTest(unittest.TestCase):
             test.log.info(msg.format(final_replication_state))
             #run expiry_pager on all nodes before doing the replication verification
             for bucket in buckets:
-                ClusterOperationHelper.set_expiry_pager_sleep_time(master,bucket.name)
+                ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)
                 test.log.info("wait for expiry pager to run on all these nodes")
                 time.sleep(30)
                 ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name, 3600)
-                ClusterOperationHelper.set_expiry_pager_sleep_time(master,bucket.name)
+                ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)
                 replica_match = RebalanceHelper.wait_till_total_numbers_match(bucket=bucket.name,
                                                                               master=master,
                                                                               timeout_in_seconds=300)
@@ -83,8 +86,9 @@ class RebalanceBaseTest(unittest.TestCase):
                     msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
                     active_items_match = stats["curr_items"] == bucket_data[bucket.name]["items_inserted_count"]
                     if not active_items_match:
-#                        asserts.append(
-                        test.log.error(msg.format(stats["curr_items"], bucket_data[bucket.name]["items_inserted_count"]))
+                    #                        asserts.append(
+                        test.log.error(
+                            msg.format(stats["curr_items"], bucket_data[bucket.name]["items_inserted_count"]))
 
         if len(asserts) > 0:
             for msg in asserts:
@@ -120,7 +124,8 @@ class RebalanceBaseTest(unittest.TestCase):
             bucket_data[bucket.name]["items_inserted_count"] += inserted_count
 
     @staticmethod
-    def threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data, delete_ratio=0, expiry_ratio=0):
+    def threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data, delete_ratio=0,
+                            expiry_ratio=0):
         buckets = rest.get_buckets()
         for bucket in buckets:
             threads = MemcachedClientHelper.create_threads(servers=rebalanced_servers,
@@ -191,7 +196,7 @@ class RebalanceBaseTest(unittest.TestCase):
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, bucket_name=bucket,
-                                                                   test=test, concurrency=4)
+                                                               test=test, concurrency=4)
 
     @staticmethod
     def get_test_params(input):
@@ -248,14 +253,14 @@ class IncrementalRebalanceComboTests(unittest.TestCase):
             # Start rebalance in thread
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             rebalance_thread = Thread(target=RebalanceHelper.rebalance_in,
-                             args=(self._servers, rebalance_in), name="rebalance_thread")
+                                      args=(self._servers, rebalance_in), name="rebalance_thread")
             #rebalance_thread.daemon = True
             rebalance_thread.start()
 
             # Start reader daemon
             for bucket in buckets:
                 reader_thread = Thread(target=BucketOperationHelper.keys_exist_or_assert_in_parallel,
-                args=(inserted_keys, master, bucket.name, self, 4), name="reader_thread")
+                                       args=(inserted_keys, master, bucket.name, self, 4), name="reader_thread")
                 reader_thread.daemon = True
                 reader_thread.start()
 
@@ -278,7 +283,7 @@ class IncrementalRebalanceComboTests(unittest.TestCase):
             final_replication_state = RestHelper(rest).wait_for_replication(300)
             msg = "replication state after waiting for up to 5 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
-#            ClusterOperationHelper.verify_persistence(self._servers, self)
+        #            ClusterOperationHelper.verify_persistence(self._servers, self)
 
     def test_load(self):
         keys_count, replica, load_ratio = RebalanceBaseTest.get_test_params(self._input)
@@ -329,7 +334,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             final_replication_state = RestHelper(rest).wait_for_replication(300)
             msg = "replication state after waiting for up to 5 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
-#            ClusterOperationHelper.verify_persistence(self._servers, self, 20000, 120)
+        #            ClusterOperationHelper.verify_persistence(self._servers, self, 20000, 120)
 
     def test_load(self):
         log = logger.Logger().get_logger()
@@ -337,9 +342,9 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         delete_ratio = DELETE_RATIO
         expiry_ratio = EXPIRY_RATIO
         if "delete-ratio" in self._input.test_params:
-            delete_ratio = float(self._input.test_params.get('delete-ratio',DELETE_RATIO))
+            delete_ratio = float(self._input.test_params.get('delete-ratio', DELETE_RATIO))
         if "expiry-ratio" in self._input.test_params:
-            expiry_ratio = float(self._input.test_params.get('expiry-ratio',EXPIRY_RATIO))
+            expiry_ratio = float(self._input.test_params.get('expiry-ratio', EXPIRY_RATIO))
         log.info("keys_count, replica, load_ratio: {0} {1} {2}".format(keys_count, replica, load_ratio))
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
         self._common_test_body(keys_count, load_ratio, replica, True, delete_ratio, expiry_ratio)
@@ -397,9 +402,9 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         delete_ratio = DELETE_RATIO
         expiry_ratio = EXPIRY_RATIO
         if "delete-ratio" in self._input.test_params:
-            delete_ratio = float(self._input.test_params.get('delete-ratio',DELETE_RATIO))
+            delete_ratio = float(self._input.test_params.get('delete-ratio', DELETE_RATIO))
         if "expiry-ratio" in self._input.test_params:
-            expiry_ratio = float(self._input.test_params.get('expiry-ratio',EXPIRY_RATIO))
+            expiry_ratio = float(self._input.test_params.get('expiry-ratio', EXPIRY_RATIO))
         log.info("Test inputs {0}".format(self._input.test_params))
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
         self._common_test_body(keys_count, load_ratio, replica, 1, True, delete_ratio, expiry_ratio)
@@ -434,7 +439,8 @@ class IncrementalRebalanceOut(unittest.TestCase):
         ClusterHelper.add_all_nodes_or_assert(master, self._servers, creds, self)
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
         self.assertTrue(rest.monitorRebalance(),
-                        msg="rebalance operation failed after adding nodes {0}".format([node.id for node in rest.node_statuses()]))
+                        msg="rebalance operation failed after adding nodes {0}".format(
+                            [node.id for node in rest.node_statuses()]))
         #remove nodes one by one and rebalance , add some item and
         #rebalance ?
         rebalanced_servers = []
@@ -449,9 +455,9 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
             for bucket in rest.get_buckets():
                 RebalanceBaseTest.load_data(master, bucket.name,
-                                                    keys_count, load_ratio,
-                                                    delete_ratio=0, expiry_ratio=0,
-                                                    test=self)
+                                            keys_count, load_ratio,
+                                            delete_ratio=0, expiry_ratio=0,
+                                            test=self)
 
             self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
             self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
@@ -822,7 +828,14 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
                 if key not in rejected:
                     try:
                         flag, keyx, value = client.get(key)
-                        if not value.endswith(mutation):
+                        try:
+                            json_object = json.loads(value)
+                            print json_object["seed"]
+                            print json
+                            print mutation
+                            if  json.loads(value)["seed"] != mutation:
+                                did_not_mutate_keys.append({'key': key, 'value': value})
+                        except:
                             did_not_mutate_keys.append({'key': key, 'value': value})
                     except Exception as ex:
                         self.log.info(ex)
@@ -864,7 +877,7 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
 
     def test_small_load(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(1.0, replica=1)
+        self._common_test_body(0.05, replica=1)
 
     def test_small_load_2_replica(self):
         RebalanceBaseTest.common_setup(self._input, self, replica=2)
@@ -1028,21 +1041,21 @@ class RebalanceSwapTests(unittest.TestCase):
         self.assertTrue(self.rebalance_in(swap_count - 1))
 
         MemcachedClientHelper.load_bucket(name="bucket-0",
-                                              servers=[master],
-                                              number_of_items=20000,
-                                              number_of_threads=1,
-                                              write_only=True,
-                                              moxi=True)
+                                          servers=[master],
+                                          number_of_items=20000,
+                                          number_of_threads=1,
+                                          write_only=True,
+                                          moxi=True)
         #now add nodes for being swapped
         #eject the current nodes and add new ones
         # add 2 * swap -1 nodes
-        nodeIpPorts = ["{0}:{1}".format(node.ip,node.port) for node in rest.node_statuses()]
+        nodeIpPorts = ["{0}:{1}".format(node.ip, node.port) for node in rest.node_statuses()]
         self.log.info("current nodes : {0}".format(nodeIpPorts))
         toBeAdded = []
         selection = self._servers[1:]
         shuffle(selection)
         for server in selection:
-            if not "{0}:{1}".format(server.ip,server.port) in nodeIpPorts:
+            if not "{0}:{1}".format(server.ip, server.port) in nodeIpPorts:
                 toBeAdded.append(server)
                 self.log.info("adding {0}:{1} to toBeAdded".format(server.ip, server.port))
             if len(toBeAdded) == swap_count:
@@ -1069,6 +1082,7 @@ class RebalanceSwapTests(unittest.TestCase):
 
     def test_swap_4(self):
         self._common_test_body(4)
+
 
 class RebalanceInOutWithParallelLoad(unittest.TestCase):
     def setUp(self):
@@ -1110,7 +1124,8 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
 
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
             self.assertTrue(rest.monitorRebalance(),
-                            msg="rebalance operation failed after adding node {0} and removing node {1}".format(server.ip, ejectedNodes))
+                            msg="rebalance operation failed after adding node {0} and removing node {1}".format(
+                                server.ip, ejectedNodes))
             rebalanced_servers.append(server)
 
             for name in bucket_data:
