@@ -341,7 +341,7 @@ class MutationThread(threading.Thread):
     def run(self):
         values = DocumentGenerator.make_docs(len(self.keys),
                 {"name": "user-${prefix}", "payload": "memcached-json-${prefix}-${padding}",
-                 "size": 1024, "seed": str(uuid.uuid4())})
+                 "size": 1024, "seed": self.seed})
         client = MemcachedClientHelper.proxy_client(self.serverInfo, self.name)
         counter = 0
         for value in values:
