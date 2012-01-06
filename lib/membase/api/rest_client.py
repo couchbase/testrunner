@@ -308,7 +308,7 @@ class RestConnection(object):
             else:
                 api += "?"
             num_params += 1
-            if param in ["key", "startkey", "endkey"]:
+            if param in ["key", "startkey", "endkey"] or params[param] == True or params[param] == False:
                 api += "{0}={1}".format(param, json.dumps(params[param]))
             else:
                 api += "{0}={1}".format(param, params[param])
