@@ -288,13 +288,13 @@ class PerfBase(unittest.TestCase):
             cfg['max-creates'] = start_at + num_items
             cfg['max-items'] = cfg['max-creates']
 
+
         if is_eperf:
             collect_server_stats = self.parami("prefix", 0) == 0
             client_id = self.parami("prefix", 0)
             sc = self.start_stats(self.spec_reference + ".load",
                               test_params = cfg, client_id = client_id,
                               collect_server_stats = collect_server_stats)
-
 
         # For Black box, multi node tests
         # always use membase-binary
@@ -384,7 +384,8 @@ class PerfBase(unittest.TestCase):
              start_at=-1,
              report=0,
              ctl=None,
-             hot_shift=0):
+             hot_shift=0,
+             is_eperf=False):
         num_items = num_items or self.num_items_loaded
 
         cfg = { 'max-items': max_items or num_items,
@@ -411,7 +412,9 @@ class PerfBase(unittest.TestCase):
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
-        client_id = self.parami("prefix", 0)
+        client_id = ''
+        if is_eperf:
+            client_id = self.parami("prefix", 0)
         sc = None
         if self.parami("collect_stats", 1):
             sc = self.start_stats(self.spec_reference + ".loop",
