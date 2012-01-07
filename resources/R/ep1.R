@@ -127,18 +127,19 @@ builds_list <- plyr::ldply(builds_json, unlist)
 
 names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','is_json','test_time')
 
- #(fbl <- builds_list[FALSE, ])
- #for(name in levels(factor(builds_list$test_name))) {
-#	 for(a_build in levels(factor(builds_list[builds_list$test_name == name,]$build))) {
-#		 filtered = builds_list[builds_list$build==a_build & builds_list$test_name == name,]
-#		 max_time = max(filtered$test_time)
-#		 filtered = filtered[filtered $test_time == max_time,]
-#		 # print(filtered)
-#		 fbl <- rbind(fbl,filtered)	
-#	 }
-# }
+ # Pick the latest stats doc for a given test on a given build
+ (fbl <- builds_list[FALSE, ])
+ for(name in levels(factor(builds_list$test_name))) {
+	 for(a_build in levels(factor(builds_list[builds_list$test_name == name,]$build))) {
+		 filtered = builds_list[builds_list$build==a_build & builds_list$test_name == name,]
+		 max_time = max(filtered$test_time)
+		 filtered = filtered[filtered $test_time == max_time,]
+		 # print(filtered)
+		 fbl <- rbind(fbl,filtered)
+	 }
+ }
 
-#builds_list <- fbl
+builds_list <- fbl
 builds_list <- builds_list[builds_list$build %in% i_builds & builds_list$test_name == test_name & builds_list$is_json=='0',]
 print(builds_list)
 # Following metrics are to be fetch from CouchDB and plotted
