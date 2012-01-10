@@ -103,6 +103,7 @@ class MembaseBucket(unittest.TestCase):
     def setUp(self):
         self.simpleSetGetTestBase = SimpleSetGetTestBase()
         self.simpleSetGetTestBase.setUp_bucket(self)
+        self._log_start()
 
     def test_value_100b(self):
         self.simpleSetGetTestBase.set_get_test(128, 4000)
@@ -119,3 +120,19 @@ class MembaseBucket(unittest.TestCase):
     def tearDown(self):
         if self.simpleSetGetTestBase:
             self.simpleSetGetTestBase.tearDown_bucket()
+        self._log_finish()
+
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass

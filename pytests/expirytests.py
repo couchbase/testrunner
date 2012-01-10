@@ -44,6 +44,22 @@ class ExpiryTests(unittest.TestCase):
         self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self._bucket_name, rest), msg=msg)
         ready = BucketOperationHelper.wait_for_memcached(serverInfo,self._bucket_name)
         self.assertTrue(ready, "wait_for_memcached failed")
+        self._log_start()
+
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
 
     # test case to set 1000 keys and verify that those keys are stored
     #e1
@@ -137,6 +153,7 @@ class ExpiryTests(unittest.TestCase):
 
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert(servers=[self.master], test_case=self)
+        self._log_finish()
 
 
 class TapListener(Thread):

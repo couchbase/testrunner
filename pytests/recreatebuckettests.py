@@ -19,9 +19,26 @@ class RecreateMembaseBuckets(unittest.TestCase):
         self.assertTrue(self.input, msg="input parameters missing...")
         self.servers = self.input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, test_case=self)
+        self._log_start()
 
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, test_case=self)
+        self._log_finish()
+
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
 
     #create bucket-load some keys-delete bucket-recreate bucket
     def test_default_moxi(self):

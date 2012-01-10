@@ -20,6 +20,25 @@ class DrainRateTests(unittest.TestCase):
         self.drained_in_seconds = -1
         self.drained = False
         self.reader_shutdown = False
+        self._log_start()
+
+    def tearDown(self):
+        self._log_finish()
+
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
 
     def _create_default_bucket(self):
         rest = RestConnection(self.master)

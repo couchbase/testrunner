@@ -33,6 +33,22 @@ class ViewTests(unittest.TestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[0]], self)
         self._create_default_bucket()
         self.created_views = {}
+        self._log_start()
+
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
 
 
     #create a bucket if it doesn't exist
@@ -580,6 +596,7 @@ class ViewTests(unittest.TestCase):
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
             ClusterOperationHelper.cleanup_cluster(self.servers)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        self._log_finish()
 
     def _setup_cluster(self):
         for server in self.servers:

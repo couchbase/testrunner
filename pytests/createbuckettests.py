@@ -2,17 +2,32 @@ import unittest
 import uuid
 from TestInput import TestInput, TestInputSingleton
 import logger
+import datetime
 import time
 from membase.api.exception import BucketCreationException
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 
 class CreateMembaseBucketsTests(unittest.TestCase):
-
     version = None
     servers = None
     input = TestInput
     log = None
+
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
 
 
     #as part of the setup let's delete all the existing buckets
@@ -22,10 +37,12 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         self.assertTrue(self.input, msg="input parameters missing...")
         self.servers = self.input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
+        self._log_start()
+
 
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
-        pass
+        self._log_finish()
 
     # read each server's version number and compare it to self.version
     def test_default_moxi(self):
@@ -317,8 +334,8 @@ class CreateMembaseBucketsTests(unittest.TestCase):
     # only done on the first server
     def test_invalid_chars(self):
         postfix = uuid.uuid4()
-        for char in ['~','!','@','#','$','^','&','*','(',')',':',',',';','"','\'','<','>','?','/']:
-            name = '{0}invalid_{1}'.format(postfix,char)
+        for char in ['~', '!', '@', '#', '$', '^', '&', '*', '(', ')', ':', ',', ';', '"', '\'', '<', '>', '?', '/']:
+            name = '{0}invalid_{1}'.format(postfix, char)
             for serverInfo in [self.servers[0]]:
                 rest = RestConnection(serverInfo)
                 proxyPort = rest.get_nodes_self().moxi
