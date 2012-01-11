@@ -4,6 +4,7 @@
 
 import getopt
 import copy
+import logging
 import sys
 from threading import Thread
 from datetime import datetime
@@ -20,6 +21,13 @@ from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
 import TestInput
 
+
+log = logging.getLogger()
+consoleHandler = logging.StreamHandler()
+consoleHandler.setLevel(logging.INFO)
+formatter = logging.Formatter("[%(asctime)s] - [%(module)s] [%(thread)d] - %(levelname)s - %(message)s")
+consoleHandler.setFormatter(formatter)
+log.addHandler(consoleHandler)
 
 def usage(err=None):
     print """\
@@ -176,7 +184,7 @@ class MembaseServerInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-        log = logger.new_logger("Installer")
+#        log = logger.new_logger("Installer")
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]
@@ -201,7 +209,7 @@ class MembaseServerInstaller(Installer):
             raise Exception("unable to initialize membase node")
 
     def install(self, params):
-        log = logger.new_logger("Installer")
+#        log = logger.new_logger("Installer")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
         info = remote_client.extract_remote_info()
@@ -212,7 +220,7 @@ class MembaseServerInstaller(Installer):
             bat_file = "install.bat"
             server_path = "/cygdrive/c/Program Files/Membase/Server/"
             dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
-            log = logger.new_logger("Installer")
+#            log = logger.new_logger("Installer")
             build = self.build_url(params)
             remote_client.create_multiple_dir(dir_paths)
             remote_client.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
@@ -250,7 +258,7 @@ class MembaseServerStandaloneInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-        log = logger.new_logger("Installer")
+#        log = logger.new_logger("Installer")
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]
@@ -263,7 +271,7 @@ PRAGMA synchronous = NORMAL;""")
         time.sleep(5)
 
     def install(self, params):
-        log = logger.new_logger("Installer")
+#        log = logger.new_logger("Installer")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
         downloaded = remote_client.download_build(build)
@@ -277,7 +285,7 @@ class CouchbaseServerInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-        log = logger.new_logger("Installer")
+#        log = logger.new_logger("Installer")
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]
@@ -310,7 +318,7 @@ class CouchbaseServerInstaller(Installer):
             raise Exception("unable to initialize membase node")
 
     def install(self, params):
-        log = logger.new_logger("Installer")
+#        log = logger.new_logger("Installer")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
         info = remote_client.extract_remote_info()
@@ -322,7 +330,7 @@ class CouchbaseServerInstaller(Installer):
             server_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
 
-            log = logger.new_logger("Installer")
+#            log = logger.new_logger("Installer")
             build = self.build_url(params)
             remote_client.create_multiple_dir(dir_paths)
             remote_client.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
@@ -358,7 +366,7 @@ class CouchbaseServerStandaloneInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-        log = logger.new_logger("Installer")
+#        log = logger.new_logger("Installer")
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]
@@ -371,7 +379,7 @@ PRAGMA synchronous = NORMAL;""")
         time.sleep(5)
 
     def install(self, params):
-        log = logger.new_logger("Installer")
+#        log = logger.new_logger("Installer")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
         downloaded = remote_client.download_build(build)
@@ -385,7 +393,7 @@ class CouchbaseSingleServerInstaller(Installer):
         Installer.__init__(self)
 
     def install(self, params):
-        log = logger.new_logger("CouchbaseSingleServerInstaller")
+#        log = logger.new_logger("CouchbaseSingleServerInstaller")
         build = self.build_url(params)
         remote_client = RemoteMachineShellConnection(params["server"])
         downloaded = remote_client.download_build(build)
@@ -396,7 +404,7 @@ class CouchbaseSingleServerInstaller(Installer):
         time.sleep(5)
 
     def initialize(self, params):
-        log = logger.new_logger("CouchbaseSingleServerInstaller")
+#        log = logger.new_logger("CouchbaseSingleServerInstaller")
         start_time = time.time()
         server = params["server"]
         remote_client = RemoteMachineShellConnection(params["server"])
@@ -480,7 +488,7 @@ class InstallerJob(object):
 
 
 def check_build(input):
-        log = logger.new_logger("Get build")
+#        log = logger.new_logger("Get build")
         _params = copy.deepcopy(input.test_params)
         _params["server"] = input.servers[0]
         installer = installer_factory(_params)
