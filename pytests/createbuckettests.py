@@ -221,7 +221,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
 
     def test_zero_replica(self):
         postfix = uuid.uuid4()
-        name = '0replica_{0}'.format(postfix)
+        name = 'replica_{0}'.format(postfix)
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi
@@ -239,7 +239,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
 
     def test_one_replica(self):
         postfix = uuid.uuid4()
-        name = '0replica_{0}'.format(postfix)
+        name = 'replica_{0}'.format(postfix)
         for serverInfo in self.servers:
             rest = RestConnection(serverInfo)
             proxyPort = rest.get_nodes_self().moxi
