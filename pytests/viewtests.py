@@ -9,9 +9,12 @@ import time
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from memcached.helper.data_helper import MemcachedError
+from remote.remote_util import RemoteMachineShellConnection
+
 
 class ViewTests(unittest.TestCase):
     #if we create a bucket and a view let's delete them in the end
@@ -172,6 +175,19 @@ class ViewTests(unittest.TestCase):
         self._begin_rebalance_out()
         doc_names = self._delete_docs(num_of_docs, num_of_deleted_docs, prefix)
         self._end_rebalance()
+        self._verify_docs_doc_name(doc_names, prefix)
+
+
+    def test_view_10k_docs_failover(self):
+        fh = FailoverHelper(self.servers,self)
+        prefix = str(uuid.uuid4())[:7]
+        num_of_docs = 10000
+        # verify we are fully clustered
+        self._begin_rebalance_in()
+        self._end_rebalance()
+        self._create_view_doc_name(prefix)
+        doc_names = self._load_docs(num_of_docs, prefix)
+        fh.failover(1)
         self._verify_docs_doc_name(doc_names, prefix)
 
 
@@ -548,6 +564,14 @@ class ViewTests(unittest.TestCase):
     def tearDown(self):
         master = self.servers[0]
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
+            for server in self.servers:
+                shell = RemoteMachineShellConnection(server)
+                if shell.is_membase_installed():
+                    shell.start_membase()
+                else:
+                    shell.start_couchbase()
+                shell.disconnect()
+
             rest = RestConnection(master)
             for view in self.created_views:
                 bucket = self.created_views[view]

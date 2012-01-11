@@ -18,17 +18,18 @@ class RestHelper(object):
         end_time = time.time() + timeout_in_seconds
         while time.time() <= end_time:
             try:
-                if self.is_cluster_healthy():
+                if self.is_cluster_healthy(5):
                     return True
             except ServerUnavailableException:
+                log.error("server {0}:{1} is unavailable".format(self.rest.ip, self.rest.port))
                 time.sleep(1)
         msg = 'unable to connect to the node {0} even after waiting {1} seconds'
         log.info(msg.format(self.rest.ip,timeout_in_seconds))
         return False
 
-    def is_cluster_healthy(self):
+    def is_cluster_healthy(self, timeout=120):
         #get the nodes and verify that all the nodes.status are healthy
-        nodes = self.rest.node_statuses()
+        nodes = self.rest.node_statuses(timeout)
         return all(node.status == 'healthy' for node in nodes)
 
     def rebalance_reached(self, percentage=100):
@@ -387,11 +388,11 @@ class RestConnection(object):
                     log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content))
                     return False, content
             except socket.error as e:
-                log.error(e)
+                log.error("socker error while connecting to {0}:{1} error {2}: ".format(self.ip, self.port, e))
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
             except httplib2.ServerNotFoundError as e:
-                log.error(e)
+                log.error("ServerNotFoundError error while connecting to {0}:{1} error {2}: ".format(self.ip, self.port, e))
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
             time.sleep(1)
@@ -655,11 +656,11 @@ class RestConnection(object):
         return node
 
 
-    def node_statuses(self):
+    def node_statuses(self, timeout=120):
         nodes = []
         api = self.baseUrl + 'nodeStatuses'
 
-        status, content = self._http_request(api)
+        status, content = self._http_request(api, timeout=timeout)
 
         json_parsed = json.loads(content)
 
