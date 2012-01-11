@@ -15,19 +15,15 @@ import testconstants
 import couchdb
 import time
 from builds.build_query import BuildQuery
-import logger
+import logging.config
 from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
 import TestInput
 
 
+logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
-consoleHandler = logging.StreamHandler()
-consoleHandler.setLevel(logging.INFO)
-formatter = logging.Formatter("[%(asctime)s] - [%(module)s] [%(thread)d] - %(levelname)s - %(message)s")
-consoleHandler.setFormatter(formatter)
-log.addHandler(consoleHandler)
 
 def usage(err=None):
     print """\
