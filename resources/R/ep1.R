@@ -11,20 +11,22 @@ library(methods)
 
 args <- commandArgs(TRUE)
 args <- unlist(strsplit(args," "))
-
-baseline_build = args[1]
-new_build = args[2]
-test_name = args[3]
-dbip = args[4]
-dbname = args[5]
-pdfname = args[6]
+# ep1.R 1.8.0r-55-g80f24f2-community 2.0.0r-452-gf1c60e1-community EPT-WRITE-original couchdb2.couchbaseqe.com eperf ept-write-nonjson-180-200r452
+# baseline_build = args[1]
+# new_build = args[2]
+# test_name = args[3]
+# dbip = args[4]
+# dbname = args[5]
+# pdfname = args[6]
+pdfname = "ept-write-nonjson-180-200r452"
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
-#baseline_build="1.7.2r-22-geaf53ef"
-#new_build = "2.0.0r-388-gf35126e-enterprise"
-#test_name = "EPT-READ-original"
-#dbip = "couchdb2.couchbaseqe.com"
-#dbname= "eperf"
+baseline_build="1.8.0r-55-g80f24f2-community"
+new_build = "2.0.0r-452-gf1c60e1-community"
+test_name = "EPT-WRITE-original"
+dbip = "couchdb2.couchbaseqe.com"
+dbname= "eperf"
+pdfname = "ept-write-nonjson-180-200r452.pdf"
 #i_builds = c("1.7.2r-22-geaf53ef", new_build)
 i_builds = c(baseline_build, new_build)
 
@@ -168,6 +170,14 @@ ns_server_data $row <- as.numeric(ns_server_data $row)
 ns_server_data $ep_queue_size <- as.numeric(ns_server_data $ep_queue_size)
 ns_server_data $ep_diskqueue_drain <- as.numeric(ns_server_data $ep_diskqueue_drain)
 ns_server_data $ops <- as.numeric(ns_server_data $ops)
+ns_server_data $ep_bg_fetched <- as.numeric(ns_server_data $ep_bg_fetched)
+ns_server_data $ep_tmp_oom_errors <- as.numeric(ns_server_data $ep_tmp_oom_errors)
+ns_server_data $vb_active_resident_items_ratio <- as.numeric(ns_server_data $vb_active_resident_items_ratio)
+ns_server_data $vb_active_eject <- as.numeric(ns_server_data $vb_active_eject)
+ns_server_data $vb_replica_eject <- as.numeric(ns_server_data $vb_replica_eject)
+ns_server_data $ep_tap_replica_queue_backoff <- as.numeric(ns_server_data $ep_tap_replica_queue_backoff)
+
+
 
 cat("generating System stats from ns_server_data ")
 result <- data.frame()
@@ -619,6 +629,84 @@ p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', si
 p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 #p <- p + facet_wrap(~name, ncol=3, scales='free_y')
 print(p)
+
+cat("ep_bg_fetched\n")
+p <- ggplot(ns_server_data, aes(row, ep_bg_fetched, color=buildinfo.version, fill=buildinfo.version, label=ep_bg_fetched))
+p <- p + labs(x="----time (sec)--->", y="ep_bg_fetched")
+p  <-  p + stat_smooth(se = TRUE)
+#p <- p + geom_line(aes(timestamp, ep_bg_fetched, color=build))
+# p <- p + scale_y_continuous()
+# p <- p + opts(title=paste("ep_bg_fetched", sep=''))
+# p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+# p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free_y')
+print(p)
+
+cat("generating tmp_oom \n")
+p <- ggplot(ns_server_data, aes(row, ep_tmp_oom_errors, color=buildinfo.version, fill=buildinfo.version, label=ep_tmp_oom_errors))
+p <- p + labs(x="----time (sec)--->", y="ep_tmp_oom_errors")
+p  <-  p + stat_smooth(se = TRUE)
+#       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$ep_tmp_oom_errors),quantile(ns_server_data$ep_tmp_oom_errors,0.999)))
+p <- p + opts(title=paste("ep_tmp_oom_errors", sep=''))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free_y')
+print(p)
+
+ns_server_data $vb_replica_eject <- as.numeric(ns_server_data $vb_replica_eject)
+ns_server_data $ep_tap_replica_queue_backoff <- as.numeric(ns_server_data $ep_tap_replica_queue_backoff)
+
+cat("generating vb_active_reject \n")
+p <- ggplot(ns_server_data, aes(row, vb_active_reject, color=buildinfo.version, fill=buildinfo.version, label= vb_active_reject))
+p <- p + labs(x="----time (sec)--->", y="vb_active_reject")
+p  <-  p + stat_smooth(se = TRUE)
+#       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$vb_active_reject),quantile(ns_server_data$vb_active_reject,0.999)))
+p <- p + opts(title=paste("vb_active_reject", sep=''))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free_y')
+print(p)
+
+cat("generating vb_replica_eject \n")
+p <- ggplot(ns_server_data, aes(row, vb_replica_eject, color=buildinfo.version, fill=buildinfo.version, label= vb_replica_eject))
+p <- p + labs(x="----time (sec)--->", y="vb_replica_eject")
+p  <-  p + stat_smooth(se = TRUE)
+#       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$vb_replica_eject),quantile(ns_server_data$vb_replica_eject,0.999)))
+p <- p + opts(title=paste("vb_replica_eject", sep=''))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free_y')
+print(p)
+
+
+cat("generating ep_tap_replica_queue_backoff \n")
+p <- ggplot(ns_server_data, aes(row, ep_tap_replica_queue_backoff, color=buildinfo.version, fill=buildinfo.version, label= ep_tap_replica_queue_backoff))
+p <- p + labs(x="----time (sec)--->", y="ep_tap_replica_queue_backoff")
+p  <-  p + stat_smooth(se = TRUE)
+# p <- p + geom_line(aes(timestamp, ep_tap_replica_queue_backoff, color=build))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$ep_tap_replica_queue_backoff),quantile(ns_server_data$ep_tap_replica_queue_backoff,0.999)))
+p <- p + opts(title=paste("ep_tap_replica_queue_backoff", sep=''))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free_y')
+print(p)
+
+cat("generating vb_active_resident_items_ratio \n")
+p <- ggplot(ns_server_data, aes(row, vb_active_resident_items_ratio, color=buildinfo.version, fill=buildinfo.version, label= vb_active_resident_items_ratio))
+p <- p + labs(x="----time (sec)--->", y="vb_active_resident_items_ratio")
+p  <-  p + stat_smooth(se = TRUE)
+#       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$vb_active_resident_items_ratio),quantile(ns_server_data$vb_active_resident_items_ratio,0.999)))
+p <- p + opts(title=paste("vb_active_resident_items_ratio", sep=''))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+#p <- p + facet_wrap(~name, ncol=3, scales='free_y')
+print(p)
+
+
 
 cat("generating data disk size\n")
 p <- ggplot(disk_data, aes(row,size, color=buildinfo.version ,fill=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="size (MB)")
