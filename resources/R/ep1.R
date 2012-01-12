@@ -12,21 +12,21 @@ library(methods)
 args <- commandArgs(TRUE)
 args <- unlist(strsplit(args," "))
 # ep1.R 1.8.0r-55-g80f24f2-community 2.0.0r-452-gf1c60e1-community EPT-WRITE-original couchdb2.couchbaseqe.com eperf ept-write-nonjson-180-200r452
-# baseline_build = args[1]
-# new_build = args[2]
-# test_name = args[3]
-# dbip = args[4]
-# dbname = args[5]
-# pdfname = args[6]
-pdfname = "ept-write-nonjson-180-200r452"
+baseline_build = args[1]
+new_build = args[2]
+test_name = args[3]
+dbip = args[4]
+dbname = args[5]
+pdfname = args[6]
+# pdfname = "ept-write-nonjson-180-200r452"
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
-baseline_build="1.8.0r-55-g80f24f2-community"
-new_build = "2.0.0r-452-gf1c60e1-community"
-test_name = "EPT-WRITE-original"
-dbip = "couchdb2.couchbaseqe.com"
-dbname= "eperf"
-pdfname = "ept-write-nonjson-180-200r452.pdf"
+# baseline_build="1.8.0r-55-g80f24f2-community"
+# new_build = "2.0.0r-452-gf1c60e1-community"
+# test_name = "EPT-WRITE-original"
+# dbip = "couchdb2.couchbaseqe.com"
+# dbname= "eperf"
+# pdfname = "ept-write-nonjson-180-200r452.pdf"
 #i_builds = c("1.7.2r-22-geaf53ef", new_build)
 i_builds = c(baseline_build, new_build)
 
