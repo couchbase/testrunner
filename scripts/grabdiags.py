@@ -21,13 +21,13 @@ if __name__ == "__main__":
     input = TestInputParser.get_test_input(sys.argv)
     for serverInfo in input.servers:
         print "grabbing diags from ".format(serverInfo.ip)
-        diag_url = "http://{0}:8091/diag".format(serverInfo.ip)
+        diag_url = "http://{0}:{1}/diag".format(serverInfo.ip,serverInfo.port)
         print diag_url
         try:
             req = urllib2.Request(diag_url)
             req.headers = create_headers(input.membase_settings.rest_username,
                                          input.membase_settings.rest_password)
-            filename = "{0}-diag.txt".format(serverInfo.ip)
+            filename = "{0}-{1}-diag.txt".format(serverInfo.ip,serverInfo.port)
             page = urllib2.urlopen(req)
             with open(filename, 'wb') as output:
                 os.write(1, "downloading {0} ...".format(serverInfo.ip))
