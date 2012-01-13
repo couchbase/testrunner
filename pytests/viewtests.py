@@ -79,7 +79,7 @@ class ViewTests(unittest.TestCase):
 
         api = rest.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
         status, content = rest._http_request(api, 'PUT', function, headers=rest._create_capi_headers())
-        self.created_views[view] = bucket
+#        self.created_views[view] = bucket
 
         # try to load some documents to see if memcached is running
         self._load_docs(num_of_docs, prefix, False)
@@ -581,6 +581,8 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
             for server in self.servers:
+                if server.port != 8091:
+                   continue
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_membase_installed():
                     shell.start_membase()
