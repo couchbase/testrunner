@@ -26,8 +26,8 @@ class ViewTests(unittest.TestCase):
         rest = RestConnection(self.servers[0])
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         mem_quota = int(rest.get_nodes_self().mcdMemoryReserved * node_ram_ratio)
-        rest.init_cluster(master.rest_username,master.rest_password)
-        rest.init_cluster_memoryQuota(master.rest_username, master.rest_password,memoryQuota=mem_quota)
+        rest.init_cluster(master.rest_username, master.rest_password)
+        rest.init_cluster_memoryQuota(master.rest_username, master.rest_password, memoryQuota=mem_quota)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
         ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[0]], self)
@@ -102,7 +102,29 @@ class ViewTests(unittest.TestCase):
             self.assertTrue(response)
             self.assertEquals(response["_id"], "_design/{0}".format(view))
             self.log.info(response)
-        #            self._verify_views_replicated(bucket, view, map_fn)
+            #            self._verify_views_replicated(bucket, view, map_fn)
+
+    def test_view_on_20k_docs_20_design_docs(self):
+        self._test_view_on_multiple_docs_multiple_design_docs(20000, 20)
+
+    def _test_view_on_multiple_docs_multiple_design_docs(self, num_of_docs, num_of_design_docs):
+        self._view_test_threads = []
+        for i in range(0, num_of_design_docs):
+            thread_result = []
+            t = Thread(target=self._test_view_on_multiple_docs_thread_wrapper,
+                       name="test_view_on_multiple_docs_multiple_design_docs", args=(num_of_docs, thread_result))
+            t.start()
+            self._view_test_threads.append((t, thread_result))
+        for (t, r) in self._view_test_threads:
+            t.join()
+        asserts = []
+        for (t, r) in self._view_test_threads:
+            #get the r
+            if len(r) > 0:
+                asserts.append(r[0])
+                self.log.error("view thread failed : {0}".format(r[0]))
+        self.fail("one of multiple threads failed. look at the logs for more specific errors")
+
 
     def test_view_on_100_docs(self):
         self._test_view_on_multiple_docs(100)
@@ -195,7 +217,7 @@ class ViewTests(unittest.TestCase):
 
 
     def test_view_10k_docs_failover(self):
-        fh = FailoverHelper(self.servers,self)
+        fh = FailoverHelper(self.servers, self)
         prefix = str(uuid.uuid4())[:7]
         num_of_docs = 10000
         # verify we are fully clustered
@@ -218,7 +240,7 @@ class ViewTests(unittest.TestCase):
         function = self._create_function(rest, bucket, view_name, map_fn, reduce_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         self.log.info("inserting {0} json objects".format(num_of_docs))
@@ -231,7 +253,8 @@ class ViewTests(unittest.TestCase):
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = self._get_view_results(rest, bucket, view_name, num_of_docs)
         value = self._get_built_in_reduce_results(results)
-        results_without_reduce = self._get_view_results(rest, bucket, view_name, num_of_docs,extra_params={"reduce":False})
+        results_without_reduce = self._get_view_results(rest, bucket, view_name, num_of_docs,
+                                                        extra_params={"reduce": False})
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
         RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
         # try this for maximum 3 minutes
@@ -245,7 +268,8 @@ class ViewTests(unittest.TestCase):
             time.sleep(10)
             attempt += 1
             #get the results without reduce ?
-            results_without_reduce = self._get_view_results(rest, bucket, view_name, num_of_docs,extra_params={"reduce":False})
+            results_without_reduce = self._get_view_results(rest, bucket, view_name, num_of_docs,
+                                                            extra_params={"reduce": False})
             keys = self._get_keys(results_without_reduce)
             num_of_results_without_reduce = len(keys)
             msg = "view with reduce=false returned {0} items, expected to return {1} items"
@@ -269,7 +293,7 @@ class ViewTests(unittest.TestCase):
         function = self._create_function(rest, bucket, view_name, map_fn, reduce_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         sum = 0
@@ -300,6 +324,11 @@ class ViewTests(unittest.TestCase):
             value = self._get_built_in_reduce_results(results)
         self.assertEquals(value, num_of_docs)
 
+    def _test_view_on_multiple_docs_thread_wrapper(self, num_of_docs, failures):
+        try:
+            self._test_view_on_multiple_docs(num_of_docs)
+        except Exception as ex:
+            failures.append(ex)
 
     def _test_view_on_multiple_docs(self, num_of_docs):
         self.log.info("description : create a view on 10 thousand documents")
@@ -311,7 +340,7 @@ class ViewTests(unittest.TestCase):
         function = self._create_function(rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         self.log.info("inserting {0} json objects".format(num_of_docs))
@@ -322,7 +351,7 @@ class ViewTests(unittest.TestCase):
             moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(len(doc_names)))
         time.sleep(5)
-        results = self._get_view_results(rest, bucket, view_name, len(doc_names))
+        results = self._get_view_results(rest, bucket, view_name, len(doc_names),extra_params={"stale":"update_after"})
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         keys = self._get_keys(results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
@@ -336,7 +365,7 @@ class ViewTests(unittest.TestCase):
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(10)
             attempt += 1
-            results = self._get_view_results(rest, bucket, view_name, len(doc_names))
+            results = self._get_view_results(rest, bucket, view_name, len(doc_names),extra_params={"stale":"update_after"})
             keys = self._get_keys(results)
         keys = self._get_keys(results)
         not_found = []
@@ -357,7 +386,7 @@ class ViewTests(unittest.TestCase):
         function = self._create_function(rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         updated_doc_names = []
         updated_num_of_docs = num_of_docs + 100
@@ -582,7 +611,7 @@ class ViewTests(unittest.TestCase):
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
             for server in self.servers:
                 if server.port != 8091:
-                   continue
+                    continue
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_membase_installed():
                     shell.start_membase()
@@ -604,8 +633,9 @@ class ViewTests(unittest.TestCase):
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
         master = self.servers[0]
-        rebalanced = ClusterOperationHelper.add_and_rebalance(self.servers, master.rest_password)
-        self.assertTrue(rebalanced, msg="cluster is not rebalanced")
+        if len(self.servers) > 1:
+            rebalanced = ClusterOperationHelper.add_and_rebalance(self.servers, master.rest_password)
+            self.assertTrue(rebalanced, msg="cluster is not rebalanced")
 
     def test_view_on_5k_docs_multiple_nodes(self):
         self._setup_cluster()
@@ -626,7 +656,7 @@ class ViewTests(unittest.TestCase):
 
     def _insert_n_items(self, bucket, view_name, prefix, number_of_docs):
         doc_names = []
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         for i in range(0, number_of_docs):
             key = doc_name = "{0}-{1}-{2}-{3}".format(view_name, prefix, i, str(uuid.uuid4()))
             value = {"name": doc_name, "age": 1100}
@@ -709,6 +739,31 @@ class ViewTests(unittest.TestCase):
 
             #more tests to run view after each incremental rebalance , add x items
             #rebalance and get the view
+    def test_load_data_get_view_2_mins_20_design_docs(self):
+        self._test_load_data_get_view_x_mins_multiple_design_docs(2,10000,2,20)
+
+    def _test_load_data_get_view_x_mins_multiple_design_docs(self,
+         load_data_duration, number_of_items,
+         run_view_duration,num_of_design_docs):
+        self._setup_cluster()
+        self.log.info("_setup_cluster returned")
+        self._view_test_threads = []
+        for i in range(0, num_of_design_docs):
+            thread_result = []
+            t = Thread(target=self._test_load_data_get_view_x_mins_thread_wrapper,
+                       name="test_view_on_multiple_docs_multiple_design_docs",
+                       args=(load_data_duration, number_of_items, run_view_duration, thread_result))
+            t.start()
+            self._view_test_threads.append((t, thread_result))
+        for (t, r) in self._view_test_threads:
+            t.join()
+        asserts = []
+        for (t, r) in self._view_test_threads:
+            #get the r
+            if len(r) > 0:
+                asserts.append(r[0])
+                self.log.error("view thread failed : {0}".format(r[0]))
+        self.fail("one of multiple threads failed. look at the logs for more specific errors")
 
     def test_get_view_during_1_min_load_10k_working_set(self):
         self._test_load_data_get_view_x_mins(1, 10000, 0)
@@ -728,6 +783,13 @@ class ViewTests(unittest.TestCase):
     def test_get_view_during_10_min_load_10k_working_set_1_min_after_load(self):
         self._test_load_data_get_view_x_mins(10, 1000, 1)
 
+    def _test_load_data_get_view_x_mins_thread_wrapper(self,
+       load_data_duration, number_of_items, run_view_duration,failures):
+        try:
+            self._test_load_data_get_view_x_mins(load_data_duration, number_of_items, run_view_duration)
+        except Exception as ex:
+            failures.append(ex)
+
     #need to split this into two tests
     def _test_load_data_get_view_x_mins(self, load_data_duration, number_of_items, run_view_duration):
         desc = "description : this test will continuously load data and gets the view results for {0} minutes"
@@ -735,8 +797,11 @@ class ViewTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        #let's flush the bucket
-        MemcachedClientHelper.direct_client(master, bucket).flush()
+        #the wrapper thread might have already built the cluster
+        if len(rest.node_statuses()) < 2:
+            self._setup_cluster()
+            #let's flush the bucket
+#        MemcachedClientHelper.direct_client(master, bucket).flush()
         self.log.info("sleeping for 5 seconds")
         time.sleep(5)
         view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
@@ -777,7 +842,7 @@ class ViewTests(unittest.TestCase):
             attempt += 1
             results = self._get_view_results(rest, bucket, view_name, limit)
             keys = self._get_keys(results)
-        #if user wants to keep getting view results
+            #if user wants to keep getting view results
         delay = 0.1
         if run_view_duration > 0:
             start = time.time()
@@ -836,7 +901,7 @@ class ViewTests(unittest.TestCase):
         #wait until memcached starts
         self.assertTrue(moxis_restarted, "unable to restart moxi process through diag/eval")
         bucket = "default"
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         for i in range(0, num_of_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
@@ -867,7 +932,7 @@ class ViewTests(unittest.TestCase):
 
     def _update_docs(self, num_of_docs, num_of_updated_docs, prefix):
         bucket = "default"
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         for i in range(0, num_of_docs):
             key = "{0}-{1}".format(prefix, i)
@@ -886,7 +951,7 @@ class ViewTests(unittest.TestCase):
 
     def _delete_docs(self, num_of_docs, num_of_deleted_docs, prefix):
         bucket = "default"
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0],bucket)
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         for i in range(0, num_of_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
@@ -905,7 +970,7 @@ class ViewTests(unittest.TestCase):
         bucket = "default"
         view_name = "dev_test_view-{0}".format(prefix)
 
-        results = self._get_view_results(rest, bucket, view_name, limit=2*len(doc_names))
+        results = self._get_view_results(rest, bucket, view_name, limit=2 * len(doc_names))
         doc_names_view = self._get_doc_names(results)
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
         # try this for maximum 1 minute
@@ -918,7 +983,7 @@ class ViewTests(unittest.TestCase):
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(delay)
             attempt += 1
-            results = self._get_view_results(rest, bucket, view_name, limit=2*len(doc_names))
+            results = self._get_view_results(rest, bucket, view_name, limit=2 * len(doc_names))
             doc_names_view = self._get_doc_names(results)
         if sorted(doc_names_view) != sorted(doc_names):
             self.fail("returned doc names have different values than expected")
@@ -947,8 +1012,8 @@ class ViewTests(unittest.TestCase):
         allNodes = []
         ejectedNodes = []
         nodes = rest.node_statuses()
-#        for node in nodes:
-#            allNodes.append(node.id)
+        #        for node in nodes:
+        #            allNodes.append(node.id)
         for server in self.servers[1:]:
             self.log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
             for node in nodes:
