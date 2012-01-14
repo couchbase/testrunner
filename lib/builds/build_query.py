@@ -129,13 +129,23 @@ class BuildQuery(object):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds')
 
     def get_sustaining_latest_builds(self):
-        return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining/')
+        return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
 
     def get_all_builds(self):
-        latestbuilds, latestchanges =\
-        self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds')
-        sustaining_builds, sustaining_changes =\
-        self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining/')
+        try:
+            latestbuilds, latestchanges =\
+                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds')
+        except:
+            latestbuilds, latestchanges =\
+                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds')
+
+        try:
+            sustaining_builds, sustaining_changes =\
+                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
+        except:
+            sustaining_builds, sustaining_changes =\
+                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds/sustaining')
+
         latestbuilds.extend(sustaining_builds)
         latestchanges.extend(sustaining_changes)
         return latestbuilds, latestchanges
@@ -150,7 +160,7 @@ class BuildQuery(object):
         #try this five times
         for i in range(0, 5):
             try:
-                page = urllib2.urlopen(build_page)
+                page = urllib2.urlopen(build_page + '/index.html')
                 soup = BeautifulSoup.BeautifulSoup(page)
                 break
             except:
