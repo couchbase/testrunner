@@ -17,9 +17,12 @@ clean:
 test:
 ifdef TESTNAME
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini ${TESTNAME}
-else	
+else
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 endif
 
 test-quick:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/dev-quick.conf
+
+test-views:
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view.conf
