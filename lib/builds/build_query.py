@@ -20,7 +20,11 @@ class MembaseBuild(object):
         self.os = ''
         self.deliverable_type = ''
         self.architecture_type = ''
+        self.toy = ''
         self.change = None # a MembaseChange
+
+    def __repr__(self):
+        return self.__str__()
 
     #let's also have a json object for all these classes
     def __str__(self):
@@ -31,8 +35,12 @@ class MembaseBuild(object):
         os = 'os : {0}'.format(self.os)
         deliverable_type = 'deliverable_type : {0}'.format(self.deliverable_type)
         architecture_type = 'architecture_type : {0}'.format(self.architecture_type)
-        return '{0} {1} {2} {3} {4} {5} {6}'.format(url, name, product, product_version, os, deliverable_type,
-                                                    architecture_type)
+        if self.toy:
+            toy = 'toy : {0}'.format(self.toy)
+        else:
+            toy = ''
+        return '{0} {1} {2} {3} {4} {5} {6} {7}'.format(url, name, product, product_version, os, deliverable_type,
+                                                    architecture_type, toy)
 
 
 class MembaseChange(object):
@@ -53,10 +61,11 @@ class BuildQuery(object):
         #parse build page and create build object
         pass
 
-    def find_build(self,builds,product,type,arch,version):
+    def find_build(self,builds,product,type,arch,version,toy=''):
         for build in builds:
             if build.product_version.find(version) != -1 and product == build.product\
-               and build.architecture_type == arch and type == build.deliverable_type:
+               and build.architecture_type == arch and type == build.deliverable_type\
+               and build.toy == toy:
                 return build
         return None
 
@@ -210,6 +219,7 @@ class BuildQuery(object):
         build.product = self._product_name(build_id)
         build.name = build_id
         build.build_number = self._build_number(build)
+        build.toy = self._product_toy(build_id)
         return build
 
     def create_change_info(self, build_id, build_decription):
@@ -228,14 +238,18 @@ class BuildQuery(object):
 
     def _product_arch_type(self, build_id):
         list = build_id.split('_')
-        is_x86 = 'toy-x86' in list or 'x86' in list
-        is_64 = '64' in list
-        if is_x86 and is_64:
+        if '64' in build_id.split('_'):
             return 'x86_64'
-        elif is_x86:
+        elif 'x86' in build_id.split('_'):
             return 'x86'
         return ''
 
+
+    def _product_toy(self, build_id):
+        r = re.search("[^_]+_toy-([^-]*)-x86",build_id)
+        if r:
+            return r.group(1)
+        return ''
 
     def _change_time(self, build_description):
         list = build_description.split('/')

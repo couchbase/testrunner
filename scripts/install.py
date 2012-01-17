@@ -38,10 +38,11 @@ Available keys:
  version=SHORT_VERSION   Example: "2.0.0r-71".
  parallel=false          Useful when you're installing a cluster.
  standalone=false        Install without cluster management
+ toy=                    Install a toy build
 
 Examples:
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
- install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true
+ install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true,toy=keith
 """
     sys.exit(err)
 
@@ -125,6 +126,12 @@ class Installer(object):
                 server = params["server"]
 
         if ok:
+            if "toy" in params:
+                toy = params["toy"]
+            else:
+                toy = ""
+
+        if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
@@ -151,7 +158,7 @@ class Installer(object):
                                                                      product='membase-server-enterprise')
                 else:
                     build = BuildQuery().find_build(builds, name, info.deliverable_type,
-                                                    info.architecture_type, version)
+                                                    info.architecture_type, version, toy=toy)
  
                 if build:
                     if 'amazon' in params:
