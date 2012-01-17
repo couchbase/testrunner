@@ -314,7 +314,7 @@ class RestConnection(object):
             else:
                 api += "{0}={1}".format(param, params[param])
 
-        log.debug("vmx: index query url: {0}".format(api))
+        log.debug("index query url: {0}".format(api))
         status, content = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
 
         json_parsed = json.loads(content)
@@ -351,6 +351,20 @@ class RestConnection(object):
 
         status, content = self._http_request(
             api, 'DELETE', headers=self._create_capi_headers())
+
+        json_parsed = json.loads(content)
+
+        return status, json_parsed
+
+
+    # Make a _spatial/_info request
+    def spatial_info(self, bucket, design_name):
+        api = self.baseUrl + \
+            'couchBase/{0}/_design/{1}/_spatial/_info'.format(
+            bucket, design_name)
+
+        status, content = self._http_request(
+            api, 'GET', headers=self._create_capi_headers())
 
         json_parsed = json.loads(content)
 
