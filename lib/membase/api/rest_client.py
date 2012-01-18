@@ -357,6 +357,19 @@ class RestConnection(object):
         return status, json_parsed
 
 
+    def spatial_compaction(self, bucket, design_name):
+        api = self.baseUrl + \
+            'couchBase/{0}/_design/{1}/_spatial/_compact'.format(
+            bucket, design_name)
+
+        status, content = self._http_request(
+            api, 'POST', headers=self._create_capi_headers())
+
+        json_parsed = json.loads(content)
+
+        return status, json_parsed
+
+
     # Make a _spatial/_info request
     def spatial_info(self, bucket, design_name):
         api = self.baseUrl + \

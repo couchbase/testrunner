@@ -166,6 +166,28 @@ class SpatialHelper(unittest.TestCase):
         return self.rest.spatial_info(self.bucket, spatial)
 
 
+    # A request to perform the compaction normally returns immediately after
+    # it is starting, without waiting until it's completed. This function
+    # call keeps blocking until the compaction is done.
+    # If you pass in False as a second parameter, it won't block and return
+    # immediately
+    # Returns True if the compaction succeded within the given timeout
+    def compact(self, spatial, block=True, timeout=60):
+        status, value = self.rest.spatial_compaction(self.bucket, spatial)
+        if not status:
+            raise Exception("Compaction returned error.")
+
+        while True:
+            status, info = self.info(spatial)
+            if not info["spatial_index"]["compact_running"]:
+                return True
+            elif timeout < 0:
+                raise Exception("Compaction timed out.")
+            else:
+                time.sleep(1)
+                timeout -= 1
+
+
     def _create_function(self, name, function):
         #if this view already exist then get the rev and embed it here?
         doc = {"language": "javascript",
