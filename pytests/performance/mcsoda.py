@@ -15,8 +15,9 @@ sys.path.append("lib")
 sys.path.append(".")
 
 try:
-   import logger
-   log = logger.new_logger("mcsoda")
+   import logging
+   logging.config.fileConfig("mcsoda.logging.conf")
+   log = logging.getLogger()
 except:
    class P:
       def error(self, m): print(m)
