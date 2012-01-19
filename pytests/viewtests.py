@@ -800,8 +800,6 @@ class ViewTests(unittest.TestCase):
         #the wrapper thread might have already built the cluster
         if len(rest.node_statuses()) < 2:
             self._setup_cluster()
-            #let's flush the bucket
-#        MemcachedClientHelper.direct_client(master, bucket).flush()
         self.log.info("sleeping for 5 seconds")
         time.sleep(5)
         view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
