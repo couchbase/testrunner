@@ -632,10 +632,8 @@ class ViewTests(unittest.TestCase):
     def _setup_cluster(self):
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
-        master = self.servers[0]
-        if len(self.servers) > 1:
-            rebalanced = ClusterOperationHelper.add_and_rebalance(self.servers, master.rest_password)
-            self.assertTrue(rebalanced, msg="cluster is not rebalanced")
+        rebalanced = ClusterOperationHelper.add_and_rebalance(self.servers)
+        self.assertTrue(rebalanced, msg="cluster is not rebalanced")
 
     def test_view_on_5k_docs_multiple_nodes(self):
         self._setup_cluster()

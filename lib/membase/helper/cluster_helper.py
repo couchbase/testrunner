@@ -15,7 +15,7 @@ class ClusterOperationHelper(object):
     #the first ip is taken as the master ip
 
     @staticmethod
-    def add_and_rebalance(servers, rest_password):
+    def add_and_rebalance(servers):
         log = logger.Logger.get_logger()
         master = servers[0]
         all_nodes_added = True
@@ -23,8 +23,9 @@ class ClusterOperationHelper(object):
         rest = RestConnection(master)
         if len(servers) > 1:
             for serverInfo in servers[1:]:
-                log.info('adding node : {0} to the cluster'.format(serverInfo.ip))
-                otpNode = rest.add_node("Administrator", rest_password, serverInfo.ip, port=serverInfo.port)
+                log.info('adding node : {0}:{1} to the cluster'.format(
+                        serverInfo.ip, serverInfo.port))
+                otpNode = rest.add_node(master.rest_username, master.rest_password, serverInfo.ip, port=serverInfo.port)
                 if otpNode:
                     log.info('added node : {0} to the cluster'.format(otpNode.id))
                 else:
@@ -43,7 +44,8 @@ class ClusterOperationHelper(object):
         rest = RestConnection(master)
         for serverInfo in all_servers:
             if serverInfo.ip != master.ip:
-                log.info('adding node : {0} to the cluster'.format(serverInfo.ip))
+                log.info('adding node : {0}:{1} to the cluster'.format(
+                        serverInfo.ip, serverInfo.port))
                 otpNode = rest.add_node(rest_settings.rest_username,
                                         rest_settings.rest_password,
                                         serverInfo.ip)
@@ -59,6 +61,7 @@ class ClusterOperationHelper(object):
             else:
                 log.error("unable to add all the nodes to the cluster")
         return otpNodes
+
 
     @staticmethod
     def wait_for_ns_servers_or_assert(servers, testcase):
@@ -106,7 +109,8 @@ class ClusterOperationHelper(object):
             nodes_ip.append(node.ip)
         for i in range(len(servers)):
             if servers[i].ip in nodes_ip:
-                log.info("Server {0} part of cluster".format(servers[i].ip))
+                log.info("Server {0}:{1} part of cluster".format(
+                        servers[i].ip, servers[i].port))
                 rest = RestConnection(servers[i])
                 t = Thread(target=ClusterOperationHelper.persistence_verification_per_node,
                            name="verification-thread-{0}".format(servers[i]),
