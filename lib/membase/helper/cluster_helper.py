@@ -14,8 +14,9 @@ import traceback
 class ClusterOperationHelper(object):
     #the first ip is taken as the master ip
 
+    # Returns True if cluster successfully finished ther rebalance
     @staticmethod
-    def add_and_rebalance(servers):
+    def add_and_rebalance(servers, wait_for_rebalance=True):
         log = logger.Logger.get_logger()
         master = servers[0]
         all_nodes_added = True
@@ -33,8 +34,17 @@ class ClusterOperationHelper(object):
                     break
             if all_nodes_added:
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
-                rebalanced &= rest.monitorRebalance()
+                if wait_for_rebalance:
+                    rebalanced &= rest.monitorRebalance()
+                else:
+                    rebakanced = False
         return all_nodes_added and rebalanced
+
+    # For a clearer API
+    @staticmethod
+    def remove_and_rebalance(servers, wait_for_rebalance=True):
+        return ClusterOperationHelper.cleanup_cluster(
+            servers, wait_for_rebalance)
 
     @staticmethod
     def add_all_nodes_or_assert(master, all_servers, rest_settings, test_case):
@@ -175,17 +185,18 @@ class ClusterOperationHelper(object):
                 shell.stop_couchbase()
 
     @staticmethod
-    def cleanup_cluster(servers):
+    def cleanup_cluster(servers, wait_for_rebalance=True):
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
-        RestHelper(rest).is_ns_server_running(timeout_in_seconds=testconstants.NS_SERVER_TIMEOUT)
+        helper = RestHelper(rest)
+        helper.is_ns_server_running(timeout_in_seconds=testconstants.NS_SERVER_TIMEOUT)
         nodes = rest.node_statuses()
         master_id = rest.get_nodes_self().id
         if len(nodes) > 1:
             log.info("rebalancing all nodes in order to remove nodes")
-            helper = RestHelper(rest)
             removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
-                                          ejectedNodes=[node.id for node in nodes if node.id != master_id])
+                                          ejectedNodes=[node.id for node in nodes if node.id != master_id],
+                                          wait_for_rebalance=wait_for_rebalance)
             log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], removed))
 
     @staticmethod

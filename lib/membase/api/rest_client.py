@@ -62,12 +62,14 @@ class RestHelper(object):
 
     #this method will rebalance the cluster by passing the remote_node as
     #ejected node
-    def remove_nodes(self, knownNodes, ejectedNodes):
+    def remove_nodes(self, knownNodes, ejectedNodes, wait_for_rebalance=True):
         if len(ejectedNodes) == 0:
             return False
         self.rest.rebalance(knownNodes, ejectedNodes)
-        return self.rest.monitorRebalance()
-
+        if wait_for_rebalance:
+            return self.rest.monitorRebalance()
+        else:
+            return False
 
     def vbucket_map_ready(self, bucket, timeout_in_seconds=360):
         end_time = time.time() + timeout_in_seconds
