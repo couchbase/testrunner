@@ -14,9 +14,10 @@ from memcached.helper.data_helper import MemcachedError
 
 
 # The SpatialHelper operates on a single bucket over a single RestConnection
-# It inherites from unittest.Testcase so we can make assertions
-class SpatialHelper(unittest.TestCase):
-    def __init__(self, bucket):
+# The original testcase needs to be passed in so we can make assertions
+class SpatialHelper:
+    def __init__(self, testcase, bucket):
+        self.testcase = testcase
         self.bucket = bucket
         self.servers = TestInputSingleton.input.servers
         self.master = self.servers[0]
@@ -39,13 +40,13 @@ class SpatialHelper(unittest.TestCase):
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
         ClusterOperationHelper.wait_for_ns_servers_or_assert(
-            [self.master], self)
+            [self.master], self.testcase)
         self._create_default_bucket()
 
         if do_rebalance:
             rebalanced = ClusterOperationHelper.add_and_rebalance(
                 self.servers)
-            self.assertTrue(rebalanced, "cluster is not rebalanced")
+            self.testcase.assertTrue(rebalanced, "cluster is not rebalanced")
 
 
     def cleanup_cluster(self):
@@ -56,10 +57,10 @@ class SpatialHelper(unittest.TestCase):
                 self.log.info("deleted spatial {0} from bucket {1}"
                               .format(name, self.bucket))
             BucketOperationHelper.delete_all_buckets_or_assert(
-                self.servers, self)
+                self.servers, self.testcase)
             ClusterOperationHelper.cleanup_cluster(self.servers)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(
-                self.servers, self)
+                self.servers, self.testcase)
 
 
     def create_index_fun(self, name):
@@ -160,8 +161,9 @@ class SpatialHelper(unittest.TestCase):
                 self.log.error("spatial_results not ready yet , try again "
                                "in 5 seconds... , error {0}".format(ex))
                 time.sleep(5)
-        self.fail("unable to get spatial_results for {0} after 4 tries"
-                  .format(spatial))
+        self.testcase.fail(
+            "unable to get spatial_results for {0} after 4 tries"
+            .format(spatial))
 
 
     def info(self, spatial):
@@ -217,9 +219,10 @@ class SpatialHelper(unittest.TestCase):
                                     ramQuotaMB=available_ram)
             ready = BucketOperationHelper.wait_for_memcached(self.master,
                                                              self.bucket)
-            self.assertTrue(ready, "wait_for_memcached failed")
-        self.assertTrue(helper.bucket_exists(self.bucket),
-                        "unable to create {0} bucket".format(self.bucket))
+            self.testcase.assertTrue(ready, "wait_for_memcached failed")
+        self.testcase.assertTrue(
+            helper.bucket_exists(self.bucket),
+            "unable to create {0} bucket".format(self.bucket))
 
 
     # Return the keys (document ids) of a spatial view response
@@ -251,7 +254,7 @@ class SpatialHelper(unittest.TestCase):
             results = self.get_results(design_name, limit)
             result_keys = self.get_keys(results)
 
-        self.assertEqual(len(inserted), len(result_keys))
+        self.testcase.assertEqual(len(inserted), len(result_keys))
         self.verify_result(inserted, result_keys)
 
     # Compare the inserted documents with the returned result
@@ -264,9 +267,9 @@ class SpatialHelper(unittest.TestCase):
         not_found = list(set(inserted) - set(result))
         if not_found:
             self._print_keys_not_found(not_found)
-            self.fail("the spatial function did return only {0} docs and "
-                      "not {1} as expected".format(len(result),
-                                                   len(inserted)))
+            self.testcase.fail("the spatial function did return only {0} "
+                               "docs and not {1} as expected"
+                               .format(len(result), len(inserted)))
 
 
     def _print_keys_not_found(self, keys_not_found, how_many=10):

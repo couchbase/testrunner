@@ -8,7 +8,7 @@ from membase.helper.spatial_helper import SpatialHelper
 class SpatialCompactionTests(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
-        self.helper = SpatialHelper("default")
+        self.helper = SpatialHelper(self, "default")
         self.helper.setup_cluster()
 
 
