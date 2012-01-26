@@ -15,6 +15,61 @@ log = logger.Logger.get_logger()
 class RebalanceHelper():
     @staticmethod
     #bucket is a json object that contains name,port,password
+    def wait_for_mc_stats_all_nodes(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
+        log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
+                                                                                stat_value, master.ip))
+        time_to_timeout = 0
+        previous_stat_value = -1
+        curr_stat_value = -1
+        verified = False
+        all_stats = {}
+        while not verified:
+            rest = RestConnection(master)
+            nodes = rest.node_statuses()
+            for node in nodes:
+                _server = {"ip": node.ip, "port": node.port, "username": master.rest_username,
+                           "password": master.rest_password}
+                mc = MemcachedClientHelper.direct_client(_server, bucket)
+                n_stats = mc.stats("")
+                mc.close()
+                all_stats[node.id] = n_stats
+            actual_stat_value = -1
+            for k in all_stats:
+                if all_stats[k] and stat_key in all_stats[k]:
+                    if actual_stat_value == -1:
+                        print all_stats[k][stat_key]
+                        actual_stat_value = int(all_stats[k][stat_key])
+                    else:
+                        actual_stat_value += int(all_stats[k][stat_key])
+            if actual_stat_value == stat_value:
+                log.info("{0} : {1}".format(stat_key, actual_stat_value))
+                verified = True
+                break
+            else:
+                if verbose:
+                    log.info("{0} : {1}".format(stat_key, actual_stat_value))
+                curr_stat_value = actual_stat_value
+
+                # values are changing so clear any timeout
+                if curr_stat_value != previous_stat_value:
+                    time_to_timeout = 0
+                else:
+                    if time_to_timeout == 0:
+                        time_to_timeout = time.time() + timeout_in_seconds
+                    if time_to_timeout < time.time():
+                        log.info("no change in {0} stat after {1} seconds (value = {2})".format(stat_key, timeout_in_seconds, curr_stat_value))
+                        break
+
+                previous_stat_value = curr_stat_value
+
+                if not verbose:
+                    time.sleep(0.1)
+                else:
+                    time.sleep(2)
+        return verified
+
+    @staticmethod
+    #bucket is a json object that contains name,port,password
     def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
                                                                                 stat_value, master.ip))
