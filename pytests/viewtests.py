@@ -11,7 +11,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached, DocumentGenerator
 from memcached.helper.data_helper import MemcachedError
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -600,6 +600,8 @@ class ViewTests(unittest.TestCase):
                     self.log.info("view returned in {0} seconds".format(delta))
                     self.log.info("was able to get view results after trying {0} times".format((i + 1)))
                     return results
+                else:
+                    self.log.info("view returned empty results in {0} seconds".format(delta))
             except Exception as ex:
                 self.log.error("view_results not ready yet , try again in 5 seconds... , error {0}".format(ex))
                 time.sleep(5)
@@ -609,6 +611,10 @@ class ViewTests(unittest.TestCase):
     def tearDown(self):
         master = self.servers[0]
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
+            try:
+                RestConnection(master).stop_rebalance()
+            except:
+                pass
             for server in self.servers:
                 if server.port != 8091:
                     continue
@@ -1030,3 +1036,64 @@ class ViewTests(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
                         msg="rebalance operation failed after adding nodes")
         self.log.info("rebalance finished")
+
+    def test_compare_views_all_nodes_100k(self):
+        self._test_compare_views_all_nodes(10000)
+
+    def _test_compare_views_all_nodes(self,num_of_docs):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        bucket = "default"
+        prefix = "{0}-{1}".format("_test_compare_views_all_nodes", str(uuid.uuid4()))
+        doc_names = self._load_docs(num_of_docs, prefix, False)
+        self._begin_rebalance_in()
+        view_name = "dev_test_compare_views_all_nodes"
+        self._create_view_for_gen_docs(rest, bucket, prefix, view_name)
+
+        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_flusher_todo', 0)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_uncommitted_items', 0)
+
+        self._end_rebalance()
+        nodes = rest.get_nodes()
+        for n in nodes:
+            n_rest = RestConnection({"ip": n.ip, "port": n.port,
+                                     "username": self.servers[0].rest_username,
+                                     "password": self.servers[0].rest_password})
+            results = self._get_view_results(n_rest, bucket, view_name, num_of_docs,
+                                             extra_params={"stale": False})
+            time.sleep(5)
+            doc_names_view = self._get_doc_names(results)
+            if sorted(doc_names_view) != sorted(doc_names):
+                self.fail("returned doc names have different values than expected")
+
+
+    def _load_docs(self, num_of_docs, prefix, verify=True):
+        rest = RestConnection(self.servers[0])
+        doc_names = []
+        bucket = "default"
+        smart = VBucketAwareMemcached(rest, bucket)
+        kv_template = {"name": "user-${prefix}-${seed}-", "mail": "memcached-json-${prefix}-${padding}"}
+        options = {"size": 256, "seed": prefix}
+        values = DocumentGenerator.make_docs(num_of_docs, kv_template, options)
+        for value in values:
+            value = value.encode("ascii", "ignore")
+            _json = json.loads(value, encoding="utf-8")
+            _id = _json["_id"].encode("ascii", "ignore")
+            _name = _json["name"].encode("ascii", "ignore")
+            del _json["_id"]
+            smart.memcached(_id).set(_id, 0, 0, json.dumps(_json))
+#            print "id:", _id, "j:", json.dumps(_json)
+            doc_names.append(_name)
+        self.log.info("inserted {0} json documents".format(num_of_docs))
+        if verify:
+            self._verify_docs_doc_name(doc_names, prefix)
+        return doc_names
+
+    def _create_view_for_gen_docs(self, rest, bucket, prefix, view_name):
+        self.log.info("description : create a view")
+        _view_name = view_name or "dev_test_view-{0}".format(prefix)
+        map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "\") != -1) { emit(doc.name, doc);}}"
+        function = self._create_function(rest, bucket, _view_name, map_fn)
+        rest.create_view(bucket, view_name, function)
+        self.created_views[view_name] = bucket
