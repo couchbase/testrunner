@@ -41,6 +41,7 @@ class MemcachedClient(object):
         self.port = port
         self.s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.timeout = timeout
+        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.s.connect_ex((host, port))
         self.r=random.Random()
         self.vbucket_count = 1024
