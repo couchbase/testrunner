@@ -111,9 +111,9 @@ createProcessUsageDataFrame <- function(bb,process) {
 	for(a_test in levels(tests)) {
 		for(a_build in levels(builds)) {
 				filtered <- bb[bb$buildinfo.version == a_build & bb$name == a_test & bb$unique_id ==id,]
-				print(unqiue(filtered$unique_id))
+				print(unique(filtered$unique_id))
 				graphed <- bb[bb$buildinfo.version == a_build & bb$comm == process & bb$name == a_test & bb$unique_id ==id,]
-                print(unqiue(graphed$unique_id))
+                print(unique(graphed$unique_id))
 				graphed <- transform(graphed,cpu_time = as.numeric(utime) + as.numeric(stime))
 			    counterdiff <- diff(graphed$cpu_time)
 				graphed[,"cpu_time_diff"] <- append(c(0), counterdiff)		
@@ -410,14 +410,14 @@ geom_bar(stat='identity', position='dodge') +
   geom_hline(yintercept=-.10, lty=3) +
   scale_y_continuous(limits=c(-1 * (magnitude_limit - 1), magnitude_limit - 1),
                      formatter=function(n) sprintf("%.1fx", abs(n) + 1)) +
-  opts(title=paste(builds_list$test_name,': Difference from ', baseline_build)) +
+  opts(title=paste(builds_list$test_name,':', baseline_build, ':', new_build )) +
   labs(y='(righter is better)', x='') +
   geom_text(aes(x=test, y=ifelse(abs(position) < .5, .5, sign(position) * -.5),
                 label=sprintf("%.02fx", abs(offpercent))),
             size=4, colour="#999999") +
 coord_flip() +
   theme_bw()
-footnote <- paste(builds_list$test_name, new_build, format(Sys.time(), "%d %b %Y"), sep=" / ")
+footnote <- paste(builds_list$test_name, baseline_build, new_build, format(Sys.time(), "%d %b %Y"), sep=" / ")
 
 makeFootnote(footnote)
 
@@ -588,6 +588,7 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[12])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[4])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[13])))
 
+
 testdf <- data.frame(MB,CB)
 rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)")
 plot.new()
@@ -596,8 +597,9 @@ col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build,
 grid.table(testdf, h.even.alpha=1, h.odd.alpha=1,  v.even.alpha=0.5, v.odd.alpha=1,cols=c(col1, col2))
 makeFootnote(footnote)
 
+
 cat("generating ops/per second \n")
-p <- ggplot(ns_server_data, aes(row, ops, color=buildinfo.version ,fill= buildinfo.version, label=ops)) + labs(x="----time (sec)--->", y="ops/sec")
+p <- ggplot(ns_server_data, aes(row, ops, color=buildinfo.version ,fill= buildinfo.version, label=ops, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ops/sec")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("ops/per second", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$ops),max(ns_server_data$ops)))
@@ -607,8 +609,9 @@ p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 's
 print(p)
 makeFootnote(footnote)
 
+
 cat("generating disk write queue graph\n")
-p <- ggplot(ns_server_data, aes(row, ep_queue_size, color=buildinfo.version ,fill=buildinfo.version, label=ep_queue_size)) + labs(x="----time (sec)--->", y="dwq")
+p <- ggplot(ns_server_data, aes(row, ep_queue_size, color=buildinfo.version ,fill=buildinfo.version, label=ep_queue_size, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="dwq")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("ep_queue_size", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$ep_queue_size),max(ns_server_data$ep_queue_size)))
@@ -618,8 +621,9 @@ p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 's
 print(p)
 makeFootnote(footnote)
 
+
 cat("generating disk drain rate graph\n")
-p <- ggplot(ns_server_data, aes(row, ep_diskqueue_drain, color=buildinfo.version, fill=buildinfo.version, label=ep_diskqueue_drain))
+p <- ggplot(ns_server_data, aes(row, ep_diskqueue_drain, color=buildinfo.version, fill=buildinfo.version, label=ep_diskqueue_drain, linetype=buildinfo.version))
 p <- p + labs(x="----time (sec)--->", y="drain_rate")
 p  <-  p + stat_smooth(se = TRUE)
 #       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
@@ -629,21 +633,25 @@ p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', si
 p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 #p <- p + facet_wrap(~name, ncol=3, scales='free_y')
 print(p)
+makeFootnote(footnote)
 
-cat("ep_bg_fetched\n")
-p <- ggplot(ns_server_data, aes(row, ep_bg_fetched, color=buildinfo.version, fill=buildinfo.version, label=ep_bg_fetched))
+
+cat("generating ep_bg_fetched\n")
+p <- ggplot(ns_server_data, aes(row, ep_bg_fetched, color=buildinfo.version, fill=buildinfo.version, label=ep_bg_fetched, linetype=buildinfo.version))
 p <- p + labs(x="----time (sec)--->", y="ep_bg_fetched")
 p  <-  p + stat_smooth(se = TRUE)
 #p <- p + geom_line(aes(timestamp, ep_bg_fetched, color=build))
-# p <- p + scale_y_continuous()
-# p <- p + opts(title=paste("ep_bg_fetched", sep=''))
-# p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
-# p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
+p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$ep_bg_fetched),max(ns_server_data$ep_bg_fetched)))
+p <- p + opts(title=paste("ep_bg_fetched", sep=''))
+p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
+p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 #p <- p + facet_wrap(~name, ncol=3, scales='free_y')
 print(p)
+makeFootnote(footnote)
+
 
 cat("generating tmp_oom \n")
-p <- ggplot(ns_server_data, aes(row, ep_tmp_oom_errors, color=buildinfo.version, fill=buildinfo.version, label=ep_tmp_oom_errors))
+p <- ggplot(ns_server_data, aes(row, ep_tmp_oom_errors, color=buildinfo.version, fill=buildinfo.version, label=ep_tmp_oom_errors, linetype=buildinfo.version))
 p <- p + labs(x="----time (sec)--->", y="ep_tmp_oom_errors")
 p  <-  p + stat_smooth(se = TRUE)
 #       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
@@ -653,12 +661,14 @@ p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', si
 p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 #p <- p + facet_wrap(~name, ncol=3, scales='free_y')
 print(p)
+makeFootnote(footnote)
+
 
 ns_server_data $vb_replica_eject <- as.numeric(ns_server_data $vb_replica_eject)
 ns_server_data $ep_tap_replica_queue_backoff <- as.numeric(ns_server_data $ep_tap_replica_queue_backoff)
 
 cat("generating vb_active_eject \n")
-p <- ggplot(ns_server_data, aes(row, vb_active_eject, color=buildinfo.version, fill=buildinfo.version, label= vb_active_eject))
+p <- ggplot(ns_server_data, aes(row, vb_active_eject, color=buildinfo.version, fill=buildinfo.version, label= vb_active_eject, linetype=buildinfo.version))
 p <- p + labs(x="----time (sec)--->", y="vb_active_eject")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(ns_server_data$vb_active_eject),quantile(ns_server_data$vb_active_eject,0.999)))
@@ -667,9 +677,10 @@ p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', si
 p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 #p <- p + facet_wrap(~name, ncol=3, scales='free_y')
 print(p)
+makeFootnote(footnote)
 
 cat("generating vb_replica_eject \n")
-p <- ggplot(ns_server_data, aes(row, vb_replica_eject, color=buildinfo.version, fill=buildinfo.version, label= vb_replica_eject))
+p <- ggplot(ns_server_data, aes(row, vb_replica_eject, color=buildinfo.version, fill=buildinfo.version, label= vb_replica_eject, linetype=buildinfo.version))
 p <- p + labs(x="----time (sec)--->", y="vb_replica_eject")
 p  <-  p + stat_smooth(se = TRUE)
 #       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
@@ -679,10 +690,11 @@ p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', si
 p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 #p <- p + facet_wrap(~name, ncol=3, scales='free_y')
 print(p)
+makeFootnote(footnote)
 
 
 cat("generating ep_tap_replica_queue_backoff \n")
-p <- ggplot(ns_server_data, aes(row, ep_tap_replica_queue_backoff, color=buildinfo.version, fill=buildinfo.version, label= ep_tap_replica_queue_backoff))
+p <- ggplot(ns_server_data, aes(row, ep_tap_replica_queue_backoff, color=buildinfo.version, fill=buildinfo.version, label= ep_tap_replica_queue_backoff, linetype=buildinfo.version))
 p <- p + labs(x="----time (sec)--->", y="ep_tap_replica_queue_backoff")
 p  <-  p + stat_smooth(se = TRUE)
 # p <- p + geom_line(aes(timestamp, ep_tap_replica_queue_backoff, color=build))
@@ -692,9 +704,11 @@ p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', si
 p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 #p <- p + facet_wrap(~name, ncol=3, scales='free_y')
 print(p)
+makeFootnote(footnote)
+
 
 cat("generating vb_active_resident_items_ratio \n")
-p <- ggplot(ns_server_data, aes(row, vb_active_resident_items_ratio, color=buildinfo.version, fill=buildinfo.version, label= vb_active_resident_items_ratio))
+p <- ggplot(ns_server_data, aes(row, vb_active_resident_items_ratio, color=buildinfo.version, fill=buildinfo.version, label= vb_active_resident_items_ratio, linetype=buildinfo.version))
 p <- p + labs(x="----time (sec)--->", y="vb_active_resident_items_ratio")
 p  <-  p + stat_smooth(se = TRUE)
 #       p <- p + geom_line(aes(timestamp, drain_rate, color=build))
@@ -704,11 +718,11 @@ p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', si
 p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'solid'))
 #p <- p + facet_wrap(~name, ncol=3, scales='free_y')
 print(p)
-
+makeFootnote(footnote)
 
 
 cat("generating data disk size\n")
-p <- ggplot(disk_data, aes(row,size, color=buildinfo.version ,fill=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="size (MB)")
+p <- ggplot(disk_data, aes(row,size, color=buildinfo.version ,fill=buildinfo.version, label=size, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="size (MB)")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("data disk size", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(disk_data$size),max(disk_data$size)))
@@ -718,9 +732,10 @@ p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 's
 print(p)
 makeFootnote(footnote)
 
+
 cat("Latency-get 90th\n")
 temp <- latency_get[latency_get$client_id ==0,]
-p <- ggplot(temp, aes(temp$mystery, temp$percentile_90th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_90th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ms")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("Latency-get 90th  percentile", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_90th),max(temp$percentile_90th)))
@@ -733,7 +748,7 @@ makeFootnote(footnote)
 
 cat("Latency-get 95th\n")
 temp <- latency_get[latency_get$client_id ==0,]
-p <- ggplot(temp, aes(temp$mystery, temp$percentile_95th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_95th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ms")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("Latency-get 95th  percentile", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_95th),max(temp$percentile_95th)))
@@ -746,7 +761,7 @@ makeFootnote(footnote)
 
 cat("Latency-get 99th\n")
 temp <- latency_get[latency_get$client_id ==0,]
-p <- ggplot(temp, aes(temp$mystery, temp$percentile_99th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_99th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ms")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("Latency-get 99th  percentile", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_99th),max(temp$percentile_99th)))
@@ -756,9 +771,10 @@ p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 's
 print(p)
 makeFootnote(footnote)
 
+
 cat("Latency-set 90th\n")
 temp <- latency_set[latency_set$client_id ==0,]
-p <- ggplot(temp, aes(temp$mystery, temp$percentile_90th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_90th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ms")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("Latency-set 90th  percentile", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_90th),max(temp$percentile_90th)))
@@ -771,7 +787,7 @@ makeFootnote(footnote)
 
 cat("Latency-set 95th\n")
 temp <- latency_set[latency_set$client_id ==0,]
-p <- ggplot(temp, aes(temp$mystery, temp$percentile_95th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_95th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ms")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("Latency-set 95th  percentile", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_95th),max(temp$percentile_95th)))
@@ -784,7 +800,7 @@ makeFootnote(footnote)
 
 cat("Latency-set 99th\n")
 temp <- latency_set[latency_set$client_id ==0,]
-p <- ggplot(temp, aes(temp$mystery, temp$percentile_99th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
+p <- ggplot(temp, aes(temp$mystery, temp$percentile_99th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ms")
 p  <-  p + stat_smooth(se = TRUE)
 p <- p + opts(title=paste("Latency-set 99th percentile", sep=''))
 p <- p + scale_y_continuous(formatter="commaize",limits = c(min(temp$percentile_99th),max(temp$percentile_99th)))
@@ -799,6 +815,7 @@ makeFootnote(footnote)
 #temp_data_frame  = createProcessUsageDataFrame(system_stats, "(beam.smp)")
 #ggplotCpuUsageWithFacets(temp_data_frame,"beam.smp cpu ticks")
 #ggplotMemoryUsageWithFacets(temp_data_frame,"beam.smp memory profile")
+#makeFootnote(footnote)
 
 
 dev.off()
