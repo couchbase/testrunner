@@ -1045,7 +1045,7 @@ class ViewTests(unittest.TestCase):
         rest = RestConnection(master)
         bucket = "default"
         prefix = "{0}-{1}".format("_test_compare_views_all_nodes", str(uuid.uuid4()))
-        doc_names = self._load_docs(num_of_docs, prefix, False)
+        doc_names = self._load_complex_docs(num_of_docs, prefix, False)
         self._begin_rebalance_in()
         view_name = "dev_test_compare_views_all_nodes"
         self._create_view_for_gen_docs(rest, bucket, prefix, view_name)
@@ -1068,7 +1068,11 @@ class ViewTests(unittest.TestCase):
                 self.fail("returned doc names have different values than expected")
 
 
-    def _load_docs(self, num_of_docs, prefix, verify=True):
+    ### TODO:  _delete_docs() method cannot be used if this method is called to load docs
+    # For now call _delete_complex_docs()
+    # possible fix is to the store prefix-id format in documentGenerator for retrieval by delete fn
+    ###
+    def _load_complex_docs(self, num_of_docs, prefix, verify=True):
         rest = RestConnection(self.servers[0])
         doc_names = []
         bucket = "default"
@@ -1088,6 +1092,21 @@ class ViewTests(unittest.TestCase):
         self.log.info("inserted {0} json documents".format(num_of_docs))
         if verify:
             self._verify_docs_doc_name(doc_names, prefix)
+        return doc_names
+
+    # used to delete documents created by the DocumentGenerator class
+    def _delete_complex_docs(self, num_of_docs, num_of_deleted_docs, prefix):
+        bucket = "default"
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        doc_names = []
+        for i in range(0, num_of_docs):
+            key = doc_name = "{0}-{1}".format(i, prefix)
+            if i < num_of_deleted_docs:
+                moxi.delete(key)
+            else:
+                doc_names.append(doc_name)
+        self.log.info("deleted {0} json documents".format(num_of_deleted_docs))
+        self._verify_docs_doc_name(doc_names, prefix)
         return doc_names
 
     def _create_view_for_gen_docs(self, rest, bucket, prefix, view_name):

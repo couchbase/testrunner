@@ -79,34 +79,37 @@ class RebalanceHelper():
         verified = False
         while not verified:
             rest = RestConnection(master)
-            stats = rest.get_bucket_stats(bucket)
-            if stats and stat_key in stats and stats[stat_key] == stat_value:
-                log.info("{0} : {1}".format(stat_key, stats[stat_key]))
-                verified = True
+            try:
+                stats = rest.get_bucket_stats(bucket)
+                if stats and stat_key in stats and stats[stat_key] == stat_value:
+                    log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                    verified = True
+                    break
+                else:
+                    if stats and stat_key in stats:
+                        if verbose:
+                            log.info("{0} : {1}".format(stat_key, stats[stat_key]))
+                        curr_stat_value = stats[stat_key]
+
+                    # values are changing so clear any timeout
+                    if curr_stat_value != previous_stat_value:
+                        time_to_timeout = 0
+                    else:
+                        if time_to_timeout == 0:
+                            time_to_timeout = time.time() + timeout_in_seconds
+                        if time_to_timeout < time.time():
+                            log.info("no change in {0} stat after {1} seconds (value = {2})".format(stat_key, timeout_in_seconds, curr_stat_value))
+                            break
+
+                    previous_stat_value = curr_stat_value
+
+                    if not verbose:
+                        time.sleep(0.1)
+                    else:
+                        time.sleep(2)
+            except:
+                log.info("unable to collect stats from server {0}".format(master))
                 break
-            else:
-                if stats and stat_key in stats:
-                    if verbose:
-                        log.info("{0} : {1}".format(stat_key, stats[stat_key]))
-                    curr_stat_value = stats[stat_key]
-
-                # values are changing so clear any timeout
-                if curr_stat_value != previous_stat_value:
-                    time_to_timeout = 0
-                else:
-                    if time_to_timeout == 0:
-                        time_to_timeout = time.time() + timeout_in_seconds
-                    if time_to_timeout < time.time():
-                        log.info("no change in {0} stat after {1} seconds (value = {2})".format(stat_key, timeout_in_seconds, curr_stat_value))
-                        break
-
-                previous_stat_value = curr_stat_value
-
-                if not verbose:
-                    time.sleep(0.1)
-                else:
-                    time.sleep(2)
-        return verified
 
     @staticmethod
     def wait_for_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
