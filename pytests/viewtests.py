@@ -261,7 +261,7 @@ class ViewTests(unittest.TestCase):
         attempt = 0
         delay = 10
         num_of_results_without_reduce = len(self._get_keys(results_without_reduce))
-        while attempt < 6 and value != num_of_docs:
+        while attempt < 18 and value != num_of_docs:
             msg = "reduce returned {0}, expected to return {1}"
             self.log.info(msg.format(value, len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))

@@ -60,7 +60,7 @@ class DrainRateTests(unittest.TestCase):
     def _load_data_for_buckets(self):
         rest = RestConnection(self.master)
         buckets = rest.get_buckets()
-        distribution = {512: 1.0}
+        distribution = {128: 1.0}
         self.bucket_data = {}
         for bucket in buckets:
             name = bucket.name.encode("ascii", "ignore")
@@ -69,7 +69,7 @@ class DrainRateTests(unittest.TestCase):
             MemcachedClientHelper.load_bucket_and_return_the_keys(name=self.bucket,
                                                                   servers=[self.master],
                                                                   value_size_distribution=distribution,
-                                                                  number_of_threads=4,
+                                                                  number_of_threads=1,
                                                                   number_of_items=self.number_of_items,
                                                                   write_only=True,
                                                                   moxi=False)
@@ -91,7 +91,8 @@ class DrainRateTests(unittest.TestCase):
         start = time.time()
         stats = rest.get_bucket_stats(self.bucket)
         self.log.info("current ep_queue_size: {0}".format(stats["ep_queue_size"]))
-        verified = RebalanceHelper.wait_for_stats(self.master, self.bucket, 'ep_queue_size', 0, timeout_in_seconds=300, verbose=False)
+        verified = RebalanceHelper.wait_for_stats(self.master, self.bucket, 'ep_queue_size', 0, timeout_in_seconds=300, verbose=False)\
+        and RebalanceHelper.wait_for_stats(self.master, self.bucket, 'ep_flusher_todo', 0, timeout_in_seconds=300, verbose=False)
         self.drained = verified
         self.drained_in_seconds = time.time() - start
 
