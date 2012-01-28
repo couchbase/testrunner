@@ -109,7 +109,10 @@ class RebalanceHelper():
                         time.sleep(2)
             except:
                 log.info("unable to collect stats from server {0}".format(master))
+                verified = True #TODO: throw ex and assume caller catches
                 break
+
+    return verified
 
     @staticmethod
     def wait_for_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
