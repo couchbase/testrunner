@@ -55,9 +55,9 @@ class StatsCollector(object):
         self.client_id = str(client_id)
 
         if collect_server_stats:
-            #mbstats_thread = Thread(target=self.membase_stats,
-            #                        args=(nodes, bucket, frequency, self._verbosity))
-            #mbstats_thread.start()
+            mbstats_thread = Thread(target=self.membase_stats,
+                                    args=(nodes, bucket, 600, self._verbosity))
+            mbstats_thread.start()
             sysstats_thread = Thread(target=self.system_stats,
                                      args=(nodes, pnames, frequency, self._verbosity))
             sysstats_thread.start()
