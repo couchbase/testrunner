@@ -863,7 +863,7 @@ class ViewTests(unittest.TestCase):
         # if no new items are set for timeout seconds, we abort
         self.docs_inserted = []
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
-        MemcachedClientHelper.direct_client(self.servers[0], bucket).flush()
+#        MemcachedClientHelper.direct_client(self.servers[0], bucket).flush()
         inserted_index = []
         time_to_timeout = 0
         while not self.shutdown_load_data:
