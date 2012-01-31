@@ -111,10 +111,12 @@ class SpatialHelper:
                     else:
                         raise e
         if wait_for_persistence:
-            RebalanceHelper.wait_for_stats(self.master, self.bucket,
-                                           "ep_queue_size", 0)
-            RebalanceHelper.wait_for_stats(self.master, self.bucket,
-                                           "ep_flusher_todo", 0)
+            RebalanceHelper.wait_for_mc_stats_all_nodes(
+                self.master, self.bucket, "ep_queue_size", 0)
+            RebalanceHelper.wait_for_mc_stats_all_nodes(
+                self.master, self.bucket, "ep_flusher_todo", 0)
+            RebalanceHelper.wait_for_mc_stats_all_nodes(
+                self.master, self.bucket, "ep_uncommitted_items", 0)
         self.log.info("inserted {0} json documents".format(num_of_docs))
         return doc_names
 
@@ -135,10 +137,13 @@ class SpatialHelper:
                     raise
             doc_names.append(key)
         # Make sure the data is persisted
-        RebalanceHelper.wait_for_stats(self.master, self.bucket,
-                                       "ep_queue_size", 0)
-        RebalanceHelper.wait_for_stats(self.master, self.bucket,
-                                       "ep_flusher_todo", 0)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            self.master, self.bucket, "ep_queue_size", 0)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            self.master, self.bucket, "ep_flusher_todo", 0)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            self.master, self.bucket, "ep_uncommitted_items", 0)
+
         self.log.info("deleted {0} json documents".format(len(doc_names)))
         return doc_names
 
