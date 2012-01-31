@@ -54,6 +54,19 @@ class FailoverHelper(object):
         return failed
 
 
+    # Start and add the failovered nodes back to the cluster and rebalance it
+    def undo_failover(self, nodes):
+        self.log.info("Add nodes back to the cluster: {0}".format(nodes))
+        rest = RestConnection(self.servers[0])
+
+        for node in nodes:
+            self._start_server(node)
+
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
+                       ejectedNodes=[])
+        rest.monitorRebalance()
+
+
     def _stop_server(self, node):
         master_rest = RestConnection(self.servers[0])
         for server in self.servers:
@@ -77,3 +90,15 @@ class FailoverHelper(object):
                 else:
                     self.log.info("running {0}".format(stop_cluster.format(node.id)))
                     master_rest.diag_eval(stop_cluster.format(node.id))
+
+
+    def _start_server(self, node):
+        master_rest = RestConnection(self.servers[0])
+        for server in self.servers:
+            rest = RestConnection(server)
+            self.log.info("see if server {0}:{1} is stopped".format(server.ip, server.port))
+            if RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
+                continue
+
+            self.log.info("running {0}".format(start_cluster.format(node.id)))
+            master_rest.diag_eval(start_cluster.format(node.id))
