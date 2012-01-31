@@ -418,6 +418,7 @@ class RebalanceHelper():
         nodeIps = ["{0}:{1}".format(node.ip,node.port) for node in nodes]
         log.info("current nodes : {0}".format(nodeIps))
         toBeAdded = []
+        master = servers[0]
         selection = servers[1:]
         if do_shuffle:
             shuffle(selection)
@@ -429,7 +430,8 @@ class RebalanceHelper():
                 break
 
         for server in toBeAdded:
-            rest.add_node('Administrator', 'password', server.ip, server.port)
+            otpNode = rest.add_node(master.rest_username, master.rest_password,
+                                    server.ip, server.port)
         otpNodes = [node.id for node in rest.node_statuses()]
         started = rest.rebalance(otpNodes, [])
         msg = "rebalance operation started ? {0}"
