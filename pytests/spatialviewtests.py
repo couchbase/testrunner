@@ -6,6 +6,7 @@ import logger
 import time
 
 from membase.helper.spatial_helper import SpatialHelper
+from membase.helper.failover_helper import FailoverHelper
 
 
 class SpatialViewTests(unittest.TestCase):
@@ -87,6 +88,10 @@ class SpatialViewTests(unittest.TestCase):
     # Update all docs
     def test_insert_15k_update_15k_docs(self):
         self._test_update_docs(15000, 15000)
+
+    # This test needs at least a 4 nodes cluster
+    def test_view_10k_docs_failover(self):
+        self._test_failover(10000)
 
 
     def test_get_spatial_during_1_min_load_10k_working_set(self):
@@ -236,3 +241,20 @@ class SpatialViewTests(unittest.TestCase):
             # Will be read after the function is terminated
             self.docs_inserted = self.helper.insert_docs(
                 number_of_docs, prefix, wait_for_persistence=False)
+
+
+    def _test_failover(self, num_of_docs):
+        self.log.info("description : test failover with {0} documents"\
+                          .format(num_of_docs))
+        design_name = "dev_test_failover_{0}".format(num_of_docs)
+        prefix = str(uuid.uuid4())[:7]
+
+        fh = FailoverHelper(self.helper.servers, self)
+
+        inserted_keys = self._setup_index(design_name, num_of_docs, prefix)
+        failover_nodes = fh.failover(1)
+        self.helper.query_index_for_verification(design_name, inserted_keys)
+
+        # The test cleanup expects all nodes running, hence spin the
+        # full cluster up again
+        fh.undo_failover(failover_nodes)
