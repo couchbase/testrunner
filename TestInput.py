@@ -3,6 +3,7 @@ import re
 from builds.build_query import BuildQuery
 import logger
 import ConfigParser
+import os
 
 #class to parse the inputs either from command line or from a ini file
 #command line supports a subset of
@@ -188,7 +189,7 @@ class TestInputParser():
                 if server.ssh_password == '' and 'password' in global_properties:
                     server.ssh_password = global_properties['password']
                 if server.ssh_key == '' and 'ssh_key' in global_properties:
-                    server.ssh_key = global_properties['ssh_key']
+                    server.ssh_key = os.path.expanduser(global_properties['ssh_key'])
                 if not server.port and 'port' in global_properties:
                     server.port = global_properties['port']
                 if server.cli_path == '' and 'cli' in global_properties:
