@@ -558,9 +558,9 @@ class ViewBaseTests(unittest.TestCase):
         self._view_test_threads = []
         for i in range(0, num_of_design_docs):
             thread_result = []
-            t = Thread(target=self._test_load_data_get_view_x_mins_thread_wrapper,
+            t = Thread(target=ViewBaseTests._test_load_data_get_view_x_mins_thread_wrapper,
                        name="test_view_on_multiple_docs_multiple_design_docs",
-                       args=(load_data_duration, number_of_items, run_view_duration, thread_result))
+                       args=(self, load_data_duration, number_of_items, run_view_duration, thread_result))
             t.start()
             self._view_test_threads.append((t, thread_result))
         for (t, r) in self._view_test_threads:
@@ -837,7 +837,7 @@ class ViewBaseTests(unittest.TestCase):
         bucket = "default"
         prefix = "{0}-{1}".format("_test_compare_views_all_nodes", str(uuid.uuid4()))
         doc_names = ViewBaseTests._load_complex_docs(self, num_of_docs, prefix, False)
-        self._begin_rebalance_in()
+        ViewBaseTests._begin_rebalance_in(self)
         view_name = "dev_test_compare_views_all_nodes"
         ViewBaseTests._create_view_for_gen_docs(self, rest, bucket, prefix, view_name)
 
@@ -1141,6 +1141,40 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_load_10k_during_rebalance(self):
         ViewBaseTests._test_insert_json_during_rebalance(self, 10000)
+
+    def test_view_stop_start_incremental_rebalance(self):
+        prefix = str(uuid.uuid4())[:7]
+        ViewBaseTests._create_view_doc_name(self, prefix)
+        doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix)
+
+        master = self.servers[0]
+        rest = RestConnection(master)
+
+        nodes = rest.node_statuses()
+        while len(nodes) < len(self.servers):
+
+            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+
+            rebalanced_in, which_servers = RebalanceHelper.rebalance_in(self.servers, 1, monitor=False)
+            # Just doing 2 iterations
+            for i in [1, 2]:
+                expected_progress = 20*i
+                reached = RestHelper(rest).rebalance_reached(expected_progress)
+                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
+                stopped = rest.stop_rebalance()
+                self.assertTrue(stopped, msg="unable to stop rebalance")
+                time.sleep(20)
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node")
+
+            self.assertTrue(rebalanced_in, msg="unable to add and rebalance more nodes")
+            nodes = rest.node_statuses()
+
+        ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
+
+
 
 class ViewFailoverTests(unittest.TestCase):
 

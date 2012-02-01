@@ -410,7 +410,7 @@ class RebalanceHelper():
     #rest api instead of passing it to the fucntions
 
     @staticmethod
-    def rebalance_in(servers, how_many, do_shuffle=True):
+    def rebalance_in(servers, how_many, do_shuffle=True, monitor=True):
         servers_rebalanced = []
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
@@ -434,6 +434,8 @@ class RebalanceHelper():
         started = rest.rebalance(otpNodes, [])
         msg = "rebalance operation started ? {0}"
         log.info(msg.format(started))
+        if monitor is not True:
+            return True, servers_rebalanced
         if started:
             result = rest.monitorRebalance()
             msg = "successfully rebalanced in selected nodes from the cluster ? {0}"
