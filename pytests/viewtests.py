@@ -25,11 +25,11 @@ class ViewBaseTests(unittest.TestCase):
         self.servers = TestInputSingleton.input.servers
         self.params = TestInputSingleton.input.test_params
         self.created_views = {}
-        self.replica  = int(ViewBaseTests.get_test_params('replica'))
-        self.failover_factor = int(ViewBaseTests.get_test_params('failover-factor'))
-        self.num_docs = int(ViewBaseTests.get_test_params('num-docs'))
-        self.num_design_docs = int(ViewBaseTests.get_test_params('num-design-docs'))
-        self.expiry_ratio = float(ViewBaseTests.get_test_params('expiry-ratio'))
+        self.replica  = ViewBaseTests.parami("replica", 1)
+        self.failover_factor = ViewBaseTests.parami("failover-factor", 1)
+        self.num_docs = ViewBaseTests.parami("num-docs", 10000)
+        self.num_design_docs = ViewBaseTests.parami("num-design-docs", 20)
+        self.expiry_ratio = ViewBaseTests.paramf("expiry-ratio", 0.1)
 
         # Clear the state from Previous invalid run
         ViewBaseTests.common_tearDown(self)
@@ -44,6 +44,23 @@ class ViewBaseTests(unittest.TestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([master], self)
         ViewBaseTests._create_default_bucket(self, replica=self.replica)
         ViewBaseTests._log_start(self)
+        db_compaction  = ViewBaseTests.parami("db_compaction", 30)
+        view_compaction  = ViewBaseTests.parami("view_compaction", 30)
+        rest.reset_auto_compaction(dbFragmentThreshold = db_compaction,
+                              viewFragmntThreshold = view_compaction)
+
+    @staticmethod
+    def param(name, default_value):
+        input = getattr(ViewBaseTests, "input", TestInputSingleton.input)
+        return input.test_params.get(name, default_value)
+
+    @staticmethod
+    def parami(name, default_int):
+        return int(ViewBaseTests.param(name, default_int))
+
+    @staticmethod
+    def paramf(name, default_float):
+        return float(ViewBaseTests.param(name, default_float))
 
     @staticmethod
     def common_tearDown(self):
@@ -70,13 +87,6 @@ class ViewBaseTests(unittest.TestCase):
             ClusterOperationHelper.cleanup_cluster(self.servers)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         ViewBaseTests._log_finish(self)
-
-    @staticmethod
-    def get_test_params(key):
-        _input = TestInputSingleton.input.test_params
-        _default = {'replica' :1, 'failover-factor':1, 'num-docs':10000, 'num-design-docs':20, 'expiry-ratio':0.1}
-
-        return _input.get(key, _default.get(key))
 
     @staticmethod
     def _log_start(self):
@@ -975,14 +985,13 @@ class ViewBasicTests(unittest.TestCase):
         view = "invalid_view-{0}".format(prefix)
         bucket = "default"
         function = '{"views":[]}'
-        num_of_docs = 10000
 
         api = rest.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
         status, content = rest._http_request(api, 'PUT', function, headers=rest._create_capi_headers())
 #        self.created_views[view] = bucket
 
         # try to load some documents to see if memcached is running
-        ViewBaseTests._load_docs(self, num_of_docs, prefix, False)
+        ViewBaseTests._load_docs(self, self.num_of_docs, prefix, False)
 
     def test_create_multiple_development_view(self):
         self.log.info("description : create multiple views without running any view query")
@@ -1090,17 +1099,11 @@ class ViewQueryTests(unittest.TestCase):
     def test_count_sum_10k_docs(self):
         ViewBaseTests._test_sum_reduce_multiple_docs(self, 10000)
 
-    def test_count_reduce_100_docs(self):
-        ViewBaseTests._test_count_reduce_multiple_docs(self, 100)
-
-    def test_count_reduce_10k_docs(self):
-        ViewBaseTests._test_count_reduce_multiple_docs(self, 10000)
-
-    def test_count_reduce_100k_docs(self):
-        ViewBaseTests._test_count_reduce_multiple_docs(self, 100000)
+    def test_count_reduce_x_docs(self):
+        ViewBaseTests._test_count_reduce_multiple_docs(self, self.num_docs)
 
     def test_load_data_get_view_2_mins_20_design_docs(self):
-        ViewBaseTests._test_load_data_get_view_x_mins_multiple_design_docs(self, 2,10000,2,20)
+        ViewBaseTests._test_load_data_get_view_x_mins_multiple_design_docs(self, 2, self.num_docs, 2, 20)
 
 
 class ViewRebalanceTests(unittest.TestCase):
@@ -1113,34 +1116,32 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_10k_docs_rebalance_in(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_docs = 100000
         num_of_deleted_docs = 10000
         # verify we are fully de-clustered
         ViewBaseTests._begin_rebalance_out(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, num_of_docs, prefix)
+        ViewBaseTests._load_docs(self, self.num_of_docs, prefix)
         ViewBaseTests._begin_rebalance_in(self)
-        doc_names = ViewBaseTests._delete_docs(self, num_of_docs, num_of_deleted_docs, prefix)
+        doc_names = ViewBaseTests._delete_docs(self, self.num_of_docs, num_of_deleted_docs, prefix)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
     def test_delete_10k_docs_rebalance_out(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_docs = 100000
         num_of_deleted_docs = 10000
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, num_of_docs, prefix)
+        ViewBaseTests._load_docs(self, self.num_of_docs, prefix)
         ViewBaseTests._begin_rebalance_out(self)
-        doc_names = ViewBaseTests._delete_docs(self, num_of_docs, num_of_deleted_docs, prefix)
+        doc_names = ViewBaseTests._delete_docs(self, self.num_of_docs, num_of_deleted_docs, prefix)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
-    def test_load_10k_during_rebalance(self):
-        ViewBaseTests._test_insert_json_during_rebalance(self, 10000)
+    def test_load_x_during_rebalance(self):
+        ViewBaseTests._test_insert_json_during_rebalance(self, self.num_docs)
 
     def test_view_stop_start_incremental_rebalance(self):
         prefix = str(uuid.uuid4())[:7]
@@ -1175,7 +1176,6 @@ class ViewRebalanceTests(unittest.TestCase):
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
 
-
 class ViewFailoverTests(unittest.TestCase):
 
     def setUp(self):
@@ -1183,18 +1183,6 @@ class ViewFailoverTests(unittest.TestCase):
 
     def tearDown(self):
         ViewBaseTests.common_tearDown(self)
-
-    def test_view_10k_docs_failover(self):
-        fh = FailoverHelper(self.servers, self)
-        prefix = str(uuid.uuid4())[:7]
-        num_of_docs = 10000
-        # verify we are fully clustered
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
-        ViewBaseTests._create_view_doc_name(self, prefix)
-        doc_names = ViewBaseTests._load_docs(self, num_of_docs, prefix)
-        fh.failover(1)
-        ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
     def test_view_failover_multiple_design_docs_x_node_replica_y(self):
             failover_helper = FailoverHelper(self.servers, self)
