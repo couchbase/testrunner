@@ -855,7 +855,7 @@ class ViewBaseTests(unittest.TestCase):
         RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_flusher_todo', 0)
         RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_uncommitted_items', 0)
 
-        self._end_rebalance()
+        ViewBaseTests._end_rebalance(self)
         nodes = rest.get_nodes()
         for n in nodes:
             n_rest = RestConnection({"ip": n.ip, "port": n.port,
