@@ -71,8 +71,9 @@ class StatsCollector(object):
             #data_size_thread = Thread(target=self.get_data_file_size,
             #                        args=(nodes, 60, bucket))
             #data_size_thread.start()
-            self._task["threads"] = [sysstats_thread, ns_server_stats_thread, bucket_size_thead]
-                                     #data_size_thread, mbstats_thread ]
+            self._task["threads"] = [sysstats_thread, ns_server_stats_thread, bucket_size_thead,
+                                     mbstats_thread]
+                                     #data_size_thread ]
             # Getting build/machine stats from only one node in the cluster
             self.build_stats(nodes)
             self.machine_stats(nodes)
@@ -309,7 +310,11 @@ class StatsCollector(object):
             d[mc.host] = {"snapshots": [], "timings":[], "dispatcher":[]}
 
         while not self._aborted():
-            time.sleep(frequency)
+            time_left = frequency
+            # at minimum we want to check for aborted every minute
+            while not self._aborted() and time_left > 0:
+                time.sleep(min(time_left, 60))
+                time_left -= 60
             for mc in mcs:
                 stats = mc.stats()
                 stats["time"] = time.time()
