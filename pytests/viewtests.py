@@ -122,12 +122,12 @@ class ViewBaseTests(unittest.TestCase):
                         msg="unable to create {0} bucket".format(name))
 
     @staticmethod
-    def _test_view_on_multiple_docs_multiple_design_docs(self, num_of_docs, num_of_design_docs):
+    def _test_view_on_multiple_docs_multiple_design_docs(self, num_docs, num_of_design_docs):
         self._view_test_threads = []
         for i in range(0, num_of_design_docs):
             thread_result = []
             t = Thread(target=ViewBaseTests._test_view_on_multiple_docs_thread_wrapper,
-                       name="test_view_on_multiple_docs_multiple_design_docs", args=(self, num_of_docs, thread_result))
+                       name="test_view_on_multiple_docs_multiple_design_docs", args=(self, num_docs, thread_result))
             t.start()
             self._view_test_threads.append((t, thread_result))
         for (t, r) in self._view_test_threads:
@@ -141,7 +141,7 @@ class ViewBaseTests(unittest.TestCase):
         self.fail("one of multiple threads failed. look at the logs for more specific errors")
 
     @staticmethod
-    def _test_view_on_multiple_docs(self, num_of_docs):
+    def _test_view_on_multiple_docs(self, num_docs):
         self.log.info("description : create a view on 10 thousand documents")
         master = self.servers[0]
         rest = RestConnection(master)
@@ -154,8 +154,8 @@ class ViewBaseTests(unittest.TestCase):
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
-        self.log.info("inserting {0} json objects".format(num_of_docs))
-        for i in range(0, num_of_docs):
+        self.log.info("inserting {0} json objects".format(num_docs))
+        for i in range(0, num_docs):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
@@ -188,7 +188,7 @@ class ViewBaseTests(unittest.TestCase):
             self.fail("map function did not return docs for {0} keys".format(len(not_found)))
 
     @staticmethod
-    def _test_count_reduce_multiple_docs(self, num_of_docs):
+    def _test_count_reduce_multiple_docs(self, num_docs):
         self.log.info("description : create a view on 10 thousand documents")
         master = self.servers[0]
         rest = RestConnection(master)
@@ -202,17 +202,17 @@ class ViewBaseTests(unittest.TestCase):
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
-        self.log.info("inserting {0} json objects".format(num_of_docs))
-        for i in range(0, num_of_docs):
+        self.log.info("inserting {0} json objects".format(num_docs))
+        for i in range(0, num_docs):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
             moxi.set(key, 0, 0, json.dumps(value))
-        self.log.info("inserted {0} json documents".format(num_of_docs))
+        self.log.info("inserted {0} json documents".format(num_docs))
         #        self._verify_views_replicated(bucket, view_name, map_fn)
-        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_of_docs)
+        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
         value = ViewBaseTests._get_built_in_reduce_results(self, results)
-        results_without_reduce = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_of_docs,
+        results_without_reduce = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs,
                                                         extra_params={"reduce": False})
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
         RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
@@ -220,29 +220,29 @@ class ViewBaseTests(unittest.TestCase):
         attempt = 0
         delay = 10
         num_of_results_without_reduce = len(ViewBaseTests._get_keys(self, results_without_reduce))
-        while attempt < 6 and value != num_of_docs:
+        while attempt < 6 and value != num_docs:
             msg = "reduce returned {0}, expected to return {1}"
             self.log.info(msg.format(value, len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(10)
             attempt += 1
             #get the results without reduce ?
-            results_without_reduce = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_of_docs,
+            results_without_reduce = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs,
                                                             extra_params={"reduce": False})
             keys = ViewBaseTests._get_keys(self, results_without_reduce)
             num_of_results_without_reduce = len(keys)
             msg = "view with reduce=false returned {0} items, expected to return {1} items"
             self.log.info(msg.format(len(keys), len(doc_names)))
-            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_of_docs)
+            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
             value = ViewBaseTests._get_built_in_reduce_results(self, results)
             msg = "reduce returned {0}, expected to return {1}"
             self.log.info(msg.format(value, len(doc_names)))
-        self.assertEquals(value, num_of_docs)
-        self.assertEquals(num_of_results_without_reduce, num_of_docs)
+        self.assertEquals(value, num_docs)
+        self.assertEquals(num_of_results_without_reduce, num_docs)
         #now try to get the view without reduce
 
     @staticmethod
-    def _test_sum_reduce_multiple_docs(self, num_of_docs):
+    def _test_sum_reduce_multiple_docs(self, num_docs):
         self.log.info("description : create a view on 10 thousand documents")
         master = self.servers[0]
         rest = RestConnection(master)
@@ -257,42 +257,42 @@ class ViewBaseTests(unittest.TestCase):
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         sum = 0
-        self.log.info("inserting {0} json objects".format(num_of_docs))
-        for i in range(0, num_of_docs):
+        self.log.info("inserting {0} json objects".format(num_docs))
+        for i in range(0, num_docs):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             rand = random.randint(0, 20000)
             value = {"name": doc_name, "age": rand}
             sum += rand
             moxi.set(key, 0, 0, json.dumps(value))
-        self.log.info("inserted {0} json documents".format(num_of_docs))
+        self.log.info("inserted {0} json documents".format(num_docs))
         #        self._verify_views_replicated(bucket, view_name, map_fn)
-        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_of_docs)
+        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
         value = ViewBaseTests._get_built_in_reduce_results(self, results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
         RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
         # try this for maximum 3 minutes
         attempt = 0
         delay = 10
-        while attempt < 6 and value != num_of_docs:
+        while attempt < 6 and value != num_docs:
             msg = "view returned {0} items , expected to return {1} items"
             self.log.info(msg.format(value, len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(10)
             attempt += 1
-            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_of_docs)
+            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
             value = ViewBaseTests._get_built_in_reduce_results(self, results)
-        self.assertEquals(value, num_of_docs)
+        self.assertEquals(value, num_docs)
 
     @staticmethod
-    def _test_view_on_multiple_docs_thread_wrapper(self, num_of_docs, failures):
+    def _test_view_on_multiple_docs_thread_wrapper(self, num_docs, failures):
         try:
-            ViewBaseTests._test_view_on_multiple_docs(self, num_of_docs)
+            ViewBaseTests._test_view_on_multiple_docs(self, num_docs)
         except Exception as ex:
             failures.append(ex)
 
     @staticmethod
-    def _test_update_view_on_multiple_docs(self, num_of_docs):
+    def _test_update_view_on_multiple_docs(self, num_docs):
         self.log.info("description : create a view on 10 thousand documents")
         master = self.servers[0]
         rest = RestConnection(master)
@@ -305,29 +305,29 @@ class ViewBaseTests(unittest.TestCase):
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         updated_doc_names = []
-        updated_num_of_docs = num_of_docs + 100
+        updated_num_docs = num_docs + 100
         prefix = str(uuid.uuid4())[:7]
-        self.log.info("inserting {0} json objects".format(num_of_docs))
-        for i in range(0, num_of_docs):
+        self.log.info("inserting {0} json objects".format(num_docs))
+        for i in range(0, num_docs):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
             moxi.set(key, 0, 0, json.dumps(value))
-        self.log.info("inserted {0} json documents".format(num_of_docs))
+        self.log.info("inserted {0} json documents".format(num_docs))
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         updated_view_prefix = "{0}-{1}-updated".format(view_name, prefix)
-        for i in range(0, updated_num_of_docs):
+        for i in range(0, updated_num_docs):
             key = updated_doc_name = "{0}-{1}-updated-{2}".format(view_name, prefix, i)
             updated_doc_names.append(updated_doc_name)
             value = {"name": updated_doc_name, "age": 1000}
             moxi.set(key, 0, 0, json.dumps(value))
-        self.log.info("inserted {0} json documents".format(updated_num_of_docs))
+        self.log.info("inserted {0} json documents".format(updated_num_docs))
 
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + updated_view_prefix + "\") != -1) { emit(doc.name, doc);}}"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
         #        self._verify_views_replicated(bucket, view_name, map_fn)
-        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, updated_num_of_docs)
+        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, updated_num_docs)
         keys = ViewBaseTests._get_keys(self, results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
         RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
@@ -340,7 +340,7 @@ class ViewBaseTests(unittest.TestCase):
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(10)
             attempt += 1
-            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, updated_num_of_docs)
+            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, updated_num_docs)
             keys = ViewBaseTests._get_keys(self, results)
         keys = ViewBaseTests._get_keys(self, results)
         not_found = []
@@ -497,7 +497,7 @@ class ViewBaseTests(unittest.TestCase):
         return doc_names
 
     @staticmethod
-    def _test_insert_json_during_rebalance(self, num_of_docs):
+    def _test_insert_json_during_rebalance(self, num_docs):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
@@ -508,9 +508,9 @@ class ViewBaseTests(unittest.TestCase):
         self.created_views[view_name] = bucket
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
-        #load num_of_docs items into single node
-        self.log.info("inserting {0} json objects".format(num_of_docs))
-        doc_names.extend(ViewBaseTests._insert_n_items(self, bucket, view_name, prefix, num_of_docs))
+        #load num_docs items into single node
+        self.log.info("inserting {0} json objects".format(num_docs))
+        doc_names.extend(ViewBaseTests._insert_n_items(self, bucket, view_name, prefix, num_docs))
 
         #grab view results while we still have only single node
         ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names))
@@ -523,10 +523,10 @@ class ViewBaseTests(unittest.TestCase):
             msg = "unable to add node {0}:{1} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip, server.port))
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
-            #mutate num_of_docs that we added before
+            #mutate num_docs that we added before
             #vbucket map is constantly changing so we need to catch the exception and
-            self.log.info("inserting {0} json objects".format(num_of_docs))
-            doc_names.extend(ViewBaseTests._insert_n_items(self, bucket, view_name, prefix, num_of_docs))
+            self.log.info("inserting {0} json objects".format(num_docs))
+            doc_names.extend(ViewBaseTests._insert_n_items(self, bucket, view_name, prefix, num_docs))
             #then monitor rebalance
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding nodes")
@@ -703,7 +703,7 @@ class ViewBaseTests(unittest.TestCase):
         self.created_views[view_name] = bucket
 
     @staticmethod
-    def _load_docs(self, num_of_docs, prefix, verify=True):
+    def _load_docs(self, num_docs, prefix, verify=True):
         rest = RestConnection(self.servers[0])
         command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [moxi], 20000)]."
         moxis_restarted = rest.diag_eval(command)
@@ -712,7 +712,7 @@ class ViewBaseTests(unittest.TestCase):
         bucket = "default"
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
-        for i in range(0, num_of_docs):
+        for i in range(0, num_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
@@ -733,17 +733,17 @@ class ViewBaseTests(unittest.TestCase):
                             time.sleep(1)
                     else:
                         raise e
-        self.log.info("inserted {0} json documents".format(num_of_docs))
+        self.log.info("inserted {0} json documents".format(num_docs))
         if verify:
             ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
         return doc_names
 
     @staticmethod
-    def _update_docs(self, num_of_docs, num_of_updated_docs, prefix):
+    def _update_docs(self, num_docs, num_of_updated_docs, prefix):
         bucket = "default"
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
-        for i in range(0, num_of_docs):
+        for i in range(0, num_docs):
             key = "{0}-{1}".format(prefix, i)
             if i < num_of_updated_docs:
                 doc_name = key + "updated"
@@ -758,11 +758,11 @@ class ViewBaseTests(unittest.TestCase):
         return doc_names
 
     @staticmethod
-    def _delete_docs(self, num_of_docs, num_of_deleted_docs, prefix):
+    def _delete_docs(self, num_docs, num_of_deleted_docs, prefix):
         bucket = "default"
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
-        for i in range(0, num_of_docs):
+        for i in range(0, num_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
             if i < num_of_deleted_docs:
                 moxi.delete(key)
@@ -846,12 +846,12 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("rebalance finished")
 
     @staticmethod
-    def _test_compare_views_all_nodes(self,num_of_docs):
+    def _test_compare_views_all_nodes(self,num_docs):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
         prefix = "{0}-{1}".format("_test_compare_views_all_nodes", str(uuid.uuid4()))
-        doc_names = ViewBaseTests._load_complex_docs(self, num_of_docs, prefix, False)
+        doc_names = ViewBaseTests._load_complex_docs(self, num_docs, prefix, False)
         ViewBaseTests._begin_rebalance_in(self)
         view_name = "dev_test_compare_views_all_nodes"
         ViewBaseTests._create_view_for_gen_docs(self, rest, bucket, prefix, view_name)
@@ -866,7 +866,7 @@ class ViewBaseTests(unittest.TestCase):
             n_rest = RestConnection({"ip": n.ip, "port": n.port,
                                      "username": self.servers[0].rest_username,
                                      "password": self.servers[0].rest_password})
-            results = ViewBaseTests._get_view_results(self, n_rest, bucket, view_name, num_of_docs,
+            results = ViewBaseTests._get_view_results(self, n_rest, bucket, view_name, num_docs,
                                              extra_params={"stale": False})
             time.sleep(5)
             doc_names_view = ViewBaseTests._get_doc_names(self, results)
@@ -879,14 +879,14 @@ class ViewBaseTests(unittest.TestCase):
     # possible fix is to the store prefix-id format in documentGenerator for retrieval by delete fn
     ###
     @staticmethod
-    def _load_complex_docs(self, num_of_docs, prefix, verify=True):
+    def _load_complex_docs(self, num_docs, prefix, verify=True):
         rest = RestConnection(self.servers[0])
         doc_names = []
         bucket = "default"
         smart = VBucketAwareMemcached(rest, bucket)
         kv_template = {"name": "user-${prefix}-${seed}-", "mail": "memcached-json-${prefix}-${padding}"}
         options = {"size": 256, "seed": prefix}
-        values = DocumentGenerator.make_docs(num_of_docs, kv_template, options)
+        values = DocumentGenerator.make_docs(num_docs, kv_template, options)
         for value in values:
             value = value.encode("ascii", "ignore")
             _json = json.loads(value, encoding="utf-8")
@@ -896,18 +896,18 @@ class ViewBaseTests(unittest.TestCase):
             smart.memcached(_id).set(_id, 0, 0, json.dumps(_json))
 #            print "id:", _id, "j:", json.dumps(_json)
             doc_names.append(_name)
-        self.log.info("inserted {0} json documents".format(num_of_docs))
+        self.log.info("inserted {0} json documents".format(num_docs))
         if verify:
             ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
         return doc_names
 
     @staticmethod
     # used to delete documents created by the DocumentGenerator class
-    def _delete_complex_docs(self, num_of_docs, num_of_deleted_docs, prefix):
+    def _delete_complex_docs(self, num_docs, num_of_deleted_docs, prefix):
         bucket = "default"
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
-        for i in range(0, num_of_docs):
+        for i in range(0, num_docs):
             key = doc_name = "{0}-{1}".format(i, prefix)
             if i < num_of_deleted_docs:
                 moxi.delete(key)
@@ -945,42 +945,42 @@ class ViewBasicTests(unittest.TestCase):
 
     def test_delete_10k_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_docs = 100000
+        num_docs = 100000
         num_of_deleted_docs = 10000
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, num_of_docs, prefix)
-        doc_names = ViewBaseTests._delete_docs(self, num_of_docs, num_of_deleted_docs, prefix)
+        ViewBaseTests._load_docs(self, num_docs, prefix)
+        doc_names = ViewBaseTests._delete_docs(self, num_docs, num_of_deleted_docs, prefix)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
     def test_readd_10k_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_docs = 100000
+        num_docs = 100000
         num_of_readd_docs = 10000
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, num_of_docs, prefix)
-        doc_names = ViewBaseTests._delete_docs(self, num_of_docs, num_of_readd_docs, prefix)
+        ViewBaseTests._load_docs(self, num_docs, prefix)
+        doc_names = ViewBaseTests._delete_docs(self, num_docs, num_of_readd_docs, prefix)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
-        doc_names = ViewBaseTests._update_docs(self, num_of_docs, num_of_readd_docs, prefix)
+        doc_names = ViewBaseTests._update_docs(self, num_docs, num_of_readd_docs, prefix)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
     def test_update_10k_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_docs = 100000
+        num_docs = 100000
         num_of_update_docs = 10000
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, num_of_docs, prefix)
-        self.log.info("loaded {0} docs".format(num_of_docs))
-        doc_names = ViewBaseTests._update_docs(self, num_of_docs, num_of_update_docs, prefix)
-        self.log.info("updated {0} docs out of {1} docs".format(num_of_update_docs, num_of_docs))
+        ViewBaseTests._load_docs(self, num_docs, prefix)
+        self.log.info("loaded {0} docs".format(num_docs))
+        doc_names = ViewBaseTests._update_docs(self, num_docs, num_of_update_docs, prefix)
+        self.log.info("updated {0} docs out of {1} docs".format(num_of_update_docs, num_docs))
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
     def test_invalid_view(self):
@@ -996,7 +996,7 @@ class ViewBasicTests(unittest.TestCase):
 #        self.created_views[view] = bucket
 
         # try to load some documents to see if memcached is running
-        ViewBaseTests._load_docs(self, self.num_of_docs, prefix, False)
+        ViewBaseTests._load_docs(self, self.num_docs, prefix, False)
 
     def test_create_multiple_development_view(self):
         self.log.info("description : create multiple views without running any view query")
@@ -1126,9 +1126,9 @@ class ViewRebalanceTests(unittest.TestCase):
         ViewBaseTests._begin_rebalance_out(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, self.num_of_docs, prefix)
+        ViewBaseTests._load_docs(self, self.num_docs, prefix)
         ViewBaseTests._begin_rebalance_in(self)
-        doc_names = ViewBaseTests._delete_docs(self, self.num_of_docs, num_of_deleted_docs, prefix)
+        doc_names = ViewBaseTests._delete_docs(self, self.num_docs, num_of_deleted_docs, prefix)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
@@ -1139,9 +1139,9 @@ class ViewRebalanceTests(unittest.TestCase):
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, self.num_of_docs, prefix)
+        ViewBaseTests._load_docs(self, self.num_docs, prefix)
         ViewBaseTests._begin_rebalance_out(self)
-        doc_names = ViewBaseTests._delete_docs(self, self.num_of_docs, num_of_deleted_docs, prefix)
+        doc_names = ViewBaseTests._delete_docs(self, self.num_docs, num_of_deleted_docs, prefix)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
