@@ -468,6 +468,7 @@ class ViewBaseTests(unittest.TestCase):
                     return results
                 else:
                     self.log.info("view returned empty results in {0} seconds".format(delta))
+                    time.sleep(5)
             except Exception as ex:
                 self.log.error("view_results not ready yet , try again in 5 seconds... , error {0}".format(ex))
                 time.sleep(5)
