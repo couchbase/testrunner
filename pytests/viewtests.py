@@ -456,9 +456,13 @@ class ViewBaseTests(unittest.TestCase):
                 params.update(extra_params)
                 if view.find("dev_") == 0:
                     params["full_set"] = True
+                self.log.info("Params {0}".format(params))
                 results = rest.view_results(bucket, view, params, limit)
+                if results.get(u'errors', []):
+                    self.fail("unable to get view_results for {0} due to error {1}".format(view, results.get(u'errors')))
+
                 delta = time.time() - start
-                if results:
+                if results.get(u'total_rows', 0) > 0:
                     self.log.info("view returned in {0} seconds".format(delta))
                     self.log.info("was able to get view results after trying {0} times".format((i + 1)))
                     return results
