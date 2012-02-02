@@ -1202,12 +1202,12 @@ class ViewFailoverTests(unittest.TestCase):
                 doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix)
                 view_names[prefix] = doc_names
 
-            id = failover_helper.failover(self.failover_factor)
+            failover_nodes = failover_helper.failover(self.failover_factor)
             self.log.info("10 seconds sleep after failover before invoking rebalance...")
             time.sleep(10)
             rest.rebalance(otpNodes=[node.id for node in nodes],
-                               ejectedNodes=[id])
-            msg = "rebalance failed while removing failover nodes {0}".format(id)
+                           ejectedNodes=[node.id for node in failover_nodes])
+            msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
 
             for key, value in view_names.items():

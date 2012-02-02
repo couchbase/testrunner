@@ -51,7 +51,7 @@ class FailoverHelper(object):
                                 msg="node status is not unhealthy even after waiting for 5 minutes")
                 self.test.assertTrue(rest.fail_over(f.id), msg="failover did not complete")
                 self.log.info("failed over node : {0}".format(f.id))
-        return f.id
+        return failed
 
 
     def _stop_server(self, node):
