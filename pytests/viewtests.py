@@ -1116,7 +1116,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_x_docs_rebalance_in(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs)
+        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs-1)
         # verify we are fully de-clustered
         ViewBaseTests._begin_rebalance_out(self)
         ViewBaseTests._end_rebalance(self)
@@ -1129,7 +1129,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_x_docs_rebalance_out(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs)
+        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs-1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
