@@ -367,7 +367,10 @@ class ViewBaseTests(unittest.TestCase):
         if results:
             rows = results["rows"]
             for row in rows:
-                key_set.append(row["key"].encode("ascii", "ignore"))
+                if(isinstance(row["key"], str)):
+                    key_set.append(row["key"].encode("ascii", "ignore"))
+                else:
+                    key_set.append(row["key"])
             self.log.info("key_set has {0} elements".format(len(key_set)))
         return key_set
 
@@ -715,7 +718,7 @@ class ViewBaseTests(unittest.TestCase):
         for i in range(0, num_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
             doc_names.append(doc_name)
-            value = {"name": doc_name, "age": 1000}
+            value = {"name": doc_name, "age": i}
             # loop till value is set
             fail_count = 0
             while True:
@@ -796,6 +799,23 @@ class ViewBaseTests(unittest.TestCase):
             doc_names_view = ViewBaseTests._get_doc_names(self, results)
         if sorted(doc_names_view) != sorted(doc_names):
             self.fail("returned doc names have different values than expected")
+    @staticmethod
+    def _delete_doc_range(self, prefix, start_index, end_index):
+        self.assertTrue(end_index >= start_index, "Requested to delete documents over an invalid range")
+
+        bucket = "default"
+        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        doc_names = []
+        delete_count = 0
+        for i in range(start_index, end_index):
+            key = doc_name = "{0}-{1}".format(prefix, i)
+            moxi.delete(key)
+            delete_count+=1
+        self.log.info("deleted {0} json documents".format(delete_count))
+        expected_delete_count = end_index - start_index
+        self.assertTrue(delete_count == (end_index - start_index),
+            "{0} docs deleted, expected {1}".format(delete_count, expected_delete_count))
+        return delete_count
 
     @staticmethod
     def _begin_rebalance_in(self):
@@ -1073,15 +1093,6 @@ class ViewBasicTests(unittest.TestCase):
         actual_key = keys[0]
         self.assertEquals(len(keys), 1)
         self.assertEquals(actual_key, doc_name)
-
-
-class ViewQueryTests(unittest.TestCase):
-
-    def setUp(self):
-        ViewBaseTests.common_setUp(self)
-
-    def tearDown(self):
-        ViewBaseTests.common_tearDown(self)
 
     def test_get_view_during_1_min_load_10k_working_set(self):
         ViewBaseTests._test_load_data_get_view_x_mins(self, 1, 10000, 0)
