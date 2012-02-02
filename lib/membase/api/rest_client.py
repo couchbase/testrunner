@@ -298,8 +298,11 @@ class RestConnection(object):
 
     # type_ is "view" or "spatial"
     def _index_results(self, bucket, type_, name, params, limit, timeout=120):
-        query = 'couchBase/{0}/_design/{1}/_{2}/{3}'
-        api = self.baseUrl + query.format(bucket, name, type_, name)
+        if type_ == 'all_docs':
+            api = self.baseUrl + 'couchBase/{0}/_all_docs'.format(bucket)
+        else:
+            query = 'couchBase/{0}/_design/{1}/_{2}/{3}'
+            api = self.baseUrl + query.format(bucket, name, type_, name)
 
         num_params = 0
         if limit != None:
@@ -323,6 +326,14 @@ class RestConnection(object):
 
         return status, json_parsed
 
+    def all_docs(self, bucket, params={}, limit=None):
+        status, json = self._index_results(bucket, 'all_docs', '', params,
+                                           limit)
+
+        if not status:
+            raise Exception("unable to obtain all docs")
+
+        return json
 
     def _create_design_doc(self, bucket, name, function):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, name)
