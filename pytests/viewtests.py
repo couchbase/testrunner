@@ -71,6 +71,8 @@ class ViewBaseTests(unittest.TestCase):
             except:
                 pass
             for server in self.servers:
+                if server.port != 8091:
+                    continue
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_membase_installed():
                     shell.start_membase()
@@ -146,7 +148,7 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
@@ -193,7 +195,7 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         reduce_fn = "_count"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn, reduce_fn)
@@ -247,7 +249,7 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, age);}}"
         reduce_fn = "_sum"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn, reduce_fn)
@@ -297,7 +299,7 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
@@ -450,8 +452,9 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}):
+        num_tries = ViewBaseTests.parami('num_tries', 20)
         #if view name starts with "dev" then we should append the full_set
-        for i in range(0, 4):
+        for i in range(0, num_tries):
             try:
                 start = time.time()
                 #full_set=true&connection_timeout=60000&limit=10&skip=0
@@ -504,7 +507,7 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
@@ -612,7 +615,7 @@ class ViewBaseTests(unittest.TestCase):
             ViewBaseTests._setup_cluster(self)
         self.log.info("sleeping for 5 seconds")
         time.sleep(5)
-        view_name = "dev_test_view_on_10k_docs-{0}".format(str(uuid.uuid4())[:7])
+        view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         prefix = str(uuid.uuid4())[:7]
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
@@ -954,53 +957,44 @@ class ViewBasicTests(unittest.TestCase):
     def tearDown(self):
         ViewBaseTests.common_tearDown(self)
 
-    def test_view_on_100_docs(self):
-        ViewBaseTests._test_view_on_multiple_docs(self, 100)
+    def test_view_on_x_docs(self):
+        ViewBaseTests._test_view_on_multiple_docs(self, self.num_docs)
 
-    def test_view_on_10k_docs(self):
-        ViewBaseTests._test_view_on_multiple_docs(self, 10000)
-
-    def test_view_on_100k_docs(self):
-        ViewBaseTests._test_view_on_multiple_docs(self, 100000)
-
-    def test_delete_10k_docs(self):
+    def test_delete_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_docs = 100000
-        num_of_deleted_docs = 10000
+        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs-1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, num_docs, prefix)
-        doc_names = ViewBaseTests._delete_docs(self, num_docs, num_of_deleted_docs, prefix)
+        ViewBaseTests._load_docs(self, self.num_docs, prefix)
+        doc_names = ViewBaseTests._delete_docs(self, self.num_docs, num_of_deleted_docs, prefix)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
-    def test_readd_10k_docs(self):
+    def test_readd_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_docs = 100000
-        num_of_readd_docs = 10000
+        num_of_readd_docs = ViewBaseTests.parami('num-readd-docs', self.num_docs-1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, num_docs, prefix)
-        doc_names = ViewBaseTests._delete_docs(self, num_docs, num_of_readd_docs, prefix)
+        ViewBaseTests._load_docs(self, self.num_docs, prefix)
+        doc_names = ViewBaseTests._delete_docs(self, self.num_docs, num_of_readd_docs, prefix)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
-        doc_names = ViewBaseTests._update_docs(self, num_docs, num_of_readd_docs, prefix)
+        doc_names = ViewBaseTests._update_docs(self, self.num_docs, num_of_readd_docs, prefix)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
-    def test_update_10k_docs(self):
+    def test_update_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_docs = 100000
-        num_of_update_docs = 10000
+        num_of_update_docs = ViewBaseTests.parami('num-update-docs', self.num_docs-1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
-        ViewBaseTests._load_docs(self, num_docs, prefix)
-        self.log.info("loaded {0} docs".format(num_docs))
-        doc_names = ViewBaseTests._update_docs(self, num_docs, num_of_update_docs, prefix)
-        self.log.info("updated {0} docs out of {1} docs".format(num_of_update_docs, num_docs))
+        ViewBaseTests._load_docs(self, self.num_docs, prefix)
+        self.log.info("loaded {0} docs".format(self.num_docs))
+        doc_names = ViewBaseTests._update_docs(self, self.num_docs, num_of_update_docs, prefix)
+        self.log.info("updated {0} docs out of {1} docs".format(num_of_update_docs, self.num_docs))
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
     def test_invalid_view(self):
@@ -1024,8 +1018,9 @@ class ViewBasicTests(unittest.TestCase):
         rest = RestConnection(master)
         prefix = str(uuid.uuid4())
         bucket = "default"
+        num_views = ViewBaseTests.parami('num-views', 5)
+        view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
 
-        view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, 5)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, doc);}"
             function = ViewBaseTests._create_function(self, rest, bucket, view, map_fn)
@@ -1037,8 +1032,8 @@ class ViewBasicTests(unittest.TestCase):
             self.log.info(response)
             #            self._verify_views_replicated(bucket, view, map_fn)
 
-    def test_view_on_20k_docs_20_design_docs(self):
-        ViewBaseTests._test_view_on_multiple_docs_multiple_design_docs(self, 20000, 20)
+    def test_view_on_x_docs_y_design_docs(self):
+        ViewBaseTests._test_view_on_multiple_docs_multiple_design_docs(self, self.num_docs, self.num_design_docs)
 
     def test_update_multiple_development_view(self):
         self.log.info("description : create multiple views without running any view query")
@@ -1046,8 +1041,8 @@ class ViewBasicTests(unittest.TestCase):
         rest = RestConnection(master)
         prefix = str(uuid.uuid4())
         bucket = "default"
-
-        view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, 5)]
+        num_views = ViewBaseTests.parami('num-views', 5)
+        view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, doc);}"
             function = ViewBaseTests._create_function(self, rest, bucket, view, map_fn)
@@ -1059,7 +1054,7 @@ class ViewBasicTests(unittest.TestCase):
             self.assertEquals(response["views"][view]["map"].encode("ascii", "ignore"), map_fn)
             #now let's update all those views ?
 
-        view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, 5)]
+        view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, null);}"
             function = ViewBaseTests._create_function(self, rest, bucket, view, map_fn)
@@ -1094,32 +1089,21 @@ class ViewBasicTests(unittest.TestCase):
         self.assertEquals(len(keys), 1)
         self.assertEquals(actual_key, doc_name)
 
-    def test_get_view_during_1_min_load_10k_working_set(self):
-        ViewBaseTests._test_load_data_get_view_x_mins(self, 1, 10000, 0)
+    def test_get_view_during_x_min_load_y_working_set(self):
+        load_time = ViewBaseTests.parami('load-time', 1)
+        run_view_time = ViewBaseTests.parami('run-view-time', 0)
+        ViewBaseTests._test_load_data_get_view_x_mins(self, load_time, self.num_docs, run_view_time)
 
-    def test_get_view_during_1_min_load_100k_working_set(self):
-        ViewBaseTests._test_load_data_get_view_x_mins(self, 1, 100000, 0)
-
-    def test_get_view_during_5_min_load_10k_working_set(self):
-        ViewBaseTests._test_load_data_get_view_x_mins(self, 5, 1000, 0)
-
-    def test_get_view_during_5_min_load_100k_working_set(self):
-        ViewBaseTests._test_load_data_get_view_x_mins(self, 5, 100000, 0)
-
-    def test_get_view_during_30_min_load_100k_working_set(self):
-        ViewBaseTests._test_load_data_get_view_x_mins(self, 30, 100000, 0)
-
-    def test_get_view_during_10_min_load_10k_working_set_1_min_after_load(self):
-        ViewBaseTests._test_load_data_get_view_x_mins(self, 10, 1000, 1)
-
-    def test_count_sum_10k_docs(self):
-        ViewBaseTests._test_sum_reduce_multiple_docs(self, 10000)
+    def test_count_sum_x_docs(self):
+        ViewBaseTests._test_sum_reduce_multiple_docs(self, self.num_docs)
 
     def test_count_reduce_x_docs(self):
         ViewBaseTests._test_count_reduce_multiple_docs(self, self.num_docs)
 
-    def test_load_data_get_view_2_mins_20_design_docs(self):
-        ViewBaseTests._test_load_data_get_view_x_mins_multiple_design_docs(self, 2, self.num_docs, 2, 20)
+    def test_load_data_get_view_x_mins_y_design_docs(self):
+        load_time = ViewBaseTests.parami('load-time', 1)
+        run_view_time = ViewBaseTests.parami('run-view-time', 0)
+        ViewBaseTests._test_load_data_get_view_x_mins_multiple_design_docs(self, load_time, self.num_docs, run_view_time, self.num_design_docs)
 
 
 class ViewRebalanceTests(unittest.TestCase):
@@ -1130,9 +1114,9 @@ class ViewRebalanceTests(unittest.TestCase):
     def tearDown(self):
         ViewBaseTests.common_tearDown(self)
 
-    def test_delete_10k_docs_rebalance_in(self):
+    def test_delete_x_docs_rebalance_in(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = 10000
+        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs)
         # verify we are fully de-clustered
         ViewBaseTests._begin_rebalance_out(self)
         ViewBaseTests._end_rebalance(self)
@@ -1143,9 +1127,9 @@ class ViewRebalanceTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
-    def test_delete_10k_docs_rebalance_out(self):
+    def test_delete_x_docs_rebalance_out(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = 10000
+        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -1228,7 +1212,6 @@ class ViewFailoverTests(unittest.TestCase):
             for key, value in view_names.items():
                 ViewBaseTests._verify_docs_doc_name(self, value, key)
 
-
 class ViewMultipleNodeTests(unittest.TestCase):
 
     def setUp(self):
@@ -1237,17 +1220,13 @@ class ViewMultipleNodeTests(unittest.TestCase):
     def tearDown(self):
         ViewBaseTests.common_tearDown(self)
 
-    def test_compare_views_all_nodes_100k(self):
-        ViewBaseTests._test_compare_views_all_nodes(self, 10000)
+    def test_compare_views_all_nodes(self):
+        ViewBaseTests._test_compare_views_all_nodes(self, self.num_docs)
 
-    def test_view_on_5k_docs_multiple_nodes(self):
+    def test_view_on_x_docs_multiple_nodes(self):
         ViewBaseTests._setup_cluster(self)
-        ViewBaseTests._test_view_on_multiple_docs(self, 5000)
+        ViewBaseTests._test_view_on_multiple_docs(self, self.num_docs)
 
-    def test_update_view_on_5k_docs_multiple_nodes(self):
+    def test_update_view_on_x_docs_multiple_nodes(self):
         ViewBaseTests._setup_cluster(self)
-        ViewBaseTests._test_update_view_on_multiple_docs(self, 5000)
-
-    def test_view_on_10k_docs_multiple_nodes(self):
-        ViewBaseTests._setup_cluster(self)
-        ViewBaseTests._test_view_on_multiple_docs(self, 10000)
+        ViewBaseTests._test_update_view_on_multiple_docs(self, self.num_docs)
