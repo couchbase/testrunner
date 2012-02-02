@@ -369,10 +369,7 @@ class ViewBaseTests(unittest.TestCase):
         if results:
             rows = results["rows"]
             for row in rows:
-                if(isinstance(row["key"], str)):
-                    key_set.append(row["key"].encode("ascii", "ignore"))
-                else:
-                    key_set.append(row["key"])
+                key_set.append(row["key"].encode("ascii", "ignore"))
             self.log.info("key_set has {0} elements".format(len(key_set)))
         return key_set
 
@@ -749,7 +746,8 @@ class ViewBaseTests(unittest.TestCase):
                                                     'ep_uncommitted_items', 0)
         self.log.info("inserted {0} json documents".format(num_docs))
         if verify:
-            ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
+            ViewBaseTests._verify_keys(self, doc_names, prefix)
+
         return doc_names
 
     @staticmethod
@@ -785,6 +783,20 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("deleted {0} json documents".format(num_of_deleted_docs))
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
         return doc_names
+
+    @staticmethod
+    def _verify_keys(self, doc_names, prefix):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        bucket = "default"
+
+        results = rest.all_docs(bucket)
+        result_keys = ViewBaseTests._get_keys(self, results)
+
+        # result_keys also contains the design document, but this doesn't
+        # matter if we compare like this
+        if set(doc_names) - set(result_keys):
+            self.fail("returned doc names have different values than expected")
 
     @staticmethod
     def _verify_docs_doc_name(self, doc_names, prefix):
