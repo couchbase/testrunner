@@ -711,7 +711,8 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _load_docs(self, num_docs, prefix, verify=True):
-        rest = RestConnection(self.servers[0])
+        master = self.servers[0]
+        rest = RestConnection(master)
         command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [moxi], 20000)]."
         moxis_restarted = rest.diag_eval(command)
         #wait until memcached starts
@@ -740,6 +741,12 @@ class ViewBaseTests(unittest.TestCase):
                             time.sleep(1)
                     else:
                         raise e
+        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket,
+                                                    'ep_queue_size', 0)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket,
+                                                    'ep_flusher_todo', 0)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket,
+                                                    'ep_uncommitted_items', 0)
         self.log.info("inserted {0} json documents".format(num_docs))
         if verify:
             ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
