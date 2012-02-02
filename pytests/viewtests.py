@@ -453,6 +453,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}):
         num_tries = ViewBaseTests.parami('num_tries', 20)
+        timeout = ViewBaseTests.parami('timeout', 10)
         #if view name starts with "dev" then we should append the full_set
         for i in range(0, num_tries):
             try:
@@ -473,11 +474,11 @@ class ViewBaseTests(unittest.TestCase):
                     self.log.info("was able to get view results after trying {0} times".format((i + 1)))
                     return results
                 else:
-                    self.log.info("view returned empty results in {0} seconds".format(delta))
-                    time.sleep(5)
+                    self.log.info("view returned empty results in {0} seconds, sleeping for {1}".format(delta, timeout))
+                    time.sleep(timeout)
             except Exception as ex:
-                self.log.error("view_results not ready yet , try again in 5 seconds... , error {0}".format(ex))
-                time.sleep(5)
+                self.log.error("view_results not ready yet , try again in {1} seconds... , error {0}".format(ex, timeout))
+                time.sleep(timeout)
         self.fail("unable to get view_results for {0} after 4 tries".format(view))
 
     @staticmethod
