@@ -111,12 +111,12 @@ class ViewBaseTests(unittest.TestCase):
                         msg="unable to create {0} bucket".format(name))
 
     @staticmethod
-    def _test_view_on_multiple_docs_multiple_design_docs(self, num_docs, num_of_design_docs):
+    def _test_view_on_multiple_docs_multiple_design_docs(self, num_docs, num_of_design_docs, params={}):
         self._view_test_threads = []
         for i in range(0, num_of_design_docs):
             thread_result = []
             t = Thread(target=ViewBaseTests._test_view_on_multiple_docs_thread_wrapper,
-                       name="test_view_on_multiple_docs_multiple_design_docs", args=(self, num_docs, thread_result))
+                       name="test_view_on_multiple_docs_multiple_design_docs", args=(self, num_docs, thread_result, params))
             t.start()
             self._view_test_threads.append((t, thread_result))
         for (t, r) in self._view_test_threads:
@@ -127,10 +127,10 @@ class ViewBaseTests(unittest.TestCase):
             if len(r) > 0:
                 asserts.append(r[0])
                 self.log.error("view thread failed : {0}".format(r[0]))
-        self.fail("one of multiple threads failed. look at the logs for more specific errors")
+                self.fail("one of multiple threads failed. look at the logs for more specific errors")
 
     @staticmethod
-    def _test_view_on_multiple_docs(self, num_docs):
+    def _test_view_on_multiple_docs(self, num_docs, params={"stale":"update_after"}):
         self.log.info("description : create a view on 10 thousand documents")
         master = self.servers[0]
         rest = RestConnection(master)
@@ -151,7 +151,7 @@ class ViewBaseTests(unittest.TestCase):
             moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(len(doc_names)))
         time.sleep(5)
-        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names),extra_params={"stale":"update_after"})
+        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         keys = ViewBaseTests._get_keys(self, results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
@@ -274,9 +274,9 @@ class ViewBaseTests(unittest.TestCase):
         self.assertEquals(value, num_docs)
 
     @staticmethod
-    def _test_view_on_multiple_docs_thread_wrapper(self, num_docs, failures):
+    def _test_view_on_multiple_docs_thread_wrapper(self, num_docs, failures, params={}):
         try:
-            ViewBaseTests._test_view_on_multiple_docs(self, num_docs)
+            ViewBaseTests._test_view_on_multiple_docs(self, num_docs, params)
         except Exception as ex:
             failures.append(ex)
 
@@ -1237,3 +1237,15 @@ class ViewMultipleNodeTests(unittest.TestCase):
     def test_update_view_on_x_docs_multiple_nodes(self):
         ViewBaseTests._setup_cluster(self)
         ViewBaseTests._test_update_view_on_multiple_docs(self, self.num_docs)
+
+class ViewPerformanceTests(unittest.TestCase):
+
+    def setUp(self):
+        ViewBaseTests.common_setUp(self)
+
+    def tearDown(self):
+        ViewBaseTests.common_tearDown(self)
+
+    def test_latency(self):
+        ViewBaseTests._test_view_on_multiple_docs_multiple_design_docs(self, self.num_docs, self.num_design_docs, \
+                                                                       params={"stale":"false", "debug" : "true" })
