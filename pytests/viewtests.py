@@ -23,13 +23,13 @@ class ViewBaseTests(unittest.TestCase):
     def common_setUp(self):
         self.log = logger.Logger.get_logger()
         self.servers = TestInputSingleton.input.servers
-        self.params = TestInputSingleton.input.test_params
+        self.input = TestInputSingleton.input
         self.created_views = {}
-        self.replica  = ViewBaseTests.parami("replica", 1)
-        self.failover_factor = ViewBaseTests.parami("failover-factor", 1)
-        self.num_docs = ViewBaseTests.parami("num-docs", 10000)
-        self.num_design_docs = ViewBaseTests.parami("num-design-docs", 20)
-        self.expiry_ratio = ViewBaseTests.paramf("expiry-ratio", 0.1)
+        self.replica  = self.input.param("replica", 1)
+        self.failover_factor = self.input.param("failover-factor", 1)
+        self.num_docs = self.input.param("num-docs", 10000)
+        self.num_design_docs = self.input.param("num-design-docs", 20)
+        self.expiry_ratio = self.input.param("expiry-ratio", 0.1)
 
         # Clear the state from Previous invalid run
         ViewBaseTests.common_tearDown(self)
@@ -44,23 +44,10 @@ class ViewBaseTests(unittest.TestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([master], self)
         ViewBaseTests._create_default_bucket(self, replica=self.replica)
         ViewBaseTests._log_start(self)
-        db_compaction  = ViewBaseTests.parami("db_compaction", 30)
-        view_compaction  = ViewBaseTests.parami("view_compaction", 30)
+        db_compaction = self.input.param("db_compaction", 30)
+        view_compaction = self.input.param("view_compaction", 30)
         rest.reset_auto_compaction(dbFragmentThreshold = db_compaction,
                               viewFragmntThreshold = view_compaction)
-
-    @staticmethod
-    def param(name, default_value):
-        input = getattr(ViewBaseTests, "input", TestInputSingleton.input)
-        return input.test_params.get(name, default_value)
-
-    @staticmethod
-    def parami(name, default_int):
-        return int(ViewBaseTests.param(name, default_int))
-
-    @staticmethod
-    def paramf(name, default_float):
-        return float(ViewBaseTests.param(name, default_float))
 
     @staticmethod
     def common_tearDown(self):
@@ -449,8 +436,8 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}):
-        num_tries = ViewBaseTests.parami('num_tries', 20)
-        timeout = ViewBaseTests.parami('timeout', 10)
+        num_tries = self.input.param('num_tries', 20)
+        timeout = self.input.param('timeout', 10)
         #if view name starts with "dev" then we should append the full_set
         for i in range(0, num_tries):
             try:
@@ -982,7 +969,7 @@ class ViewBasicTests(unittest.TestCase):
 
     def test_delete_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs-1)
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -993,7 +980,7 @@ class ViewBasicTests(unittest.TestCase):
 
     def test_readd_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_readd_docs = ViewBaseTests.parami('num-readd-docs', self.num_docs-1)
+        num_of_readd_docs = self.input.param('num-readd-docs', self.num_docs-1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -1006,7 +993,7 @@ class ViewBasicTests(unittest.TestCase):
 
     def test_update_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_update_docs = ViewBaseTests.parami('num-update-docs', self.num_docs-1)
+        num_of_update_docs = self.input.param('num-update-docs', self.num_docs-1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -1038,7 +1025,7 @@ class ViewBasicTests(unittest.TestCase):
         rest = RestConnection(master)
         prefix = str(uuid.uuid4())
         bucket = "default"
-        num_views = ViewBaseTests.parami('num-views', 5)
+        num_views = self.input.param('num-views', 5)
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
 
         for view in view_names:
@@ -1061,7 +1048,7 @@ class ViewBasicTests(unittest.TestCase):
         rest = RestConnection(master)
         prefix = str(uuid.uuid4())
         bucket = "default"
-        num_views = ViewBaseTests.parami('num-views', 5)
+        num_views = self.input.param('num-views', 5)
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, doc);}"
@@ -1110,8 +1097,8 @@ class ViewBasicTests(unittest.TestCase):
         self.assertEquals(actual_key, doc_name)
 
     def test_get_view_during_x_min_load_y_working_set(self):
-        load_time = ViewBaseTests.parami('load-time', 1)
-        run_view_time = ViewBaseTests.parami('run-view-time', 0)
+        load_time = self.input.param('load-time', 1)
+        run_view_time = self.input.param('run-view-time', 0)
         ViewBaseTests._test_load_data_get_view_x_mins(self, load_time, self.num_docs, run_view_time)
 
     def test_count_sum_x_docs(self):
@@ -1121,8 +1108,8 @@ class ViewBasicTests(unittest.TestCase):
         ViewBaseTests._test_count_reduce_multiple_docs(self, self.num_docs)
 
     def test_load_data_get_view_x_mins_y_design_docs(self):
-        load_time = ViewBaseTests.parami('load-time', 1)
-        run_view_time = ViewBaseTests.parami('run-view-time', 0)
+        load_time = self.input.param('load-time', 1)
+        run_view_time = self.input.param('run-view-time', 0)
         ViewBaseTests._test_load_data_get_view_x_mins_multiple_design_docs(self, load_time, self.num_docs, run_view_time, self.num_design_docs)
 
 
@@ -1136,7 +1123,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_x_docs_rebalance_in(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs-1)
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
         # verify we are fully de-clustered
         ViewBaseTests._begin_rebalance_out(self)
         ViewBaseTests._end_rebalance(self)
@@ -1149,7 +1136,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_x_docs_rebalance_out(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = ViewBaseTests.parami('num-deleted-docs', self.num_docs-1)
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)

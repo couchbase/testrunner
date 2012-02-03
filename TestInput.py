@@ -26,6 +26,22 @@ class TestInput(object):
         self.test_params = {}
         #servers , each server can have u,p,port,directory
 
+    def param(self, name, default_value):
+        if name in self.test_params:
+            return TestInput._parse_param(self.test_params[name])
+        else:
+            return default_value
+
+    @staticmethod
+    def _parse_param(value):
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                return float(value)
+            except ValueError:
+                return value
+
 
 class TestInputServer(object):
     def __init__(self):
