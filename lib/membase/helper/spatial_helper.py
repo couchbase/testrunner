@@ -111,12 +111,7 @@ class SpatialHelper:
                     else:
                         raise e
         if wait_for_persistence:
-            RebalanceHelper.wait_for_mc_stats_all_nodes(
-                self.master, self.bucket, "ep_queue_size", 0)
-            RebalanceHelper.wait_for_mc_stats_all_nodes(
-                self.master, self.bucket, "ep_flusher_todo", 0)
-            RebalanceHelper.wait_for_mc_stats_all_nodes(
-                self.master, self.bucket, "ep_uncommitted_items", 0)
+            self.wait_for_persistence()
         self.log.info("inserted {0} json documents".format(num_of_docs))
         return doc_names
 
@@ -136,13 +131,8 @@ class SpatialHelper:
                 else:
                     raise
             doc_names.append(key)
-        # Make sure the data is persisted
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
-            self.master, self.bucket, "ep_queue_size", 0)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
-            self.master, self.bucket, "ep_flusher_todo", 0)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
-            self.master, self.bucket, "ep_uncommitted_items", 0)
+
+        self.wait_for_persistence(180)
 
         self.log.info("deleted {0} json documents".format(len(doc_names)))
         return doc_names
@@ -318,3 +308,14 @@ class SpatialHelper:
         for i in range(0, how_many):
             self.log.error("did not find key {0} in the spatial view results"
                            .format(keys_not_found[i]))
+
+    def wait_for_persistence(self, timeout=120):
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            self.master, self.bucket, "ep_queue_size", 0,
+            timeout_in_seconds=timeout)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            self.master, self.bucket, "ep_flusher_todo", 0,
+            timeout_in_seconds=timeout)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            self.master, self.bucket, "ep_uncommitted_items", 0,
+            timeout_in_seconds=timeout)
