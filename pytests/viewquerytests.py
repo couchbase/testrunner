@@ -23,7 +23,7 @@ class ViewQueryTests(unittest.TestCase):
     def test_query_range(self):
 
         # create view with age as key in map function
-        self.view_spec['fn_str'] = 'function (doc) {if(doc.age) { emit(doc.age, doc);}}'
+        self.view_spec['fn_str'] = 'function (doc) {if(doc.age != null) { emit(doc.age, doc);}}'
         self._create_view_from_spec(self.view_spec)
 
         # load some docs
