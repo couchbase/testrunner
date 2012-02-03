@@ -56,7 +56,7 @@ class ViewQueryTests(unittest.TestCase):
         rest = self._rconn()
         prefix = self.view_prefix
         num_docs = self.num_docs
-        num_of_doc_to_delete = ViewBaseTests.parami("docs-to-delete", 9000)
+        num_of_doc_to_delete = self.input.param("docs-to-delete", 9000)
         view_name = "dev_test_view-{0}".format(prefix)
         query_spec = self.add_stale_queries([])
 
