@@ -316,7 +316,7 @@ class RestConnection(object):
             else:
                 api += "{0}={1}".format(param, params[param])
 
-        log.debug("index query url: {0}".format(api))
+        log.info("index query url: {0}".format(api))
         status, content = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
 
         json_parsed = json.loads(content)

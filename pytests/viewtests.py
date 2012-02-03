@@ -196,7 +196,7 @@ class ViewBaseTests(unittest.TestCase):
         rest = RestConnection(master)
         bucket = "default"
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
-        map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
+        map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc.age);}}"
         reduce_fn = "_count"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn, reduce_fn)
         rest.create_view(bucket, view_name, function)
@@ -208,7 +208,7 @@ class ViewBaseTests(unittest.TestCase):
         for i in range(0, num_docs):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
-            value = {"name": doc_name, "age": 1000}
+            value = {"name": doc_name, "age": i}
             moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_docs))
         #        self._verify_views_replicated(bucket, view_name, map_fn)
@@ -250,7 +250,7 @@ class ViewBaseTests(unittest.TestCase):
         rest = RestConnection(master)
         bucket = "default"
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
-        map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, age);}}"
+        map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc.age);}}"
         reduce_fn = "_sum"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn, reduce_fn)
         rest.create_view(bucket, view_name, function)
@@ -469,7 +469,7 @@ class ViewBaseTests(unittest.TestCase):
                     self.fail("unable to get view_results for {0} due to error {1}".format(view, results.get(u'errors')))
 
                 delta = time.time() - start
-                if results.get(u'total_rows', 0) > 0:
+                if results.get(u'rows', []) or results.get(u'total_rows', 0) > 0:
                     self.log.info("view returned in {0} seconds".format(delta))
                     self.log.info("was able to get view results after trying {0} times".format((i + 1)))
                     return results
