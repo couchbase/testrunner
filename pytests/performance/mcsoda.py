@@ -635,13 +635,17 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                                  str(len(recvBuf)) + "): " + recvBuf)
            cmds = s_cmds[server]
            for i in range(cmds):
-              rcmd, keylen, extralen, errcode, datalen, ropaque, val, recvBuf = \
-                  self.recvMsgSockBuf(conn.s, recvBuf)
-              if errcode == ERR_NOT_MY_VBUCKET:
+              try:
+                 rcmd, keylen, extralen, errcode, datalen, ropaque, val, recvBuf = \
+                     self.recvMsgSockBuf(conn.s, recvBuf)
+                 if errcode == ERR_NOT_MY_VBUCKET:
+                    reset_my_awareness = True
+                 elif errcode == ERR_ENOMEM or \
+                      errcode == ERR_EBUSY or \
+                      errcode == ERR_ETMPFAIL:
+                    backoff = True
+              except:
                  reset_my_awareness = True
-              elif errcode == ERR_ENOMEM or \
-                   errcode == ERR_EBUSY or \
-                   errcode == ERR_ETMPFAIL:
                  backoff = True
            conn.recvBuf = recvBuf
         if backoff:
