@@ -264,14 +264,14 @@ class ViewBaseTests(unittest.TestCase):
         attempt = 0
         delay = 10
         while attempt < 6 and value != num_docs:
-            msg = "view returned {0} items , expected to return {1} items"
-            self.log.info(msg.format(value, len(doc_names)))
+            msg = "view returned {0} value , expected to return sum {1}"
+            self.log.info(msg.format(value, sum))
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(10)
             attempt += 1
             results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
             value = ViewBaseTests._get_built_in_reduce_results(self, results)
-        self.assertEquals(value, num_docs)
+        self.assertEquals(value, sum)
 
     @staticmethod
     def _test_view_on_multiple_docs_thread_wrapper(self, num_docs, failures, params={}):
