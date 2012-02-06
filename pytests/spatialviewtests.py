@@ -38,142 +38,78 @@ class SpatialViewTests(unittest.TestCase):
                               "_design/{0}".format(design_name))
             self.log.info(response)
 
-    def test_insert_100_docs_full_verification(self):
-        self._test_insert_docs_full_verification(100)
 
-    def test_insert_10k_docs_full_verification(self):
-        self._test_insert_docs_full_verification(10000)
-
-    def test_insert_100k_docs_full_verification(self):
-        self._test_insert_docs_full_verification(100000)
-
-    # This test fails, but works when time.sleep(1) is added after the
-    # self.helper.insert_docs() call
-    def test_insert_100_docs(self):
-        self._test_insert_docs(100)
-
-    def test_insert_10k_docs(self):
-        self._test_insert_docs(10000)
-
-    def test_insert_100k_docs(self):
-        self._test_insert_docs(100000)
-
-
-    # Average case
-    def test_insert_15k_delete_10k_docs(self):
-        self._test_delete_docs(15000, 10000)
-
-    # Delete all docs
-    def test_insert_15k_delete_15k_docs(self):
-        self._test_delete_docs(15000, 15000)
-
-    # Delete almost all docs, should lead to a view empty vBuckets
-    def test_insert_15k_delete_14980_docs(self):
-        self._test_delete_docs(15000, 14980)
-
-    # Delete more docs than there are (leads to deleting documents
-    # that doesn't exist)
-    def test_insert_10k_delete_12k_docs(self):
-        self._test_delete_docs(10000, 12000)
-
-
-    # Average case
-    def test_insert_15k_update_100_docs(self):
-        self._test_update_docs(15000, 100)
-
-    # Update large number of docs
-    def test_insert_15k_update_12k_docs(self):
-        self._test_update_docs(15000, 12000)
-
-    # Update all docs
-    def test_insert_15k_update_15k_docs(self):
-        self._test_update_docs(15000, 15000)
-
-    # This test needs at least a 4 nodes cluster
-    def test_view_10k_docs_failover(self):
-        self._test_failover(10000)
-
-
-    def test_get_spatial_during_1_min_load_10k_working_set(self):
-        self._test_insert_and_get_spatial_x_mins(1, 10000)
-
-    def test_get_spatial_during_1_min_load_100k_working_set(self):
-        self._test_insert_and_get_spatial_x_mins(1, 100000)
-
-    def test_get_spatial_during_5_min_load_10k_working_set(self):
-        self._test_insert_and_get_spatial_x_mins(5, 10000)
-
-    def test_get_spatial_during_5_min_load_100k_working_set(self):
-        self._test_insert_and_get_spatial_x_mins(5, 100000)
-
-    def test_get_spatial_during_30_min_load_100k_working_set(self):
-        self._test_insert_and_get_spatial_x_mins(30, 100000)
-
-
-    def _test_insert_docs(self, num_of_docs):
+    def test_insert_x_docs(self):
+        num_docs = self.helper.input.param("num-docs", 100)
         self.log.info("description : create a spatial view on {0} documents"\
-                          .format(num_of_docs))
-        design_name = "dev_test_insert_docs_{0}"\
-            .format(num_of_docs)
+                          .format(num_docs))
+        design_name = "dev_test_insert_{0}_docs".format(num_docs)
         prefix = str(uuid.uuid4())[:7]
 
-        inserted_keys = self._setup_index(design_name, num_of_docs, prefix)
-        self.assertEqual(len(inserted_keys), num_of_docs)
+        inserted_keys = self._setup_index(design_name, num_docs, prefix)
+        self.assertEqual(len(inserted_keys), num_docs)
 
 
     # Does verify the full docs and not only the keys
-    def _test_insert_docs_full_verification(self, num_of_docs):
-        self.log.info("description : create a spatial view on {0} documents"\
-                          .format(num_of_docs))
-        design_name = "dev_test_insert_docs_{0}"\
-            .format(num_of_docs)
+    def test_insert_x_docs_full_verification(self):
+        num_docs = self.helper.input.param("num-docs", 100)
+        self.log.info("description : create a spatial view with {0} docs"
+                      " and verify the full documents".format(num_docs))
+        design_name = "dev_test_insert_{0}_docs_full_verification"\
+            .format(num_docs)
         prefix = str(uuid.uuid4())[:7]
 
         self.helper.create_index_fun(design_name)
-        inserted_docs = self.helper.insert_docs(num_of_docs, prefix,
+        inserted_docs = self.helper.insert_docs(num_docs, prefix,
                                                 return_docs=True)
         self.helper.query_index_for_verification(design_name, inserted_docs,
                                                  full_docs=True)
 
 
-    def _test_delete_docs(self, num_of_docs, num_of_deleted_docs):
+    def test_insert_x_delete_y_docs(self):
+        num_docs = self.helper.input.param("num-docs", 15000)
+        num_deleted_docs = self.helper.input.param("num-deleted-docs", 10000)
         self.log.info("description : create spatial view with {0} docs "
-                      " and delete {1} docs".format(num_of_docs,
-                                                    num_of_deleted_docs))
+                      " and delete {1} docs".format(num_docs,
+                                                    num_deleted_docs))
         design_name = "dev_test_insert_{0}_delete_{1}_docs"\
-            .format(num_of_docs, num_of_deleted_docs)
+            .format(num_docs, num_deleted_docs)
         prefix = str(uuid.uuid4())[:7]
 
-        inserted_keys = self._setup_index(design_name, num_of_docs, prefix)
+        inserted_keys = self._setup_index(design_name, num_docs, prefix)
 
         # Delete documents and very that the documents got deleted
-        deleted_keys = self.helper.delete_docs(num_of_deleted_docs, prefix)
-        results = self.helper.get_results(design_name, 2*num_of_docs)
+        deleted_keys = self.helper.delete_docs(num_deleted_docs, prefix)
+        results = self.helper.get_results(design_name, 2*num_docs)
         result_keys = self.helper.get_keys(results)
-        self.assertEqual(len(result_keys), num_of_docs-len(deleted_keys))
+        self.assertEqual(len(result_keys), num_docs-len(deleted_keys))
         self.helper.verify_result(inserted_keys, deleted_keys + result_keys)
 
 
-    def _test_update_docs(self, num_of_docs, num_of_updated_docs):
+    def test_insert_x_update_y_docs(self):
+        num_docs = self.helper.input.param("num-docs", 15000)
+        num_updated_docs = self.helper.input.param("num-updated-docs", 100)
         self.log.info("description : create spatial view with {0} docs "
-                      " and update {1} docs".format(num_of_docs,
-                                                    num_of_updated_docs))
+                      " and update {1} docs".format(num_docs,
+                                                    num_updated_docs))
         design_name = "dev_test_insert_{0}_delete_{1}_docs"\
-            .format(num_of_docs, num_of_updated_docs)
+            .format(num_docs, num_updated_docs)
         prefix = str(uuid.uuid4())[:7]
 
-        self._setup_index(design_name, num_of_docs, prefix)
+        self._setup_index(design_name, num_docs, prefix)
 
         # Update documents and verify that the documents got updated
-        updated_keys = self.helper.insert_docs(num_of_updated_docs, prefix,
+        updated_keys = self.helper.insert_docs(num_updated_docs, prefix,
                                                dict(updated=True))
-        results = self.helper.get_results(design_name, 2*num_of_docs)
+        results = self.helper.get_results(design_name, 2*num_docs)
         result_updated_keys = self._get_updated_docs_keys(results)
         self.assertEqual(len(updated_keys), len(result_updated_keys))
         self.helper.verify_result(updated_keys, result_updated_keys)
 
 
-    def _test_insert_and_get_spatial_x_mins(self, duration, num_of_docs):
+    def test_get_spatial_during_x_min_load_y_working_set(self):
+        num_docs = self.helper.input.param("num-docs", 10000)
+        duration = self.helper.input.param("load-time", 1)
         self.log.info("description : this test will continuously insert data "
                       "and get the spatial view results for {0} minutes")
         design_name = "dev_test_insert_and_get_spatial_{0}_mins"\
@@ -186,7 +122,7 @@ class SpatialViewTests(unittest.TestCase):
         self.shutdown_load_data = False
         load_thread = Thread(
             target=self._insert_data_till_stopped,
-            args=(num_of_docs, prefix))
+            args=(num_docs, prefix))
         load_thread.start()
 
         self._get_results_for_x_minutes(design_name, duration)
@@ -203,9 +139,9 @@ class SpatialViewTests(unittest.TestCase):
     # Create the index and insert documents including verififaction that
     # the index contains them
     # Returns the keys of the inserted documents
-    def _setup_index(self, design_name, num_of_docs, prefix):
+    def _setup_index(self, design_name, num_docs, prefix):
         self.helper.create_index_fun(design_name)
-        inserted_keys = self.helper.insert_docs(num_of_docs, prefix)
+        inserted_keys = self.helper.insert_docs(num_docs, prefix)
         self.helper.query_index_for_verification(design_name, inserted_keys)
 
         return inserted_keys
@@ -236,22 +172,23 @@ class SpatialViewTests(unittest.TestCase):
             self.log.info("spatial view returned {0} rows".format(len(keys)))
             time.sleep(delay)
 
-    def _insert_data_till_stopped(self, number_of_docs, prefix):
+    def _insert_data_till_stopped(self, num_docs, prefix):
         while not self.shutdown_load_data:
             # Will be read after the function is terminated
             self.docs_inserted = self.helper.insert_docs(
-                number_of_docs, prefix, wait_for_persistence=False)
+                num_docs, prefix, wait_for_persistence=False)
 
 
-    def _test_failover(self, num_of_docs):
+    def test_x_docs_failover(self):
+        num_docs = self.helper.input.param("num-docs", 10000)
         self.log.info("description : test failover with {0} documents"\
-                          .format(num_of_docs))
-        design_name = "dev_test_failover_{0}".format(num_of_docs)
+                          .format(num_docs))
+        design_name = "dev_test_failover_{0}".format(num_docs)
         prefix = str(uuid.uuid4())[:7]
 
         fh = FailoverHelper(self.helper.servers, self)
 
-        inserted_keys = self._setup_index(design_name, num_of_docs, prefix)
+        inserted_keys = self._setup_index(design_name, num_docs, prefix)
         failover_nodes = fh.failover(1)
         self.helper.query_index_for_verification(design_name, inserted_keys)
 

@@ -20,6 +20,7 @@ class SpatialHelper:
         self.testcase = testcase
         self.bucket = bucket
         self.servers = TestInputSingleton.input.servers
+        self.input = TestInputSingleton.input
         self.master = self.servers[0]
         self.rest = RestConnection(self.master)
         self.log = logger.Logger.get_logger()
