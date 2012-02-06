@@ -95,6 +95,11 @@ class BuildQuery(object):
         return None
 
     def find_membase_release_build(self, product, deliverable_type, os_architecture, build_version, is_amazon=False):
+        build_details = build_version
+        if build_version == "1.7.2":
+            build_details = "1.7.2r-20-g6604356"
+        elif build_version == "1.8.0":
+            build_detalis = "1.8.0r-55-g80f24f2"
         build = MembaseBuild()
         build.deliverable_type = deliverable_type
         build.time = '0'
@@ -105,9 +110,9 @@ class BuildQuery(object):
         build.name = '{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
         build.build_number = 0
         if deliverable_type == "exe":
-            build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{0}.setup.{3}'.format(build_version, product, os_architecture, deliverable_type)
+            build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.setup.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
         else:
-            build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
+            build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
         # This points to the Internal s3 account to look for release builds
         if is_amazon:
             build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)

@@ -5,6 +5,7 @@ COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/membase/data/'
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
+WIN_MB_PATH = "/cygdrive/c/Program Files/Membase/Server/"
 LINUX_CB_PATH = "/opt/couchbase/"
 VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 30

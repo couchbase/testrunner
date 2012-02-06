@@ -147,8 +147,11 @@ class RemoteMachineShellConnection:
     def stop_membase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
+            log.info("STOP SERVER")
             o, r = self.execute_command("net stop membaseserver")
             self.log_command_output(o, r)
+            log.info("Wait 10 seconds to stop service completely")
+            time.sleep(10)
         if info.type.lower() == "linux":
             #check if /opt/membase exists or /opt/couchbase or /opt/couchbase-single
             o, r = self.execute_command("/etc/init.d/membase-server stop")
@@ -310,9 +313,9 @@ class RemoteMachineShellConnection:
     def file_exists(self, remotepath, filename):
         sftp = self._ssh_client.open_sftp()
         try:
-            filenames = sftp.listdir(remotepath)
+            filenames = sftp.listdir_attr(remotepath)
             for name in filenames:
-                if name == filename:
+                if name.filename == filename and int(name.st_size) > 0:
                     sftp.close()
                     return True
             sftp.close()
@@ -328,6 +331,7 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM ISBEW64.*')
         self.execute_command('taskkill /F /T /IM iexplore.*')
         self.execute_command('taskkill /F /T /IM WerFault.*')
+        self.execute_command('taskkill /F /T /IM Firefox.*')
         output, error = self.execute_command(
              "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O {1}_{2}.exe';ls -l;".format(
                 url, name, version))
@@ -495,6 +499,22 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
+    def membase_upgrade_win(self, architecture, windows_name, version):
+        task = "upgrade"
+        bat_file = "upgrade.bat"
+        version_file = "VERSION.txt"
+        self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
+                                       architecture, windows_name, version, task)
+        log.info('sleep for 5 seconds before running task schedule upgrade me')
+        time.sleep(5)
+        # run task schedule to upgrade Membase server
+        output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+        self.log_command_output(output, error)
+        self.wait_till_file_deleted(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
+        self.wait_till_file_added(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
+        log.info('wait 30 seconds for server to start up completely')
+        time.sleep(30)
+
     def couchbase_single_install(self, build):
         is_couchbase_single = False
         if build.name.lower().find("couchbase-single") != -1:
@@ -585,6 +605,35 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             else:
                 output, error = self.execute_command('/opt/couchbase/bin/mbenable_core_dumps.sh  {0}'.format(path))
                 self.log_command_output(output, error)
+
+    def membase_install_win(self, build, version, startserver=True):
+        is_membase = False
+        is_couchbase = False
+        if build.name.lower().find("membase") != -1:
+            is_membase = True
+        elif build.name.lower().find("couchbase") != -1:
+            is_couchbase = True
+        if not is_membase and not is_couchbase:
+            raise Exception("its not a membase or couchbase ?")
+        info = self.extract_remote_info()
+        log.info('deliverable_type : {0}'.format(info.deliverable_type))
+        if info.type.lower() == 'windows':
+            task = "install"
+            bat_file = "install.bat"
+            dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
+            # build = self.build_url(params)
+            self.create_multiple_dir(dir_paths)
+            self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+            self.modify_bat_file('/cygdrive/c/automation', bat_file, "mb",
+                                           info.architecture_type, info.windows_name, version, task)
+            log.info('sleep for 5 seconds before running task schedule install me')
+            time.sleep(5)
+            # run task schedule to install Membase server
+            output, error = self.execute_command("cmd /c schtasks /run /tn installme")
+            self.log_command_output(output, error)
+            self.wait_till_file_added(testconstants.WIN_MB_PATH, "VERSION.txt", timeout_in_seconds=600)
+            log.info('wait 30 seconds for server to start up completely')
+            time.sleep(30)
 
     def wait_till_file_deleted(self, remotepath, filename, timeout_in_seconds=180):
         end_time = time.time() + float(timeout_in_seconds)
@@ -853,14 +902,18 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed? {0}".format(exist))
             if exist:
-                log.info("VERSION file exists.  Start to uninstall Membase server")
+                log.info("VERSION file exists.  Start to uninstall")
                 build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
+                if "1.8.0" in full_version:
+                    product_name = "couchbase-server-enterprise"
+                    product = "cb"
                 log.info('Build name: {0}'.format(build_name))
                 build_name = build_name.rstrip() + ".exe"
                 log.info('Check if {0} is in tmp directory'.format(build_name))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:   # if not exist in tmp dir, start to download that verion build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
+                    print build.url
                     downloaded = self.download_binary_in_win(build.url, product, short_version)
                     if downloaded:
                         log.info('Successful download {0}_{1}.exe'.format(product, short_version))
