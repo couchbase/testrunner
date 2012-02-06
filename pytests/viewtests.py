@@ -282,7 +282,7 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _test_update_view_on_multiple_docs(self, num_docs):
-        self.log.info("description : create a view on 10 thousand documents")
+        self.log.info("description : create a view on {0} documents".format(self.num_docs))
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
@@ -692,6 +692,7 @@ class ViewBaseTests(unittest.TestCase):
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
         rest.create_view(bucket, view_name, function)
         self.created_views[view_name] = bucket
+        return view_name
 
     @staticmethod
     def _load_docs(self, num_docs, prefix, verify=True):
@@ -828,7 +829,7 @@ class ViewBaseTests(unittest.TestCase):
         return delete_count
 
     @staticmethod
-    def _begin_rebalance_in(self):
+    def _begin_rebalance_in(self, timeout=5):
         master = self.servers[0]
         rest = RestConnection(master)
         for server in self.servers[1:]:
@@ -841,7 +842,7 @@ class ViewBaseTests(unittest.TestCase):
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
         except:
             self.log.error("rebalance failed, trying again after 5 seconds")
-            time.sleep(5)
+            time.sleep(timeout)
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
 
     @staticmethod
@@ -876,7 +877,7 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("rebalance finished")
 
     @staticmethod
-    def _test_compare_views_all_nodes(self,num_docs):
+    def _test_compare_views_all_nodes(self, num_docs):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
@@ -891,18 +892,22 @@ class ViewBaseTests(unittest.TestCase):
         RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_uncommitted_items', 0)
 
         ViewBaseTests._end_rebalance(self)
+        ViewBaseTests._verify_views_from_all(self, master, bucket, view_name, num_docs, doc_names)
+
+    @staticmethod
+    def _verify_views_from_all(self, master, bucket, view_name, num_docs, doc_names):
+        rest = RestConnection(master)
         nodes = rest.get_nodes()
         for n in nodes:
             n_rest = RestConnection({"ip": n.ip, "port": n.port,
-                                     "username": self.servers[0].rest_username,
-                                     "password": self.servers[0].rest_password})
+                                     "username": master.rest_username,
+                                     "password": master.rest_password})
             results = ViewBaseTests._get_view_results(self, n_rest, bucket, view_name, num_docs,
                                              extra_params={"stale": False})
             time.sleep(5)
             doc_names_view = ViewBaseTests._get_doc_names(self, results)
             if sorted(doc_names_view) != sorted(doc_names):
                 self.fail("returned doc names have different values than expected")
-
 
     ### TODO:  _delete_docs() method cannot be used if this method is called to load docs
     # For now call _delete_complex_docs()
@@ -1251,6 +1256,22 @@ class ViewRebalanceTests(unittest.TestCase):
             nodes = rest.node_statuses()
 
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
+
+    def test_create_view_during_rebalance(self):
+        master = self.servers[0]
+
+        prefix = str(uuid.uuid4())[:7]
+        doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, verify=False)
+
+        rebalance_thread = Thread(target=ViewBaseTests._begin_rebalance_in,
+                       name="Start rebalance in",
+                       args=(self, 5))
+        rebalance_thread.start()
+        view_name = ViewBaseTests._create_view_doc_name(self, prefix)
+        rebalance_thread.join()
+        ViewBaseTests._end_rebalance(self)
+
+        ViewBaseTests._verify_views_from_all(self, master, 'default', view_name, self.num_docs, doc_names)
 
 
 class ViewFailoverTests(unittest.TestCase):
