@@ -58,7 +58,7 @@ class ViewBaseTests(unittest.TestCase):
             except:
                 pass
             for server in self.servers:
-                if server.port != 8091:
+                if server.port != '8091':
                     continue
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_membase_installed():
