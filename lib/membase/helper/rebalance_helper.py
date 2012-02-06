@@ -444,3 +444,21 @@ class RebalanceHelper():
             log.info(msg.format(result))
             return result, servers_rebalanced
         return False, servers_rebalanced
+
+    @staticmethod
+    def getOtpNodeIds(master):
+        rest = RestConnection(master)
+        nodes = rest.node_statuses()
+        otpNodeIds = [node.id for node in nodes]
+        return otpNodeIds
+
+    @staticmethod
+    def pick_node(master):
+        rest = RestConnection(master)
+        nodes = rest.node_statuses()
+        picked = None
+        for node_for_stat in nodes:
+            if node_for_stat.id.find('127.0.0.1') == -1 and node_for_stat.id.find(master.ip) == -1:
+                picked = node_for_stat
+                break
+        return picked

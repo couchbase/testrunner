@@ -149,23 +149,6 @@ class RebalanceBaseTest(unittest.TestCase):
             bucket_data[bucket.name]['inserted_keys'] = []
         return bucket_data
 
-    @staticmethod
-    def getOtpNodeIds(master):
-        rest = RestConnection(master)
-        nodes = rest.node_statuses()
-        otpNodeIds = [node.id for node in nodes]
-        return otpNodeIds
-
-    @staticmethod
-    def pick_node(master):
-        rest = RestConnection(master)
-        nodes = rest.node_statuses()
-        picked = None
-        for node_for_stat in nodes:
-            if node_for_stat.id.find('127.0.0.1') == -1 and node_for_stat.id.find(master.ip) == -1:
-                picked = node_for_stat
-                break
-        return picked
 
     @staticmethod
     def load_data(master, bucket, keys_count=-1, load_ratio=-1, delete_ratio=0, expiry_ratio=0, test=None):
@@ -371,7 +354,7 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         rebalanced_servers = [master]
 
         for server in self._servers[1:]:
-            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
             self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
             otpNode = rest.add_node(creds.rest_username,
                                     creds.rest_password,
@@ -451,7 +434,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
         #dont rebalance out the current node
         while len(nodes) > 1:
             #pick a node that is not the master node
-            toBeEjectedNode = RebalanceBaseTest.pick_node(master)
+            toBeEjectedNode = RebalanceHelper.pick_node(master)
 
             for bucket in rest.get_buckets():
                 RebalanceBaseTest.load_data(master, bucket.name,
@@ -459,7 +442,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
                                             delete_ratio=0, expiry_ratio=0,
                                             test=self)
 
-            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
             self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
             self.assertTrue(rest.monitorRebalance(),
@@ -516,7 +499,7 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
         #dont rebalance out the current node
         while len(nodes) > 1:
             #pick a node that is not the master node
-            toBeEjectedNode = RebalanceBaseTest.pick_node(master)
+            toBeEjectedNode = RebalanceHelper.pick_node(master)
             RebalanceBaseTest.load_data_for_buckets(rest, ram_ratio, distribution, [master], bucket_data, self)
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             #let's start/step rebalance three times
@@ -584,7 +567,7 @@ class StopRebalanceTests(unittest.TestCase):
         #dont rebalance out the current node
         while len(nodes) > 1:
             #pick a node that is not the master node
-            toBeEjectedNode = RebalanceBaseTest.pick_node(master)
+            toBeEjectedNode = RebalanceHelper.pick_node(master)
             RebalanceBaseTest.load_data_for_buckets(rest, ram_ratio, distribution, [master], bucket_data, self)
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             #let's start/step rebalance three times
@@ -626,7 +609,7 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
         for server in self._servers[1:]:
-            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
             self.log.info("adding node {0}:{1} and rebalance afterwards".format(server.ip, server.port))
             otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster {1}"
@@ -711,7 +694,7 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
                 bucket_data[name]["items_inserted_count"] += thread.inserted_keys_count()
 
         for server in self._servers[1:]:
-            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
             #do this 2 times , start rebalance , failover the node , remove the node and rebalance
             for i in range(0, NUM_REBALANCE):
                 distribution = RebalanceBaseTest.get_distribution(load_ratio)
@@ -1110,7 +1093,7 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
                 ejectedNodes = [otpNode.id]
             else:
                 ejectedNodes = []
-            self.log.info("current nodes : {0}".format(RebalanceBaseTest.getOtpNodeIds(master)))
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
             self.log.info("adding node {0}, removing node {1} and rebalance afterwards".format(server.ip, ejectedNodes))
             otpNode = rest.add_node(creds.rest_username,
                                     creds.rest_password,

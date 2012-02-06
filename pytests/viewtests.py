@@ -1134,6 +1134,31 @@ class ViewRebalanceTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
+    def test_delete_x_docs_incremental_rebalance_in(self):
+        prefix = str(uuid.uuid4())[:7]
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
+        ViewBaseTests._create_view_doc_name(self, prefix)
+
+        master = self.servers[0]
+        rest = RestConnection(master)
+        nodes = rest.node_statuses()
+
+        while len(nodes) < len(self.servers):
+            ViewBaseTests._load_docs(self, self.num_docs, prefix)
+
+            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+            t = Thread(target=RebalanceHelper.rebalance_in,
+                       name="Starting incremental rebalance in",
+                       args=(self.servers, 1, False))
+            t.start()
+            doc_names = ViewBaseTests._delete_docs(self, self.num_docs, num_of_deleted_docs, prefix)
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node")
+
+            t.join()
+            ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
+            nodes = rest.node_statuses()
+
     def test_delete_x_docs_rebalance_out(self):
         prefix = str(uuid.uuid4())[:7]
         num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
@@ -1147,8 +1172,53 @@ class ViewRebalanceTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
+    def test_delete_x_docs_incremental_rebalance_out(self):
+        prefix = str(uuid.uuid4())[:7]
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
+        ViewBaseTests._create_view_doc_name(self, prefix)
+
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
+        master = self.servers[0]
+        rest = RestConnection(master)
+
+        rebalanced_servers = []
+        rebalanced_servers.extend(self.servers)
+
+        nodes = rest.node_statuses()
+
+        while len(nodes) > 1:
+
+            ViewBaseTests._load_docs(self, self.num_docs, prefix)
+            #pick a node that is not the master node
+            toBeEjectedNode = RebalanceHelper.pick_node(master)
+
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
+            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+            t = Thread(target=rest.rebalance,
+                       name="Starting rebalance out",
+                       args=([node.id for node in rest.node_statuses()], [toBeEjectedNode.id]))
+            t.start()
+            doc_names = ViewBaseTests._delete_docs(self, self.num_docs, num_of_deleted_docs, prefix)
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
+
+            t.join()
+
+            for node in nodes:
+                for rebalanced_server in rebalanced_servers:
+                    if rebalanced_server.ip.find(node.ip) != -1:
+                        rebalanced_servers.remove(rebalanced_server)
+                        break
+
+            ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
+            nodes = rest.node_statuses()
+
+
     def test_load_x_during_rebalance(self):
         ViewBaseTests._test_insert_json_during_rebalance(self, self.num_docs)
+
 
     def test_view_stop_start_incremental_rebalance(self):
         prefix = str(uuid.uuid4())[:7]
@@ -1202,6 +1272,7 @@ class ViewFailoverTests(unittest.TestCase):
             nodes = rest.node_statuses()
             self._view_test_threads = []
             view_names = {}
+            #TODO: Parallelize loading and querying views
             for i in range(0, self.num_design_docs):
                 prefix = str(uuid.uuid4())[:7]
                 ViewBaseTests._create_view_doc_name(self, prefix)
