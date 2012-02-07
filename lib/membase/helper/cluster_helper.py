@@ -37,7 +37,7 @@ class ClusterOperationHelper(object):
                 if wait_for_rebalance:
                     rebalanced &= rest.monitorRebalance()
                 else:
-                    rebakanced = False
+                    rebalanced = False
         return all_nodes_added and rebalanced
 
     # For a clearer API
