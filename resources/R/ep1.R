@@ -168,7 +168,12 @@ for(index in 1:nrow(builds_list)) {
 	# print(ncol(unlisted))
 	# print(nrow(unlisted))
 	# print(unlisted[1,])
-	result <- rbind(result,unlisted)
+	if (ncol(result) > 0 & ncol(result) != ncol(unlisted)) {
+		#rbind.fill does not work if arg1 or arg2 is empty
+		result <- rbind.fill(result,unlisted)
+	} else {
+		result <- rbind(result,unlisted)
+	}
 }
 cat("generated ns_server_data data frame\n")
 cat(paste("result has ", nrow(result)," rows \n"))
@@ -202,7 +207,7 @@ ns_server_data <- result_tmp
 ns_server_data$row = ns_server_data $row/1000
 
 
-cat("generating System stats from ns_server_data ")
+cat("generating System stats from ns_server_data_system ")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
 		tryCatch({
