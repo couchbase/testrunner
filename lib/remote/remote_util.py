@@ -166,6 +166,15 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("/etc/init.d/membase-server start")
             self.log_command_output(o, r)
 
+    def stop_schedule_tasks(self):
+        log.info("STOP ALL SCHEDULE TASKS: installme, removeme and upgrademe")
+        output, error = self.execute_command("cmd /c schtasks /end /tn installme")
+        self.log_command_output(output, error)
+        output, error = self.execute_command("cmd /c schtasks /end /tn removeme")
+        self.log_command_output(output, error)
+        output, error = self.execute_command("cmd /c schtasks /end /tn upgrademe")
+        self.log_command_output(output, error)
+
     def is_membase_installed(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
@@ -505,6 +514,7 @@ class RemoteMachineShellConnection:
         version_file = "VERSION.txt"
         self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
                                        architecture, windows_name, version, task)
+        self.stop_schedule_tasks()
         log.info('sleep for 5 seconds before running task schedule upgrade me')
         time.sleep(5)
         # run task schedule to upgrade Membase server
@@ -626,12 +636,16 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             self.modify_bat_file('/cygdrive/c/automation', bat_file, "mb",
                                            info.architecture_type, info.windows_name, version, task)
+            self.stop_schedule_tasks()
             log.info('sleep for 5 seconds before running task schedule install me')
             time.sleep(5)
             # run task schedule to install Membase server
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             self.log_command_output(output, error)
-            self.wait_till_file_added(testconstants.WIN_MB_PATH, "VERSION.txt", timeout_in_seconds=600)
+            if is_membase:
+                self.wait_till_file_added(testconstants.WIN_MB_PATH, "VERSION.txt", timeout_in_seconds=600)
+            else:
+                self.wait_till_file_added(testconstants.WIN_CB_PATH, "VERSION.txt", timeout_in_seconds=600)
             log.info('wait 30 seconds for server to start up completely')
             time.sleep(30)
 
@@ -796,9 +810,11 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
                 self.create_multiple_dir(dir_paths)
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+                self.stop_couchbase()
                 # modify bat file to run uninstall schedule task
                 self.modify_bat_file('/cygdrive/c/automation', bat_file,
                                        product, info.architecture_type, info.windows_name, short_version, task)
+                self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule uninstall')
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
@@ -913,7 +929,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:   # if not exist in tmp dir, start to download that verion build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
-                    print build.url
                     downloaded = self.download_binary_in_win(build.url, product, short_version)
                     if downloaded:
                         log.info('Successful download {0}_{1}.exe'.format(product, short_version))
@@ -922,9 +937,11 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
                 self.create_multiple_dir(dir_paths)
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+                self.stop_membase()
                 # modify bat file to run uninstall schedule task
                 self.modify_bat_file('/cygdrive/c/automation', bat_file,
                                        product, info.architecture_type, info.windows_name, short_version, task)
+                self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule uninstall')
                 time.sleep(5)
                 # run schedule task uninstall Membase server
@@ -1162,6 +1179,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if info.type.lower() == 'windows':
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
+            log.info("Wait 10 seconds to stop service completely")
+            time.sleep(10)
         if info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/couchbase-server stop")
             self.log_command_output(o, r)
