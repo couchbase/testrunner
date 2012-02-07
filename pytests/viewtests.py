@@ -356,7 +356,10 @@ class ViewBaseTests(unittest.TestCase):
         if results:
             rows = results["rows"]
             for row in rows:
-                key_set.append(row["key"].encode("ascii", "ignore"))
+                if(isinstance(row["key"], str)):
+                    key_set.append(row["key"].encode("ascii", "ignore"))
+                else:
+                    key_set.append(row["key"])
             self.log.info("key_set has {0} elements".format(len(key_set)))
         return key_set
 
