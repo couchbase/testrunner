@@ -74,18 +74,23 @@ class SpatialHelper:
     # overwritten.
     # extra_values are key value pairs that will be added to the
     # JSON document
+    # If `return_docs` is true, it'll return the full docs and not
+    # only the keys
     def insert_docs(self, num_of_docs, prefix, extra_values={},
-                    wait_for_persistence=True):
+                    wait_for_persistence=True, return_docs=False):
         moxi = MemcachedClientHelper.proxy_client(self.master, self.bucket)
         doc_names = []
         for i in range(0, num_of_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
-            doc_names.append(doc_name)
             geom = {"type": "Point", "coordinates":
                         [random.randrange(-180, 180),
                          random.randrange(-90, 90)]}
             value = {"name": doc_name, "age": 1000, "geometry": geom}
             value.update(extra_values)
+            if not return_docs:
+                doc_names.append(doc_name)
+            else:
+                doc_names.append(value)
             # loop till value is set
             fail_count = 0
             while True:
@@ -238,7 +243,10 @@ class SpatialHelper:
 
     # Verify that the built index is correct. The documents might not
     # be persisted to disk yet, hence give it 5 tries
-    def query_index_for_verification(self, design_name, inserted):
+    # If `full_docs` is true, the whole documents, not only the keys
+    # will be verified
+    def query_index_for_verification(self, design_name, inserted,
+                                     full_docs=False):
         attempt = 0
         delay = 10
         limit = len(inserted)
@@ -254,8 +262,35 @@ class SpatialHelper:
             results = self.get_results(design_name, limit)
             result_keys = self.get_keys(results)
 
-        self.testcase.assertEqual(len(inserted), len(result_keys))
-        self.verify_result(inserted, result_keys)
+        if not full_docs:
+            self.testcase.assertEqual(len(inserted), len(result_keys))
+            self.verify_result(inserted, result_keys)
+        else:
+            # The default spatial view function retrurns the full
+            # document, hence the values can be used for the
+            # meta information as well
+            # Only verify things we can get from the value, hence not
+            # the revision, nor the bbox. For the ID we use the "name"
+            # of the value
+            inserted_expanded = []
+            for value in inserted:
+                inserted_expanded.append(
+                    json.dumps({'id': value['name'],
+                                'geometry': value['geometry'],
+                                'value': value}, sort_keys=True))
+
+            results_collapsed = []
+            for row in results['rows']:
+                del row['bbox']
+                # Delete all special values inserted by CouchDB or Couchbase
+                for key in row['value'].keys():
+                    if key.startswith('_') or key.startswith('$'):
+                        del row['value'][key]
+                results_collapsed.append(json.dumps(row, sort_keys=True))
+
+            diff = set(inserted_expanded) - set(results_collapsed)
+            self.testcase.assertEqual(diff, set())
+
 
     # Compare the inserted documents with the returned result
     # Both arguments contain a list of document names

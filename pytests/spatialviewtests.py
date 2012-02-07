@@ -37,6 +37,15 @@ class SpatialViewTests(unittest.TestCase):
                               "_design/{0}".format(design_name))
             self.log.info(response)
 
+    def test_insert_100_docs_full_verification(self):
+        self._test_insert_docs_full_verification(100)
+
+    def test_insert_10k_docs_full_verification(self):
+        self._test_insert_docs_full_verification(10000)
+
+    def test_insert_100k_docs_full_verification(self):
+        self._test_insert_docs_full_verification(100000)
+
     # This test fails, but works when time.sleep(1) is added after the
     # self.helper.insert_docs() call
     def test_insert_100_docs(self):
@@ -105,6 +114,21 @@ class SpatialViewTests(unittest.TestCase):
 
         inserted_keys = self._setup_index(design_name, num_of_docs, prefix)
         self.assertEqual(len(inserted_keys), num_of_docs)
+
+
+    # Does verify the full docs and not only the keys
+    def _test_insert_docs_full_verification(self, num_of_docs):
+        self.log.info("description : create a spatial view on {0} documents"\
+                          .format(num_of_docs))
+        design_name = "dev_test_insert_docs_{0}"\
+            .format(num_of_docs)
+        prefix = str(uuid.uuid4())[:7]
+
+        self.helper.create_index_fun(design_name)
+        inserted_docs = self.helper.insert_docs(num_of_docs, prefix,
+                                                return_docs=True)
+        self.helper.query_index_for_verification(design_name, inserted_docs,
+                                                 full_docs=True)
 
 
     def _test_delete_docs(self, num_of_docs, num_of_deleted_docs):
