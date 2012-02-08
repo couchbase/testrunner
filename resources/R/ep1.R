@@ -230,7 +230,8 @@ cat(paste("result has ", nrow(result)," rows \n"))
 ns_server_data_system <- result
 ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
 ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
-ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
+ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used
+
 
 
 
@@ -251,6 +252,8 @@ cat(paste("result has ", nrow(result)," rows \n"))
 system_stats <- result
 system_stats = transform(system_stats,utime=as.numeric(utime),stime=as.numeric(stime),rss=(as.numeric(rss) * 4096) / (1024 * 1024))
 system_stats$row <- as.numeric(factor(system_stats$row))
+system_stats$nswap <- as.numeric(system_stats$nswap)
+system_stats$cnswap <- as.numeric(system_stats$cnswap)
 
 
 # Get Latency-get
@@ -851,6 +854,21 @@ p <- addopts(p,"Latency-set 99th  percentile")
 print(p)
 makeFootnote(footnote)
 
+
+
+cat("generating cpu_util \n")
+p <- ggplot(ns_server_data_system, aes(row, cpu_util, color=buildinfo.version , label= cpu_util)) + labs(x="----time (sec)--->", y="cpu_util")
+p <- p + geom_point()
+p <- addopts(p,"cpu_util")
+print(p)
+makeFootnote(footnote)
+
+cat("generating swap_used \n")
+p <- ggplot(ns_server_data_system, aes(row, swap_used, color=buildinfo.version , label= swap_used)) + labs(x="----time (sec)--->", y="swap_used")
+p <- p + geom_point()
+p <- addopts(p,"swap_used")
+print(p)
+makeFootnote(footnote)
 
 #cat("Generating Memory/CPU usage for beam.smp and memcached\n")
 #temp_data_frame  = createProcessUsageDataFrame(system_stats, "(beam.smp)")
