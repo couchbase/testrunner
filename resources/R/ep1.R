@@ -193,7 +193,10 @@ ns_server_data $mem_used <- as.numeric(ns_server_data$mem_used)
 ns_server_data $curr_items_tot <- as.numeric(ns_server_data$curr_items_tot)
 ns_server_data $cmd_get <- as.numeric(ns_server_data$cmd_get)
 ns_server_data $cmd_set <- as.numeric(ns_server_data$cmd_set)
-
+ns_server_data $get_misses <- as.numeric(ns_server_data$get_misses)
+ns_server_data $get_hits <- as.numeric(ns_server_data$get_hits)
+ns_server_data <- transform(ns_server_data , cache_miss=ifelse(ns_server_data$cmd_get <= ns_server_data$ep_bg_fetched,0,ns_server_data$ep_bg_fetched/ns_server_data$cmd_get))
+ns_server_data$cache_miss <- ns_server_data$cache_miss*100
 all_builds = factor(ns_server_data$buildinfo.version)
 result_tmp <- data.frame()
 for(a_build in levels(all_builds)) {
@@ -772,6 +775,29 @@ cat("generating cmd_get \n")
 p <- ggplot(ns_server_data, aes(row, cmd_get, color=buildinfo.version , label= cmd_get)) + labs(x="----time (sec)--->", y="ops/sec")
 p <- p + geom_point()
 p <- addopts(p,"cmd_get ops/sec")
+print(p)
+makeFootnote(footnote)
+
+
+cat("generating get misses \n")
+p <- ggplot(ns_server_data, aes(row, get_misses, color=buildinfo.version , label= get_misses)) + labs(x="----time (sec)--->", y="# of get misses")
+p <- p + geom_point()
+p <- addopts(p,"# of get misses")
+print(p)
+makeFootnote(footnote)
+
+cat("generating get hits \n")
+p <- ggplot(ns_server_data, aes(row, get_hits, color=buildinfo.version , label= get_hits)) + labs(x="----time (sec)--->", y="# of get hits")
+p <- p + geom_point()
+p <- addopts(p,"# of get hits")
+print(p)
+makeFootnote(footnote)
+
+
+cat("generating cache_miss \n")
+p <- ggplot(ns_server_data, aes(row, cache_miss, color=buildinfo.version , label= cache_miss)) + labs(x="----time (sec)--->", y="cache_miss percentage")
+p <- p + geom_point()
+p <- addopts(p,"cache_miss percentage")
 print(p)
 makeFootnote(footnote)
 
