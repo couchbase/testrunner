@@ -111,12 +111,13 @@ class ViewBaseTests(unittest.TestCase):
                         msg="unable to create {0} bucket".format(name))
 
     @staticmethod
-    def _test_view_on_multiple_docs_multiple_design_docs(self, num_docs, num_of_design_docs, params={}):
+    def _test_view_on_multiple_docs_multiple_design_docs(self, num_docs, num_of_design_docs, params={}, delay=10):
         self._view_test_threads = []
         for i in range(0, num_of_design_docs):
             thread_result = []
             t = Thread(target=ViewBaseTests._test_view_on_multiple_docs_thread_wrapper,
-                       name="test_view_on_multiple_docs_multiple_design_docs", args=(self, num_docs, thread_result, params))
+                       name="test_view_on_multiple_docs_multiple_design_docs", args=(self, num_docs, thread_result, \
+                                                                                     params, delay))
             t.start()
             self._view_test_threads.append((t, thread_result))
         for (t, r) in self._view_test_threads:
@@ -126,12 +127,12 @@ class ViewBaseTests(unittest.TestCase):
             #get the r
             if len(r) > 0:
                 asserts.append(r[0])
-                self.log.error("view thread failed : {0}".format(r[0]))
-                self.fail("one of multiple threads failed. look at the logs for more specific errors")
+                self.fail("view thread failed : {0}".format(r[0]))
+
 
     @staticmethod
-    def _test_view_on_multiple_docs(self, num_docs, params={"stale":"update_after"}):
-        self.log.info("description : create a view on 10 thousand documents")
+    def _test_view_on_multiple_docs(self, num_docs, params={"stale":"update_after"}, delay=10):
+        self.log.info("description : create a view on {0} documents".format(num_docs))
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
@@ -143,6 +144,7 @@ class ViewBaseTests(unittest.TestCase):
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
+        total_time = 0
         self.log.info("inserting {0} json objects".format(num_docs))
         for i in range(0, num_docs):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
@@ -151,30 +153,35 @@ class ViewBaseTests(unittest.TestCase):
             moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(len(doc_names)))
         time.sleep(5)
-        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
-        #        self._verify_views_replicated(bucket, view_name, map_fn)
+        results, view_time = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
+        # self._verify_views_replicated(bucket, view_name, map_fn)
         keys = ViewBaseTests._get_keys(self, results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
         RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
-        # try this for maximum 3 minutes
-        attempt = 0
-        delay = 10
-        while attempt < 6 and len(keys) != len(doc_names):
+
+        total_time = view_time
+        # Keep trying this for maximum 5 minutes
+        start_time = time.time()
+        while (len(keys) != len(doc_names)) & (time.time() - start_time < 300):
             msg = "view returned {0} items , expected to return {1} items"
             self.log.info(msg.format(len(keys), len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
-            time.sleep(10)
-            attempt += 1
-            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names),extra_params={"stale":"update_after"})
+            time.sleep(delay)
+            results, view_time = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names),extra_params=params)
+            total_time += view_time
             keys = ViewBaseTests._get_keys(self, results)
-        keys = ViewBaseTests._get_keys(self, results)
-        not_found = []
-        for name in doc_names:
-            if not name in keys:
-                not_found.append(name)
-        if not_found:
-            ViewBaseTests._print_keys_not_found(self, not_found, 10)
-            self.fail("map function did not return docs for {0} keys".format(len(not_found)))
+
+        self.log.info("View time: {0} secs".format(total_time))
+
+        # Only if the lengths are not equal, look for missing keys
+        if len(keys) != len(doc_names):
+            not_found = []
+            for name in doc_names:
+                if not name in keys:
+                    not_found.append(name)
+            if not_found:
+                ViewBaseTests._print_keys_not_found(self, not_found, 10)
+                self.fail("map function did not return docs for {0} keys".format(len(not_found)))
 
     @staticmethod
     def _test_count_reduce_multiple_docs(self, num_docs):
@@ -274,9 +281,9 @@ class ViewBaseTests(unittest.TestCase):
         self.assertEquals(value, sum)
 
     @staticmethod
-    def _test_view_on_multiple_docs_thread_wrapper(self, num_docs, failures, params={}):
+    def _test_view_on_multiple_docs_thread_wrapper(self, num_docs, failures, params={}, delay=10):
         try:
-            ViewBaseTests._test_view_on_multiple_docs(self, num_docs, params)
+            ViewBaseTests._test_view_on_multiple_docs(self, num_docs, params, delay)
         except Exception as ex:
             failures.append(ex)
 
@@ -458,8 +465,9 @@ class ViewBaseTests(unittest.TestCase):
                 delta = time.time() - start
                 if results.get(u'rows', []) or results.get(u'total_rows', 0) > 0:
                     self.log.info("view returned in {0} seconds".format(delta))
+                    view_time = delta
                     self.log.info("was able to get view results after trying {0} times".format((i + 1)))
-                    return results
+                    return results, view_time
                 else:
                     self.log.info("view returned empty results in {0} seconds, sleeping for {1}".format(delta, timeout))
                     time.sleep(timeout)
@@ -1343,4 +1351,4 @@ class ViewPerformanceTests(unittest.TestCase):
 
     def test_latency(self):
         ViewBaseTests._test_view_on_multiple_docs_multiple_design_docs(self, self.num_docs, self.num_design_docs, \
-                                                                       params={"stale":"false", "debug" : "true" })
+                                                                       params={"stale":"false", "debug" : "true" }, delay=1)
