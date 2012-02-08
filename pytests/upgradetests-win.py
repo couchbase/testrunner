@@ -117,7 +117,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
             remote.stop_membase()
             log.info("###### START UPGRADE. #########")
             remote.membase_upgrade_win(info.architecture_type, info.windows_name, version)
-            log.info("THIS IS END OF UPGRADE")
             remote.disconnect()
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
 
@@ -465,8 +464,11 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
                     for server in servers:
                         remote = RemoteMachineShellConnection(server)
-                        remote.download_build(appropriate_build)
-                        remote.membase_upgrade(appropriate_build, save_upgrade_config=save_upgrade_config)
+                        if version.startswith("1.8.0"):
+                            abbr_product = "cb"
+                        remote.download_binary_in_win(appropriate_build.url, abbr_product, version)
+                        log.info("###### START UPGRADE. #########")
+                        remote.membase_upgrade_win(info.architecture_type, info.windows_name, version)
                         RestHelper(RestConnection(server)).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
 
                         #verify admin_creds still set
@@ -484,8 +486,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                         log.info("Starting all servers together")
                         self._start_membase_servers(servers)
                     time.sleep(TIMEOUT_SECS)
-                    if version == "1.7.0" or version == "1.7.1":
-                        self._save_config(rest_settings, master)
 
                     if create_buckets:
                         self.assertTrue(BucketOperationHelper.wait_for_bucket_creation('default', RestConnection(master)),
