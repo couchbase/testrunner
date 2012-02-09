@@ -90,14 +90,14 @@ class BucketOperationHelper():
                     assert_on_test.fail(msg=msg)
 
     @staticmethod
-    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1, password=""):
+    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1, password=None):
         log = logger.Logger.get_logger()
         rest = RestConnection(serverInfo)
         if bucket_ram < 0:
             info = rest.get_nodes_self()
             bucket_ram = info.memoryQuota * 2 / 3
 
-        if password:
+        if password == None:
             authType = "sasl"
         else:
             authType = "none"

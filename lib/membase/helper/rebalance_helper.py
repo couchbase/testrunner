@@ -183,9 +183,8 @@ class RebalanceHelper():
             #some stats are in memcached
             if stats and stat_key in stats:
                 actual = int(stats[stat_key])
-                log.info("{0} : {1}".format(stat_key, actual))
                 if option == "==":
-                    verified = actual == stat_value
+                    verified = stat_value == actual
                 elif option == ">":
                     verified = stat_value > actual
                 elif option == "<":
@@ -195,16 +194,11 @@ class RebalanceHelper():
                 elif option == "<=":
                     verified = stat_value <= actual
                 if verified:
-                    log.info("{0} : {1}".format(stat_key, actual))
+                    log.info("verified {0} : {1}".format(stat_key, actual))
                     break
-            else:
-                if stats and stat_key in stats:
-                    if verbose:
-                        log.info("{0} : {1}".format(stat_key, stats[stat_key]))
-                if not verbose:
-                    time.sleep(0.1)
-                else:
-                    time.sleep(2)
+                if verbose:
+                    log.info("{0} : {1} isn't {2} {3}".format(stat_key, stat_value, option, actual))
+            time.sleep(2)
         return verified
 
     @staticmethod

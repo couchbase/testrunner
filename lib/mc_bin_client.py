@@ -196,6 +196,16 @@ class MemcachedClient(object):
             struct.pack(memcacheConstants.GETL_PKT_FMT, exp))
         return self.__parseGet(parts)
 
+    def getr(self, key, vbucket=-1):
+        """Get the value for a given key within the memcached server from a replica vbucket."""
+        if vbucket == -1:
+            self.vbucketId = crc32.crc32_hash(key) & (self.vbucket_count - 1)
+        else:
+            self.vbucketId = vbucket
+        parts=self._doCmd(memcacheConstants.CMD_GET_REPLICA, key, '')
+
+        return self.__parseGet(parts, len(key))
+
     def cas(self, key, exp, flags, oldVal, val):
         """CAS in a new value for the given key and comparison value."""
         self._mutate(memcacheConstants.CMD_SET, key, exp, flags,

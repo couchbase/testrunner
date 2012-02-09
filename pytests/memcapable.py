@@ -12,7 +12,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from results_helper import ResultsHelper
 
@@ -348,6 +348,421 @@ class GetlTests(unittest.TestCase):
         self.log.info("get key {0}".format(key))
         flags_v, cas_v, get_v = mc.get(key)
         self.assertEquals(get_v, "*")
+
+
+class GetrTests(unittest.TestCase):
+    memcapableTestBase = None
+    log = logger.Logger.get_logger()
+
+    NO_REBALANCE = 0
+    DURING_REBALANCE = 1
+    AFTER_REBALANCE = 2
+
+    def setUp(self):
+        self.servers = TestInputSingleton.input.servers
+        self.input = TestInputSingleton.input
+        self.master = self.servers[0]
+        self.bucket_name = "default"
+        self.memcapableTestBase = MemcapableTestBase()
+        self.rest = RestConnection(self.master)
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+
+    def tearDown(self):
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+        ClusterOperationHelper.cleanup_cluster([self.master])
+
+    def test_getr_1(self):
+        # GETR_TEST_1, 1 replica, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_2(self):
+        # GETR_TEST_2, 2 replica, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=2,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_3(self):
+        # GETR_TEST_3, 3 replica, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=3,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_4(self):
+        # GETR_TEST_4, 1 replica eject items, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=True,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_5(self):
+        # GETR_TEST_5, 1 replica expiration, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=300,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_6(self):
+        # GETR_TEST_6, 1 replica during rebalance in, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.DURING_REBALANCE)
+
+    def test_getr_7(self):
+        # GETR_TEST_7, 1 replica after rebalance in, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.AFTER_REBALANCE)
+
+    def test_getr_8(self):
+        # GETR_TEST_8, 1 replica warmup, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=True,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_9(self):
+        # GETR_TEST_9, 1 replica mutates, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=True,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_10(self):
+        # GETR_TEST_10, 1 replica deletes, all items retrieved
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=True,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_1n(self):
+        # GETR_TESTN_1, non-existing items, ERR_NOT_FOUND
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=True,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_2n(self):
+        # GETR_TESTN_2, 1 replica expired, ERR_NOT_FOUND
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=15,
+                        delay=35,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_3n(self):
+        # GETR_TESTN_3, 1 replica expired rebalance in, ERR_NOT_FOUND
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=15,
+                        delay=35,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.AFTER_REBALANCE)
+
+    def test_getr_4n(self):
+        # GETR_TESTN_4, 0 replica, ENGINE_NOT_MY_VBUCKET
+        self._getr_body(item_count=10000,
+                        replica_count=0,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=False,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr_5n(self):
+        # GETR_TESTN_5, 1 replica delete, ERR_NOT_FOUND
+        self._getr_body(item_count=10000,
+                        replica_count=1,
+                        expiration=0,
+                        delay=0,
+                        eject=False,
+                        delete=True,
+                        mutate=False,
+                        warmup=False,
+                        skipload=False,
+                        rebalance=GetrTests.NO_REBALANCE)
+
+    def test_getr(self):
+        self._getr_body(item_count=self.input.param("item_count", 10000),
+                        replica_count=self.input.param("replica_count", 1),
+                        expiration=self.input.param("expiration", 0),
+                        delay=self.input.param("delay", 0),
+                        eject=self.input.param("eject", 0),
+                        delete=self.input.param("delete", 0),
+                        mutate=self.input.param("mutate", 0),
+                        warmup=self.input.param("warmup", 0),
+                        skipload=self.input.param("skipload", 0),
+                        rebalance=self.input.param("rebalance", 0))
+
+    def _getr_body(self, item_count, replica_count, expiration, delay, eject, delete, mutate, warmup, skipload, rebalance):
+        negative_test = False
+        if delay > expiration:
+            negative_test = True
+        if delete and not mutate:
+            negative_test = True
+        if skipload and not mutate:
+            negative_test = True
+
+        prefix = str(uuid.uuid4())[:7]
+
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+        BucketOperationHelper.create_bucket(self.master, name=self.bucket_name, replica=replica_count, port=11210, test_case=self, bucket_ram=-1, password="")
+
+        if rebalance == GetrTests.DURING_REBALANCE or rebalance == GetrTests.AFTER_REBALANCE:
+            # leave 1 node unclustered for rebalance in
+            ClusterOperationHelper.begin_rebalance_out(self.master, self.servers[-1:])
+            ClusterOperationHelper.end_rebalance(self.master)
+            ClusterOperationHelper.begin_rebalance_in(self.master, self.servers[:-1])
+            ClusterOperationHelper.end_rebalance(self.master)
+        else:
+            ClusterOperationHelper.begin_rebalance_in(self.master, self.servers)
+            ClusterOperationHelper.end_rebalance(self.master)
+
+        vprefix = ""
+        if not skipload:
+            self._load_items(item_count=item_count, expiration=expiration, prefix=prefix, vprefix=vprefix)
+            if not expiration:
+                RebalanceHelper.wait_for_stats_int_value(self.master, self.bucket_name, "curr_items_tot", item_count * (replica_count + 1), "<=", 600, True)
+
+        if delete:
+            self._delete_items(item_count=item_count, prefix=prefix)
+
+        if mutate:
+            vprefix = "mutated"
+            self._load_items(item_count=item_count, expiration=expiration, prefix=prefix, vprefix=vprefix)
+
+        self.assertTrue(RestHelper(self.rest).wait_for_replication(180),
+                        msg="replication did not complete")
+
+        if eject:
+            self._eject_items(item_count=item_count, prefix=prefix)
+
+        if delay:
+            self.log.info("delaying for {0} seconds".format(delay))
+            time.sleep(delay)
+
+        if rebalance == GetrTests.DURING_REBALANCE:
+            ClusterOperationHelper.begin_rebalance_in(self.master, self.servers)
+        if rebalance == GetrTests.AFTER_REBALANCE:
+            ClusterOperationHelper.end_rebalance(self.master)
+        if warmup:
+            self.log.info("restarting memcached")
+            command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [memcached], 20000)]."
+            memcached_restarted = self.rest.diag_eval(command)
+            #wait until memcached starts
+            self.assertTrue(memcached_restarted, "unable to restart memcached process through diag/eval")
+            RebalanceHelper.wait_for_stats(self.master, self.bucket_name, "curr_items_tot", item_count * (replica_count + 1), 600)
+
+        count = self._getr_items(item_count=item_count, replica_count=replica_count, prefix=prefix, vprefix=vprefix)
+
+        if negative_test:
+            self.assertTrue(count == 0, "found items, expected none")
+        else:
+            self.assertTrue(count == replica_count * item_count, "expected {0} items, got {1} items".format(replica_count * item_count, count))
+        if rebalance == GetrTests.DURING_REBALANCE:
+            ClusterOperationHelper.end_rebalance(self.master)
+
+    def _load_items(self, item_count, expiration, prefix, vprefix=""):
+        flags = 0
+        client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
+        time_start = time.time()
+        for i in range(item_count):
+            timeout_end = time.time() + 10
+            passed = False
+            while time.time() < timeout_end and not passed:
+                try:
+                    client.set(prefix + "_key_" + str(i), expiration, flags, vprefix + "_value_" + str(i))
+                    passed = True
+                except Exception as e:
+                    self.log.error("failed to set key {0}, error: {1}".format(prefix + "_key_" + str(i), e))
+                    time.sleep(2)
+            self.assertTrue(passed, "exit due to set errors after {0} seconds".format(time.time() - time_start))
+        self.log.info("loaded {0} items in {1} seconds".format(item_count, time.time() - time_start))
+
+    def _get_items(self, item_count, prefix, vprefix=""):
+        client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
+        time_start = time.time()
+        get_count = 0
+        last_error = ""
+        error_count = 0
+        for i in range(item_count):
+            try:
+                value = client.get(prefix + "_key_" + str(i))[2]
+                assert(value==vprefix + "_value_" + str(i))
+                get_count += 1
+            except Exception as e:
+                last_error = "failed to getr key {0}, error: {1}".format(prefix + "_key_" + str(i), e)
+                error_count += 1
+        if error_count > 0:
+            self.log.error("got {0} errors, last error: {1}".format(error_count, last_error))
+        self.log.info("got {0} replica items in {1} seconds".format(get_count, time.time() - time_start))
+        return get_count
+
+    def _getr_items(self, item_count, replica_count, prefix, vprefix=""):
+        time_start = time.time()
+        get_count = 0
+        last_error = ""
+        error_count = 0
+        awareness = VBucketAwareMemcached(self.rest, self.bucket_name)
+        for r in range(replica_count):
+            for i in range(item_count):
+                retry = True
+
+                key = prefix + "_key_" + str(i)
+                while retry:
+                    client = awareness.memcached(key, r)
+                    try:
+                        value = client.getr(prefix + "_key_" + str(i))[2]
+                        assert(value==vprefix + "_value_" + str(i))
+                        get_count += 1
+                        retry = False
+                    except mc_bin_client.MemcachedError as e:
+                        last_error = "failed to getr key {0}, error: {1}".format(prefix + "_key_" + str(i), e)
+                        error_count += 1
+                        if e.status == 7:
+                            self.log.info("getting new vbucket map {0}")
+                            awareness.reset(self.rest)
+                        else:
+                            retry = False
+                    except Exception as e:
+                        last_error = "failed to getr key {0}, error: {1}".format(prefix + "_key_" + str(i), e)
+                        error_count += 1
+                        retry = False
+        if error_count > 0:
+            self.log.error("got {0} errors, last error: {1}".format(error_count, last_error))
+        self.log.info("got {0} replica items in {1} seconds".format(get_count, time.time() - time_start))
+        awareness.done()
+        return get_count
+
+    def _delete_items(self, item_count, prefix):
+        client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
+        time_start = time.time()
+        for i in range(item_count):
+            timeout_end = time.time() + 10
+            passed = False
+            while time.time() < timeout_end and not passed:
+                try:
+                    client.delete(prefix + "_key_" + str(i))
+                    passed = True
+                except Exception as e:
+                    self.log.error("failed to delete key {0}, error: {1}".format(prefix + "_key_" + str(i), e))
+                    time.sleep(2)
+            self.assertTrue(passed, "exit due to delete errors after {0} seconds".format(time.time() - time_start))
+        self.log.info("deleted {0} items in {1} seconds".format(item_count, time.time() - time_start))
+
+    def _eject_items(self, item_count, prefix):
+        flags = 0
+        client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
+        time_start = time.time()
+        for i in range(item_count):
+            timeout_end = time.time() + 10
+            passed = False
+            while time.time() < timeout_end and not passed:
+                try:
+                    client.evict_key(prefix + "_key_" + str(i))
+                    passed = True
+                except Exception as e:
+                    self.log.error("failed to eject key {0}, error: {1}".format(prefix + "_key_" + str(i), e))
+                    time.sleep(2)
+            self.assertTrue(passed, "exit due to eject errors after {0} seconds".format(time.time() - time_start))
+        self.log.info("ejected {0} items in {1} seconds".format(item_count, time.time() - time_start))
+
+    def _next_parameter(self, d, di):
+        carry = True
+        for k in d:
+            if carry:
+                di[k] += 1
+            if di[k] >= len(d[k]):
+                carry = True
+                di[k] = 0
+            else:
+                carry = False
+        return not carry
 
 
 class SimpleDecrMembaseBucketDefaultPort(unittest.TestCase):

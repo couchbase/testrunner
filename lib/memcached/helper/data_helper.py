@@ -690,48 +690,62 @@ class VBucketAwareMemcached(object):
         self.bucket = bucket
         self.memcacheds = {}
         self.vBucketMap = {}
+        self.vBucketMapReplica = {}
         self.reset(rest)
 
     def reset(self, rest=None):
-        m, v = self.request_map(rest or RestConnection(self.info), self.bucket)
+        m, v, r = self.request_map(rest or RestConnection(self.info), self.bucket)
         self.memcacheds = m
         self.vBucketMap = v
+        self.vBucketMapReplica = r
 
     def request_map(self, rest, bucket):
         memcacheds = {}
         vBucketMap = {}
+        vBucketMapReplica = {}
         vb_ready = RestHelper(rest).vbucket_map_ready(bucket, 60)
         if not vb_ready:
             raise Exception("vbucket map is not ready for bucket {0}".format(bucket))
         vBuckets = rest.get_vbuckets(bucket)
-        nodes = rest.get_nodes()
         for vBucket in vBuckets:
-            masterIp = vBucket.master.split(":")[0]
-            masterPort = int(vBucket.master.split(":")[1])
             vBucketMap[vBucket.id] = vBucket.master
-            if not vBucket.master in memcacheds:
-                server = TestInputServer()
-                server.ip = masterIp
-                server.port = rest.port
-                server.rest_username = rest.username
-                server.rest_password = rest.password
-                try:
-                    for node in nodes:
-                        if node.ip == masterIp and node.memcached == masterPort:
-                            server.port = node.port
-                            memcacheds[vBucket.master] =\
-                            MemcachedClientHelper.direct_client(server, bucket)
-                            break
-                except Exception as ex:
-                    msg = "unable to establish connection to {0}.cleanup open connections"
-                    self.log.warn(msg.format(masterIp))
-                    self.done()
-                    raise ex
-        return memcacheds, vBucketMap
+            self.add_memcached(vBucket.master, memcacheds, rest, bucket)
 
-    def memcached(self, key):
+            vBucketMapReplica[vBucket.id] = vBucket.replica
+            for replica in vBucket.replica:
+                self.add_memcached(replica, memcacheds, rest, bucket)
+        return memcacheds, vBucketMap, vBucketMapReplica
+
+    def add_memcached(self, server_str, memcacheds, rest, bucket):
+        if not server_str in memcacheds:
+            serverIp = server_str.split(":")[0]
+            serverPort = int(server_str.split(":")[1])
+            nodes = rest.get_nodes()
+
+            server = TestInputServer()
+            server.ip = serverIp
+            server.port = rest.port
+            server.rest_username = rest.username
+            server.rest_password = rest.password
+            try:
+                for node in nodes:
+                    if node.ip == serverIp and node.memcached == serverPort:
+                        server.port = node.port
+                        memcacheds[server_str] =\
+                            MemcachedClientHelper.direct_client(server, bucket)
+                        break
+            except Exception as ex:
+                msg = "unable to establish connection to {0}.cleanup open connections"
+                self.log.warn(msg.format(serverIp))
+                self.done()
+                raise ex
+
+    def memcached(self, key, replica_index=None):
         vBucketId = crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)
-        return self.memcached_for_vbucket(vBucketId)
+        if replica_index is None:
+            return self.memcached_for_vbucket(vBucketId)
+        else:
+            return self.memcached_for_replica_vbucket(vBucketId, replica_index)
 
     def memcached_for_vbucket(self, vBucketId):
         if vBucketId not in self.vBucketMap:
@@ -741,6 +755,15 @@ class VBucketAwareMemcached(object):
             msg = "poxi does not have a mc connection for server : {0}"
             raise Exception(msg.format(self.vBucketMap[vBucketId]))
         return self.memcacheds[self.vBucketMap[vBucketId]]
+
+    def memcached_for_replica_vbucket(self, vBucketId, replica_index=0):
+        if vBucketId not in self.vBucketMapReplica:
+            msg = "replica vbucket map does not have an entry for vb : {0}"
+            raise Exception(msg.format(vBucketId))
+        if self.vBucketMapReplica[vBucketId][replica_index] not in self.memcacheds:
+            msg = "poxi does not have a mc connection for server : {0}"
+            raise Exception(msg.format(self.vBucketMapReplica[vBucketId][replica_index]))
+        return self.memcacheds[self.vBucketMapReplica[vBucketId][replica_index]]
 
     def not_my_vbucket_memcached(self, key):
         vBucketId = crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)

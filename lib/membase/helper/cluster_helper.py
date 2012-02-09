@@ -2,6 +2,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedClient, MemcachedError
+from membase.api.exception import ServerAlreadyJoinedException
 
 import logger
 import testconstants
@@ -274,3 +275,58 @@ class ClusterOperationHelper(object):
             sh.log_command_output(o, r)
             msg = "modified erlang +A from {0} to {1} for server {2}"
             log.info(msg.format(original, modified, server.ip))
+
+    @staticmethod
+    def begin_rebalance_in(master, servers, timeout=5):
+        log = logger.Logger.get_logger()
+        rest = RestConnection(master)
+        otpNode = None
+
+        for server in servers:
+            if server == master:
+                continue
+            log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
+            try:
+                otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
+                msg = "unable to add node {0}:{1} to the cluster"
+                assert otpNode, msg.format(server.ip, server.port)
+            except ServerAlreadyJoinedException:
+                log.info("server {0} already joined".format(server))
+        log.info("beginning rebalance in")
+        try:
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+        except:
+            log.error("rebalance failed, trying again after {0} seconds".format(timeout))
+            time.sleep(timeout)
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+
+    @staticmethod
+    def begin_rebalance_out(master, servers, timeout=5):
+        log = logger.Logger.get_logger()
+        rest = RestConnection(master)
+        otpNode = None
+
+        allNodes = []
+        ejectedNodes = []
+        nodes = rest.node_statuses()
+        for server in servers:
+            if server == master:
+                continue
+            log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
+            for node in nodes:
+                if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
+                    ejectedNodes.append(node.id)
+        log.info("beginning rebalance out")
+        try:
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
+        except:
+            log.error("rebalance failed, trying again after {0} seconds".format(timeout))
+            time.sleep(timeout)
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
+
+    @staticmethod
+    def end_rebalance(master):
+        log = logger.Logger.get_logger()
+        rest = RestConnection(master)
+        assert rest.monitorRebalance(), "rebalance operation failed after adding nodes"
+        log.info("rebalance finished")
