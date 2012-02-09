@@ -153,7 +153,9 @@ class ViewBaseTests(unittest.TestCase):
             moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(len(doc_names)))
         time.sleep(5)
-        results, view_time = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
+        results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
+        view_time = results['view_time']
+
         # self._verify_views_replicated(bucket, view_name, map_fn)
         keys = ViewBaseTests._get_keys(self, results)
         #TODO: we should extend this function to wait for disk_write_queue for all nodes
@@ -167,7 +169,8 @@ class ViewBaseTests(unittest.TestCase):
             self.log.info(msg.format(len(keys), len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(delay)
-            results, view_time = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names),extra_params=params)
+            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names),extra_params=params)
+            view_time = results['view_time']
             total_time += view_time
             keys = ViewBaseTests._get_keys(self, results)
 
@@ -465,9 +468,9 @@ class ViewBaseTests(unittest.TestCase):
                 delta = time.time() - start
                 if results.get(u'rows', []) or results.get(u'total_rows', 0) > 0:
                     self.log.info("view returned in {0} seconds".format(delta))
-                    view_time = delta
+                    results['view_time'] = delta
                     self.log.info("was able to get view results after trying {0} times".format((i + 1)))
-                    return results, view_time
+                    return results
                 else:
                     self.log.info("view returned empty results in {0} seconds, sleeping for {1}".format(delta, timeout))
                     time.sleep(timeout)
