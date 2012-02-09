@@ -230,7 +230,7 @@ cat(paste("result has ", nrow(result)," rows \n"))
 ns_server_data_system <- result
 ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
 ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
-ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used
+ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
 
 
 
