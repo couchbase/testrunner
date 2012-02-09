@@ -250,6 +250,18 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
+    def wait_for_persistence(master, bucket, timeout=120):
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            master, bucket, "ep_queue_size", 0,
+            timeout_in_seconds=timeout)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            master, bucket, "ep_flusher_todo", 0,
+            timeout_in_seconds=timeout)
+        RebalanceHelper.wait_for_mc_stats_all_nodes(
+            master, bucket, "ep_uncommitted_items", 0,
+            timeout_in_seconds=timeout)
+
+    @staticmethod
     #TODO: add password and port
     def print_taps_from_all_nodes(rest, bucket='default'):
         #get the port number from rest ?

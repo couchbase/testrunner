@@ -311,12 +311,4 @@ class SpatialHelper:
                            .format(keys_not_found[i]))
 
     def wait_for_persistence(self, timeout=120):
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
-            self.master, self.bucket, "ep_queue_size", 0,
-            timeout_in_seconds=timeout)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
-            self.master, self.bucket, "ep_flusher_todo", 0,
-            timeout_in_seconds=timeout)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
-            self.master, self.bucket, "ep_uncommitted_items", 0,
-            timeout_in_seconds=timeout)
+        RebalanceHelper.wait_for_persistence(self.master, self.bucket, timeout)
