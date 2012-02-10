@@ -14,7 +14,9 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
 from membase.api.rest_client import RestConnection, RestHelper
 import json
-from threading import Thread
+import sys
+sys.path.append('./pytests/performance/')
+import mcsoda
 
 
 class MemcachedClientHelperExcetion(Exception):
@@ -804,7 +806,72 @@ class DocumentGenerator(object):
     def create_value(pattern, size):
         return (pattern * (size / len(pattern))) + pattern[0:(size % len(pattern))]
 
-
 #        docs = DocumentGenerator.make_docs(number_of_items,
 #                {"name": "user-${prefix}", "payload": "payload-${prefix}-${padding}"},
 #                {"size": 1024, "seed": str(uuid.uuid4())})
+
+#Format of the json documents that mcsoda uses.
+# JSON BODY
+# {
+# "key":"%s",
+# "key_num":%s,
+# "name":"%s",
+# "email":"%s",
+# "city":"%s",
+# "country":"%s",
+# "realm":"%s",
+# "coins":%s,
+# "achievements":%s
+# }
+
+class LoadWithMcsoda(object):
+
+    def __init__(self, master, num_docs, bucket='default',prefix=''):
+
+        rest = RestConnection(master)
+        vBuckets = rest.get_vbuckets(bucket)
+        self.vbucket_count = len(vBuckets)
+
+        self.cfg = {
+                'max-items': num_docs,
+                'max-creates': num_docs,
+                'min-value-size': 512,
+                'exit-after-creates': 1,
+                'ratio-sets': 1,
+                'ratio-misses': 0,
+                'ratio-creates': 1,
+                'ratio-deletes': 0,
+                'ratio-hot': 0,
+                'ratio-hot-sets': 1,
+                'ratio-hot-gets': 0,
+                'ratio-expirations': 0,
+                'expiration': 0,
+                'threads': 1,
+                'json': 1,
+                'batch': 1000,
+                'vbuckets': vbucket_count,
+                'doc-cache': 0,
+                'prefix': prefix,
+        }
+
+        # Right now only supports membase binary and 'default' bucket
+        protocol="membase-binary://{0}:8091".format(master.ip)
+
+        self.protocol, self.host_port, self.user, self.pswd = self.protocol_parse(protocol)
+
+    def protocol_parse(self, protocol_in, use_direct=False):
+        if protocol_in.find('://') >= 0:
+            protocol = \
+                '-'.join(((["membase"] + \
+                               protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
+            host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":8091"
+            user, pswd = (('@' + protocol_in.split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
+
+        return protocol, host_port, user, pswd
+
+    def get_cfg(self):
+        return self.cfg
+
+    def load_data(self):
+        cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.user, self.pswd)
+        return cur
