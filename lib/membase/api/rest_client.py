@@ -337,7 +337,6 @@ class RestConnection(object):
 
     def _create_design_doc(self, bucket, name, function):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, name)
-        #check if this view exists and update the rev
         status, content = self._http_request(
             api, 'PUT', function, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
@@ -357,10 +356,6 @@ class RestConnection(object):
         status, design_doc = self._get_design_doc(bucket, name)
         if status == False:
             raise Exception("unable to delete design document")
-
-        rev = design_doc["_rev"]
-        #pass in the rev
-        api = api + "?rev={0}".format(rev)
 
         status, content = self._http_request(
             api, 'DELETE', headers=self._create_capi_headers())
