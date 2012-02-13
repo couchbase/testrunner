@@ -20,16 +20,17 @@ class SpatialViewTests(unittest.TestCase):
         self.helper.cleanup_cluster()
 
 
-    def test_create_multiple_development_spatial(self):
-        self.log.info("description : create multiple spatial views without "
-                      "running any spatial view query")
+    def test_create_x_design_docs(self):
+        num_design_docs = self.helper.input.param("num-design-docs", 5)
+        self.log.info("description : create {0} spatial views without "
+                      "running any spatial view query".format(num_design_docs))
         rest = self.helper.rest
         bucket = self.helper.bucket
         prefix = str(uuid.uuid4())
-        name = "dev_test_spatial_multiple"
+        name = "dev_test_multiple_design_docs"
 
         design_names = ["{0}-{1}-{2}".format(name, i, prefix) \
-                             for i in range(0, 5)]
+                             for i in range(0, num_design_docs)]
         for design_name in design_names:
             self.helper.create_index_fun(design_name)
             response = rest.get_spatial(bucket, design_name)
