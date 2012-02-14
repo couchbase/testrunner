@@ -718,6 +718,7 @@ class VBucketAwareMemcached(object):
                 try:
                     for node in nodes:
                         if node.ip == masterIp and node.memcached == masterPort:
+                            server.port = node.port
                             memcacheds[vBucket.master] =\
                             MemcachedClientHelper.direct_client(server, bucket)
                             break
