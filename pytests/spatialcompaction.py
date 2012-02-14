@@ -23,7 +23,7 @@ class SpatialCompactionTests(unittest.TestCase):
         prefix = str(uuid.uuid4())[:7]
         design_name = "dev_test_spatial_compaction"
 
-        self.helper.create_index_fun(design_name)
+        self.helper.create_index_fun(design_name, prefix)
 
         # Insert (resp. update, as they have the same prefix) and query
         # the spatial index several time so that the compaction makes sense

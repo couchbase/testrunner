@@ -31,7 +31,7 @@ class SpatialRebalanceTests(unittest.TestCase):
         # Make sure we are fully de-clustered
         ClusterOperationHelper.remove_and_rebalance(self.helper.servers)
 
-        self.helper.create_index_fun(design_name)
+        self.helper.create_index_fun(design_name, prefix)
         inserted_keys = self.helper.insert_docs(num_docs, prefix)
 
         # Start creating the cluster and rebalancing it without waiting until
@@ -63,7 +63,7 @@ class SpatialRebalanceTests(unittest.TestCase):
         # Make sure we are fully clustered
         ClusterOperationHelper.add_and_rebalance(self.helper.servers)
 
-        self.helper.create_index_fun(design_name)
+        self.helper.create_index_fun(design_name, prefix)
         inserted_keys = self.helper.insert_docs(num_docs, prefix)
 
         # Start destroying the cluster and rebalancing it without waiting
@@ -95,7 +95,7 @@ class SpatialRebalanceTests(unittest.TestCase):
         # Make sure we are fully de-clustered
         ClusterOperationHelper.remove_and_rebalance(self.helper.servers)
 
-        self.helper.create_index_fun(design_name)
+        self.helper.create_index_fun(design_name, prefix)
         inserted_keys = self.helper.insert_docs(num_docs, prefix)
 
         # Add all servers to the master server one by one and start

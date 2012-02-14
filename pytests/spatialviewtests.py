@@ -32,7 +32,7 @@ class SpatialViewTests(unittest.TestCase):
         design_names = ["{0}-{1}-{2}".format(name, i, prefix) \
                              for i in range(0, num_design_docs)]
         for design_name in design_names:
-            self.helper.create_index_fun(design_name)
+            self.helper.create_index_fun(design_name, prefix)
             response = rest.get_spatial(bucket, design_name)
             self.assertTrue(response)
             self.assertEquals(response["_id"],
@@ -60,7 +60,7 @@ class SpatialViewTests(unittest.TestCase):
             .format(num_docs)
         prefix = str(uuid.uuid4())[:7]
 
-        self.helper.create_index_fun(design_name)
+        self.helper.create_index_fun(design_name, prefix)
         inserted_docs = self.helper.insert_docs(num_docs, prefix,
                                                 return_docs=True)
         self.helper.query_index_for_verification(design_name, inserted_docs,
@@ -117,7 +117,7 @@ class SpatialViewTests(unittest.TestCase):
             .format(duration)
         prefix = str(uuid.uuid4())[:7]
 
-        self.helper.create_index_fun(design_name)
+        self.helper.create_index_fun(design_name, prefix)
 
         self.docs_inserted = []
         self.shutdown_load_data = False
@@ -141,7 +141,7 @@ class SpatialViewTests(unittest.TestCase):
     # the index contains them
     # Returns the keys of the inserted documents
     def _setup_index(self, design_name, num_docs, prefix):
-        self.helper.create_index_fun(design_name)
+        self.helper.create_index_fun(design_name, prefix)
         inserted_keys = self.helper.insert_docs(num_docs, prefix)
         self.helper.query_index_for_verification(design_name, inserted_keys)
 

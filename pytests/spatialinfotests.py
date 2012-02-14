@@ -23,7 +23,7 @@ class SpatialInfoTests(unittest.TestCase):
         prefix = str(uuid.uuid4())[:7]
         design_name = "dev_test_spatial_info"
 
-        self.helper.create_index_fun(design_name)
+        self.helper.create_index_fun(design_name, prefix)
 
         # Fill the database and add an index
         doc_names = self.helper.insert_docs(2000, prefix)
