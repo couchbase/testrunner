@@ -7,7 +7,7 @@ from membase.api.rest_client import RestConnection
 from viewtests import ViewBaseTests
 from memcached.helper.data_helper import VBucketAwareMemcached, DocumentGenerator
 import json
-
+import sys
 
 class ViewQueryTests(unittest.TestCase):
 
@@ -32,6 +32,7 @@ class ViewQueryTests(unittest.TestCase):
         data_set = SimpleDataSet(self._rconn(), self.num_docs)
         queries = data_set.get_startkey_endkey_docid_queries()
         self._query_test_init(data_set, queries)
+
 
     def test_simple_dataset_all_queries(self):
         data_set = SimpleDataSet(self._rconn(), self.num_docs)
@@ -72,7 +73,6 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._begin_rebalance_out(self)
         self._query_all_views(data_set.views)
         ViewBaseTests._end_rebalance(self)
-
 
     def test_employee_dataset_stale_queries(self):
         ViewBaseTests._begin_rebalance_in(self)
@@ -119,14 +119,14 @@ class ViewQueryTests(unittest.TestCase):
         # verify
         [self._query_all_views(ds.views) for ds in data_sets]
 
-
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
-    # verification is optional
+    # verification is optional, and best practice is to
+    # set to False if you plan on running _query_all_views()
+    # later in the test case
     ###
     def _query_test_init(self, data_set, queries, verify_results = True):
-        tcObj = self
 
         # init queries
         views = data_set.views
@@ -136,7 +136,7 @@ class ViewQueryTests(unittest.TestCase):
         # start loading data
         t = Thread(target=data_set.load,
                    name="load_data_set",
-                   args=(tcObj,views[0]))
+                   args=(self, views[0]))
         t.start()
 
         # run queries while loading data
@@ -148,22 +148,39 @@ class ViewQueryTests(unittest.TestCase):
         # results will be verified if verify_results set
         if verify_results:
             self._query_all_views(views, verify_results)
+        else:
+            self._check_view_intergrity(views)
 
 
     ##
     # run all queries for all views in parallel
     ##
-    def _query_all_views(self, views, verify_results = False):
-        tcObj = self
+    def _query_all_views(self, views, verify_results = True):
+
         query_threads = []
         for view in views:
             t = Thread(target=view.run_queries,
                name="query-{0}".format(view.name),
-               args=(tcObj, verify_results))
+               args=(self, verify_results))
             query_threads.append(t)
             t.start()
 
         [t.join() for t in query_threads]
+
+        self._check_view_intergrity(views)
+
+    ##
+    # if an error occured loading or querying data for a view
+    # it is queued and checked here
+    ##
+    def _check_view_intergrity(self, views):
+        for view in views:
+            self.assertEquals(view.results.failures, [],
+                [ex[1] for ex in view.results.failures])
+            self.assertEquals(view.results.errors, [],
+                [ex[1] for ex in view.results.errors])
+
+
 
 
     # retrieve default rest connection associated with the master server
@@ -189,6 +206,7 @@ class View:
         self.name = (name, default_name)[name is None]
         self.fn_str = (fn_str, default_fn_str)[fn_str is None]
         self.fn = self._set_view_fn_from_attrs(rest)
+        self.results = unittest.TestResult()
 
         # queries defined for this view
         self.queries = queries
@@ -231,6 +249,7 @@ class View:
 
                 # first verify all doc_names get reported in the view
                 while attempt < 10 and num_keys != expected_num_docs:
+
                     self.log.info("Quering view {0} with params: {1}".format(view_name, params));
                     results = ViewBaseTests._get_view_results(tc, rest,
                         "default", view_name, limit=None, extra_params=params)
@@ -239,9 +258,19 @@ class View:
                     self.log.info("trying again in {0} seconds".format(delay))
                     time.sleep(delay)
                     attempt += 1
-                msg = "Query failed: {0} Documents Retrieved,  expected {1}"
-                tc.assertTrue(num_keys == expected_num_docs,
-                    msg.format(num_keys, expected_num_docs))
+                if(num_keys != expected_num_docs):
+                    msg = "Query failed: {0} Documents Retrieved,  expected {1}"
+                    val = msg.format(num_keys, expected_num_docs)
+                    try:
+                        tc.assertEquals(num_keys, expected_num_docs, val)
+                    except Exception as ex:
+                        self.results.addFailure(tc, sys.exc_info())
+            else:
+                # query without verification
+                self.log.info("Quering view {0} with params: {1}".format(view_name, params));
+                results = ViewBaseTests._get_view_results(tc, rest, "default", view_name,
+                                                          limit=None, extra_params=params)
+
 
 class EmployeeDataSet:
     def __init__(self, rest, docs_per_day = 200, bucket = "default"):
@@ -255,7 +284,7 @@ class EmployeeDataSet:
                            "desc" : "Couchbase server UI is one of the crown jewels of our product, which makes the Couchbase NoSQL database easy to use and operate, reports statistics on real time across large clusters, and much more. As a Member of Couchbase Technical Staff, you will design and implement front-end software for cutting-edge distributed, scale-out data infrastructure software systems, which is a pillar for the growing cloud infrastructure."}
         self.senior_arch_info = {"title" : "Senior Architect",
                                "desc" : "As a Member of Technical Staff, Senior Architect, you will design and implement cutting-edge distributed, scale-out data infrastructure software systems, which is a pillar for the growing cloud infrastructure. More specifically, you will bring Unix systems and server tech kung-fu to the team."}
-        self.views = self.get_views(rest)
+        self.views = self.create_views(rest)
         self.bucket = bucket
         self.rest = rest
         self.name = "employee_dataset"
@@ -293,7 +322,7 @@ class EmployeeDataSet:
                self.get_stale_queries()
 
     # views for this dataset
-    def get_views(self, rest):
+    def create_views(self, rest):
         vfn1 = 'function (doc) { var myregexp = new RegExp("^UI "); if(doc.job_title.match(myregexp)){ emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}'
         vfn2 = 'function (doc) { var myregexp = new RegExp("^System "); if(doc.job_title.match(myregexp)){ emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}'
         vfn3 = 'function (doc) { var myregexp = new RegExp("^Senior "); if(doc.job_title.match(myregexp)){ emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}'
@@ -321,22 +350,25 @@ class EmployeeDataSet:
     def _iterative_load(self, info, tc, view, loads_per_iteration, verify_docs_loaded):
         loaded_docs = []
 
-        smart = VBucketAwareMemcached(self.rest, self.bucket)
-        for i in range(1,self.years + 1):
-            for j in range(1, self.months + 1):
-                doc_sets = []
-                for k in range(1, self.days + 1):
-                    kv_template = {"name": "employee-${prefix}-${seed}",
-                                   "join_yr" : 2007+i, "join_mo" : j, "join_day" : k,
-                                   "email": "${prefix}@couchbase.com",
-                                   "job_title" : info["title"].encode("utf-8","ignore"),
-                                   "desc" : info["desc"].encode("utf-8", "ignore")}
-                    options = {"size": 256, "seed":  str(uuid.uuid4())[:7]}
-                    docs = DocumentGenerator.make_docs(loads_per_iteration, kv_template, options)
-                    doc_sets.append(docs)
-                #load docs
-                self._load_chunk(smart, doc_sets)
-
+        try:
+            smart = VBucketAwareMemcached(self.rest, self.bucket)
+            for i in range(1,self.years + 1):
+                for j in range(1, self.months + 1):
+                    doc_sets = []
+                    for k in range(1, self.days + 1):
+                        kv_template = {"name": "employee-${prefix}-${seed}",
+                                       "join_yr" : 2007+i, "join_mo" : j, "join_day" : k,
+                                       "email": "${prefix}@couchbase.com",
+                                       "job_title" : info["title"].encode("utf-8","ignore"),
+                                       "desc" : info["desc"].encode("utf-8", "ignore")}
+                        options = {"size": 256, "seed":  str(uuid.uuid4())[:7]}
+                        docs = DocumentGenerator.make_docs(loads_per_iteration, kv_template, options)
+                        doc_sets.append(docs)
+                    #load docs
+                    self._load_chunk(smart, doc_sets)
+        except Exception as ex:
+            view.results.addError(tc, sys.exc_info())
+            raise ex
 
     def _load_chunk(self, smart, doc_sets):
         for docs in doc_sets:
@@ -350,10 +382,11 @@ class EmployeeDataSet:
 class SimpleDataSet:
     def __init__(self, rest, num_docs):
         self.num_docs = num_docs
-        self.views = self.get_views(rest)
+        self.views = self.create_views(rest)
         self.name = "simple_dataset"
 
-    def get_views(self, rest):
+
+    def create_views(self, rest):
         view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.id);}}'
         return [View(rest, fn_str = view_fn)]
 
