@@ -609,6 +609,7 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
+        num_tries = self.input.param('num-tries', 20)
         #the wrapper thread might have already built the cluster
         if len(rest.node_statuses()) < 2:
             ViewBaseTests._setup_cluster(self)
@@ -646,7 +647,7 @@ class ViewBaseTests(unittest.TestCase):
         if get_results:
             results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, limit)
             keys = ViewBaseTests._get_keys(self, results)
-            while attempt < 6 and len(keys) != limit:
+            while attempt < num_tries and len(keys) != limit:
                 msg = "view returned {0} items , expected to return {1} items"
                 self.log.info(msg.format(len(keys), limit))
                 self.log.info("trying again in {0} seconds".format(delay))

@@ -850,7 +850,7 @@ class LoadWithMcsoda(object):
                 'threads': 1,
                 'json': 1,
                 'batch': 1000,
-                'vbuckets': vbucket_count,
+                'vbuckets': self.vbucket_count,
                 'doc-cache': 0,
                 'prefix': prefix,
         }
