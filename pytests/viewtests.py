@@ -449,7 +449,7 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}):
-        num_tries = self.input.param('num_tries', 20)
+        num_tries = self.input.param('num-tries', 20)
         timeout = self.input.param('timeout', 10)
         #if view name starts with "dev" then we should append the full_set
         for i in range(0, num_tries):
