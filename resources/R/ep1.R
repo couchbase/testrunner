@@ -23,12 +23,12 @@ pdfname = args[6]
 # pdfname = "ept-write-nonjson-180-200r452"
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
-# baseline_build="1.8.0r-55-g80f24f2-community"
-# new_build = "2.0.0r-452-gf1c60e1-community"
-# test_name = "EPT-WRITE-original"
-# dbip = "couchdb2.couchbaseqe.com"
-# dbname= "eperf"
-# pdfname = "ept-write-nonjson-180-200r452.pdf"
+ # baseline_build="1.8.0r-55-g80f24f2-community"
+ # new_build = "2.0.0r-646-gaddc29e-community"
+ # test_name = "EPT-WRITE-original"
+ # dbip = "couchdb2.couchbaseqe.com"
+ # dbname= "eperf"
+ # pdfname = "ept-write-nonjson-180-200r452.pdf"
 #i_builds = c("1.7.2r-22-geaf53ef", new_build)
 i_builds = c(baseline_build, new_build)
 
@@ -209,6 +209,30 @@ for(a_build in levels(all_builds)) {
 ns_server_data <- result_tmp
 ns_server_data$row = ns_server_data $row/1000
 
+cat("generating memcached stats ")
+result <- data.frame()
+mc_result <- vector()
+for(index in nrow(builds_list):1) {
+       tryCatch({
+                url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","membasestats", sep='')
+                cat(paste(url,"\n"))
+                doc_json <- fromJSON(file=url)
+				for(jIndex in 1:length(doc_json)) {
+					# print(length(unlist(doc_json[jIndex])))
+					one <- unlist(doc_json[jIndex])
+					x <- c(one["row"],one["time"],one["ep_bg_wait_avg"],one["ep_tap_bg_fetched"],one["ep_bg_max_load"],one["ep_bg_load"],one["buildinfo.version"])
+					mc_result <- rbind(mc_result, x)
+				}
+       },error=function(e)e, finally=print("Error getting system stats from memcached"))
+}
+
+
+memcached_stats <- as.data.frame(mc_result)
+memcached_stats $row <- as.numeric(memcached_stats $row)
+memcached_stats $ep_bg_wait_avg <- as.numeric(memcached_stats $ep_bg_wait_avg)
+memcached_stats $ep_tap_bg_fetched <- as.numeric(memcached_stats $ep_tap_bg_fetched)
+memcached_stats $ep_bg_max_load <- as.numeric(memcached_stats $ep_bg_max_load)
+memcached_stats $ep_bg_load <- as.numeric(memcached_stats $ep_bg_load)
 
 cat("generating System stats from ns_server_data_system ")
 result <- data.frame()
@@ -225,7 +249,7 @@ for(index in 1:nrow(builds_list)) {
 	},error=function(e)e, finally=print("Error getting system stats from ns_server_data"))
 }
 cat("generated ns_server_data_system data frame\n")
-cat(paste("result has ", nrow(result)," rows \n"))
+#cat(paste("result has ", nrow(result)," rows \n"))
 
 ns_server_data_system <- result
 ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
@@ -234,13 +258,11 @@ ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
 
 
 
-
-# Get systemstats
 cat("generating system stats\n")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
 	url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","systemstats", sep='')
-	cat(paste(url,"\n"))
+	#cat(paste(url,"\n"))
 	doc_json <- fromJSON(file=url)
 	# cat(paste(builds_list[index,]$id,"\n"))
 	unlisted <- plyr::ldply(doc_json, unlist)
@@ -867,6 +889,34 @@ cat("generating swap_used \n")
 p <- ggplot(ns_server_data_system, aes(row, swap_used, color=buildinfo.version , label= swap_used)) + labs(x="----time (sec)--->", y="swap_used")
 p <- p + geom_point()
 p <- addopts(p,"swap_used")
+print(p)
+makeFootnote(footnote)
+
+
+#memcached stats
+
+ cat("generating ep_bg_wait_avg \n")
+ p <- ggplot(memcached_stats, aes(row, ep_bg_wait_avg, color=buildinfo.version , label= ep_bg_wait_avg)) + labs(x="----time (sec)--->", y="ep_bg_wait_avg")
+ p <- p + geom_point()
+ p <- addopts(p,"ep_bg_wait_avg")
+ print(p)
+ makeFootnote(footnote)
+cat("generating ep_tap_bg_fetched \n")
+p <- ggplot(memcached_stats, aes(row, ep_tap_bg_fetched, color=buildinfo.version , label= ep_tap_bg_fetched)) + labs(x="----time (sec)--->", y="ep_tap_bg_fetched")
+p <- p + geom_point()
+p <- addopts(p,"ep_tap_bg_fetched")
+print(p)
+makeFootnote(footnote)
+cat("generating ep_bg_max_load \n")
+p <- ggplot(memcached_stats, aes(row, ep_bg_max_load, color=buildinfo.version , label= ep_bg_max_load)) + labs(x="----time (sec)--->", y="ep_bg_max_load")
+p <- p + geom_point()
+p <- addopts(p,"ep_bg_max_load")
+print(p)
+makeFootnote(footnote)
+cat("generating ep_bg_load \n")
+p <- ggplot(memcached_stats, aes(row, ep_bg_load, color=buildinfo.version , label= ep_bg_load)) + labs(x="----time (sec)--->", y="ep_bg_load")
+p <- p + geom_point()
+p <- addopts(p,"ep_bg_load")
 print(p)
 makeFootnote(footnote)
 
