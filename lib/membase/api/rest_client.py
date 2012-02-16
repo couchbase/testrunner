@@ -6,7 +6,7 @@ import socket
 import time
 import logger
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
-from membase.api.exception import BucketCreationException, ServerJoinException
+from membase.api.exception import BucketCreationException, ServerJoinException, ClusterRemoteException
 
 log = logger.Logger.get_logger()
 #helper library methods built on top of RestConnection interface
@@ -187,7 +187,6 @@ class RestConnection(object):
             raise Exception("unable to create view")
 
         return json
-
 
     #http://10.1.6.108:8091/couchBase/bucket-0/_design/dev_6ca50/_view/dev_6ca50?limit=10&_=1311107815807
     def view_results(self, bucket, view, params, limit=100, timeout=120):
@@ -470,6 +469,59 @@ class RestConnection(object):
         status, content = self._http_request(api, 'POST', params)
         return status
 
+    #password:password username:Administrator hostname:127.0.0.1:9002 name:two
+    def remote_clusters(self, remoteIp, remotePort, username, password, name):
+        #example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
+        otpNode = None
+        remoteCluster = {}
+        msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4}"
+        log.info(msg.format(remoteIp, remotePort, username, password, name))
+        api = self.baseUrl + 'pools/default/remoteClusters'
+        params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, remotePort),
+                                   'username': username,
+                                   'password': password,
+                                   'name':name})
+
+        status, content = self._http_request(api, 'POST', params)
+        #sample response :
+        # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
+        if status == True:
+            json_parsed = json.loads(content)
+            print json_parsed
+            remoteCluster = json_parsed
+        else:
+            log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
+            raise ClusterRemoteException(nodeIp=remoteIp,remotePort=remotePort)
+
+        return remoteCluster
+
+
+    #replicationType:continuous toBucket:default toCluster:two fromBucket:default
+    def create_replication(self, replicationType, fromBucket, toBucket, toCluster):
+        msg = "starting replication type:{0} from {1} to {2} in the remote cluster {3}"
+        create_replication_response = {}
+        log.info(msg.format(replicationType, fromBucket, toBucket, toCluster))
+        api = self.baseUrl + 'controller/createReplication'
+        params = urllib.urlencode({'replicationType': replicationType,
+                                   'toBucket': toBucket,
+                                   'fromBucket': fromBucket,
+                                   'toCluster':toCluster})
+
+        status, content = self._http_request(api, 'POST', params)
+        #respone : {"database":"http://127.0.0.1:9500/_replicator",
+        # "document":{"type":"xdc","source":"default","targetBucket":"default",
+        # "target":"http://Administrator:asdasd@127.0.0.1:9002/pools/default/buckets/default",
+        # "continuous":true}}
+        if status:
+            json_parsed = json.loads(content)
+            create_replication_response = json_parsed
+        else:
+            log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
+            raise Exception("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
+
+        return create_replication_response
+
+    
 
     #params serverIp : the server to add to this cluster
     #raises exceptions when

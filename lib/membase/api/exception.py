@@ -7,6 +7,7 @@ class MembaseHttpExceptionTypes(object):
     NODE_CANT_ADD_TO_ITSELF=1003
     BUCKET_CREATION_ERROR = 1004
     STATS_UNAVAILABLE = 1005
+    REMOTE_CLUSTER_JOIN_FAILED = 1006
 
 #base exception class for membase apis
 class MembaseHttpException(Exception):
@@ -74,6 +75,16 @@ class ServerJoinException(MembaseHttpException):
         self.parameters['nodeIp'] = nodeIp
         self.parameters['remoteIp'] = remoteIp
         self.type = MembaseHttpExceptionTypes.NODE_CANT_ADD_TO_ITSELF
+
+class ClusterRemoteException(MembaseHttpException):
+    def __init__(self,nodeIp='',remoteIp=''):
+        self._message = 'unable to add remote cluster : {0}:{1}'.format(remoteIp,
+                                                              nodeIp)
+        self.parameters = dict()
+        self.parameters['nodeIp'] = nodeIp
+        self.parameters['remoteIp'] = remoteIp
+        self.type = MembaseHttpExceptionTypes.REMOTE_CLUSTER_JOIN_FAILED
+
 
 class ServerAlreadyJoinedException(MembaseHttpException):
     def __init__(self,nodeIp='',remoteIp=''):
