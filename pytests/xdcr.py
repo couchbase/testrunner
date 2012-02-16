@@ -1,3 +1,4 @@
+import uuid
 from TestInput import TestInputSingleton
 import logger
 import time
@@ -29,7 +30,13 @@ class XDCRBaseTest(unittest.TestCase):
         master_cluster1 = input.clusters.get(0)[0]
         master_cluster2 = input.clusters.get(1)[0]
         bucket = "bucket-0"
-        XDCRBaseTest._insert_replicator_doc(testcase, input.membase_settings, master_cluster1.ip, bucket, master_cluster2.ip, bucket)
+        #add remote cluster
+        rest1 = RestConnection(master_cluster1)
+        remote_cluster_id = str(uuid.uuid4())[0:5]
+        rest1.remote_clusters(master_cluster2.ip,master_cluster2.port,
+                             master_cluster2.rest_username,
+                             master_cluster2.rest_password,remote_cluster_id)
+        rest1.create_replication("continuous","bucket-0","bucket-0",remote_cluster_id)
 
     @staticmethod
     def common_tearDown(servers, testcase):
@@ -97,20 +104,20 @@ class XDCRBaseTest(unittest.TestCase):
                             "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
 
     @staticmethod
-    def _insert_replicator_doc(testcase, rest_settings, source_ip, source_bucket, target_ip, target_bucket):
+    def _insert_replicator_doc(testcase, rest_settings, source, source_bucket, target, target_bucket):
         log = logger.Logger().get_logger()
         username = rest_settings.rest_username
         password = rest_settings.rest_password
 
-        source_url = "http://{0}:{1}@{2}:8091/pools/default/buckets/{3}".format(username, password, source_ip, source_bucket)
-        target_url = "http://{0}:{1}@{2}:8091/pools/default/buckets/{3}".format(username, password, target_ip, target_bucket)
+        source_url = "http://{0}:{1}@{2}:{3}/pools/default/buckets/{4}".format(username, password, source.ip,source.port, source_bucket)
+        target_url = "http://{0}:{1}@{2}:{3}/pools/default/buckets/{4}".format(username, password, target.ip,target.port, target_bucket)
 
         # Insert doc at the source_ip
-        couchdb_url = "http://{0}:{1}/".format(source_ip, "5984")
+        couchdb_url = "http://{0}:{1}/".format(source_ip, "9500")
         server = client.Server(couchdb_url)
         doc = {'continuous': True, 'type': 'xdcr'}
         data = server.replicate(source_url, target_url, **doc)
-        log.info("replicator doc inserted {0}".format(data['id']))
+        log.info("replicator doc inserted {0}".format(data['_local_id']))
 
 
 class XDCRTests(unittest.TestCase):
