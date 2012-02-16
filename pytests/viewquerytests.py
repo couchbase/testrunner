@@ -397,12 +397,12 @@ class SimpleDataSet:
     def get_startkey_endkey_queries(self):
         start_key = self.num_docs/2
         end_key = self.num_docs - 1000
-        return [QueryHelper({"start_key"   : start_key,
-                             "end_key"    : end_key,
-                             "decending"  : "true"}, end_key - start_key + 1),
-                QueryHelper({"start_key"   : start_key,
-                             "end_key"    : end_key,
-                             "decending"  : "true"}, end_key - start_key + 1),
+        return [QueryHelper({"start_key"   : end_key,
+                             "end_key"    : start_key,
+                             "descending"  : "true"}, end_key - start_key + 1),
+                QueryHelper({"start_key"   : end_key,
+                             "end_key"    :  start_key,
+                             "descending"  : "true"}, end_key - start_key + 1),
                 QueryHelper({"end_key"     : end_key}, end_key + 1),
                 QueryHelper({"end_key"     : end_key,
                              "inclusive_end" : "false"}, end_key),
@@ -413,14 +413,14 @@ class SimpleDataSet:
         start_key_docid_idx = start_key + 100
         end_key = self.num_docs - 1000
         startkey_docid = "\"{0}-{1}\"".format(self.views[0].prefix, start_key_docid_idx)
-        return [QueryHelper({"start_key"   : start_key,
-                             "end_key"    : end_key,
+        return [QueryHelper({"start_key"   : end_key,
+                             "end_key"    : start_key,
                              "startkey_docid" : startkey_docid,
-                             "decending"  : "true"}, end_key - start_key_docid_idx + 1),
-                QueryHelper({"start_key"   : start_key,
-                             "end_key"    : end_key,
+                             "descending"  : "true"}, end_key - start_key_docid_idx + 1),
+                QueryHelper({"start_key"   : end_key,
+                             "end_key"    :  start_key,
                              "startkey_docid" : startkey_docid,
-                             "decending"  : "true"}, end_key - start_key_docid_idx + 1),
+                             "descending"  : "true"}, end_key - start_key_docid_idx + 1),
                 QueryHelper({"start_key"   : start_key,
                              "startkey_docid"   : startkey_docid}, self.num_docs - start_key_docid_idx)]
 
