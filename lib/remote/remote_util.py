@@ -619,10 +619,13 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
     def membase_install_win(self, build, version, startserver=True):
         is_membase = False
         is_couchbase = False
+        abbr_product = ""
         if build.name.lower().find("membase") != -1:
             is_membase = True
+            abbr_product = "mb"
         elif build.name.lower().find("couchbase") != -1:
             is_couchbase = True
+            abbr_product = "cb"
         if not is_membase and not is_couchbase:
             raise Exception("its not a membase or couchbase ?")
         info = self.extract_remote_info()
@@ -634,7 +637,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             # build = self.build_url(params)
             self.create_multiple_dir(dir_paths)
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
-            self.modify_bat_file('/cygdrive/c/automation', bat_file, "mb",
+            self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product,
                                            info.architecture_type, info.windows_name, version, task)
             self.stop_schedule_tasks()
             log.info('sleep for 5 seconds before running task schedule install me')

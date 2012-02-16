@@ -307,31 +307,9 @@ class CouchbaseServerInstaller(Installer):
         type = info.type.lower()
         server = params["server"]
         if type == "windows":
-            task = "install"
-            bat_file = "install.bat"
-            server_path = "/cygdrive/c/Program Files/Couchbase/Server/"
-            dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
-
-#            log = logger.new_logger("Installer")
             build = self.build_url(params)
-            remote_client.create_multiple_dir(dir_paths)
-            remote_client.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
-            downloaded = remote_client.download_binary_in_win(build.url, params["product"], params["version"])
-            if downloaded:
-                log.info('Successful download {0}_{1}.exe'.format(params["product"], params["version"]))
-            else:
-                log.error('Download {0}_{1}.exe failed'.format(params["product"], params["version"]))
-            # modify bat file to update new build version
-            remote_client.modify_bat_file('/cygdrive/c/automation', bat_file, params["product"],
-                                           info.architecture_type, info.windows_name, params["version"], task)
-            log.info('sleep for 5 seconds before running task schedule install me')
-            time.sleep(5)
-            # run task schedule to install couchbase server
-            output, error = remote_client.execute_command("cmd /c schtasks /run /tn installme")
-            remote_client.log_command_output(output, error)
-            remote_client.wait_till_file_added(server_path, "VERSION.txt", timeout_in_seconds=600)
-            log.info('wait 30 seconds for server to start up completely')
-            time.sleep(30)
+            remote_client.download_binary_in_win(build.url, params["product"], params["version"])
+            remote_client.membase_install_win(build, params["version"])
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
