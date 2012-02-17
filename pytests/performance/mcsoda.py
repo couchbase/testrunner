@@ -130,7 +130,8 @@ def run_worker(ctl, cfg, cur, store, prefix):
     o_last_flush = store.num_ops(cur)
     t_last = time.time()
     o_last = store.num_ops(cur)
-    ops_per_sec_prev = []
+    xfer_sent_last = 0
+    xfer_recv_last = 0
 
     report = cfg.get('report', 0)
     hot_shift = cfg.get('hot-shift', 0)
@@ -143,41 +144,44 @@ def run_worker(ctl, cfg, cur, store, prefix):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
         if cfg.get('max-ops', 0) > 0 and cfg.get('max-ops', 0) <= num_ops:
-            break
+           break
         if cfg.get('exit-after-creates', 0) > 0 and \
            cfg.get('max-creates', 0) > 0 and \
            cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
-            break
+           break
 
         flushed = store.command(next_cmd(cfg, cur, store))
         i += 1
 
         if report > 0 and i % report == 0:
-            t_curr = time.time()
-            o_curr = store.num_ops(cur)
+           t_curr = time.time()
+           o_curr = store.num_ops(cur)
+           xfer_sent_curr = store.xfer_sent
+           xfer_recv_curr = store.xfer_recv
 
-            t_delta = t_curr - t_last
-            o_delta = o_curr - o_last
+           t_delta = t_curr - t_last
+           o_delta = o_curr - o_last
+           xfer_sent_delta = xfer_sent_curr - xfer_sent_last
+           xfer_recv_delta = xfer_recv_curr - xfer_recv_last
 
-            ops_per_sec = o_delta / t_delta
-            log.info(prefix + dict_to_s(cur))
-            log.info("%s    ops: %s secs: %s ops/sec: %s" %
+           ops_per_sec = o_delta / t_delta
+           xfer_sent_per_sec = xfer_sent_delta / t_delta
+           xfer_recv_per_sec = xfer_recv_delta / t_delta
+
+           log.info(prefix + dict_to_s(cur))
+           log.info("%s  ops: %s secs: %s ops/sec: %s" \
+                    " tx-bytes/sec: %s rx-bytes/sec: %s" %
                      (prefix,
                       string.ljust(str(o_delta), 10),
                       string.ljust(str(t_delta), 15),
-                      ops_per_sec))
-            t_last = t_curr
-            o_last = o_curr
+                      string.ljust(str(int(ops_per_sec)), 10),
+                      string.ljust(str(int(xfer_sent_per_sec) or "unknown"), 10),
+                      int(xfer_recv_per_sec) or "unknown"))
 
-            ops_per_sec_prev.append(ops_per_sec)
-            while len(ops_per_sec_prev) > 10:
-               ops_per_sec_prev.pop(0)
-
-            max_ops_per_sec = cfg.get('max-ops-per-sec', 0)
-            if max_ops_per_sec > 0 and len(ops_per_sec_prev) >= 2:
-               # TODO: Do something clever here to prevent going over
-               # the max-ops-per-sec.
-               pass
+           t_last = t_curr
+           o_last = o_curr
+           xfer_sent_last = xfer_sent_curr
+           xfer_recv_last = xfer_recv_curr
 
         if flushed:
            t_curr_flush = time.time()
@@ -306,14 +310,38 @@ def choose_entry(arr, n):
 class Store:
 
     def connect(self, target, user, pswd, cfg, cur):
-        self.cfg = cfg
-        self.cur = cur
+       self.target = target
+       self.cfg = cfg
+       self.cur = cur
+       self.xfer_sent = 0
+       self.xfer_recv = 0
+
+    def show_some_keys(self):
+       log.info("first 5 keys...")
+       for i in range(5):
+          print("echo get %s | nc %s %s" %
+                (self.cmd_line_get(i, prepare_key(i, self.cfg.get('prefix', ''))),
+                 self.target.split(':')[0],
+                 self.target.split(':')[1]))
 
     def stats_collector(self, sc):
         self.sc = sc
 
     def command(self, c):
-        log.info("%s %s %s %s %s" % c)
+        cmd, key_num, key_str, data, expiration = c
+        if cmd[0] == 'g':
+            print('get ' + key_str + '\r')
+            return False
+        if cmd[0] == 'd':
+            print('delete ' + key_str + '\r')
+            return False
+
+        c = 'set'
+        if cmd[0] == 'a':
+           c = self.arpa[self.cur.get('cur-sets', 0) % len(self.arpa)]
+
+        print("%s %s 0 %s %s\r\n%s\r" % (c, key_str, expiration,
+                                         len(data), data))
         return False
 
     def flush(self):
@@ -337,10 +365,10 @@ class Store:
 
     def readbytes(self, skt, nbytes, buf):
         while len(buf) < nbytes:
-            data = skt.recv(max(nbytes - len(buf), 4096))
-            if not data:
-                return None, ''
-            buf += data
+           data = skt.recv(max(nbytes - len(buf), 4096))
+           if not data:
+              return None, ''
+           buf += data
         return buf[:nbytes], buf[nbytes:]
 
     def add_timing_sample(self, cmd, delta, prefix="latency-"):
@@ -387,6 +415,8 @@ class StoreMemcachedBinary(Store):
                       (CMD_REPLACE, True),
                       (CMD_APPEND,  False),
                       (CMD_PREPEND, False) ]
+        self.xfer_sent = 0
+        self.xfer_recv = 0
 
     def connect_host_port(self, host, port, user, pswd):
         self.conn = mc_bin_client.MemcachedClient(host, port)
@@ -411,10 +441,14 @@ class StoreMemcachedBinary(Store):
 
     def inflight_send(self, inflight_msg):
         self.conn.s.send(inflight_msg)
+        return len(inflight_msg)
 
     def inflight_recv(self, inflight, inflight_arr, expectBuffer=None):
-       for i in range(inflight):
-          self.recvMsg()
+        received = 0
+        for i in range(inflight):
+           cmd, keylen, extralen, errcode, datalen, opaque, val, buf = self.recvMsg()
+           received += datalen + MIN_RECV_PACKET
+        return received
 
     def inflight_append_buffer(self, grp, vbucketId, opcode, opaque):
         return grp
@@ -476,7 +510,7 @@ class StoreMemcachedBinary(Store):
 
         if self.inflight > 0:
            # Receive replies from the previous batch of infight requests.
-           self.inflight_recv(self.inflight, self.inflight_grp)
+           self.xfer_recv += self.inflight_recv(self.inflight, self.inflight_grp)
            self.inflight_end_time = time.time()
            self.ops += self.inflight
            if self.sc:
@@ -498,8 +532,8 @@ class StoreMemcachedBinary(Store):
            msg = self.inflight_complete(grp)
 
            latency_start = time.time()
-           self.inflight_send(msg)
-           self.inflight_recv(1, grp, expectBuffer=False)
+           self.xfer_sent += self.inflight_send(msg)
+           self.xfer_recv += self.inflight_recv(1, grp, expectBuffer=False)
            latency_end = time.time()
 
            self.ops += 1
@@ -515,7 +549,7 @@ class StoreMemcachedBinary(Store):
            self.inflight_num_arpas = next_inflight_num_arpas
            self.inflight_start_time = time.time()
            self.inflight_grp = next_grp
-           self.inflight_send(next_msg)
+           self.xfer_sent += self.inflight_send(next_msg)
 
         if latency_cmd:
             self.add_timing_sample(latency_cmd, latency_end - latency_start)
@@ -597,6 +631,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         rest = RestConnection(info)
         self.awareness = VBucketAwareMemcached(rest, user or 'default', info)
         self.backoff = 0
+        self.xfer_sent = 0
+        self.xfer_recv = 0
 
     def flush_level(self):
         f = StoreMemcachedBinary.flush_level(self)
@@ -616,14 +652,18 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         return rv
 
     def inflight_send(self, inflight_msg):
+        sent = 0
         for server, buf in inflight_msg:
            try:
               conn = self.awareness.memcacheds[server]
               conn.s.send(buf)
+              sent += len(buf)
            except:
               pass
+        return sent
 
     def inflight_recv(self, inflight, inflight_grp, expectBuffer=None):
+        received = 0
         s_cmds = inflight_grp['s_cmds']
         reset_my_awareness = False
         backoff = False
@@ -643,6 +683,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                  try:
                     rcmd, keylen, extralen, errcode, datalen, ropaque, val, recvBuf = \
                         self.recvMsgSockBuf(conn.s, recvBuf)
+                    received += datalen + MIN_RECV_PACKET
                     if errcode == ERR_NOT_MY_VBUCKET:
                        reset_my_awareness = True
                     elif errcode == ERR_ENOMEM or \
@@ -671,6 +712,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
               self.awareness.reset()
            except:
               pass
+
+        return received
 
     def recvMsgSockBuf(self, sock, buf):
         pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf)
@@ -710,6 +753,8 @@ class StoreMemcachedAscii(Store):
         self.previous_ops = 0
         self.buf = ''
         self.arpa = [ 'add', 'replace', 'append', 'prepend' ]
+        self.xfer_sent = 0
+        self.xfer_recv = 0
 
     def command(self, c):
         self.queue.append(c)
@@ -813,7 +858,7 @@ def key_to_achievements(key_num, key_str):
 doc_cache = {}
 
 def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
-                   cache=None, key_name="key"):
+                   cache=None, key_name="key", suffix_ex="", whitespace=True):
     global doc_cache
 
     c = "{"
@@ -842,16 +887,20 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                           key_to_realm(key_num, key_str),
                           key_to_coins(key_num, key_str),
                           key_to_achievements(key_num, key_str))
+       if not whitespace:
+          d = d.replace("\n ", "")
        if cache:
           doc_cache[key_num] = d
 
-    return "%s%s%s" % (c, d, suffix)
+    return "%s%s%s%s" % (c, d, suffix_ex, suffix)
 
 # --------------------------------------------------------
 
 PROTOCOL_STORE = { 'memcached-ascii': StoreMemcachedAscii,
                    'memcached-binary': StoreMemcachedBinary,
-                   'membase-binary': StoreMembaseBinary}
+                   'membase-binary': StoreMembaseBinary,
+                   'none-binary': Store,
+                   'none': Store }
 
 def run(cfg, cur, protocol, host_port, user, pswd,
         stats_collector = None, stores = None, ctl = None):
@@ -893,12 +942,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
                                       args=(ctl, cfg, cur, store,
                                             "thread-" + str(i) + ": ")))
 
-   log.info("first 5 keys...")
-   for i in range(5):
-      print("echo get %s | nc %s %s" %
-            (store.cmd_line_get(i, prepare_key(i, cfg.get('prefix', ''))),
-             host_port.split(':')[0],
-             host_port.split(':')[1]))
+   store.show_some_keys()
 
    if cfg.get("doc-cache", 0) > 0 and cfg.get("doc-gen", 0) > 0:
       min_value_size = cfg['min-value-size'][0]
@@ -958,33 +1002,33 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None):
   cfg_defaults = cfg_defaults or {
      "prefix":             ("",    "Prefix for every item key."),
-     "max-ops":            (0,     "Max number of ops before exiting. 0 means keep going."),
-     "max-items":          (-1,    "Max number of items; default 100000."),
-     "max-creates":        (-1,    "Max number of creates; defaults to max-items."),
-     "min-value-size":     ("10",  "Minimal value size (bytes) during SET's; comma-separated."),
+     "max-ops":            (0,     "Max # of ops before exiting. 0 means keep going."),
+     "max-items":          (-1,    "Max # of items; default 100000."),
+     "max-creates":        (-1,    "Max # of creates; defaults to max-items."),
+     "min-value-size":     ("10",  "Min value size (bytes) for SET's; comma-separated."),
      "ratio-sets":         (0.1,   "Fraction of requests that should be SET's."),
      "ratio-creates":      (0.1,   "Fraction of SET's that should create new items."),
      "ratio-misses":       (0.05,  "Fraction of GET's that should miss."),
      "ratio-hot":          (0.2,   "Fraction of items to have as a hot item subset."),
      "ratio-hot-sets":     (0.95,  "Fraction of SET's that hit the hot item subset."),
      "ratio-hot-gets":     (0.95,  "Fraction of GET's that hit the hot item subset."),
-     "ratio-deletes":      (0.0,   "Fraction of SET updates that should be DELETE's instead."),
+     "ratio-deletes":      (0.0,   "Fraction of SET updates that shold be DELETE's."),
      "ratio-arpas":        (0.0,   "Fraction of SET non-DELETE'S to be 'a-r-p-a' cmds."),
      "ratio-expirations":  (0.0,   "Fraction of SET's that use the provided expiration."),
      "expiration":         (0,     "Expiration time parameter for SET's"),
      "exit-after-creates": (0,     "Exit after max-creates is reached."),
      "threads":            (1,     "Number of client worker threads to use."),
-     "batch":              (100,   "Batch / pipeline up this number of commands per server."),
+     "batch":              (100,   "Batch/pipeline up this # of commands per server."),
      "json":               (1,     "Use JSON documents. 0 to generate binary documents."),
      "time":               (0,     "Stop after this many seconds if > 0."),
-     "max-ops-per-sec":    (0,     "When > 0, max ops/second target performance."),
+     "max-ops-per-sec":    (0,     "When >0, max ops/second target performance."),
      "report":             (40000, "Emit performance output after this many requests."),
      "histo-precision":    (1,     "Precision of histogram bins."),
-     "vbuckets":           (0,     "When > 0, vbucket hash during memcached-binary protocol."),
-     "doc-cache":          (1,     "When 1, cache generated docs; faster but uses memory."),
-     "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs before main loop."),
+     "vbuckets":           (0,     "When >0, vbucket hash in memcached-binary protocol."),
+     "doc-cache":          (1,     "When 1, cache docs; faster, but uses O(N) memory."),
+     "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs at start."),
      "backoff-factor":     (2.0,   "Exponential backoff factor on ETMPFAIL errors."),
-     "hot-shift":          (0,     "Number of keys/sec that hot item subset should shift.")
+     "hot-shift":          (0,     "# of keys/sec that hot item subset should shift.")
      }
 
   cur_defaults = cur_defaults or {
@@ -993,7 +1037,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "cur-creates":  (0, "Number of sets that were creates."),
      "cur-gets":     (0, "Number of gets already done."),
      "cur-deletes":  (0, "Number of deletes already done."),
-     "cur-arpas":    (0, "Number of add/replace/prepend/append's (a-r-p-a) commands."),
+     "cur-arpas":    (0, "# of add/replace/prepend/append's (a-r-p-a) cmds."),
      "cur-base":     (0, "Base of numeric key range. 0 by default.")
      }
 
@@ -1007,14 +1051,16 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
                "          %s 127.0.0.1:11211",
                "          %s 127.0.0.1",
                "          %s my-test-bucket@127.0.0.1",
-               "          %s my-test-bucket:MyPassword@127.0.0.1"]:
+               "          %s my-test-bucket:MyPassword@127.0.0.1",
+               "          %s none://127.0.0.1",
+               ]:
         print(s % (argv[0]))
      print("")
      print("optional key=val's and their defaults:")
      for d in [cfg_defaults, cur_defaults]:
         for k in sorted(d.iterkeys()):
            print("  %s = %s %s" %
-                 (string.ljust(k, 20), string.ljust(str(d[k][0]), 5), d[k][1]))
+                 (string.ljust(k, 18), string.ljust(str(d[k][0]), 5), d[k][1]))
      print("")
      print("  TIP: min-value-size can be comma-separated values: min-value-size=10,256,1024")
      print("")
