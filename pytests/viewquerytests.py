@@ -51,7 +51,7 @@ class ViewQueryTests(unittest.TestCase):
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
-        data_set.add_group_count_queries([data_set.views[-1]])
+        data_set.add_group_count_queries()
         self._query_test_init(data_set)
 
 
@@ -114,9 +114,10 @@ class ViewQueryTests(unittest.TestCase):
         # load and query all views and datasets
         test_threads = []
         for ds in data_sets:
+            ds.add_all_query_sets()
             t = Thread(target=self._query_test_init,
                        name=ds.name,
-                       args=(ds, ds.get_all_query_sets(), False))
+                       args=(ds, False))
             test_threads.append(t)
             t.start()
 
@@ -339,7 +340,7 @@ class EmployeeDataSet:
 
     def add_startkey_endkey_queries(self, views = None):
         if views is None:
-            views = self.views[0:3]
+            views = self.views
 
         for view in views:
             index_size = view.index_size
@@ -379,8 +380,7 @@ class EmployeeDataSet:
             # if user doesn't override
             for view in self.views:
                 if view.index_size == self.calc_total_doc_count():
-                    if view.reduce_fn is not '':  #BUG IN REDUCE WITH THESE QUERIES
-                        views.append(view)
+                    views.append(view)
 
 
         for view in views:
@@ -454,10 +454,7 @@ class EmployeeDataSet:
     """
     def add_group_count_queries(self, views = None):
         if views is None:
-            views = []
-            for view in self.views:
-                if view.reduce_fn == "_count":
-                    views.append(view)
+            views = self.views
 
         for view in views:
             index_size = view.index_size
@@ -570,8 +567,8 @@ class SimpleDataSet:
             index_size = view.index_size
             start_key = index_size/2
             end_key = index_size - 1000
-            view.queries += [QueryHelper({"start_key"     : start_key,
-                                          "end_key"       : end_key,
+            view.queries += [QueryHelper({"start_key"     : end_key,
+                                          "end_key"       : start_key,
                                           "descending"     : "true"},
                                             end_key - start_key + 1),
                              QueryHelper({"start_key"     : end_key,
