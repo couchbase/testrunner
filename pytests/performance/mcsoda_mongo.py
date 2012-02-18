@@ -23,6 +23,8 @@ class StoreMongo(mcsoda.Store):
                                self.host_port[1])
         self.db = self.conn['default']
         self.coll = self.db['default']
+        self.xfer_sent = 0
+        self.xfer_recv = 0
 
     def gen_doc(self, key_num, key_str, min_value_size, json=None, cache=None):
         global mongoDocCache
@@ -53,7 +55,7 @@ class StoreMongo(mcsoda.Store):
         return d
 
     def command(self, c):
-        cmd, key_num, key_str, data = c
+        cmd, key_num, key_str, data, expiration = c
         cmd_start = time.time()
         if cmd[0] == 'g':
             self.coll.find_one(key_str)
