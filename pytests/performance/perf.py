@@ -35,6 +35,9 @@ class PerfBase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.sc = None
         self.tearDown() # Tear down in case previous run had unclean death.
+        self.setupRest()
+
+    def setupRest(self):
         self.rest        = RestConnection(self.input.servers[0])
         self.rest_helper = RestHelper(self.rest)
 
@@ -46,10 +49,31 @@ class PerfBase(unittest.TestCase):
         self.setUpBase0()
 
         master = self.input.servers[0]
-        bucket = self.param("bucket", "default")
 
         self.is_multi_node = False
-        self.data_path   = master.data_path
+        self.data_path = master.data_path
+
+        # Number of items loaded by load() method.
+        # Does not include or count any items that came from setUp_dgm().
+        #
+        self.num_items_loaded = 0
+
+        self.setUpCluster()
+
+        self.setUp_moxi()
+
+        if self.parami("dgm", getattr(self, "dgm", 1)):
+            self.setUp_dgm()
+
+        time.sleep(10)
+        self.setUpBase1()
+        self.wait_until_warmed_up()
+        ClusterOperationHelper.flush_os_caches(self.input.servers)
+
+    def setUpCluster(self):
+        master = self.input.servers[0]
+        bucket = self.param("bucket", "default")
+
         self.rest.init_cluster(master.rest_username, master.rest_password)
         self.rest.init_cluster_memoryQuota(master.rest_username,
                                            master.rest_password,
@@ -72,21 +96,6 @@ class PerfBase(unittest.TestCase):
         except:
             pass # For example, membase doesn't support auto compaction.
 
-        # Number of items loaded by load() method.
-        # Does not include or count any items that came from setUp_dgm().
-        #
-        self.num_items_loaded = 0
-
-        self.setUp_moxi()
-
-        if self.parami("dgm", getattr(self, "dgm", 1)):
-            self.setUp_dgm()
-
-        time.sleep(10)
-        self.setUpBase1()
-        self.wait_until_warmed_up()
-        ClusterOperationHelper.flush_os_caches(self.input.servers)
-
     def tearDown(self):
         self.tearDown_moxi()
 
@@ -94,6 +103,9 @@ class PerfBase(unittest.TestCase):
             self.sc.stop()
             self.sc = None
 
+        self.tearDownCluster()
+
+    def tearDownCluster(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
