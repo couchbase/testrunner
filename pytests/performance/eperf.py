@@ -19,7 +19,6 @@ from membase.performance.stats import StatsCollector, CallbackStatsCollector
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 
 import testconstants
-import mcsoda
 import perf
 
 class EPerfMaster(perf.PerfBase):
@@ -33,9 +32,15 @@ class EPerfMaster(perf.PerfBase):
         self.level_callbacks = []
         self.latched_rebalance_done = False
         self.is_multi_node = False
+        self.superSetUp();
+
+    def superSetUp(self):
         super(EPerfMaster, self).setUp()
 
     def tearDown(self):
+        self.superTearDown()
+
+    def superTearDown(self):
         super(EPerfMaster, self).tearDown()
 
     def get_all_stats(self):
@@ -457,7 +462,6 @@ class EPerfClient(EPerfMaster):
             sc.level_callbacks = self.level_callbacks
         else:
             sc = super(EPerfMaster, self).mk_stats(verbosity)
-
         return sc
 
     def test_ept_read(self):
