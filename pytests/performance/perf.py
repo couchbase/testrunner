@@ -35,9 +35,9 @@ class PerfBase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.sc = None
         self.tearDown() # Tear down in case previous run had unclean death.
-        self.setupRest()
+        self.setUpRest()
 
-    def setupRest(self):
+    def setUpRest(self):
         self.rest        = RestConnection(self.input.servers[0])
         self.rest_helper = RestHelper(self.rest)
 
