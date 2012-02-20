@@ -60,7 +60,7 @@ class PerfBase(unittest.TestCase):
 
         self.setUpCluster()
 
-        self.setUp_moxi()
+        self.setUpProxy()
 
         if self.parami("dgm", getattr(self, "dgm", 1)):
             self.setUp_dgm()
@@ -97,7 +97,7 @@ class PerfBase(unittest.TestCase):
             pass # For example, membase doesn't support auto compaction.
 
     def tearDown(self):
-        self.tearDown_moxi()
+        self.tearDownProxy()
 
         if self.sc is not None:
             self.sc.stop()
@@ -110,7 +110,7 @@ class PerfBase(unittest.TestCase):
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
 
-    def setUp_moxi(self, bucket=None):
+    def setUpProxy(self, bucket=None):
         bucket = bucket or self.param("bucket", "default")
         if len(self.input.moxis) > 0:
             shell = RemoteMachineShellConnection(self.input.moxis[0])
@@ -118,7 +118,7 @@ class PerfBase(unittest.TestCase):
                              self.input.moxis[0].port)
             shell.disconnect()
 
-    def tearDown_moxi(self):
+    def tearDownProxy(self):
         if len(self.input.moxis) > 0:
             shell = RemoteMachineShellConnection(self.input.moxis[0])
             shell.stop_moxi()
@@ -152,9 +152,9 @@ class PerfBase(unittest.TestCase):
             pswd = ''
         return protocol, host_port, user, pswd
 
-    def restart_moxi(self, bucket=None):
-        self.tearDown_moxi()
-        self.setUp_moxi(bucket)
+    def restartProxy(self, bucket=None):
+        self.tearDownProxy()
+        self.setUpProxy(bucket)
 
     def setUp_dgm(self):
         # Download fragmented, DGM dataset onto each cluster node, if
@@ -376,7 +376,7 @@ class PerfBase(unittest.TestCase):
 
     def loop_prep(self):
         self.wait_until_drained()
-        self.restart_moxi()
+        self.restartProxy()
 
     def loop(self, num_ops=None,
              num_items=None,
