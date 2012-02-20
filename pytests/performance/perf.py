@@ -248,6 +248,9 @@ class PerfBase(unittest.TestCase):
                     process_names=['memcached', 'beam.smp', 'couchjs'],
                     test_params = None, client_id = '',
                     collect_server_stats = True):
+        if self.parami('stats', 1) == 0:
+            return None
+
         servers = servers or self.input.servers
         sc = self.mk_stats(False)
         sc.start(servers, "default", process_names, test_name, 10, client_id,
@@ -257,6 +260,8 @@ class PerfBase(unittest.TestCase):
         return self.sc
 
     def end_stats(self, sc, total_stats=None):
+        if sc is None:
+            return
         if total_stats:
             sc.total_stats(total_stats)
         sc.stop()
