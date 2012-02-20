@@ -58,7 +58,7 @@ class PerfBase(unittest.TestCase):
         #
         self.num_items_loaded = 0
 
-        self.setUpCluster()
+        self.setUpBucket()
 
         self.setUpProxy()
 
@@ -70,7 +70,7 @@ class PerfBase(unittest.TestCase):
         self.wait_until_warmed_up()
         ClusterOperationHelper.flush_os_caches(self.input.servers)
 
-    def setUpCluster(self):
+    def setUpBucket(self):
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
@@ -103,10 +103,13 @@ class PerfBase(unittest.TestCase):
             self.sc.stop()
             self.sc = None
 
+        self.tearDownBucket()
         self.tearDownCluster()
 
-    def tearDownCluster(self):
+    def tearDownBucket(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
+
+    def tearDownCluster(self):
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
 
