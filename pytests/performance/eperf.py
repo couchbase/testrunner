@@ -118,7 +118,7 @@ class EPerfMaster(perf.PerfBase):
         if self.is_master:
             self.nodes(num_nodes)
 
-        if  self.parami("load_phase", 1) > 0:
+        if self.parami("load_phase", 1) > 0:
             print "Loading"
             num_clients = self.parami("num_clients", len(self.input.clients) or 1)
             start_at = int(self.paramf("start_at", 1.0) * \
