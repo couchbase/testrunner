@@ -454,7 +454,7 @@ class EmployeeDataSet:
     """
     def add_group_count_queries(self, views = None):
         if views is None:
-            views = self.views
+            views = [self.views[-1]]
 
         for view in views:
             index_size = view.index_size
