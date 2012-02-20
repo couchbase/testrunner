@@ -129,9 +129,7 @@ class EPerfMaster(perf.PerfBase):
             self.load(items,
                       self.param('size', self.min_value_size()),
                       kind=self.param('kind', 'json'),
-                      protocol=self.param('protocol',
-                                          'membase-binary://' + \
-                                              self.input.servers[0].ip + ":8091"),
+                      protocol=self.mk_protocol(self.input.servers[0].ip),
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
                       prefix="",
@@ -169,9 +167,7 @@ class EPerfMaster(perf.PerfBase):
                       max_creates    = max_creates,
                       min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),
-                      protocol       = self.param('protocol',
-                                                  'membase-binary://' + \
-                                                      self.input.servers[0].ip + ":8091"),
+                      protocol       = self.mk_protocol(self.input.servers[0].ip),
                       clients        = self.parami('clients', 1),
                       ratio_sets     = ratio_sets,
                       ratio_misses   = ratio_misses,

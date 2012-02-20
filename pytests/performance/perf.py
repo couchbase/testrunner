@@ -155,6 +155,10 @@ class PerfBase(unittest.TestCase):
             pswd = ''
         return protocol, host_port, user, pswd
 
+    def mk_protocol(self, host):
+        return self.param('protocol',
+                          'membase-binary://' + self.input.servers[0].ip + ":8091")
+
     def restartProxy(self, bucket=None):
         self.tearDownProxy()
         self.setUpProxy(bucket)
@@ -314,8 +318,7 @@ class PerfBase(unittest.TestCase):
         # For Black box, multi node tests
         # always use membase-binary
         if self.is_multi_node:
-            protocol=self.param('protocol', 'membase-binary://' + \
-                                            self.input.servers[0].ip + ":8091")
+            protocol=self.mk_protocol(self.input.servers[0].ip)
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
@@ -454,8 +457,7 @@ class PerfBase(unittest.TestCase):
         # For Black box, multi node tests
         # always use membase-binary
         if self.is_multi_node:
-            protocol=self.param('protocol', 'membase-binary://' + \
-                                            self.input.servers[0].ip + ":8091")
+            protocol = self.mk_protocol(self.input.servers[0].ip)
 
         self.log.info("mcsoda - protocol %s" % protocol)
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
