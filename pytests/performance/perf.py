@@ -59,8 +59,8 @@ class PerfBase(unittest.TestCase):
         #
         self.num_items_loaded = 0
 
+        self.setUpCluster()
         self.setUpBucket()
-
         self.setUpProxy()
 
         if self.parami("dgm", getattr(self, "dgm", 1)):
@@ -71,14 +71,17 @@ class PerfBase(unittest.TestCase):
         self.wait_until_warmed_up()
         ClusterOperationHelper.flush_os_caches(self.input.servers)
 
-    def setUpBucket(self):
+    def setUpCluster(self):
         master = self.input.servers[0]
-        bucket = self.param("bucket", "default")
 
         self.rest.init_cluster(master.rest_username, master.rest_password)
         self.rest.init_cluster_memoryQuota(master.rest_username,
                                            master.rest_password,
                                            memoryQuota=self.ram_quota())
+
+    def setUpBucket(self):
+        bucket = self.param("bucket", "default")
+
         self.rest.create_bucket(bucket=bucket,
                                 ramQuotaMB=self.ram_quota(),
                                 replicaNumber=self.parami("replicas",
