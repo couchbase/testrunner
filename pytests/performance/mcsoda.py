@@ -9,6 +9,7 @@ import heapq
 import socket
 import string
 import struct
+import random
 import threading
 
 sys.path.append("lib")
@@ -250,7 +251,8 @@ def next_cmd(cfg, cur, store):
                                      cfg.get('ratio-hot', 0),
                                      cfg.get('ratio-hot-sets', 0),
                                      cur.get('cur-sets', 0),
-                                     cur.get('cur-base', 0))
+                                     cur.get('cur-base', 0),
+                                     cfg.get('random', 0))
 
         expiration = 0
         if cmd[0] == 's' and cfg.get('ratio-expirations', 0.0) * 100 > cur_sets % 100:
@@ -273,7 +275,8 @@ def next_cmd(cfg, cur, store):
                                      cfg.get('ratio-hot', 0),
                                      cfg.get('ratio-hot-gets', 0),
                                      cur.get('cur-gets', 0),
-                                     cur.get('cur-base', 0))
+                                     cur.get('cur-base', 0),
+                                     cfg.get('random', 0))
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
 
             return (cmd, key_num, key_str, itm_val, 0)
@@ -281,7 +284,7 @@ def next_cmd(cfg, cur, store):
             cur['cur-misses'] = cur.get('cur-misses', 0) + 1
             return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None, 0)
 
-def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops, base):
+def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops, base, random_key):
     hit_hot_range = (ratio_hot_choice * 100) > (num_ops % 100)
     if hit_hot_range:
         range = math.floor(ratio_hot * num_items)
@@ -289,7 +292,11 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice, num_ops, base):
         base  = base + math.floor(ratio_hot * num_items)
         range = math.floor((1.0 - ratio_hot) * num_items)
 
-    return int(base + (num_ops % positive(range)))
+    x = num_ops
+    if random_key == 1:
+       x = int(random.random() * num_items)
+
+    return int(base + (x % positive(range)))
 
 def positive(x):
     if x > 0:
@@ -1028,7 +1035,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "doc-cache":          (1,     "When 1, cache docs; faster, but uses O(N) memory."),
      "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs at start."),
      "backoff-factor":     (2.0,   "Exponential backoff factor on ETMPFAIL errors."),
-     "hot-shift":          (0,     "# of keys/sec that hot item subset should shift.")
+     "hot-shift":          (0,     "# of keys/sec that hot item subset should shift."),
+     "random":             (0,     "When 1, use random keys for gets and updates.")
      }
 
   cur_defaults = cur_defaults or {
