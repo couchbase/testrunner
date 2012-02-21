@@ -43,6 +43,7 @@ Available keys:
 Examples:
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
  install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true,toy=keith
+ install.py -i /tmp/ubuntu.ini -p product=mongo,version=2.0.2
 """
     sys.exit(err)
 
@@ -57,9 +58,14 @@ errors = {"UNREACHABLE": "",
 
 
 def installer_factory(params):
+    if params.get("product", None) is None:
+        sys.exit("ERROR: don't know what product you want installed")
+
     mb_alias = ["membase", "membase-server", "mbs", "mb"]
     cb_alias = ["couchbase", "couchbase-server", "cb"]
     css_alias = ["couchbase-single", "couchbase-single-server", "css"]
+    mongo_alias = ["mongo"]
+
     if params["product"] in mb_alias:
         if "standalone" in params:
             return MembaseServerStandaloneInstaller()
@@ -72,6 +78,10 @@ def installer_factory(params):
             return CouchbaseServerInstaller()
     elif params["product"] in css_alias:
         return CouchbaseSingleServerInstaller()
+    elif params["product"] in mongo_alias:
+        return MongoInstaller()
+
+    sys.exit("ERROR: don't know about product " + params["product"])
 
 
 class Installer(object):
@@ -159,7 +169,7 @@ class Installer(object):
                 else:
                     build = BuildQuery().find_build(builds, name, info.deliverable_type,
                                                     info.architecture_type, version, toy=toy)
- 
+
                 if build:
                     if 'amazon' in params:
                         type = info.type.lower()
@@ -168,7 +178,6 @@ class Installer(object):
                                                           "https://s3.amazonaws.com/packages.couchbase")
                             build.url = build.url.replace("enterprise", "community")
                             build.name = build.name.replace("enterprise", "community")
-                            
                         else:
                             build.url = build.url.replace("http://builds.hq.northscale.net",
                                                           "http://packages.northscale.com")
@@ -392,6 +401,58 @@ class CouchbaseSingleServerInstaller(Installer):
             time.sleep(5)
         if not couchdb_ok:
             raise Exception("unable to initialize couchbase single server")
+
+
+class MongoInstaller(Installer):
+    def get_server(self, params):
+        version = params["version"]
+        server = params["server"]
+        server.product_name = "mongodb-linux-x86_64-" + version
+        server.product_tgz = server.product_name + ".tgz"
+        server.product_url = "http://fastdl.mongodb.org/linux/" + server.product_tgz
+        return server
+
+    def mk_remote_client(self, server):
+        remote_client = RemoteMachineShellConnection(server)
+
+        info = remote_client.extract_remote_info()
+        type = info.type.lower()
+        if type == "windows":
+            sys.exit("ERROR: please teach me about windows one day.")
+
+        return remote_client
+
+    def uninstall(self, params):
+        server = self.get_server(params)
+        remote_client = self.mk_remote_client(server)
+        remote_client.execute_command("killall mongod mongos")
+        remote_client.execute_command("killall -9 mongod mongos")
+        remote_client.execute_command("rm -rf ./{0}".format(server.product_name))
+
+    def install(self, params):
+        server = self.get_server(params)
+        remote_client = self.mk_remote_client(server)
+
+        downloaded = remote_client.download_binary(server.product_url, "tgz", server.product_tgz)
+        if not downloaded:
+            log.error(downloaded, 'unable to download binaries : {0}'.format(server.product_url))
+
+        remote_client.execute_command("tar -xzvf /tmp/{0}".format(server.product_tgz))
+
+    def initialize(self, params):
+        server = self.get_server(params)
+        remote_client = self.mk_remote_client(server)
+        remote_client.execute_command("mkdir -p {0}/data/data-27019 {0}/data/data-27018 {0}/log". \
+                                          format(server.product_name))
+        remote_client.execute_command("./{0}/bin/mongod --port 27019 --fork --rest --configsvr" \
+                                          " --logpath ./{0}/log/mongod-27019.out --dbpath ./{0}/data/data-27019". \
+                                          format(server.product_name))
+        remote_client.execute_command("./{0}/bin/mongod --port 27018 --fork --rest --shardsvr" \
+                                          " --logpath ./{0}/log/mongod-27018.out --dbpath ./{0}/data/data-27018". \
+                                          format(server.product_name))
+        remote_client.execute_command("./{0}/bin/mongos --port 27017 --fork" \
+                                          " --logpath ./{0}/log/mongos-27017.out --configdb localhost:27019". \
+                                          format(server.product_name))
 
 
 class InstallerJob(object):
