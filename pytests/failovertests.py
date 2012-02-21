@@ -80,9 +80,10 @@ class FailoverBaseTest(unittest.TestCase):
                     final_replication_state = RestHelper(rest).wait_for_replication(900)
                     msg = "replication state after waiting for up to 15 minutes : {0}"
                     test.log.info(msg.format(final_replication_state))
+                    # in windows, we need to set timeout_in_seconds to 15+ minutes
                     test.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
                                                                                   bucket=bucket,
-                                                                                  timeout_in_seconds=600),
+                                                                                  timeout_in_seconds=1200),
                                     msg="replication was completed but sum(curr_items) dont match the curr_items_total")
 
                     start_time = time.time()
