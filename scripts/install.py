@@ -458,13 +458,22 @@ class MongoInstaller(Installer):
 
 class InstallerJob(object):
     def sequential_install(self, params):
+        installers = []
+
         for server in input.servers:
             _params = copy.deepcopy(params)
             _params["server"] = server
-            installer = installer_factory(_params)
+            installers.append((installer_factory(_params), _params))
+
+        for installer, _params in installers:
             try:
                 installer.uninstall(_params)
                 print "uninstall succeeded"
+            except Exception as ex:
+                print "unable to complete the uninstallation: ", ex
+
+        for installer, _params in installers:
+            try:
                 installer.install(_params)
                 try:
                     installer.initialize(_params)
