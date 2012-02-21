@@ -450,6 +450,7 @@ class MongoInstaller(Installer):
         remote_client.execute_command("./{0}/bin/mongod --port 27018 --fork --rest --shardsvr" \
                                           " --logpath ./{0}/log/mongod-27018.out --dbpath ./{0}/data/data-27018". \
                                           format(server.product_name))
+        time.sleep(5) # So that mongos can connect to stabilized mongod.
         remote_client.execute_command("./{0}/bin/mongos --port 27017 --fork" \
                                           " --logpath ./{0}/log/mongos-27017.out --configdb localhost:27019". \
                                           format(server.product_name))
