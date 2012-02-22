@@ -349,8 +349,12 @@ class PerfBase(unittest.TestCase):
 
         return ops, start_time, end_time
 
-    def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd):
-        return mcsoda.run(cfg, cur, protocol, host_port, user, pswd)
+    def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
+                   stats_collector = None, stores = None, ctl = None):
+        return mcsoda.run(cfg, cur, protocol, host_port, user, pswd,
+                          stats_collector=stats_collector,
+                          stores=stores,
+                          ctl=ctl)
 
     def nodes(self, num_nodes):
         self.is_multi_node = True
