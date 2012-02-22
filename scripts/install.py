@@ -445,14 +445,17 @@ class MongoInstaller(Installer):
         remote_client.execute_command("mkdir -p {0}/data/data-27019 {0}/data/data-27018 {0}/log". \
                                           format(server.product_name))
         remote_client.execute_command("./{0}/bin/mongod --port 27019 --fork --rest --configsvr" \
-                                          " --logpath ./{0}/log/mongod-27019.out --dbpath ./{0}/data/data-27019". \
+                                          " --logpath ./{0}/log/mongod-27019.out" \
+                                          " --dbpath ./{0}/data/data-27019". \
                                           format(server.product_name))
         remote_client.execute_command("./{0}/bin/mongod --port 27018 --fork --rest --shardsvr" \
-                                          " --logpath ./{0}/log/mongod-27018.out --dbpath ./{0}/data/data-27018". \
+                                          " --logpath ./{0}/log/mongod-27018.out" \
+                                          " --dbpath ./{0}/data/data-27018". \
                                           format(server.product_name))
-        time.sleep(5) # So that mongos can connect to stabilized mongod.
-        remote_client.execute_command("./{0}/bin/mongos --port 27017 --fork" \
-                                          " --logpath ./{0}/log/mongos-27017.out --configdb localhost:27019". \
+        time.sleep(20) # So that mongos can connect to stabilized mongod.
+        remote_client.execute_command(("./{0}/bin/mongos --port 27017 --fork" \
+                                           " --logpath ./{0}/log/mongos-27017.out" \
+                                           " --configdb " + server.ip + ":27019"). \
                                           format(server.product_name))
 
 
