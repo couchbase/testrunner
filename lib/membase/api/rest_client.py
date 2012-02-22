@@ -415,7 +415,11 @@ class RestConnection(object):
                 if response['status'] in ['200', '201', '202']:
                     return True, content
                 else:
-                    json_parsed = json.loads(content)
+                    try:
+                        json_parsed = json.loads(content)
+                    except ValueError as e:
+                        json_parsed = {}
+                        json_parsed["error"] = "status: {0}, content: {1}".format(response['status'], content)
                     reason = "unknown"
                     if "error" in json_parsed:
                         reason = json_parsed["error"]
@@ -986,15 +990,13 @@ class RestConnection(object):
         return settings
 
 
-    def update_autofailover_settings(self, enabled, timeout, max_nodes):
+    def update_autofailover_settings(self, enabled, timeout):
         if enabled:
             params = urllib.urlencode({'enabled': 'true',
-                                       'timeout': timeout,
-                                       'maxNodes': max_nodes})
+                                       'timeout': timeout})
         else:
             params = urllib.urlencode({'enabled': 'false',
-                                       'timeout': timeout,
-                                       'maxNodes': max_nodes})
+                                       'timeout': timeout})
         api = self.baseUrl + 'settings/autoFailover'
         log.info('settings/autoFailover params : {0}'.format(params))
 

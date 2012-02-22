@@ -1201,6 +1201,23 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             o, r = self.execute_command("/etc/init.d/couchbase-server start")
             self.log_command_output(o, r)
 
+    def pause_memcached(self):
+        o, r = self.execute_command("killall -SIGSTOP memcached")
+        self.log_command_output(o, r)
+
+    def unpause_memcached(self):
+        o, r = self.execute_command("killall -SIGCONT memcached")
+        self.log_command_output(o, r)
+
+    def pause_beam(self):
+        o, r = self.execute_command("killall -SIGSTOP beam")
+        self.log_command_output(o, r)
+
+    def unpause_beam(self):
+        o, r = self.execute_command("killall -SIGCONT beam")
+        self.log_command_output(o, r)
+
+
     #TODO: Windows
     def flush_os_caches(self):
         info = self.extract_remote_info()
