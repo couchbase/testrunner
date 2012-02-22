@@ -150,6 +150,8 @@ class RemoteMachineShellConnection:
             log.info("STOP SERVER")
             o, r = self.execute_command("net stop membaseserver")
             self.log_command_output(o, r)
+            o, r = self.execute_command("net stop couchbaseserver")
+            self.log_command_output(o, r)
             log.info("Wait 10 seconds to stop service completely")
             time.sleep(10)
         if info.type.lower() == "linux":
