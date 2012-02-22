@@ -12,6 +12,8 @@ MONGOS_PORT    = 27017
 class EPerfMasterMongo(eperf.EPerfMaster):
 
     def setUpBase1(self):
+        self.is_leader = self.parami("prefix", 0) == 0
+
         pass # Mongo has no vbuckets.
 
     def setUpRest(self):
