@@ -531,7 +531,7 @@ class StoreMemcachedBinary(Store):
         delta_arpas = 0
 
         if self.inflight > 0:
-           # Receive replies from the previous batch of infight requests.
+           # Receive replies from the previous batch of inflight requests.
            self.xfer_recv += self.inflight_recv(self.inflight, self.inflight_grp)
            self.inflight_end_time = time.time()
            self.ops += self.inflight
