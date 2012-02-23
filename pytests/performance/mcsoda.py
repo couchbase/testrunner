@@ -1070,13 +1070,16 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
            (argv[0]))
      print("  default protocol = memcached-binary://")
      print("  default port     = 11211\n")
-     for s in ["examples: %s memcached-binary://127.0.0.1:11211 max-items=1000000 json=1",
+     for s in ["examples: %s membase://127.0.0.1:8091 max-items=1000000 json=1",
+               "          %s memcached://127.0.0.1:11210 vbuckets=1024",
                "          %s memcached://127.0.0.1:11211",
+               "          %s memcached-ascii://127.0.0.1:11211",
+               "          %s memcached-binary://127.0.0.1:11211",
                "          %s 127.0.0.1:11211",
                "          %s 127.0.0.1",
                "          %s my-test-bucket@127.0.0.1",
                "          %s my-test-bucket:MyPassword@127.0.0.1",
-               "          %s none://127.0.0.1",
+               "          %s none://",
                ]:
         print(s % (argv[0]))
      print("")
