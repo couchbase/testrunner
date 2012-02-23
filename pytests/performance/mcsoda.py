@@ -1021,7 +1021,8 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
 # --------------------------------------------------------
 
-def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None):
+def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
+         extra_examples=None):
   cfg_defaults = cfg_defaults or {
      "prefix":             ("",    "Prefix for every item key."),
      "max-ops":            (0,     "Max # of ops before exiting. 0 means keep going."),
@@ -1070,7 +1071,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
            (argv[0]))
      print("  default protocol = memcached-binary://")
      print("  default port     = 11211\n")
-     for s in ["examples: %s membase://127.0.0.1:8091 max-items=1000000 json=1",
+     examples = [
+               "examples: %s membase://127.0.0.1:8091 max-items=1000000 json=1",
                "          %s memcached://127.0.0.1:11210 vbuckets=1024",
                "          %s memcached://127.0.0.1:11211",
                "          %s memcached-ascii://127.0.0.1:11211",
@@ -1079,8 +1081,11 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
                "          %s 127.0.0.1",
                "          %s my-test-bucket@127.0.0.1",
                "          %s my-test-bucket:MyPassword@127.0.0.1",
-               "          %s none://",
-               ]:
+               "          %s none://"
+               ]
+     if extra_examples:
+        examples = examples + extra_examples
+     for s in examples:
         print(s % (argv[0]))
      print("")
      print("optional key=val's and their defaults:")
