@@ -57,7 +57,7 @@ class StoreMongo(mcsoda.Store):
     def command(self, c):
         cmd, key_num, key_str, data, expiration = c
         cmd_start = time.time()
-        if cmd[0] == 'g':
+        if cmd[0] == 'g' or cmd[0] == 'q':
             self.coll.find_one(key_str)
         elif cmd[0] == 's':
             self.coll.save(data)

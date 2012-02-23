@@ -272,6 +272,12 @@ def next_cmd(cfg, cur, store):
         cmd = 'get'
         cur['cur-gets'] = cur.get('cur-gets', 0) + 1
 
+        do_query = cfg.get('ratio-queries', 0) > \
+            float(cur.get('cur-queries', 0)) / cur.get('cur-gets', 0)
+        if do_query:
+           cmd = 'query'
+           cur['cur-queries'] = cur.get('cur-queries', 0) + 1
+
         do_get_hit = (cfg.get('ratio-misses', 0) * 100) <= (cur.get('cur-gets', 0) % 100)
         if do_get_hit:
             key_num = choose_key_num(cur.get('cur-items', 0),
@@ -345,8 +351,8 @@ class Store:
 
     def command(self, c):
         cmd, key_num, key_str, data, expiration = c
-        if cmd[0] == 'g':
-            print('get ' + key_str + '\r')
+        if cmd[0] == 'g' or cmd[0] == 'q':
+            print(cmd + ' ' + key_str + '\r')
             return False
         if cmd[0] == 'd':
             print('delete ' + key_str + '\r')
@@ -587,7 +593,7 @@ class StoreMemcachedBinary(Store):
 
     def cmd_append(self, cmd, key_num, key_str, data, expiration, grp):
        self.cmds += 1
-       if cmd[0] == 'g':
+       if cmd[0] == 'g' or cmd[0] == 'q':
           hdr, vbucketId = self.header(CMD_GET, key_str, '', opaque=self.cmds)
           m = self.inflight_append_buffer(grp, vbucketId, CMD_GET, self.cmds)
           m.append(hdr)
@@ -781,8 +787,8 @@ class StoreMemcachedAscii(Store):
         return False
 
     def command_send(self, cmd, key_num, key_str, data, expiration):
-        if cmd[0] == 'g':
-            return 'get ' + key_str + '\r\n'
+        if cmd[0] == 'g' or cmd[0] == 'q':
+            return cmd + ' ' + key_str + '\r\n'
         if cmd[0] == 'd':
             return 'delete ' + key_str + '\r\n'
 
@@ -794,7 +800,7 @@ class StoreMemcachedAscii(Store):
 
     def command_recv(self, cmd, key_num, key_str, data, expiration):
         buf = self.buf
-        if cmd[0] == 'g':
+        if cmd[0] == 'g' or cmd[0] == 'q':
             # GET...
             line, buf = self.readline(self.skt, buf)
             while line and line != 'END':
@@ -1031,6 +1037,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None)
      "ratio-deletes":      (0.0,   "Fraction of SET updates that shold be DELETE's."),
      "ratio-arpas":        (0.0,   "Fraction of SET non-DELETE'S to be 'a-r-p-a' cmds."),
      "ratio-expirations":  (0.0,   "Fraction of SET's that use the provided expiration."),
+     "ratio-queries":      (0.0,   "Fraction of GET hits that should be queries."),
      "expiration":         (0,     "Expiration time parameter for SET's"),
      "exit-after-creates": (0,     "Exit after max-creates is reached."),
      "threads":            (1,     "Number of client worker threads to use."),
