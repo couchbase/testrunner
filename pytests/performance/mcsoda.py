@@ -451,6 +451,7 @@ class StoreMemcachedBinary(Store):
         self.inflight_num_sets = 0
         self.inflight_num_deletes = 0
         self.inflight_num_arpas = 0
+        self.inflight_num_queries = 0
         self.inflight_start_time = 0
         self.inflight_end_time = 0
         self.inflight_grp = None
@@ -503,6 +504,7 @@ class StoreMemcachedBinary(Store):
         next_inflight_num_sets = 0
         next_inflight_num_deletes = 0
         next_inflight_num_arpas = 0
+        next_inflight_num_queries = 0
 
         next_grp = self.inflight_start()
 
@@ -510,13 +512,14 @@ class StoreMemcachedBinary(Store):
         n = len(self.queue)
         while i < n:
             cmd, key_num, key_str, data, expiration = self.queue[i]
-            delta_gets, delta_sets, delta_deletes, delta_arpas = \
+            delta_gets, delta_sets, delta_deletes, delta_arpas, delta_queries = \
                 self.cmd_append(cmd, key_num, key_str, data, expiration, next_grp)
             next_inflight += 1
             next_inflight_num_gets += delta_gets
             next_inflight_num_sets += delta_sets
             next_inflight_num_deletes += delta_deletes
             next_inflight_num_arpas += delta_arpas
+            next_inflight_num_queries += delta_queries
             i = i + 1
 
         next_msg = self.inflight_complete(next_grp)
@@ -529,6 +532,7 @@ class StoreMemcachedBinary(Store):
         delta_sets = 0
         delta_deletes = 0
         delta_arpas = 0
+        delta_queries = 0
 
         if self.inflight > 0:
            # Receive replies from the previous batch of inflight requests.
@@ -540,6 +544,7 @@ class StoreMemcachedBinary(Store):
                                   'tot-sets':    self.inflight_num_sets,
                                   'tot-deletes': self.inflight_num_deletes,
                                   'tot-arpas':   self.inflight_num_arpas,
+                                  'tot-queries': self.inflight_num_queries,
                                   'start-time':  self.inflight_start_time,
                                   'end-time':    self.inflight_end_time })
 
@@ -548,7 +553,7 @@ class StoreMemcachedBinary(Store):
            # request latency.
            grp = self.inflight_start()
            latency_cmd, key_num, key_str, data, expiration = self.queue[0]
-           delta_gets, delta_sets, delta_deletes, delta_arpas = \
+           delta_gets, delta_sets, delta_deletes, delta_arpas, delta_queries = \
                 self.cmd_append(latency_cmd,
                                 key_num, key_str, data, expiration, grp)
            msg = self.inflight_complete(grp)
@@ -569,6 +574,7 @@ class StoreMemcachedBinary(Store):
            self.inflight_num_sets = next_inflight_num_sets
            self.inflight_num_deletes = next_inflight_num_deletes
            self.inflight_num_arpas = next_inflight_num_arpas
+           self.inflight_num_queries = next_inflight_num_queries
            self.inflight_start_time = time.time()
            self.inflight_grp = next_grp
            self.xfer_sent += self.inflight_send(next_msg)
@@ -598,20 +604,20 @@ class StoreMemcachedBinary(Store):
           m = self.inflight_append_buffer(grp, vbucketId, CMD_GET, self.cmds)
           m.append(hdr)
           m.append(key_str)
-          return 1, 0, 0, 0
+          return 1, 0, 0, 0, 0
        elif cmd[0] == 'd':
           hdr, vbucketId = self.header(CMD_DELETE, key_str, '', opaque=self.cmds)
           m = self.inflight_append_buffer(grp, vbucketId, CMD_DELETE, self.cmds)
           m.append(hdr)
           m.append(key_str)
-          return 0, 0, 1, 0
+          return 0, 0, 1, 0, 0
 
-       rv = (0, 1, 0, 0)
+       rv = (0, 1, 0, 0, 0)
        curr_cmd = CMD_SET
        curr_extra = struct.pack(SET_PKT_FMT, 0, expiration)
 
        if cmd[0] == 'a':
-          rv = (0, 0, 0, 1)
+          rv = (0, 0, 0, 1, 0)
           curr_cmd, have_extra = self.arpa[self.cur.get('cur-sets', 0) % len(self.arpa)]
           if not have_extra:
              curr_extra = ''
@@ -1063,6 +1069,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
      "cur-gets":     (0, "Number of gets already done."),
      "cur-deletes":  (0, "Number of deletes already done."),
      "cur-arpas":    (0, "# of add/replace/prepend/append's (a-r-p-a) cmds."),
+     "cur-queries":  (0, "Number of gets that were view/index queries."),
      "cur-base":     (0, "Base of numeric key range. 0 by default.")
      }
 
