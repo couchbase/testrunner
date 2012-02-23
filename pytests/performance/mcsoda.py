@@ -307,7 +307,7 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
        x = int(random.random() * num_items)
     else:
        pos = cur.get('pos', 0)
-       pos = (pos + LARGE_PRIME) % num_items
+       pos = (pos + LARGE_PRIME) % positive(num_items)
        cur['pos'] = pos
        x = pos
 
