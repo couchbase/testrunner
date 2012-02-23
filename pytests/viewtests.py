@@ -591,7 +591,7 @@ class ViewBaseTests(unittest.TestCase):
             if len(r) > 0:
                 asserts.append(r[0])
                 self.log.error("view thread failed : {0}".format(r[0]))
-        self.fail("one of multiple threads failed. look at the logs for more specific errors")
+                self.fail("one of multiple threads failed. look at the logs for more specific errors")
 
     @staticmethod
     def _test_load_data_get_view_x_mins_thread_wrapper(self,
