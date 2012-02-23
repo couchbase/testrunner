@@ -1059,7 +1059,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
      "doc-gen":            (1,     "When 1 and doc-cache, pre-generate docs at start."),
      "backoff-factor":     (2.0,   "Exponential backoff factor on ETMPFAIL errors."),
      "hot-shift":          (0,     "# of keys/sec that hot item subset should shift."),
-     "random":             (0,     "When 1, use random keys for gets and updates.")
+     "random":             (0,     "When 1, use random keys for gets and updates."),
+     "queries":            ("",    "Query templates; semicolon-separated.")
      }
 
   cur_defaults = cur_defaults or {
@@ -1093,7 +1094,10 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
      if extra_examples:
         examples = examples + extra_examples
      for s in examples:
-        print(s % (argv[0]))
+        if s.find("%s") > 0:
+           print(s % (argv[0]))
+        else:
+           print(s)
      print("")
      print("optional key=val's and their defaults:")
      for d in [cfg_defaults, cur_defaults]:
@@ -1113,7 +1117,9 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
      for (dk, dv) in d.iteritems():
         o[dk] = dv[0]
      for kv in argv[2:]:
-        k, v = (kv + '=').split('=')[0:2]
+        s = (kv + '=').split('=')[0:-1]
+        k = s[0]
+        v = '='.join(s[1:])
         if k and v and k in o:
            if type(o[k]) != type(""):
               try:
