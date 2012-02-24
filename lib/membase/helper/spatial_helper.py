@@ -238,29 +238,20 @@ class SpatialHelper:
         return keys
 
 
-    # Verify that the built index is correct. The documents might not
-    # be persisted to disk yet, hence give it 5 tries
+    # Verify that the built index is correct. Wait until all data got
+    # persited on disk
     # If `full_docs` is true, the whole documents, not only the keys
     # will be verified
+    # Note that the resultset might be way bigger, we only check if
+    # the keys that should be inserted, were really inserted (i.e. that
+    # there might be additional keys returned)
     def query_index_for_verification(self, design_name, inserted,
                                      full_docs=False):
-        attempt = 0
-        delay = 10
-        limit = len(inserted)
-        results = self.get_results(design_name, limit)
+        self.wait_for_persistence()
+        results = self.get_results(design_name)
         result_keys = self.get_keys(results)
-        while attempt < 5 and len(result_keys) != limit:
-            msg = "spatial view returned {0} items , expected "\
-                "to return {1} items"
-            self.log.info(msg.format(len(result_keys), limit))
-            self.log.info("trying again in {0} seconds".format(delay))
-            time.sleep(delay)
-            attempt += 1
-            results = self.get_results(design_name, limit)
-            result_keys = self.get_keys(results)
 
         if not full_docs:
-            self.testcase.assertEqual(len(inserted), len(result_keys))
             self.verify_result(inserted, result_keys)
         else:
             # The default spatial view function retrurns the full
