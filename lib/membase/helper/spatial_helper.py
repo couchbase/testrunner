@@ -140,7 +140,7 @@ class SpatialHelper:
         return doc_names
 
 
-    def get_results(self, spatial, limit=100, extra_params={}):
+    def get_results(self, spatial, limit=None, extra_params={}):
         for i in range(0, 4):
             try:
                 start = time.time()
