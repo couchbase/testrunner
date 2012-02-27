@@ -150,7 +150,7 @@ class SpatialViewTests(unittest.TestCase):
             thread_result = []
             t = Thread(
                 target=SpatialViewTests._test_spatial_view_thread_wrapper,
-                name="Insert documents in parallel",
+                name="Insert documents and query in parallel",
                 args=(self, num_docs, design_name, thread_result))
             t.start()
             view_test_threads.append((t, thread_result))
