@@ -132,6 +132,45 @@ class SpatialViewTests(unittest.TestCase):
         self.helper.query_index_for_verification(design_name,
                                                  load_thread.inserted())
 
+    def test_get_spatial_during_x_min_load_y_working_set_multiple_design_docs(
+        self):
+        num_docs = self.helper.input.param("num-docs", 10000)
+        num_design_docs = self.helper.input.param("num-design-docs", 10)
+        duration = self.helper.input.param("load-time", 1)
+        self.log.info("description : will create {0} docs per design doc and "
+                      "{1} design docs that will be queried while the data "
+                      "is loaded for {2} minutes"
+                      .format(num_docs, num_design_docs, duration))
+        name = "dev_test_spatial_test_{0}_docs_{1}_design_docs_{2}_mins_load"\
+            .format(num_docs, num_design_docs, duration)
+
+        view_test_threads = []
+        for i in range(0, num_design_docs):
+            prefix = str(uuid.uuid4())[:7]
+            design_name = "{0}-{1}-{2}".format(name, i, prefix)
+            thread_result = []
+            t = Thread(
+                target=SpatialViewTests._test_multiple_design_docs_thread_wrapper,
+                name="Insert documents and query multiple design docs in parallel",
+                args=(self, num_docs, duration, design_name, prefix,
+                      thread_result))
+            t.start()
+            view_test_threads.append((t, thread_result))
+        for (t, failures) in view_test_threads:
+            t.join()
+        for (t, failures) in view_test_threads:
+            if len(failures) > 0:
+                self.fail("view thread failed : {0}".format(failures[0]))
+
+    def _test_multiple_design_docs_thread_wrapper(self, num_docs, duration,
+                                                  design_name, prefix,
+                                                  failures):
+        try:
+            self._query_x_mins_during_loading(num_docs, duration, design_name,
+                                              prefix)
+        except Exception as ex:
+            failures.append(ex)
+
 
     def test_spatial_view_on_x_docs_y_design_docs(self):
         num_docs = self.helper.input.param("num-docs", 10000)
