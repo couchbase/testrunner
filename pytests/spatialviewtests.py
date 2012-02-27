@@ -1,4 +1,5 @@
 import random
+import threading
 from threading import Thread
 import unittest
 import uuid
@@ -114,24 +115,22 @@ class SpatialViewTests(unittest.TestCase):
             .format(duration)
         prefix = str(uuid.uuid4())[:7]
 
+        self._query_x_mins_during_loading(num_docs, duration, design_name,
+                                         prefix)
+
+    def _query_x_mins_during_loading(self, num_docs, duration, design_name, prefix):
         self.helper.create_index_fun(design_name, prefix)
 
-        self.docs_inserted = []
-        self.shutdown_load_data = False
-        load_thread = Thread(
-            target=self._insert_data_till_stopped,
-            args=(num_docs, prefix))
+        load_thread = InsertDataTillStopped(self.helper, num_docs, prefix)
         load_thread.start()
 
         self._get_results_for_x_minutes(design_name, duration)
 
-        self.shutdown_load_data = True
+        load_thread.stop_insertion()
         load_thread.join()
 
-        # self.docs_inserted was set by the insertion thread
-        # (_insert_data_till_stopped)
         self.helper.query_index_for_verification(design_name,
-                                                 self.docs_inserted)
+                                                 load_thread.inserted())
 
 
     def test_spatial_view_on_x_docs_y_design_docs(self):
@@ -206,12 +205,6 @@ class SpatialViewTests(unittest.TestCase):
             self.log.info("spatial view returned {0} rows".format(len(keys)))
             time.sleep(delay)
 
-    def _insert_data_till_stopped(self, num_docs, prefix):
-        while not self.shutdown_load_data:
-            # Will be read after the function is terminated
-            self.docs_inserted = self.helper.insert_docs(
-                num_docs, prefix, wait_for_persistence=False)
-
 
     def _insert_x_docs_and_query(self, num_docs, design_name):
         prefix = str(uuid.uuid4())[:7]
@@ -236,3 +229,28 @@ class SpatialViewTests(unittest.TestCase):
         # The test cleanup expects all nodes running, hence spin the
         # full cluster up again
         fh.undo_failover(failover_nodes)
+
+
+class InsertDataTillStopped(threading.Thread):
+    def __init__(self, helper, num_docs, prefix):
+        threading.Thread.__init__(self)
+        self._helper = helper
+        self._num_docs = num_docs
+        self._prefix = prefix
+        self._stop_insertion = False
+        self._last_inserted = []
+
+    def run(self):
+        i = 0
+        while not self._stop_insertion:
+            i += 1
+            prefix = self._prefix + "-{0}".format(i)
+            self._last_inserted = self._helper.insert_docs(
+                self._num_docs, prefix, wait_for_persistence=False)
+
+    def stop_insertion(self):
+        self._stop_insertion = True
+
+    # Return the last inserted set of docs
+    def inserted(self):
+        return self._last_inserted
