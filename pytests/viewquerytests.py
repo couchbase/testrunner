@@ -260,6 +260,7 @@ class View:
             if expected_num_docs is not None and verify_results:
                 attempt = 0
                 delay = 15
+                results = None
 
                 # first verify all doc_names get reported in the view
                 while attempt < 20 and num_keys != expected_num_docs:
@@ -289,6 +290,7 @@ class View:
                         tc.assertEquals(num_keys, expected_num_docs, val)
                     except Exception as ex:
                         self.log.error(val)
+                        self.log.error("Last query result:\n\n%s\n\n" % (json.dumps(results, sort_keys=True, indent=4))
                         self.results.addFailure(tc, sys.exc_info())
             else:
                 # query without verification
