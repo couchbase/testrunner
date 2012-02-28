@@ -246,8 +246,10 @@ class SpatialHelper:
     # the keys that should be inserted, were really inserted (i.e. that
     # there might be additional keys returned)
     def query_index_for_verification(self, design_name, inserted,
-                                     full_docs=False):
-        self.wait_for_persistence()
+                                     full_docs=False,
+                                     wait_for_persistence=True):
+        if wait_for_persistence:
+            self.wait_for_persistence()
         results = self.get_results(design_name)
         result_keys = self.get_keys(results)
 

@@ -263,7 +263,8 @@ class SpatialViewTests(unittest.TestCase):
 
         inserted_keys = self._setup_index(design_name, num_docs, prefix)
         failover_nodes = fh.failover(1)
-        self.helper.query_index_for_verification(design_name, inserted_keys)
+        self.helper.query_index_for_verification(design_name, inserted_keys,
+                                                 wait_for_persistence=False)
 
         # The test cleanup expects all nodes running, hence spin the
         # full cluster up again
