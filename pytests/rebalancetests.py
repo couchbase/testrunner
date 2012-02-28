@@ -75,9 +75,10 @@ class RebalanceBaseTest(unittest.TestCase):
                 time.sleep(30)
                 ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name, 3600)
                 ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)
+                # windows need more than 15 minutes to get number matched
                 replica_match = RebalanceHelper.wait_till_total_numbers_match(bucket=bucket.name,
                                                                               master=master,
-                                                                              timeout_in_seconds=300)
+                                                                              timeout_in_seconds=1200)
                 if not replica_match:
                     asserts.append("replication was completed but sum(curr_items) dont match the curr_items_total")
                 if not failed_over:
@@ -837,9 +838,10 @@ class RebalanceTestsWithMutationLoadTests(unittest.TestCase):
                 final_replication_state = RestHelper(rest).wait_for_replication(600)
                 msg = "replication state after waiting for up to 10 minutes : {0}"
                 self.log.info(msg.format(final_replication_state))
+                # windows need more than 15 minutes to get number matched
                 self.assertTrue(RebalanceHelper.wait_till_total_numbers_match(master=master,
                                                                               bucket=bucket0,
-                                                                              timeout_in_seconds=600),
+                                                                              timeout_in_seconds=1200),
                                 msg="replication was completed but sum(curr_items) dont match the curr_items_total")
 
             start_time = time.time()
