@@ -294,6 +294,26 @@ class SpatialViewTests(unittest.TestCase):
         fh.undo_failover(failover_nodes)
 
 
+    def test_update_view_x_docs(self):
+        num_docs = self.helper.input.param("num-docs", 100)
+        self.log.info("description : create a spatial view on {0} documents "
+                      "and update the view so that it returns only a subset"\
+                          .format(num_docs))
+        design_name = "dev_test_update_view_{0}_docs".format(num_docs)
+        prefix = str(uuid.uuid4())[:7]
+
+        # Create an index that emits all documents
+        self.helper.create_index_fun(design_name, prefix)
+        keys_b = self.helper.insert_docs(num_docs/3, prefix + "bbb")
+        keys_c = self.helper.insert_docs(num_docs-(num_docs/3), prefix + "ccc")
+        self.helper.query_index_for_verification(design_name, keys_b + keys_c)
+
+        # Update index to only a subset of the documents
+        self.helper.create_index_fun(design_name, prefix + "ccc")
+        self.helper.query_index_for_verification(design_name, keys_c)
+
+
+
 class InsertDataTillStopped(threading.Thread):
     def __init__(self, helper, num_docs, prefix):
         threading.Thread.__init__(self)
