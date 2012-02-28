@@ -25,20 +25,43 @@ class SpatialViewTests(unittest.TestCase):
         num_design_docs = self.helper.input.param("num-design-docs", 5)
         self.log.info("description : create {0} spatial views without "
                       "running any spatial view query".format(num_design_docs))
+        prefix = str(uuid.uuid4())
+
+        fun = "function (doc) {emit(doc.geometry, doc);}"
+        self._insert_x_design_docs(num_design_docs, prefix, fun)
+
+
+    def test_update_x_design_docs(self):
+        num_design_docs = self.helper.input.param("num-design-docs", 5)
+        self.log.info("description : update {0} spatial views without "
+                      "running any spatial view query".format(num_design_docs))
+        prefix = str(uuid.uuid4())
+
+        fun = "function (doc) {emit(doc.geometry, doc);}"
+        self._insert_x_design_docs(num_design_docs, prefix, fun)
+
+        # Update the design docs with a different function
+        fun = "function (doc) {emit(doc.geometry, null);}"
+        self._insert_x_design_docs(num_design_docs, prefix, fun)
+
+
+    def _insert_x_design_docs(self, num_design_docs, prefix, fun):
         rest = self.helper.rest
         bucket = self.helper.bucket
-        prefix = str(uuid.uuid4())
         name = "dev_test_multiple_design_docs"
 
-        design_names = ["{0}-{1}-{2}".format(name, i, prefix) \
-                             for i in range(0, num_design_docs)]
-        for design_name in design_names:
-            self.helper.create_index_fun(design_name, prefix)
+        for i in range(0, num_design_docs):
+            design_name = "{0}-{1}-{2}".format(name, i, prefix)
+            self.helper.create_index_fun(design_name, prefix, fun)
+
+            # Verify that the function was really stored
             response = rest.get_spatial(bucket, design_name)
             self.assertTrue(response)
             self.assertEquals(response["_id"],
                               "_design/{0}".format(design_name))
-            self.log.info(response)
+            self.assertEquals(
+                response["spatial"][design_name].encode("ascii", "ignore"),
+                fun)
 
 
     def test_insert_x_docs(self):

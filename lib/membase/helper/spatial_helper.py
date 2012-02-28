@@ -25,8 +25,9 @@ class SpatialHelper:
         self.rest = RestConnection(self.master)
         self.log = logger.Logger.get_logger()
 
-        # A list of indexes that were created with create_spatial_index_fun
-        self._indexes = []
+        # A set of indexes that were created with create_spatial_index_fun
+        # It's a set, so indexes can be updated without problems
+        self._indexes = set([])
 
 
     def setup_cluster(self, do_rebalance=True):
@@ -64,12 +65,13 @@ class SpatialHelper:
                 self.servers, self.testcase)
 
 
-    def create_index_fun(self, name, prefix):
-        fun = 'function (doc) {if(doc._id.indexOf("' + prefix + \
-            '") != -1) { emit(doc.geometry, doc);}}'
+    def create_index_fun(self, name, prefix, fun=None):
+        if fun is None:
+            fun = 'function (doc) {if(doc._id.indexOf("' + prefix + \
+                '") != -1) { emit(doc.geometry, doc);}}'
         function = self._create_function(name, fun)
         self.rest.create_spatial(self.bucket, name, function)
-        self._indexes.append(name)
+        self._indexes.add(name)
 
 
     # If you insert docs that are already there, they are simply
