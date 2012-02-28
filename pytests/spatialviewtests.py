@@ -6,6 +6,7 @@ import uuid
 import logger
 import time
 
+from membase.api.rest_client import RestConnection
 from membase.helper.spatial_helper import SpatialHelper
 from membase.helper.failover_helper import FailoverHelper
 
@@ -311,6 +312,33 @@ class SpatialViewTests(unittest.TestCase):
         # Update index to only a subset of the documents
         self.helper.create_index_fun(design_name, prefix + "ccc")
         self.helper.query_index_for_verification(design_name, keys_c)
+
+
+    def test_compare_views_all_nodes_x_docs(self):
+        num_docs = self.helper.input.param("num-docs", 100)
+        self.log.info("description : creates view on {0} documents, queries "
+                      "all nodes (not only the master node) and compares "
+                      "if the results are all the same"\
+                          .format(num_docs))
+        design_name = "dev_test_compare_views_{0}_docs".format(num_docs)
+        prefix = str(uuid.uuid4())[:7]
+
+        inserted_keys = self._setup_index(design_name, num_docs, prefix)
+
+        nodes = self.helper.rest.get_nodes()
+        params = {"connection_timeout": 60000, "full_set": True}
+
+        # Query every single node and verify
+        for n in nodes:
+            n_rest = RestConnection({
+                    "ip": n.ip,
+                    "port": n.port,
+                    "username": self.helper.master.rest_username,
+                    "password": self.helper.master.rest_password})
+            results = n_rest.spatial_results(self.helper.bucket, design_name,
+                                             params, None)
+            result_keys = self.helper.get_keys(results)
+            self.helper.verify_result(inserted_keys, result_keys)
 
 
 
