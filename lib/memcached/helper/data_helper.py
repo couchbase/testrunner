@@ -262,9 +262,19 @@ class MemcachedClientHelper(object):
 
     @staticmethod
     def direct_client(server, bucket, timeout=30):
-        rest = RestConnection(server)
-        node = rest.get_nodes_self()
         log = logger.Logger.get_logger()
+        rest = RestConnection(server)
+        node = None
+        try:
+            node = rest.get_nodes_self()
+        except ValueError as e:
+            log.info("could not connect to server {0}, will try scanning all nodes".format(server))
+        if not node:
+            nodes = rest.get_nodes()
+            for n in nodes:
+                if n.ip == server.ip and n.port == server.port:
+                    node = n
+
         if isinstance(server, dict):
             log.info("dict:{0}".format(server))
             log.info("creating direct client {0}:{1} {2}".format(server["ip"], node.memcached, bucket))
@@ -850,7 +860,7 @@ class DocumentGenerator(object):
 
 class LoadWithMcsoda(object):
 
-    def __init__(self, master, num_docs, bucket='default',prefix=''):
+    def __init__(self, master, num_docs, prefix='', bucket='default', password='', protocol='membase-binary', port=11211):
 
         rest = RestConnection(master)
         vBuckets = rest.get_vbuckets(bucket)
@@ -878,12 +888,19 @@ class LoadWithMcsoda(object):
                 'prefix': prefix,
         }
 
-        # Right now only supports membase binary and 'default' bucket
-        protocol="membase-binary://{0}:8091".format(master.ip)
+        self.protocol = protocol
+        self.user = bucket
+        self.pswd = password
 
-        self.protocol, self.host_port, self.user, self.pswd = self.protocol_parse(protocol)
+        if protocol == 'membase-binary':
+            self.host_port = "{0}:{1}:{2}".format(master.ip, master.port, port)
 
-    def protocol_parse(self, protocol_in, use_direct=False):
+        elif protocol == 'memcached-binary':
+            self.host_port = "{0}:{1}:{1}".format(master.ip, port)
+
+        self.ctl = { 'run_ok': True }
+
+    def protocol_parse(self, protocol_in):
         if protocol_in.find('://') >= 0:
             protocol = \
                 '-'.join(((["membase"] + \
@@ -897,5 +914,8 @@ class LoadWithMcsoda(object):
         return self.cfg
 
     def load_data(self):
-        cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.user, self.pswd)
+        cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.user, self.pswd, ctl=self.ctl)
         return cur
+
+    def load_stop(self):
+        self.ctl['run_ok'] = False

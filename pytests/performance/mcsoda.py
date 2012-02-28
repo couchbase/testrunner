@@ -654,8 +654,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         from membase.api.rest_client import RestConnection
         from memcached.helper.data_helper import VBucketAwareMemcached
         info = { "ip": host, "port": port,
-                 'username': user or 'Administrator',
-                 'password': pswd or 'password' }
+                 'username': user or 'default',
+                 'password': pswd or '' }
         rest = RestConnection(info)
         self.awareness = VBucketAwareMemcached(rest, user or 'default', info)
         self.backoff = 0

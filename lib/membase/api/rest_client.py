@@ -1248,6 +1248,8 @@ class RestParser(object):
             node.id = parsed["otpNode"]
             if parsed["otpNode"].find('@') >= 0:
                 node.ip = node.id[node.id.index('@') + 1:]
+        elif "hostname" in parsed:
+            node.ip = parsed["hostname"].split(":")[0]
 
         # memoryQuota
         if 'memoryQuota' in parsed:

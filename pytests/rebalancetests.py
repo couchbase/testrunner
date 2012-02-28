@@ -9,7 +9,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached
+from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached, LoadWithMcsoda
 from threading import Thread
 
 
@@ -24,26 +24,31 @@ class RebalanceBaseTest(unittest.TestCase):
     def common_setup(input, testcase, bucket_ram_ratio=(2.0 / 3.0), replica=0):
         log = logger.Logger.get_logger()
         servers = input.servers
+        serverInfo = servers[0]
+        rest = RestConnection(serverInfo)
+        rest.stop_rebalance()
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
-        serverInfo = servers[0]
 
         log.info('picking server : {0} as the master'.format(serverInfo))
         #if all nodes are on the same machine let's have the bucket_ram_ratio as bucket_ram_ratio * 1/len(servers)
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(servers)
-        rest = RestConnection(serverInfo)
         info = rest.get_nodes_self()
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
+        if "num_buckets" in TestInputSingleton.input.test_params:
+            num_buckets = int(TestInputSingleton.input.test_params["num_buckets"])
+        else:
+            num_buckets = 1
         if "ascii" in TestInputSingleton.input.test_params\
         and TestInputSingleton.input.test_params["ascii"].lower() == "true":
             BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio,
-                                                          howmany=1, sasl=False)
+                                                          howmany=num_buckets, sasl=False)
         else:
             BucketOperationHelper.create_multiple_buckets(serverInfo, replica, node_ram_ratio * bucket_ram_ratio,
-                                                          howmany=1, sasl=True)
+                                                          howmany=num_buckets, sasl=True)
         buckets = rest.get_buckets()
         for bucket in buckets:
             ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket.name)
@@ -393,8 +398,107 @@ class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
         self._common_test_body(keys_count, load_ratio, replica, 1, True, delete_ratio, expiry_ratio)
 
-#this test case will add all the nodes and then start removing them one by one
 
+class IncrementalRebalanceWithParallelLoad(unittest.TestCase):
+    def setUp(self):
+        self._input = TestInputSingleton.input
+        self._servers = self._input.servers
+        self.log = logger.Logger().get_logger()
+
+    def tearDown(self):
+        RebalanceBaseTest.common_tearDown(self._servers, self)
+
+    #load data add one node , rebalance add another node rebalance, then remove each node
+    def _common_test_body(self, keys_count, repeat, max_ops_per_second, min_item_size):
+        master = self._servers[0]
+        rest = RestConnection(master)
+        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+        creds = self._input.membase_settings
+        rebalanced_servers = [master]
+
+        # start load, max_ops_per_second is the combined limit for all buckets
+        buckets = rest.get_buckets()
+        loaders = []
+        self.log.info("max-ops-per-second per bucket: {0}".format(max_ops_per_second / len(buckets)))
+        for bucket in buckets:
+            loader = {}
+            loader["mcsoda"] = LoadWithMcsoda(master, keys_count, prefix='', bucket=bucket.name,password=bucket.saslPassword, protocol='membase-binary')
+#            loader["mcsoda"] = LoadWithMcsoda(master, keys_count, prefix='', bucket=bucket.name, password=bucket.saslPassword, protocol='memcached-binary', port=11211)
+            loader["mcsoda"].cfg["max-ops"] = 0
+            loader["mcsoda"].cfg["max-ops-per-sec"] = max_ops_per_second / len(buckets)
+            loader["mcsoda"].cfg["exit-after-creates"] = 0
+            loader["mcsoda"].cfg["min-value-size"] = min_item_size
+            loader["mcsoda"].cfg["json"] = 0
+            loader["mcsoda"].cfg["batch"] = 100
+            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
+            loader["thread"].daemon = True
+            loaders.append(loader)
+
+        for loader in loaders:
+            loader["thread"].start()
+
+
+        for iteration in range(repeat):
+            for server in self._servers[1:]:
+                self.log.info("iteration {0}: ".format(iteration))
+                self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
+                self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
+
+                rebalance_done = False
+                rebalance_try = 0
+                while not rebalance_done:
+                    try:
+                        ClusterOperationHelper.begin_rebalance_in(master, [server])
+                        ClusterOperationHelper.end_rebalance(master)
+                        rebalance_done = True
+                    except AssertionError as e:
+                        rebalance_try += 1
+                        self.log.error(e)
+                        time.sleep(5)
+                        if rebalance_try > 5:
+                            raise e
+
+            for server in self._servers[1:]:
+                self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
+                self.log.info("removing node {0} and rebalance afterwards".format(server.ip))
+
+                rebalance_done = False
+                rebalance_try = 0
+                while not rebalance_done:
+                    try:
+                        ClusterOperationHelper.begin_rebalance_out(master, [server])
+                        ClusterOperationHelper.end_rebalance(master)
+                        rebalance_done = True
+                    except AssertionError as e:
+                        rebalance_try += 1
+                        self.log.error(e)
+                        time.sleep(5)
+                        if rebalance_try > 5:
+                            raise e
+
+        # stop load
+        for loader in loaders:
+            loader["mcsoda"].load_stop()
+
+        for loader in loaders:
+            loader["thread"].join()
+
+
+    def test_load(self):
+        log = logger.Logger().get_logger()
+        repeat = self._input.param("repeat", 1)
+        keys_count = self._input.param("keys_count", 1000)
+        replica = self._input.param("replica", 1)
+        max_ops_per_second = self._input.param("max_ops_per_second", 500)
+        min_item_size = self._input.param("min_item_size", 128)
+
+        log.info("repeat: {0}, keys_count: {1}, replica: {2}, max_ops_per_second: {3}, min_item_size: {4}".format(repeat, keys_count, replica, max_ops_per_second, min_item_size))
+
+        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
+        self._common_test_body(keys_count, repeat, max_ops_per_second, min_item_size)
+
+
+#this test case will add all the nodes and then start removing them one by one
 
 class IncrementalRebalanceOut(unittest.TestCase):
     def setUp(self):

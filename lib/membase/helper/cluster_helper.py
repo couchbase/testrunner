@@ -304,17 +304,19 @@ class ClusterOperationHelper(object):
     def begin_rebalance_out(master, servers, timeout=5):
         log = logger.Logger.get_logger()
         rest = RestConnection(master)
-        otpNode = None
+
+        master_node = rest.get_nodes_self()
 
         allNodes = []
         ejectedNodes = []
         nodes = rest.node_statuses()
         for server in servers:
-            if server == master:
+            server_node = RestConnection(server).get_nodes_self()
+            if server_node == master_node:
                 continue
-            log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
+            log.info("removing node {0}:{1} from cluster".format(server_node.ip, server_node.port))
             for node in nodes:
-                if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
+                if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server_node.ip, server_node.port):
                     ejectedNodes.append(node.id)
         log.info("beginning rebalance out")
         try:
