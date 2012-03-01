@@ -37,6 +37,15 @@ class SpatialQueryTests(unittest.TestCase):
         data_set.add_skip_queries()
         self._query_test_init(data_set)
 
+    def test_simple_dataset_bbox_queries(self):
+        num_docs = self.helper.input.param("num-docs", 1000)
+        self.log.info("description : Make bounding box queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_bbox_queries()
+        self._query_test_init(data_set)
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
@@ -169,9 +178,24 @@ class SimpleDataSet:
                                     {"skip": 7296, "limit": 506}])
                 ]
 
+    def add_bbox_queries(self):
+        for view in self.views:
+            view.queries += [
+                QueryHelper({"bbox": "-180,-90,180,90"}, view.index_size),
+                QueryHelper({"bbox": "-900,-900,900,900"}, view.index_size),
+                QueryHelper({}, view.index_size),
+                QueryHelper({"bbox": "-900,-900,900,900"}, view.index_size),
+                QueryCompareHelper([{"bbox": "-900,-900,900,900"}],
+                                   [{}]),
+                QueryCompareHelper([{"bbox": "-117,-76,34,43"}],
+                                   [{"bbox": "-117,-76,34,-5"},
+                                    {"bbox": "-117,-5,34,43"}]),
+                ]
+
     def add_all_query_sets(self):
         self.add_limit_queries()
         self.add_skip_queries()
+        self.add_bbox_queries()
 
 
 
