@@ -5,7 +5,7 @@ from exception import TimeoutException
 from membase.api.rest_client import RestConnection
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import KVStoreAwareSmartClient
+from memcached.helper.data_helper import KVStoreAwareSmartClient, KVStoreSmartClientHelper
 from mc_bin_client import MemcachedError
 import copy
 import json
@@ -139,7 +139,7 @@ class BucketCreateTask(Task):
         task_manager.schedule(self)
 
 class BucketDeleteTask(Task):
-    def __init__(self, server, bucket):
+    def __init__(self, server, bucket = "default"):
         Task.__init__(self, "bucket_delete_task")
         self.server = server
         self.bucket = bucket
@@ -162,13 +162,18 @@ class BucketDeleteTask(Task):
 
     def delete_bucket(self, task_manager):
         rest = RestConnection(self.server)
-        if rest.delete_bucket(self.bucket):
-            self.state = "checking"
-            task_manager.schedule(self)
+        if self.bucket in [bucket.name for bucket in rest.get_buckets()]:
+            if rest.delete_bucket(self.bucket):
+                self.state = "checking"
+                task_manager.schedule(self)
+            else:
+                self.state = "finished"
+                self.set_result({"status": "error",
+                                 "value": "Failed to delete bucket {0}".format(self.bucket)})
         else:
+            # bucket already deleted
             self.state = "finished"
-            self.set_result({"status": "error",
-                             "value": "Failed to delete bucket {0}".format(self.bucket)})
+            self.set_result({"status": "success", "value": None})
 
     def check_bucket_deleted(self):
         rest = RestConnection(self.server)
@@ -242,23 +247,42 @@ class RebalanceTask(Task):
             self.state = "finishing"
             self.set_result({"status": "success", "value": None})
 
-
-class GenericLoadingTask(Task):
-    def __init__(self, rest, bucket, info = None, kv_store = None, store_enabled = True):
-        Task.__init__(self, "load_gen_task")
+#OperationGeneratorTask
+#OperationGenerating
+class GenericLoadingTask(Thread, Task):
+    def __init__(self, rest, bucket, kv_store = None, store_enabled = True, info = None):
+        Thread.__init__(self)
+        Task.__init__(self, "gen_task")
         self.rest = rest
         self.bucket = bucket
         self.client = KVStoreAwareSmartClient(rest, bucket, kv_store, info, store_enabled)
-        self.state = "pending"
+        self.state = "initializing"
+        self.doc_op_count = 0
+
+    def cancel(self):
+        self._Thread__stop()
+        self.join()
+        self.log.info("cancelling task: {0}".format(self.name))
+        self.cancelled = True
+
 
     def step(self, task_manager):
-        if self.state == "pending":
-            self.do_ops()
+        if self.cancelled:
+            self.result = self.set_result({"status": "cancelled",
+                                           "value": self.doc_op_count})
+        if self.state == "initializing":
             self.state = "running"
-            task_manager.schedule(self)
+            self.start()
+            task_manager.schedule(self, 2)
         elif self.state == "running":
-            self.state = "finished"
-        else:
+            self.log.info("{0}: {1} ops completed".format(self.name, self.doc_op_count))
+            if self.is_alive():
+                task_manager.schedule(self, 2)
+            else:
+                self.join()
+                self.state = "finished"
+                self.set_result({"status" : "success", "value" : self.doc_op_count})
+        elif self.state != "finished":
             raise Exception("Bad State in DocumentGeneratorTask")
 
     def do_ops(self):
@@ -267,7 +291,9 @@ class GenericLoadingTask(Task):
     def do_task_op(self, op, key, value = None, expiration = None):
         retry_count = 0
         ok = False
-        value = value.replace(" ", "")
+        if value is not None:
+            value = value.replace(" ", "")
+
         while retry_count < 5 and not ok:
             try:
                 if op == "set":
@@ -282,47 +308,20 @@ class GenericLoadingTask(Task):
                 ok = True
             except MemcachedError as error:
                 if error.status == 7:
-                    client.reset_vbucket(self.rest, key)
-                retry_count += 1
+                    self.client.reset_vbucket(self.rest, key)
+                retry_count = retry_count + 1
+            except AssertionError:
+                retry_count = retry_count + 1
 
-class LoadDocGeneratorTask(Thread, GenericLoadingTask):
-    def __init__(self, rest, doc_generators, bucket = "default", expiration = None, loop = False):
-        Thread.__init__(self)
-        GenericLoadingTask.__init__(self, rest, bucket)
+class LoadDocGeneratorTask(GenericLoadingTask):
+    def __init__(self, rest, doc_generators, bucket = "default", kv_store = None,
+                 store_enabled = True, expiration = None, loop = False):
+        GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
 
         self.doc_generators = doc_generators
-        self._dcopy = copy.deepcopy(doc_generators)
         self.expiration = None
         self.loop = loop
-        self.doc_ids = []
-        self.state = "initializing"
-
-    def cancel(self):
-        self._Thread__stop()
-        self.join()
-        self.log.info("cancelling LoadDocGeneratorTask")
-        self.cancelled = True
-
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": self.doc_ids})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "running"
-            self.start()
-            task_manager.schedule(self, 2)
-        elif self.state == "running":
-            self.log.info("{0} documents loaded".format(len(self.doc_ids)))
-            if self.is_alive():
-                task_manager.schedule(self, 2)
-            else:
-                self.join()
-                self.state = "finished"
-                self.set_result({"status" : "success", "value" : self.doc_ids})
-        elif self.state != "finished":
-            raise Exception("Bad State in DocumentGeneratorTask")
-
+        self.name = "doc-load-task"
 
     def run(self):
         while True:
@@ -334,60 +333,78 @@ class LoadDocGeneratorTask(Thread, GenericLoadingTask):
                     _id = _json["_id"].encode("ascii", "ignore")
                     try:
                         self.do_task_op("set", _id, _value, self.expiration)
-                        self.doc_ids.append(_id)
+                        self.doc_op_count = self.doc_op_count + 1
                     except Exception as e:
                         self.state = "finished"
                         self.set_result({"status": "error", "value": e})
                         return
             if not self.loop:
+                self.set_result({"status": "success", "value": self.doc_op_count})
                 return
 
-class DocumentMutateTask(GenericLoadingTask):
-    def __init__(self, docs, rest, bucket,
-                kv_store = None, info = None,
-                store_enabled = True, expiration = None):
-        GenericLoadingTask.__init__(rest, bucket, kv_store, info, store_enabled)
-        self.docs = docs
-        self.expiration = expiration
-
-    def do_ops(self, json_data):
-        for doc in self.docs:
-            _doc_body = doc.encode("ascii", "ignore")
-            _json = json.loads(_doc_body, encoding="utf-8")
-            _id = _json["_id"].encode("ascii", "ignore")
-            try:
-                self.do_task_op("set", _id, _doc_body, self.expiration)
-            except:
-                self.set_result({"status": "error", "value": "set failed"})
-
-        self.set_result({"status" : "success", "value" : None})
 
 class DocumentAccessTask(GenericLoadingTask):
-    def __init__(self, doc_ids, rest, bucket, info):
-        super(GenericLoadingTask, self).\
-            __init__(rest, bucket, info = info)
-        self.doc_ids = doc_ids
+    def __init__(self, rest, doc_ids, bucket = "default",
+                 info = None, loop = False):
 
-    def do_ops(self):
-        for _id in self.doc_ids:
+        GenericLoadingTask.__init__(self, rest, bucket, info = info)
+        self.doc_ids = doc_ids
+        self.name = "doc-get-task"
+        self.loop = loop
+
+    def run(self):
+        while True:
+            for _id in self.doc_ids:
                 try:
                     self.do_task_op("get", _id)
-                except:
-                    self.set_result({"status": "error", "value": "get failed"})
-        self.set_result({"status" : "success", "value" : None})
+                    self.doc_op_count = self.doc_op_count + 1
+                except Exception as e:
+                    self.set_result({"status": "error",
+                                     "value": "get failed {0}".format(e)})
+            if not self.loop:
+                self.set_result({"status": "success", "value": self.doc_op_count})
+                return
 
 class DocumentDeleteTask(GenericLoadingTask):
-    def __init__(self, doc_ids, info = None, kv_store = None, store_enabled = True):
-        super(GenericLoadingTask, self).\
-            __init__(rest, bucket, kv_store, info, store_enabled)
+    def __init__(self, rest, doc_ids, bucket = "default", info = None,
+                 kv_store = None, store_enabled = True):
+        GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
         self.doc_ids = doc_ids
+        self.name = "doc-delete-task"
 
-    def do_ops(self):
+    def run(self):
         for _id in self.doc_ids:
                 try:
                     self.do_task_op("delete", _id)
-                except:
-                    self.set_result({"status": "error", "value": "deletes failed"})
-        self.set_result({"status" : "success", "value" : None})
+                    self.doc_op_count = self.doc_op_count + 1
+                except Exception as e:
+                    self.set_result({"status": "error",
+                                     "value": "deletes failed {0}".format(e)})
+        self.set_result({"status" : "success", "value" : self.doc_op_count})
 
+class KVStoreIntegrityTask(Task, Thread):
+    def __init__(self, rest, kv_store, bucket = "default"):
+        self.state = "initializing"
+        self.res = None
+        Thread.__init__(self)
+
+        self.client = KVStoreAwareSmartClient(rest, bucket, kv_store)
+        self.kv_helper = KVStoreSmartClientHelper()
+
+    def step(self, task_manager):
+        if self.state == "initializing":
+            self.state = "running"
+            self.start()
+            task_manager.schedule(self)
+        elif self.state == "running":
+            if self.res is not None:
+                self.state = "complete"
+            else:
+                task_manager.schedule(self, 5)
+        else:
+            raise Exception("Bad State in KVStoreIntegrityTask")
+
+    def run(self):
+        validation_failures = KVStoreSmartClientHelper.do_verification(self.client)
+        self.set_result({"status": "success", "value": validation_failures})
 
