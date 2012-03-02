@@ -51,8 +51,7 @@ class TaskManager(Thread):
     def _emptyq_and_cancel(self, queue):
         for i in range(queue.qsize()):
             _t = queue.get()
-            if 'cancel' in _t['task'].__dict__:
-                _t.cancel()
+            _t['task'].cancel()
 
     def stop(self):
         self.running = False
