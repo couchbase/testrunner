@@ -818,14 +818,8 @@ class VBucketAwareMemcached(object):
 
 class KVStoreAwareSmartClient(VBucketAwareMemcached):
     def __init__(self, rest, bucket, kv_store = None, info=None, store_enabled = True):
-        self.log = logger.Logger.get_logger()
-        self.info = info
-        self.bucket = bucket
-        self.memcacheds = {}
-        self.vBucketMap = {}
+        VBucketAwareMemcached.__init__(self, rest, bucket, info)
         self.kv_store = kv_store or ClientKeyValueStore()
-        self.vBucketMapReplica = {}
-        self.reset(rest)
         self.store_enabled = store_enabled
 
 
@@ -1058,6 +1052,26 @@ class DocumentGenerator(object):
     @staticmethod
     def create_value(pattern, size):
         return (pattern * (size / len(pattern))) + pattern[0:(size % len(pattern))]
+
+    @staticmethod
+    def get_doc_generators(count, kv_template = None, seed = None, sizes = None):
+
+        seed = seed or str(uuid.uuid4())[0:7]
+        sizes = sizes or [128]
+
+        doc_gen_iterators = []
+
+        if kv_template is None:
+            kv_template = {"name": "doc-${prefix}-${seed}",
+                           "sequence": "${seed}",
+                           "email": "${prefix}@couchbase.com"}
+        for size in sizes:
+            options = {"size": size, "seed": seed}
+            docs = DocumentGenerator.make_docs(count / len(sizes),
+                                               kv_template, options)
+            doc_gen_iterators.append(docs)
+
+        return doc_gen_iterators
 
 #        docs = DocumentGenerator.make_docs(number_of_items,
 #                {"name": "user-${prefix}", "payload": "payload-${prefix}-${padding}"},
