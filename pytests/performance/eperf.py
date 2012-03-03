@@ -232,6 +232,24 @@ class EPerfMaster(perf.PerfBase):
                           max_creates    = self.parami("max_creates", 3000000))
         self.gated_finish(self.input.clients, notify)
 
+    def test_ept_scaled_down_write_1(self):
+	self.spec("EPT-SCALED-DOWN-WRITE.1")
+	items = self.parami("items",7000000)
+	notify = self.gated_start(self.input.client)
+	self.load_phase(self.parami("num_nodes", 2), items)
+	# Read:Insert:Update:Delete Ratio = 20:15:60:5.
+        self.access_phase(items,
+                          ratio_sets     = self.paramf('ratio_sets', 0.8),
+                          ratio_misses   = self.paramf('ratio_misses', 0.05),
+                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes  = self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot      = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
+                          max_creates    = self.parami("max_creates", 300000))
+        self.gated_finish(self.input.clients, notify)
+
     def test_ept_mixed_1(self):
         self.spec("EPT-MIXED.1")
         items = self.parami("items", 7000000)
@@ -474,3 +492,7 @@ class EPerfClient(EPerfMaster):
 
     def test_ept_rebalance_med(self):
         super(EPerfClient, self).test_ept_rebalance_med()
+
+    def test_ept_scaled_down_write(self):
+        super(EPerfClient, self).test_ept_scaled_down_write_1()
+
