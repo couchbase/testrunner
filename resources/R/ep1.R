@@ -921,10 +921,38 @@ print(p)
 makeFootnote(footnote)
 
 #cat("Generating Memory/CPU usage for beam.smp and memcached\n")
-#temp_data_frame  = createProcessUsageDataFrame(system_stats, "(beam.smp)")
-#ggplotCpuUsageWithFacets(temp_data_frame,"beam.smp cpu ticks")
-#ggplotMemoryUsageWithFacets(temp_data_frame,"beam.smp memory profile")
-#makeFootnote(footnote)
+temp_data_frame  = createProcessUsageDataFrame(system_stats, "(beam.smp)")
+mc_temp_data_frame  = createProcessUsageDataFrame(system_stats, "(memcached)")
+cat("generating cpu ticks \n")
+p <- ggplot(temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
+p <- p + geom_line()
+p <- addopts(p,"cpu_time_diff")
+print(p)
+makeFootnote(footnote)
+
+cat("generating memcached cpu ticks \n")
+p <- ggplot(mc_temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
+p <- p + geom_point()
+p <- addopts(p,"cpu_time_diff")
+print(p)
+makeFootnote(footnote)
+
+
+beam <- system_stats[system_stats$comm == "(beam.smp)",]
+cat("generating beam.smp mem \n")
+p <- ggplot(beam, aes(row, rss, color=buildinfo.version , label= prettySize(rss))) + labs(x="----time (sec)--->", y="rss")
+p <- p + geom_point()
+p <- addopts(p,"rss")
+print(p)
+makeFootnote(footnote)
+
+memcached <- system_stats[system_stats$comm == "(memcached)",]
+cat("generating (memcached) mem \n")
+p <- ggplot(memcached, aes(row, rss, color=buildinfo.version , label= prettySize(rss))) + labs(x="----time (sec)--->", y="rss")
+p <- p + geom_point()
+p <- addopts(p,"rss")
+print(p)
+makeFootnote(footnote)
 
 
 dev.off()
