@@ -235,7 +235,7 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_scaled_down_write_1(self):
 	self.spec("EPT-SCALED-DOWN-WRITE.1")
 	items = self.parami("items",7000000)
-	notify = self.gated_start(self.input.client)
+	notify = self.gated_start(self.input.clients)
 	self.load_phase(self.parami("num_nodes", 2), items)
 	# Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
