@@ -1069,25 +1069,36 @@ class RestConnection(object):
                 return True, i
         return False, i
 
-    # Reset compaction values to default
+    # Reset compaction values to default, try with old fields (dp4 build) and then try
+    # with newer fields
     def reset_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 80,
                               viewFragmntThreshold = 80):
         api = self.baseUrl + "controller/setAutoCompaction"
-        params = urllib.urlencode({"just_validate": "1",
-                                   "parallelDBAndViewCompaction": parallelDBAndVC,
+        params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
                                    "databaseFragmentationThreshold": dbFragmentThreshold,
                                    "viewFragmentationThreshold": viewFragmntThreshold})
         status, content = self._http_request(api, "POST", params)
+        # For non dp4 build, suffix [percentage] is required
+        if not status:
+            params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
+                                       "databaseFragmentationThreshold[percentage]": dbFragmentThreshold,
+                                       "viewFragmentationThreshold[percentage]": viewFragmntThreshold})
+            status, content = self._http_request(api, "POST", params)
         return status
 
     def set_autoCompaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 100,
                            viewFragmntThreshold = 100):
         api = self.baseUrl + "controller/setAutoCompaction"
-        params = urllib.urlencode({"just_validate": "1",
-                                   "parallelDBAndViewCompaction": parallelDBAndVC,
-                                   "databaseFragmentationThreshold": dbFragmentThreshold,
-                                   "viewFragmentationThreshold": viewFragmntThreshold})
+        params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
+                                   "databaseFragmentationThreshold[percentage]": dbFragmentThreshold,
+                                   "viewFragmentationThreshold[percentage]": viewFragmntThreshold})
         status, content = self._http_request(api, "POST", params)
+        # For non dp4 build, suffix [percentage] is required
+        if not status:
+            params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
+                                       "databaseFragmentationThreshold[percentage]": dbFragmentThreshold,
+                                       "viewFragmentationThreshold[percentage]": viewFragmntThreshold})
+
         return status
 
 
