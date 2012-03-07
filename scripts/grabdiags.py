@@ -2,7 +2,7 @@ from httplib import BadStatusLine
 import sys
 import os
 import urllib2
-import zipfile
+import gzip
 import base64
 
 sys.path.append('.')
@@ -37,11 +37,14 @@ if __name__ == "__main__":
                         break
                     output.write(buffer)
                     os.write(1, ".")
-            zipped = zipfile.ZipFile("{0}.zip".format(filename), "w", compression=zipfile.ZIP_DEFLATED)
-            zipped.write(filename)
+            file_input = open('{0}'.format(filename), 'rb')
+            zipped = gzip.open("{0}.gz".format(filename), 'wb')
+            zipped.writelines(file_input)
+            file_input.close()
             zipped.close()
+
             os.remove(filename)
-            print "downloaded and zipped diags @ : {0}".format("{0}.zip".format(filename))
+            print "downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename))
         except urllib2.URLError as error:
             print "unable to obtain diags from {0}".format(diag_url)
         except BadStatusLine:
