@@ -1098,7 +1098,7 @@ class RestConnection(object):
             params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
                                        "databaseFragmentationThreshold[percentage]": dbFragmentThreshold,
                                        "viewFragmentationThreshold[percentage]": viewFragmntThreshold})
-
+            status, content = self._http_request(api, "POST", params)
         return status
 
 

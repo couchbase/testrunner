@@ -1298,33 +1298,78 @@ class ViewFailoverTests(unittest.TestCase):
         ViewBaseTests.common_tearDown(self)
 
     def test_view_failover_multiple_design_docs_x_node_replica_y(self):
-            failover_helper = FailoverHelper(self.servers, self)
-            master = self.servers[0]
-            rest = RestConnection(master)
+        failover_helper = FailoverHelper(self.servers, self)
+        master = self.servers[0]
+        rest = RestConnection(master)
 
-            # verify we are fully clustered
-            ViewBaseTests._begin_rebalance_in(self)
-            ViewBaseTests._end_rebalance(self)
-            nodes = rest.node_statuses()
-            self._view_test_threads = []
-            view_names = {}
-            #TODO: Parallelize loading and querying views
-            for i in range(0, self.num_design_docs):
-                prefix = str(uuid.uuid4())[:7]
-                ViewBaseTests._create_view_doc_name(self, prefix)
-                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix)
-                view_names[prefix] = doc_names
+        # verify we are fully clustered
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+        nodes = rest.node_statuses()
+        self._view_test_threads = []
+        view_names = {}
+        #TODO: Parallelize loading and querying views
+        for i in range(0, self.num_design_docs):
+            prefix = str(uuid.uuid4())[:7]
+            ViewBaseTests._create_view_doc_name(self, prefix)
+            doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix)
+            view_names[prefix] = doc_names
 
-            failover_nodes = failover_helper.failover(self.failover_factor)
-            self.log.info("10 seconds sleep after failover before invoking rebalance...")
-            time.sleep(10)
-            rest.rebalance(otpNodes=[node.id for node in nodes],
-                           ejectedNodes=[node.id for node in failover_nodes])
-            msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
-            self.assertTrue(rest.monitorRebalance(), msg=msg)
+        failover_nodes = failover_helper.failover(self.failover_factor)
+        self.log.info("10 seconds sleep after failover before invoking rebalance...")
+        time.sleep(10)
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=[node.id for node in failover_nodes])
+        msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
+        self.assertTrue(rest.monitorRebalance(), msg=msg)
 
-            for key, value in view_names.items():
-                ViewBaseTests._verify_docs_doc_name(self, value, key)
+        for key, value in view_names.items():
+            ViewBaseTests._verify_docs_doc_name(self, value, key)
+
+    def test_view_with_failed_over_node(self):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        master_node = rest.get_nodes_self()
+        # verify we are fully clustered
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+        nodes = rest.node_statuses()
+
+        self._view_test_threads = []
+        view_names = {}
+
+        # Create half of the design docs before failover
+        for i in range(0, self.num_design_docs/2):
+            prefix = str(uuid.uuid4())[:7]
+            ViewBaseTests._create_view_doc_name(self, prefix)
+            doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix)
+            view_names[prefix] = doc_names
+
+        # Failover total-replica-1 (master) nodes
+        howmany = self.input.param("howmany", len(self.servers)- self.replica - 1)
+        selection = []
+        for n in nodes:
+            if n.id != master_node.id:
+                selection.append(n)
+
+        failed = selection[0:howmany]
+        for f in failed:
+            self.log.info("Failing over {0}".format(f.id))
+            rest.fail_over(f.id)
+        self.log.info("20 seconds sleep after failover, for nodes to go pending....")
+        time.sleep(20)
+
+        # Create half of the design docs after failover
+        for i in range(self.num_design_docs/2, self.num_design_docs):
+            prefix = str(uuid.uuid4())[:7]
+            ViewBaseTests._create_view_doc_name(self, prefix)
+            doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix)
+            view_names[prefix] = doc_names
+
+        # Verify views after rebalaning out failed nodes
+        for key, value in view_names.items():
+            ViewBaseTests._verify_docs_doc_name(self, value, key)
+
 
 class ViewMultipleNodeTests(unittest.TestCase):
 
