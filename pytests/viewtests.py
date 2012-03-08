@@ -30,6 +30,7 @@ class ViewBaseTests(unittest.TestCase):
         self.num_docs = self.input.param("num-docs", 10000)
         self.num_design_docs = self.input.param("num-design-docs", 20)
         self.expiry_ratio = self.input.param("expiry-ratio", 0.1)
+        self.num_buckets = self.input.param("num-buckets", 1)
 
         # Clear the state from Previous invalid run
         ViewBaseTests.common_tearDown(self)
@@ -42,7 +43,11 @@ class ViewBaseTests(unittest.TestCase):
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
         ClusterOperationHelper.wait_for_ns_servers_or_assert([master], self)
-        ViewBaseTests._create_default_bucket(self, replica=self.replica)
+
+        if self.num_buckets==1:
+            ViewBaseTests._create_default_bucket(self, replica=self.replica)
+        else:
+            ViewBaseTests._create_multiple_buckets(self, replica=self.replica)
         ViewBaseTests._log_start(self)
         db_compaction = self.input.param("db_compaction", 30)
         view_compaction = self.input.param("view_compaction", 30)
@@ -109,6 +114,18 @@ class ViewBaseTests(unittest.TestCase):
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),
                         msg="unable to create {0} bucket".format(name))
+
+    @staticmethod
+    def _create_multiple_buckets(self, replica=1):
+        master = self.servers[0]
+        created = BucketOperationHelper.create_multiple_buckets(master, replica, howmany=self.num_buckets)
+        self.assertTrue(created, "unable to create multiple buckets")
+
+        rest = RestConnection(master)
+        buckets = rest.get_buckets()
+        for bucket in buckets:
+            ready = BucketOperationHelper.wait_for_memcached(master, bucket.name)
+            self.assertTrue(ready, msg="wait_for_memcached failed")
 
     @staticmethod
     def _test_view_on_multiple_docs_multiple_design_docs(self, num_docs, num_of_design_docs, params={}, delay=10):
@@ -697,11 +714,10 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("inserted {0} json documents".format(len(self.docs_inserted)))
 
     @staticmethod
-    def _create_view_doc_name(self, prefix):
+    def _create_view_doc_name(self, prefix, bucket):
         self.log.info("description : create a view")
         master = self.servers[0]
         rest = RestConnection(master)
-        bucket = "default"
         view_name = "dev_test_view-{0}".format(prefix)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "-\") != -1) { emit(doc.name, doc);}}"
         function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
@@ -710,14 +726,14 @@ class ViewBaseTests(unittest.TestCase):
         return view_name
 
     @staticmethod
-    def _load_docs(self, num_docs, prefix, verify=True):
+    def _load_docs(self, num_docs, prefix, bucket='default', verify=True):
         master = self.servers[0]
         rest = RestConnection(master)
         command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [moxi], 20000)]."
         moxis_restarted = rest.diag_eval(command)
         #wait until memcached starts
         self.assertTrue(moxis_restarted, "unable to restart moxi process through diag/eval")
-        bucket = "default"
+
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         for i in range(0, num_docs):
@@ -802,10 +818,9 @@ class ViewBaseTests(unittest.TestCase):
             self.fail("returned doc names have different values than expected")
 
     @staticmethod
-    def _verify_docs_doc_name(self, doc_names, prefix):
+    def _verify_docs_doc_name(self, doc_names, prefix, bucket='default'):
         master = self.servers[0]
         rest = RestConnection(master)
-        bucket = "default"
         view_name = "dev_test_view-{0}".format(prefix)
 
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, limit=2 * len(doc_names))
@@ -825,6 +840,8 @@ class ViewBaseTests(unittest.TestCase):
             doc_names_view = ViewBaseTests._get_doc_names(self, results)
         if sorted(doc_names_view) != sorted(doc_names):
             self.fail("returned doc names have different values than expected")
+
+
     @staticmethod
     def _delete_doc_range(self, prefix, start_index, end_index):
         self.assertTrue(end_index >= start_index, "Requested to delete documents over an invalid range")
@@ -844,10 +861,12 @@ class ViewBaseTests(unittest.TestCase):
         return delete_count
 
     @staticmethod
-    def _begin_rebalance_in(self, timeout=5):
+    def _begin_rebalance_in(self, timeout=5, howmany=0):
         master = self.servers[0]
         rest = RestConnection(master)
-        for server in self.servers[1:]:
+        if not howmany:
+            howmany= len(self.servers)
+        for server in self.servers[1:howmany]:
             self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
             otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
             msg = "unable to add node {0}:{1} to the cluster"
@@ -1370,6 +1389,95 @@ class ViewFailoverTests(unittest.TestCase):
         for key, value in view_names.items():
             ViewBaseTests._verify_docs_doc_name(self, value, key)
 
+
+class ViewCreationDeletionTests(unittest.TestCase):
+
+    def setUp(self):
+        ViewBaseTests.common_setUp(self)
+
+    def tearDown(self):
+        ViewBaseTests.common_tearDown(self)
+
+    def test_view_multiple_buckets(self):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        buckets = rest.get_buckets()
+        view_names = {}
+        view_bucket = {}
+        for bucket in buckets:
+            for i in range(0, self.num_design_docs):
+                prefix = str(uuid.uuid4())[:7]
+                ViewBaseTests._create_view_doc_name(self, prefix, bucket.name)
+                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name, \
+                    verify=False)
+                view_names[prefix] = doc_names
+                view_bucket[prefix] = bucket.name
+
+        for key, value in view_names.items():
+            view_name = "dev_test_view-{0}".format(key)
+            ViewBaseTests._verify_views_from_all(self, master, view_bucket[key], view_name, self.num_docs, value)
+
+    def test_view_node_not_rebalanced(self):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        buckets = rest.get_buckets()
+
+        # Cluster total - 1 nodes
+        ViewBaseTests._begin_rebalance_in(self, howmany=len(self.servers)-1)
+        ViewBaseTests._end_rebalance(self)
+
+        view_names = {}
+        view_bucket = {}
+        for bucket in buckets:
+            for i in range(0, self.num_design_docs):
+                prefix = str(uuid.uuid4())[:7]
+                ViewBaseTests._create_view_doc_name(self, prefix, bucket.name)
+                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name,\
+                    verify=False)
+                view_names[prefix] = doc_names
+                view_bucket[prefix] = bucket.name
+
+        # Add the last server remaininggt
+        server = self.servers[-1]
+
+        # Add a node, but not rebalance in
+        self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
+        otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
+        msg = "unable to add node {0}:{1} to the cluster"
+        self.assertTrue(otpNode, msg.format(server.ip, server.port))
+
+        # Verify before rebalance
+        for key, value in view_names.items():
+            view_name = "dev_test_view-{0}".format(key)
+            ViewBaseTests._verify_views_from_all(self, master, view_bucket[key], view_name, self.num_docs, value)
+
+        # Rebalance the node in
+        rest.rebalance(otpNodes=[node.id for node in rest.get_nodes()], ejectedNodes=[])
+
+        # Verify after rebalance
+        for key, value in view_names.items():
+            view_name = "dev_test_view-{0}".format(key)
+            ViewBaseTests._verify_views_from_all(self, master, view_bucket[key], view_name, self.num_docs, value)
+
+    def test_view_rebalance_out(self):
+        pass
+    def test_view_rebalance_in(self):
+        pass
+
+    def test_view_node_down(self):
+        pass
+
+    def test_view_multi_node_down(self):
+        pass
+
+    def test_view_node_down_and_failed(self):
+        pass
+
+    def test_view_node_failed_and_rebalance_out(self):
+        pass
+
+    def test_view_node_warmup(self):
+        pass
 
 class ViewMultipleNodeTests(unittest.TestCase):
 

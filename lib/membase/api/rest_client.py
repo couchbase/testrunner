@@ -864,7 +864,11 @@ class RestConnection(object):
                     node.rest_password = self.password
                     if node.ip == "127.0.0.1":
                         node.ip = self.ip
-                    nodes.append(node)
+                    # Only add nodes which are active on cluster
+                    if node.clusterMembership == 'active':
+                        nodes.append(node)
+                    else:
+                        log.info("Node {0} not part of cluster {1}".format(node.ip, node.clusterMembership))
 
         return nodes
 
@@ -1178,6 +1182,7 @@ class Node(object):
         self.status = ""
         self.hostname = ""
         self.clusterCompatibility = ""
+        self.clusterMembership = ""
         self.version = ""
         self.os = ""
         self.ports = []
@@ -1235,6 +1240,7 @@ class RestParser(object):
         node.status = parsed['status']
         node.hostname = parsed['hostname']
         node.clusterCompatibility = parsed['clusterCompatibility']
+        node.clusterMembership = parsed['clusterMembership']
         node.version = parsed['version']
         node.port = parsed["hostname"][parsed["hostname"].find(":") + 1:]
         node.os = parsed['os']
@@ -1358,6 +1364,8 @@ class RestParser(object):
             node.hostname = nodeDictionary['hostname']
             if 'clusterCompatibility' in nodeDictionary:
                 node.clusterCompatibility = nodeDictionary['clusterCompatibility']
+            if 'clusterMembership' in nodeDictionary:
+                node.clusterCompatibility = nodeDictionary['clusterMembership']
             node.version = nodeDictionary['version']
             node.os = nodeDictionary['os']
             if "ports" in nodeDictionary:
