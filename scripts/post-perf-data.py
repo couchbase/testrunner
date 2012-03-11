@@ -121,6 +121,8 @@ if __name__ == "__main__":
                     row_dict = {}
                     row_dict['cpu_util'] = row['systemStats']['cpu_utilization_rate']
                     row_dict['swap_used'] = row['systemStats']['swap_used']
+                    if not 'vb_replica_curr_items' in row['interestingStats']:
+                       continue
                     row_dict['vb_replica_curr_items'] = row['interestingStats']['vb_replica_curr_items']
                     row_dict['curr_items_tot'] = row['interestingStats']['curr_items_tot']
                     row_dict['curr_items'] = row['interestingStats']['curr_items']
