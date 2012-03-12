@@ -263,7 +263,8 @@ class View:
                 results = None
 
                 # first verify all doc_names get reported in the view
-                while attempt < 20 and num_keys != expected_num_docs:
+                # for windows, we need more than 20+ times
+                while attempt < 40 and num_keys != expected_num_docs:
 
                     self.log.info("Quering view {0} with params: {1}".format(view_name, params));
                     results = ViewBaseTests._get_view_results(tc, rest,
