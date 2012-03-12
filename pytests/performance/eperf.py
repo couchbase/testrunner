@@ -215,8 +215,8 @@ class EPerfMaster(perf.PerfBase):
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_all_in_memory(self):
-        self.spect("EPT-ALL-IN-MEMORY-1")
-        item = self.para,i("items",1000000)
+        self.spec("EPT-ALL-IN-MEMORY-1")
+        item = self.parami("items",1000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
