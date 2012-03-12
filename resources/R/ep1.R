@@ -10,7 +10,7 @@ library(plotrix)
 library(methods)
 
 #Rscript ep1.R 1.8.0r-55-g80f24f2-community 2.0.0r-552-gd0bac7a-community EPT-READ-original couchdb2.couchbaseqe.com eperf ept-read-#nonjson-180r55-200r552
-
+#Rscript ep1.R 1.8.0r-55-g80f24f2-enterprise 2.0.0r-710-toy-community EPT-WRITE-original couchdb2.couchbaseqe.com eperf EPT-SCALED-DOWN-WRITE.1-2.0.0r-709-toy-community-1.8.0r-55-g80f24f2-enterprise
 args <- commandArgs(TRUE)
 args <- unlist(strsplit(args," "))
 # ep1.R 1.8.0r-55-g80f24f2-community 2.0.0r-452-gf1c60e1-community EPT-WRITE-original couchdb2.couchbaseqe.com eperf ept-write-nonjson-180-200r452
@@ -24,12 +24,12 @@ pdfname = args[6]
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
  # baseline_build="1.8.0r-55-g80f24f2-community"
- # new_build = "2.0.0r-646-gaddc29e-community"
+ # new_build = "2.0.0r-710-toy-community"
  # test_name = "EPT-WRITE-original"
  # dbip = "couchdb2.couchbaseqe.com"
  # dbname= "eperf"
- # pdfname = "ept-write-nonjson-180-200r452.pdf"
-#i_builds = c("1.7.2r-22-geaf53ef", new_build)
+ # pdfname = "one"
+ # i_builds = c("1.7.2r-22-geaf53ef", new_build)
 i_builds = c(baseline_build, new_build)
 
 cat(paste("args : ",args,""),sep="\n")
@@ -111,22 +111,15 @@ ggplotAllProcessesCpuUsageWithFacets <- function(df,title) {
 createProcessUsageDataFrame <- function(bb,process) {
  	(temp_data_frame <- bb[FALSE, ])
 	builds = factor(bb$buildinfo.version)
-	print(builds)
-	tests = factor(bb$name)
-	ips = factor(bb$ip)
-	id <- unique(bb[bb$buildinfo.version==build,]$unique_id)[1]
-	print(id)
-	for(a_test in levels(tests)) {
-		for(a_build in levels(builds)) {
-				filtered <- bb[bb$buildinfo.version == a_build & bb$name == a_test & bb$unique_id ==id,]
-				print(unique(filtered$unique_id))
-				graphed <- bb[bb$buildinfo.version == a_build & bb$comm == process & bb$name == a_test & bb$unique_id ==id,]
-                print(unique(graphed$unique_id))
-				graphed <- transform(graphed,cpu_time = as.numeric(utime) + as.numeric(stime))
-			    counterdiff <- diff(graphed$cpu_time)
-				graphed[,"cpu_time_diff"] <- append(c(0), counterdiff)		
-				temp_data_frame <- rbind(temp_data_frame,  graphed)
-		}
+	for(a_build in levels(builds)) {
+			filtered <- bb[bb$buildinfo.version == a_build,]
+			print(unique(filtered$unique_id))
+			graphed <- bb[bb$buildinfo.version == a_build & bb$comm == process,]
+            print(unique(graphed$unique_id))
+			graphed <- transform(graphed,cpu_time = as.numeric(utime) + as.numeric(stime))
+		    counterdiff <- diff(graphed$cpu_time)
+			graphed[,"cpu_time_diff"] <- append(c(0), counterdiff)		
+			temp_data_frame <- rbind(temp_data_frame,  graphed)
 	}
 	temp_data_frame
 }
@@ -220,7 +213,7 @@ for(index in nrow(builds_list):1) {
 				for(jIndex in 1:length(doc_json)) {
 					# print(length(unlist(doc_json[jIndex])))
 					one <- unlist(doc_json[jIndex])
-					x <- c(one["row"],one["time"],one["ep_bg_wait_avg"],one["ep_tap_bg_fetched"],one["ep_bg_max_load"],one["ep_bg_load"],one["buildinfo.version"])
+					x <- c(one["row"],one["time"],one["ep_bg_max_load"],one["ep_bg_load"],one["buildinfo.version"])
 					mc_result <- rbind(mc_result, x)
 				}
        },error=function(e)e, finally=print("Error getting system stats from memcached"))
@@ -229,32 +222,32 @@ for(index in nrow(builds_list):1) {
 
 memcached_stats <- as.data.frame(mc_result)
 memcached_stats $row <- as.numeric(memcached_stats $row)
-memcached_stats $ep_bg_wait_avg <- as.numeric(memcached_stats $ep_bg_wait_avg)
+# memcached_stats $ep_bg_wait_avg <- as.numeric(memcached_stats $ep_bg_wait_avg)
 memcached_stats $ep_tap_bg_fetched <- as.numeric(memcached_stats $ep_tap_bg_fetched)
 memcached_stats $ep_bg_max_load <- as.numeric(memcached_stats $ep_bg_max_load)
 memcached_stats $ep_bg_load <- as.numeric(memcached_stats $ep_bg_load)
 
-cat("generating System stats from ns_server_data_system ")
-result <- data.frame()
-for(index in 1:nrow(builds_list)) {
-		tryCatch({
-		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data_system", sep='')
-		#cat(paste(url,"\n"))
-		doc_json <- fromJSON(file=url)
-		cat(paste(builds_list[index,]$id,"\n"))
-		unlisted <- plyr::ldply(doc_json, unlist)
-        ncol(unlisted)
-		result <- rbind(result,unlisted)
-		print(nrow(result))
-	},error=function(e)e, finally=print("Error getting system stats from ns_server_data"))
-}
-cat("generated ns_server_data_system data frame\n")
-#cat(paste("result has ", nrow(result)," rows \n"))
+# cat("generating System stats from ns_server_data_system ")
+# result <- data.frame()
+# for(index in 1:nrow(builds_list)) {
+		# tryCatch({
+		# url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data_system", sep='')
+		# #cat(paste(url,"\n"))
+		# doc_json <- fromJSON(file=url)
+		# cat(paste(builds_list[index,]$id,"\n"))
+		# unlisted <- plyr::ldply(doc_json, unlist)
+        # ncol(unlisted)
+		# result <- rbind(result,unlisted)
+		# print(nrow(result))
+	# },error=function(e)e, finally=print("Error getting system stats from ns_server_data"))
+# }
+# cat("generated ns_server_data_system data frame\n")
+# #cat(paste("result has ", nrow(result)," rows \n"))
 
-ns_server_data_system <- result
-ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
-ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
-ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
+# ns_server_data_system <- result
+# ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
+# ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
+# ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
 
 
 
@@ -489,7 +482,7 @@ df <- fixupData(buildComparison(p , 'system', 'baseline'))
 ggplot(data=df[df$system != 'baseline',], aes(test, position, fill=color)) +
   geom_hline(yintercept=0, lwd=1, col='#777777') +
 geom_bar(stat='identity', position='dodge') +
-  scale_fill_manual('Result', values=colors, legend=FALSE) +
+  scale_fill_manual('Result', values=colors) +
   geom_hline(yintercept=.10, lty=3) +
   geom_hline(yintercept=-.10, lty=3) +
   scale_y_continuous(limits=c(-1 * (magnitude_limit - 1), magnitude_limit - 1),
@@ -878,29 +871,29 @@ makeFootnote(footnote)
 
 
 
-cat("generating cpu_util \n")
-p <- ggplot(ns_server_data_system, aes(row, cpu_util, color=buildinfo.version , label= cpu_util)) + labs(x="----time (sec)--->", y="cpu_util")
-p <- p + geom_point()
-p <- addopts(p,"cpu_util")
-print(p)
-makeFootnote(footnote)
+# cat("generating cpu_util \n")
+# p <- ggplot(ns_server_data_system, aes(row, cpu_util, color=buildinfo.version , label= cpu_util)) + labs(x="----time (sec)--->", y="cpu_util")
+# p <- p + geom_point()
+# p <- addopts(p,"cpu_util")
+# print(p)
+# makeFootnote(footnote)
 
-cat("generating swap_used \n")
-p <- ggplot(ns_server_data_system, aes(row, swap_used, color=buildinfo.version , label= swap_used)) + labs(x="----time (sec)--->", y="swap_used")
-p <- p + geom_point()
-p <- addopts(p,"swap_used")
-print(p)
-makeFootnote(footnote)
+# cat("generating swap_used \n")
+# p <- ggplot(ns_server_data_system, aes(row, swap_used, color=buildinfo.version , label= swap_used)) + labs(x="----time (sec)--->", y="swap_used")
+# p <- p + geom_point()
+# p <- addopts(p,"swap_used")
+# print(p)
+# makeFootnote(footnote)
 
 
 #memcached stats
 
- cat("generating ep_bg_wait_avg \n")
- p <- ggplot(memcached_stats, aes(row, ep_bg_wait_avg, color=buildinfo.version , label= ep_bg_wait_avg)) + labs(x="----time (sec)--->", y="ep_bg_wait_avg")
- p <- p + geom_point()
- p <- addopts(p,"ep_bg_wait_avg")
- print(p)
- makeFootnote(footnote)
+ # cat("generating ep_bg_wait_avg \n")
+ # p <- ggplot(memcached_stats, aes(row, ep_bg_wait_avg, color=buildinfo.version , label= ep_bg_wait_avg)) + labs(x="----time (sec)--->", y="ep_bg_wait_avg")
+ # p <- p + geom_point()
+ # p <- addopts(p,"ep_bg_wait_avg")
+ # print(p)
+ # makeFootnote(footnote)
 cat("generating ep_tap_bg_fetched \n")
 p <- ggplot(memcached_stats, aes(row, ep_tap_bg_fetched, color=buildinfo.version , label= ep_tap_bg_fetched)) + labs(x="----time (sec)--->", y="ep_tap_bg_fetched")
 p <- p + geom_point()
@@ -921,38 +914,38 @@ print(p)
 makeFootnote(footnote)
 
 #cat("Generating Memory/CPU usage for beam.smp and memcached\n")
-temp_data_frame  = createProcessUsageDataFrame(system_stats, "(beam.smp)")
-mc_temp_data_frame  = createProcessUsageDataFrame(system_stats, "(memcached)")
-cat("generating cpu ticks \n")
-p <- ggplot(temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
-p <- p + geom_line()
-p <- addopts(p,"cpu_time_diff")
-print(p)
-makeFootnote(footnote)
+# temp_data_frame  = createProcessUsageDataFrame(system_stats, "(beam.smp)")
+# mc_temp_data_frame  = createProcessUsageDataFrame(system_stats, "(memcached)")
+# cat("generating cpu ticks \n")
+# p <- ggplot(temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
+# p <- p + geom_line()
+# p <- addopts(p,"cpu_time_diff")
+# print(p)
+# makeFootnote(footnote)
 
-cat("generating memcached cpu ticks \n")
-p <- ggplot(mc_temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
-p <- p + geom_point()
-p <- addopts(p,"cpu_time_diff")
-print(p)
-makeFootnote(footnote)
+# cat("generating memcached cpu ticks \n")
+# p <- ggplot(mc_temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
+# p <- p + geom_point()
+# p <- addopts(p,"cpu_time_diff")
+# print(p)
+# makeFootnote(footnote)
 
 
-beam <- system_stats[system_stats$comm == "(beam.smp)",]
-cat("generating beam.smp mem \n")
-p <- ggplot(beam, aes(row, rss, color=buildinfo.version , label= prettySize(rss))) + labs(x="----time (sec)--->", y="rss")
-p <- p + geom_point()
-p <- addopts(p,"rss")
-print(p)
-makeFootnote(footnote)
+# beam <- system_stats[system_stats$comm == "(beam.smp)",]
+# cat("generating beam.smp mem \n")
+# p <- ggplot(beam, aes(row, rss, color=buildinfo.version , label= prettySize(rss))) + labs(x="----time (sec)--->", y="rss")
+# p <- p + geom_point()
+# p <- addopts(p,"rss")
+# print(p)
+# makeFootnote(footnote)
 
-memcached <- system_stats[system_stats$comm == "(memcached)",]
-cat("generating (memcached) mem \n")
-p <- ggplot(memcached, aes(row, rss, color=buildinfo.version , label= prettySize(rss))) + labs(x="----time (sec)--->", y="rss")
-p <- p + geom_point()
-p <- addopts(p,"rss")
-print(p)
-makeFootnote(footnote)
+# memcached <- system_stats[system_stats$comm == "(memcached)",]
+# cat("generating (memcached) mem \n")
+# p <- ggplot(memcached, aes(row, rss, color=buildinfo.version , label= prettySize(rss))) + labs(x="----time (sec)--->", y="rss")
+# p <- p + geom_point()
+# p <- addopts(p,"rss")
+# print(p)
+# makeFootnote(footnote)
 
 
 dev.off()
