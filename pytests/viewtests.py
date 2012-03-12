@@ -731,7 +731,7 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("inserted {0} json documents".format(len(self.docs_inserted)))
 
     @staticmethod
-    def _create_view_doc_name(self, prefix, bucket):
+    def _create_view_doc_name(self, prefix, bucket='default'):
         self.log.info("description : create a view")
         master = self.servers[0]
         rest = RestConnection(master)
