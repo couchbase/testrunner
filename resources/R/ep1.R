@@ -213,7 +213,7 @@ for(index in nrow(builds_list):1) {
 				for(jIndex in 1:length(doc_json)) {
 					# print(length(unlist(doc_json[jIndex])))
 					one <- unlist(doc_json[jIndex])
-					x <- c(one["row"],one["time"],one["ep_bg_max_load"],one["ep_bg_load"],one["buildinfo.version"])
+					x <- c(one["row"],one["time"],one["ep_tap_bg_fetched "],one["ep_bg_max_load"],one["ep_bg_load"],one["buildinfo.version"])
 					mc_result <- rbind(mc_result, x)
 				}
        },error=function(e)e, finally=print("Error getting system stats from memcached"))
