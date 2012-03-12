@@ -77,7 +77,22 @@ class ViewBaseTests(unittest.TestCase):
                 bucket = self.created_views[view]
                 rest.delete_view(bucket, view)
                 self.log.info("deleted view {0} from bucket {1}".format(view, bucket))
-            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+            # todo: remove this code when delete default bucket bug fixed
+            remote_client = RemoteMachineShellConnection(master)
+            info = remote_client.extract_remote_info()
+            if info.type.lower() == 'windows':
+                remote_client.execute_command("taskkill /F /T /IM memcached.exe")
+                self.log.info("WAIT 5 SECONDS HERE TO COMPLETE DELETE MEMCACHED PROCESS")
+                time.sleep(5)
+                BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+                self.log.info("DELETE DEFAULT DATABASE FILES")
+                remote_client.execute_command("rm -rf /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchdb/default")
+                self.log.info("WAIT 2 SECONDS HERE TO COMPLETE DELETE DEFAULT BUCKET")
+                time.sleep(2)
+                self.log.info("DELETE CONFIG.DAT FILES")
+                remote_client.execute_command("rm -f /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/config/config.dat")
+            else:
+                BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
             ClusterOperationHelper.cleanup_cluster(self.servers)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         ViewBaseTests._log_finish(self)
@@ -181,7 +196,8 @@ class ViewBaseTests(unittest.TestCase):
         total_time = view_time
         # Keep trying this for maximum 5 minutes
         start_time = time.time()
-        while (len(keys) != len(doc_names)) & (time.time() - start_time < 300):
+        # increase timeout to 600 seconds for windows testing
+        while (len(keys) != len(doc_names)) & (time.time() - start_time < 600):
             msg = "view returned {0} items , expected to return {1} items"
             self.log.info(msg.format(len(keys), len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
@@ -466,7 +482,8 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}):
-        num_tries = self.input.param('num-tries', 20)
+        # increase number of try to 40 to test on windows
+        num_tries = self.input.param('num-tries', 40)
         timeout = self.input.param('timeout', 10)
         #if view name starts with "dev" then we should append the full_set
         for i in range(0, num_tries):
@@ -626,7 +643,7 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket = "default"
-        num_tries = self.input.param('num-tries', 20)
+        num_tries = self.input.param('num-tries', 40)
         #the wrapper thread might have already built the cluster
         if len(rest.node_statuses()) < 2:
             ViewBaseTests._setup_cluster(self)
