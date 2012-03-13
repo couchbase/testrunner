@@ -25,7 +25,8 @@ class XDCRBaseTest(unittest.TestCase):
             BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
             XDCRBaseTest.cluster_initialization(servers)
             XDCRBaseTest.create_buckets(servers, testcase, howmany=2)
-            XDCRBaseTest.rebalance_servers_in(servers, input.membase_settings, testcase)
+            if len(servers) > 1:
+                XDCRBaseTest.rebalance_servers_in(servers, input.membase_settings, testcase)
 
         master_cluster1 = input.clusters.get(0)[0]
         master_cluster2 = input.clusters.get(1)[0]
