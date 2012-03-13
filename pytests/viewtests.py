@@ -748,8 +748,10 @@ class ViewBaseTests(unittest.TestCase):
         rest = RestConnection(master)
         command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [moxi], 20000)]."
         moxis_restarted = rest.diag_eval(command)
-        #wait until memcached starts
         self.assertTrue(moxis_restarted, "unable to restart moxi process through diag/eval")
+
+        #wait until memcached starts
+        BucketOperationHelper.wait_for_memcached(self.servers[0], bucket)
 
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
@@ -1419,6 +1421,10 @@ class ViewCreationDeletionTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         buckets = rest.get_buckets()
+        # Cluster all nodes
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
         view_names = {}
         view_bucket = {}
         for bucket in buckets:
@@ -1478,8 +1484,6 @@ class ViewCreationDeletionTests(unittest.TestCase):
 
     def test_view_rebalance_out(self):
         pass
-    def test_view_rebalance_in(self):
-        pass
 
     def test_view_node_down(self):
         pass
@@ -1494,7 +1498,50 @@ class ViewCreationDeletionTests(unittest.TestCase):
         pass
 
     def test_view_node_warmup(self):
-        pass
+        master = self.servers[0]
+        rest = RestConnection(master)
+
+        buckets = rest.get_buckets()
+
+        # Cluster total - 1 nodes
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
+        view_names = {}
+        view_bucket = {}
+        for bucket in buckets:
+            for i in range(0, self.num_design_docs):
+                prefix = str(uuid.uuid4())[:7]
+                ViewBaseTests._create_view_doc_name(self, prefix, bucket.name)
+                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name,\
+                    verify=False)
+                view_names[prefix] = doc_names
+                view_bucket[prefix] = bucket.name
+
+        # Pick a node to warmup
+        server = self.servers[-1]
+        shell = RemoteMachineShellConnection(server)
+        self.log.info("Node {0} is being stopped".format(server.ip))
+        shell.stop_couchbase()
+        time.sleep(20)
+        shell.start_couchbase()
+
+        self.log.info("Node {0} should be warming up".format(server.ip))
+
+        for bucket in buckets:
+            for i in range(0, self.num_design_docs):
+                prefix = str(uuid.uuid4())[:7]
+                ViewBaseTests._create_view_doc_name(self, prefix, bucket.name)
+                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name,\
+                    verify=False)
+                view_names[prefix] = doc_names
+                view_bucket[prefix] = bucket.name
+
+        # Verify views
+        for key, value in view_names.items():
+            view_name = "dev_test_view-{0}".format(key)
+            ViewBaseTests._verify_views_from_all(self, master, view_bucket[key], view_name,\
+                self.num_docs, value)
 
 class ViewMultipleNodeTests(unittest.TestCase):
 
