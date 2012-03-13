@@ -1,11 +1,17 @@
 #!/usr/bin/python
-import re
+
+import os
 import sys
 sys.path.append("lib")
 sys.path.append("pytests")
+
+if sys.hexversion < 0x02060000:
+    print "Testrunner requires version 2.6+ of python"
+    sys.exit()
+
+import re
 import time
 import unittest
-import os
 import logger
 import logging.config
 from xunit import XUnitTestResult
