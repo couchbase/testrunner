@@ -1256,7 +1256,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
             self.onenodemc.set(item, 0, 0, item)
         self.log.info("inserted {0} items".format(howmany))
 
-    def _measure_warmup(self, howmany, max_time):
+    def _do_warmup(self, howmany, timeout_in_seconds=1800):
         # max_time is in micro seconds
         #flush the bucket
         self.onenodemc.flush()
@@ -1269,8 +1269,9 @@ class WarmUpMemcachedTest(unittest.TestCase):
         rest = RestConnection(self.master)
         command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
         memcached_restarted = rest.diag_eval(command)
-        #wait until memcached starts
         self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
+
+        #wait until memcached starts
         start = time.time()
         memcached_restarted = False
         while time.time() - start < 60:
@@ -1286,39 +1287,38 @@ class WarmUpMemcachedTest(unittest.TestCase):
                 time.sleep(1)
 
         self.assertTrue(memcached_restarted, "memcached restarted and uptime is now reset")
-        RebalanceHelper.wait_for_stats(self.master, "default", "curr_items", curr_items, 600)
-        RebalanceHelper.wait_for_stats(self.master, "default", "curr_items", curr_items, 600)
+
+        # Warmup till curr_items match
         self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
-        for i in range(0, 100):
-            stats = self.onenodemc.stats()
-            if "ep_warmup_time" in stats:
-                self.log.info("{1} ep_warmup_time : {0}".format(stats["ep_warmup_time"], i))
-                break
-            else:
+        stats = self.onenodemc.stats()
+        present_count = int(stats["curr_items"])
+        self.log.info("ep curr_items : {0}, inserted_items {1}".format(present_count, curr_items))
+        start = time.time()
+        while (time.time() - start) <= timeout_in_seconds:
+            if present_count < curr_items:
+                stats = self.onenodemc.stats()
+                present_count = int(stats["curr_items"])
+                self.log.info("curr_items : {0}".format(present_count))
                 time.sleep(1)
+            else:
+                self.fail("Timed out waiting for warmup")
+
+        self.log.info("ep curr_items : {0}, inserted_items {1}".format(present_count, curr_items))
         stats = self.onenodemc.stats()
         warmup_time = int(stats["ep_warmup_time"])
-        self.assertTrue(warmup_time <= max_time)
-        #put n items
-        #restart memcached
-        #look at warmup time
-        #loo
+        self.log.info("ep_warmup_time is {0}".format(warmup_time))
 
-    def measure_warmup_2(self):
-        warmup_max_time = 1 * 1000000
-        self._measure_warmup(2, warmup_max_time)
+    def do_warmup_2(self):
+        self._do_warmup(2)
 
-    def measure_warmup_10k(self):
-        warmup_max_time = 2 * 1000000
-        self._measure_warmup(10000, warmup_max_time)
+    def do_warmup_10k(self):
+        self._do_warmup(10000)
 
-    def measure_warmup_100k(self):
-        warmup_max_time = 12 * 1000000
-        self._measure_warmup(100000, warmup_max_time)
+    def do_warmup_100k(self):
+        self._do_warmup(100000)
 
-    def measure_warmup_1M(self):
-        warmup_max_time = 120 * 1000000
-        self._measure_warmup(1000000, warmup_max_time)
+    def do_warmup_1M(self):
+        self._do_warmup(1000000)
 
 
 class MultiGetNegativeTest(unittest.TestCase):
