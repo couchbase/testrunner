@@ -57,6 +57,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def common_tearDown(self):
         master = self.servers[0]
+        remote_info = None
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
             try:
                 RestConnection(master).stop_rebalance()
@@ -66,6 +67,8 @@ class ViewBaseTests(unittest.TestCase):
                 if server.port != '8091':
                     continue
                 shell = RemoteMachineShellConnection(server)
+                if master.ip == server.ip:
+                    remote_info = shell.extract_remote_info()
                 if shell.is_membase_installed():
                     shell.start_membase()
                 else:
@@ -77,22 +80,24 @@ class ViewBaseTests(unittest.TestCase):
                 bucket = self.created_views[view]
                 rest.delete_view(bucket, view)
                 self.log.info("deleted view {0} from bucket {1}".format(view, bucket))
+
             # todo: remove this code when delete default bucket bug fixed
-            remote_client = RemoteMachineShellConnection(master)
-            info = remote_client.extract_remote_info()
-            if info.type.lower() == 'windows':
-                remote_client.execute_command("taskkill /F /T /IM memcached.exe")
+            if remote_info is not None and remote_info.type.lower() == 'windows':
+                shell = RemoteMachineShellConnection(master)
+                shell.execute_command("taskkill /F /T /IM memcached.exe")
                 self.log.info("WAIT 5 SECONDS HERE TO COMPLETE DELETE MEMCACHED PROCESS")
                 time.sleep(5)
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
                 self.log.info("DELETE DEFAULT DATABASE FILES")
-                remote_client.execute_command("rm -rf /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchdb/default")
+                shell.execute_command("rm -rf /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchdb/default")
                 self.log.info("WAIT 2 SECONDS HERE TO COMPLETE DELETE DEFAULT BUCKET")
                 time.sleep(2)
                 self.log.info("DELETE CONFIG.DAT FILES")
-                remote_client.execute_command("rm -f /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/config/config.dat")
+                shell.execute_command("rm -f /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/config/config.dat")
+                shell.disconnect()
             else:
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+
             ClusterOperationHelper.cleanup_cluster(self.servers)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         ViewBaseTests._log_finish(self)
