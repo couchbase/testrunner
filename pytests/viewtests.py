@@ -202,7 +202,7 @@ class ViewBaseTests(unittest.TestCase):
         # Keep trying this for maximum 5 minutes
         start_time = time.time()
         # increase timeout to 600 seconds for windows testing
-        while (len(keys) != len(doc_names)) & (time.time() - start_time < 600):
+        while (len(keys) != len(doc_names)) and (time.time() - start_time < 600):
             msg = "view returned {0} items , expected to return {1} items"
             self.log.info(msg.format(len(keys), len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
