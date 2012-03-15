@@ -748,7 +748,7 @@ class ViewBaseTests(unittest.TestCase):
         return view_name
 
     @staticmethod
-    def _load_docs(self, num_docs, prefix, bucket='default', verify=True):
+    def _load_docs(self, num_docs, prefix, verify=True, bucket='default'):
         master = self.servers[0]
         rest = RestConnection(master)
         command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [moxi], 20000)]."
