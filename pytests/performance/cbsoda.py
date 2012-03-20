@@ -8,11 +8,13 @@ import time
 import socket
 import threading
 import mcsoda
+import errno
 
 from membase.api.rest_client import RestConnection
 
 class Reader(threading.Thread):
     def __init__(self, src, reader_go, reader_done):
+
         self.src = src
         self.reader_go = reader_go
         self.reader_done = reader_done
@@ -24,20 +26,24 @@ class Reader(threading.Thread):
         self.reader_go.wait()
         self.reader_go.clear()
         while True:
-            data = self.src.recv(4096)
-            if not data:
-                break
+            try:
+                data = self.src.recv(4096)
+                if not data:
+                    break
 
-            self.received += len(data)
+                self.received += len(data)
 
-            found = len(re.findall("HTTP/1.1 ", data))
+                found = len(re.findall("HTTP/1.1 ", data))
 
-            self.inflight -= found
+                self.inflight -= found
+            except Exception as e:
+                # timed out
+                self.inflight = 0
+
             if self.inflight == 0:
                 self.reader_done.set()
                 self.reader_go.wait()
                 self.reader_go.clear()
-
 
 class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
@@ -45,6 +51,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
         mcsoda.StoreMembaseBinary.connect_host_port(self, host, port, user, pswd)
 
         self.capi_host_port = (host, 8092)
+        socket.setdefaulttimeout(1.0)
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.capi_skt.connect(self.capi_host_port)
@@ -76,7 +83,19 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
         sent_capi = len(buf_capi)
         if sent_capi > 0:
-            self.capi_skt.send(buf_capi)
+            try:
+                self.capi_skt.send(buf_capi)
+            except socket.error, e:
+                if isinstance(e.args, tuple):
+                    if e[0] == errno.EPIPE:
+                        #remote-end closed the socket- TODO: why does this happen?
+                        self.capi_skt.close()
+                        self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                        self.capi_skt.connect(self.capi_host_port)
+
+                        #resend data
+                        self.capi_skt.send(buf_capi)
 
         return sent_mc + sent_capi
 
@@ -98,6 +117,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
         received_capi = self.reader.received - r
 
         return received_mc + received_capi
+
 
     def cmd_append(self, cmd, key_num, key_str, data, expiration, grp):
         if cmd[0] == 'q':
@@ -143,7 +163,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
 if __name__ == "__main__":
     extra_examples=["          %s couchbase://127.0.0.1:8091 ratio-queries=0.2",
                     "          %s couchbase://127.0.0.1:8091 ratio-queries=0.2 \\",
-                    "               queries=/default/_design/DDOC/_views/by_email?startkey={email}",
+                    "               queries=/default/_design/DDOC/_view/by_email?startkey={email}",
                     "",
                     "Available keys for queries templates:",
                     "    key, name, email, city, country, realm, coins",

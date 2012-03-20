@@ -8,6 +8,7 @@ import json
 import os
 import threading
 import gzip
+import ast
 
 from TestInput import TestInputSingleton
 
@@ -147,7 +148,10 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot_sets = 0,
                      ratio_expirations = 0,
                      max_creates    = 0,
-                     hot_shift = 0):
+                     hot_shift = 0,
+                     ratio_queries = 0,
+                     queries = None,
+                     proto_prefix = "membase-binary"):
 
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
@@ -167,7 +171,8 @@ class EPerfMaster(perf.PerfBase):
                       max_creates    = max_creates,
                       min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),
-                      protocol       = self.mk_protocol(self.input.servers[0].ip),
+                      protocol       = (self.mk_protocol(self.input.servers[0].ip,
+                                        proto_prefix)),
                       clients        = self.parami('clients', 1),
                       ratio_sets     = ratio_sets,
                       ratio_misses   = ratio_misses,
@@ -187,7 +192,20 @@ class EPerfMaster(perf.PerfBase):
                       report         = int(max_creates * 0.1),
                       exit_after_creates = self.parami('exit_after_creates', 1),
                       hot_shift = self.parami('hot_shift', hot_shift),
-                      is_eperf=True)
+                      is_eperf=True,
+                      ratio_queries = ratio_queries,
+                      queries = queries)
+
+    # create view and index document documents
+    def index_phase(self, view, bucket="default"):
+
+        if self.parami("index_phase", 1) > 0:
+            map_fn = "function (doc) { if(doc.key_num !== undefined){ emit(doc.key_num, null);}}"
+            function = create_view_function(self.rest, view, map_fn)
+            self.rest.create_view(bucket, view, function)
+            params={'stale'    : 'false',
+                    'full_set' : 'true'}
+            self.rest.view_results(bucket, view, params)
 
     def latched_rebalance(self, cur):
         if not self.latched_rebalance_done:
@@ -428,6 +446,67 @@ class EPerfMaster(perf.PerfBase):
                           max_creates = self.parami("max_creates", 20000000))
         self.gated_finish(self.input.clients, notify)
 
+    def test_query_all_docs_mixed_original(self):
+        self.spec("QEURY-ALLDOCS-MIXED-original")
+        items = self.parami("items", 45000000)
+        notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        view = self.param("view","/default/_all_docs")
+        limit = self.param("limit","10")
+        queries = "{0}?limit={1}".format(view,limit)
+
+
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.10),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.05),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
+                          max_creates = self.parami("max_creates", 30000000),
+                          ratio_queries = self.paramf('ratio_queries', 0.2),
+                          queries = queries,
+                          proto_prefix = "couchbase")
+
+        self.gated_finish(self.input.clients, notify)
+
+
+    # run eperf tests with various query params
+    #
+    # underlying cbsoda lib supports templating: i.e
+    # -p  prefix=1,num_clients=1,batch=100,load_phase=0,index_phase=1,access_phase=1,items=5000,query_params="{'startkey' : '{int100}' }"
+    def test_query_params_mixed_original(self):
+        self.spec("QUERY-PARAMS-MIXED-original")
+        items = self.parami("items", 45000000)
+        notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
+
+        view = self.param("view","test_query_params_mixed_original")
+        limit = self.param("limit","10")
+        query_params = ast.literal_eval(self.param("query_params", "{}"))
+        queries = "/default/_design/{0}/_view/{0}?limit={1}{2}".format(view,limit,params_to_str(query_params))
+
+        self.index_phase(view)
+
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.10),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.05),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
+                          max_creates = self.parami("max_creates", 30000000),
+                          ratio_queries = self.paramf('ratio_queries', 0.2),
+                          queries = queries,
+                          proto_prefix = "couchbase")
+
+        self.gated_finish(self.input.clients, notify)
+
+
     def test_ept_mixed_original(self):
         self.spec("EPT-MIXED-original")
         items = self.parami("items", 45000000)
@@ -561,3 +640,28 @@ class EPerfClient(EPerfMaster):
     
     def test_ept_all_in_memory(self):
         super(EPerfClient, self).test_ept_all_in_memory()
+
+def params_to_str(params):
+    param_str = ""
+    if params is not None:
+        for k,v in params.items():
+            param_str += "&{0}={1}".format(k,v)
+    return param_str
+
+def create_view_function(rest, view,  function, bucket="default", reduce=''):
+
+    #if this view already exist then get the rev and embed it here ?
+    dict = {"language": "javascript",
+            "_id": "_design/{0}".format(view)}
+    try:
+        view_response = rest.get_view(bucket, view)
+        if view_response:
+            dict["_rev"] = view_response["_rev"]
+    except:
+        pass
+    if reduce:
+        dict["views"] = {view: {"map": function, "reduce": reduce}}
+    else:
+        dict["views"] = {view: {"map": function}}
+    return json.dumps(dict)
+

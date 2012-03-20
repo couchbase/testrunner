@@ -14,6 +14,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.performance.stats import StatsCollector
 from remote.remote_util import RemoteMachineShellConnection
+from cbsoda import StoreCouchbase
 import testconstants
 
 import mcsoda
@@ -147,9 +148,12 @@ class PerfBase(unittest.TestCase):
 
     def protocol_parse(self, protocol_in, use_direct=False):
         if protocol_in.find('://') >= 0:
-            protocol = \
-                '-'.join(((["membase"] + \
-                               protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
+            if protocol_in.find("couchbase:") >= 0:
+                protocol = "couchbase"
+            else:
+                protocol = \
+                    '-'.join(((["membase"] + \
+                                   protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
             host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":8091"
             user, pswd = (('@' + protocol_in.split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
         else:
@@ -159,9 +163,10 @@ class PerfBase(unittest.TestCase):
             pswd = ''
         return protocol, host_port, user, pswd
 
-    def mk_protocol(self, host):
+
+    def mk_protocol(self, host, prefix='membase-binary'):
         return self.param('protocol',
-                          'membase-binary://' + self.input.servers[0].ip + ":8091")
+                          prefix+'://' + self.input.servers[0].ip + ":8091")
 
     def restartProxy(self, bucket=None):
         self.tearDownProxy()
@@ -419,7 +424,9 @@ class PerfBase(unittest.TestCase):
              report=0,
              ctl=None,
              hot_shift=0,
-             is_eperf=False):
+             is_eperf=False,
+             ratio_queries = 0,
+             queries = 0):
         num_items = num_items or self.num_items_loaded
 
         cfg = { 'max-items': max_items or num_items,
@@ -434,6 +441,7 @@ class PerfBase(unittest.TestCase):
                 'ratio-hot-sets': ratio_hot_sets,
                 'ratio-hot-gets': ratio_hot_gets,
                 'ratio-expirations': ratio_expirations,
+                'ratio-queries' : ratio_queries,
                 'expiration': expiration or 0,
                 'threads': clients,
                 'json': int(kind == 'json'),
@@ -441,12 +449,15 @@ class PerfBase(unittest.TestCase):
                 'vbuckets': self.vbucket_count,
                 'doc-cache': doc_cache,
                 'prefix': prefix,
+                'queries': queries,
                 'report': report
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
         client_id = ''
+        stores = None
+
         if is_eperf:
             client_id = self.parami("prefix", 0)
         sc = None
@@ -477,10 +488,16 @@ class PerfBase(unittest.TestCase):
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
+
+        # For query tests
+        # always use StoreCouchbase
+        if protocol == "couchbase":
+            stores = [StoreCouchbase()]
         cur, start_time, end_time = self.mcsoda_run(cfg, cur,
                                                     protocol, host_port, user, pswd,
                                                     stats_collector=sc,
-                                                    ctl=ctl)
+                                                    ctl=ctl, stores=stores)
+
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
                 'tot-items': cur.get('cur-items', 0),
