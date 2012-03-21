@@ -83,18 +83,18 @@ class ViewBaseTests(unittest.TestCase):
 
             # todo: remove this code when delete default bucket bug fixed
             if remote_info is not None and remote_info.type.lower() == 'windows':
-                shell = RemoteMachineShellConnection(master)
-                shell.execute_command("taskkill /F /T /IM memcached.exe")
-                self.log.info("WAIT 5 SECONDS HERE TO COMPLETE DELETE MEMCACHED PROCESS")
-                time.sleep(5)
+                #shell = RemoteMachineShellConnection(master)
+                #shell.execute_command("taskkill /F /T /IM memcached.exe")
+                #self.log.info("WAIT 5 SECONDS HERE TO COMPLETE DELETE MEMCACHED PROCESS")
+                #time.sleep(5)
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-                self.log.info("DELETE DEFAULT DATABASE FILES")
-                shell.execute_command("rm -rf /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchdb/default")
-                self.log.info("WAIT 2 SECONDS HERE TO COMPLETE DELETE DEFAULT BUCKET")
-                time.sleep(2)
-                self.log.info("DELETE CONFIG.DAT FILES")
-                shell.execute_command("rm -f /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/config/config.dat")
-                shell.disconnect()
+                #self.log.info("DELETE DEFAULT DATABASE FILES")
+                #shell.execute_command("rm -rf /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchdb/default")
+                #self.log.info("WAIT 2 SECONDS HERE TO COMPLETE DELETE DEFAULT BUCKET")
+                #time.sleep(2)
+                #self.log.info("DELETE CONFIG.DAT FILES")
+                #shell.execute_command("rm -f /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/config/config.dat")
+                #shell.disconnect()
             else:
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
 
