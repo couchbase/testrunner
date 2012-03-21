@@ -193,7 +193,7 @@ class ViewQueryTests(unittest.TestCase):
     def _rconn(self):
         return RestConnection(self.servers[0])
 
-class View:
+class QueryView:
     def __init__(self, rest,
                  index_size,
                  bucket = "default",
@@ -486,11 +486,11 @@ class EmployeeDataSet:
         full_index_size = self.calc_total_doc_count()
         partial_index_size = self.calc_total_doc_count()/3
 
-        return [View(rest, full_index_size,    fn_str = vfn4),
-                View(rest, partial_index_size, fn_str = vfn1),
-                View(rest, partial_index_size, fn_str = vfn2),
-                View(rest, partial_index_size, fn_str = vfn3),
-                View(rest, full_index_size,    fn_str = vfn4, reduce_fn="_count")]
+        return [QueryView(rest, full_index_size,    fn_str = vfn4),
+                QueryView(rest, partial_index_size, fn_str = vfn1),
+                QueryView(rest, partial_index_size, fn_str = vfn2),
+                QueryView(rest, partial_index_size, fn_str = vfn3),
+                QueryView(rest, full_index_size,    fn_str = vfn4, reduce_fn="_count")]
 
     def get_data_sets(self):
         return [self.sys_admin_info, self.ui_eng_info, self.senior_arch_info]
@@ -555,7 +555,7 @@ class SimpleDataSet:
 
     def create_views(self, rest):
         view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
-        return [View(rest, self.num_docs, fn_str = view_fn)]
+        return [QueryView(rest, self.num_docs, fn_str = view_fn)]
 
     def load(self, tc, view, verify_docs_loaded = True):
         doc_names = ViewBaseTests._load_docs(tc, self.num_docs, view.prefix, verify_docs_loaded)
