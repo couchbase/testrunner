@@ -8,6 +8,7 @@ import threading
 
 from TestInput import TestInputSingleton
 
+from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -848,21 +849,6 @@ class DiskDrainRate(PerfBase):
 
 class MapReduce(PerfBase):
 
-    def create_view(self, rest, bucket, view, map, reduce=None):
-        dict = {"language": "javascript", "_id": "_design/{0}".format(view)}
-        try:
-            view_response = rest.get_view(bucket, view)
-            if view_response:
-                dict["_rev"] = view_response["_rev"]
-        except:
-            pass
-        if reduce:
-            dict["views"] = {view: {"map": map, "reduce": reduce}}
-        else:
-            dict["views"] = {view: {"map": map}}
-
-        rest.create_view(bucket, view, json.dumps(dict))
-
     def go_load(self):
         items  = self.parami("items", 1000000)
         self.load(items,
@@ -881,7 +867,7 @@ class MapReduce(PerfBase):
         bucket = "default"
         view   = "myview"
 
-        self.create_view(self.rest, bucket, view, map_fun, reduce=reduce_fun);
+        self.rest.create_view(view, bucket, [View(view, map_fun, reduce_fun)])
 
         self.log.info("building view: %s = %s; %s" % (view, map_fun, reduce_fun))
         ops = {}

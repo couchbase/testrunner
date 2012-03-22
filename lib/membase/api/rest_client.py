@@ -5,6 +5,7 @@ import httplib2
 import socket
 import time
 import logger
+from couchbase.document import DesignDocument, View
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
 from membase.api.exception import BucketCreationException, ServerJoinException, ClusterRemoteException
 
@@ -179,14 +180,15 @@ class RestConnection(object):
 
         return json_parsed
 
+    def create_view(self, design_doc_name, bucket_name, views):
+        design_doc = DesignDocument(design_doc_name, views)
+        api = "{0}couchBase/{1}/_design/{2}".format(self.baseUrl, bucket_name, design_doc_name)
 
-    def create_view(self, bucket, view, function):
-        status, json = self._create_design_doc(bucket, view, function)
-
+        status, content = self._http_request(api, 'PUT', str(design_doc),
+                                            headers=self._create_capi_headers())
         if status == False:
             raise Exception("unable to create view")
-
-        return json
+        return json.loads(content)
 
     #http://10.1.6.108:8091/couchBase/bucket-0/_design/dev_6ca50/_view/dev_6ca50?limit=10&_=1311107815807
     def view_results(self, bucket, view, params, limit=100, timeout=120):

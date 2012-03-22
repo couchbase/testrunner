@@ -6,6 +6,7 @@ import uuid
 from TestInput import TestInputSingleton
 import logger
 import time
+from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -175,8 +176,7 @@ class ViewBaseTests(unittest.TestCase):
         bucket = "default"
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
@@ -233,8 +233,7 @@ class ViewBaseTests(unittest.TestCase):
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc.age);}}"
         reduce_fn = "_count"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn, reduce_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, reduce_fn)])
         self.created_views[view_name] = bucket
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
@@ -287,8 +286,7 @@ class ViewBaseTests(unittest.TestCase):
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc.age);}}"
         reduce_fn = "_sum"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn, reduce_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, reduce_fn)])
         self.created_views[view_name] = bucket
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
@@ -336,8 +334,7 @@ class ViewBaseTests(unittest.TestCase):
         bucket = "default"
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
@@ -359,10 +356,8 @@ class ViewBaseTests(unittest.TestCase):
             value = {"name": updated_doc_name, "age": 1000}
             moxi.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(updated_num_docs))
-
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + updated_view_prefix + "\") != -1) { emit(doc.name, doc);}}"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, updated_num_docs)
         keys = ViewBaseTests._get_keys(self, results)
@@ -430,24 +425,6 @@ class ViewBaseTests(unittest.TestCase):
         except IndexError:
             value = None
         return value
-
-    @staticmethod
-    def _create_function(self, rest, bucket, view, function, reduce=''):
-        #if this view already exist then get the rev and embed it here ?
-        dict = {"language": "javascript",
-                "_id": "_design/{0}".format(view)}
-        try:
-            view_response = rest.get_view(bucket, view)
-            if view_response:
-                dict["_rev"] = view_response["_rev"]
-        except:
-            pass
-        if reduce:
-            dict["views"] = {view: {"map": function, "reduce": reduce}}
-        else:
-            dict["views"] = {view: {"map": function}}
-        self.log.info("dict {0}".format(dict))
-        return json.dumps(dict)
 
     @staticmethod
     def _verify_views_replicated(self, bucket, view_name, map_fn):
@@ -547,8 +524,7 @@ class ViewBaseTests(unittest.TestCase):
         bucket = "default"
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
@@ -657,8 +633,7 @@ class ViewBaseTests(unittest.TestCase):
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         prefix = str(uuid.uuid4())[:7]
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
         self.shutdown_load_data = False
         self.docs_inserted = []
@@ -742,8 +717,7 @@ class ViewBaseTests(unittest.TestCase):
         rest = RestConnection(master)
         view_name = "dev_test_view-{0}".format(prefix)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "-\") != -1) { emit(doc.name, doc);}}"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
         return view_name
 
@@ -1015,8 +989,7 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("description : create a view")
         _view_name = view_name or "dev_test_view-{0}".format(prefix)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "\") != -1) { emit(doc.name, doc);}}"
-        function = ViewBaseTests._create_function(self, rest, bucket, _view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
 
 
@@ -1089,12 +1062,11 @@ class ViewBasicTests(unittest.TestCase):
         prefix = str(uuid.uuid4())
         bucket = "default"
         num_views = self.input.param('num-views', 5)
+        map_fn = "function (doc) {emit(doc._id, doc);}"
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
 
         for view in view_names:
-            map_fn = "function (doc) {emit(doc._id, doc);}"
-            function = ViewBaseTests._create_function(self, rest, bucket, view, map_fn)
-            rest.create_view(bucket, view, function)
+            rest.create_view(view, bucket, [View(view, map_fn)])
             self.created_views[view] = bucket
             response = rest.get_view(bucket, view)
             self.assertTrue(response)
@@ -1115,8 +1087,7 @@ class ViewBasicTests(unittest.TestCase):
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, doc);}"
-            function = ViewBaseTests._create_function(self, rest, bucket, view, map_fn)
-            rest.create_view(bucket, view, function)
+            rest.create_view(view, bucket, [View(view, map_fn)])
             self.created_views[view] = bucket
             response = rest.get_view(bucket, view)
             self.assertTrue(response)
@@ -1127,8 +1098,7 @@ class ViewBasicTests(unittest.TestCase):
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, null);}"
-            function = ViewBaseTests._create_function(self, rest, bucket, view, map_fn)
-            rest.create_view(bucket, view, function)
+            rest.create_view(view, bucket, [View(view, map_fn)])
             self.created_views[view] = bucket
             response = rest.get_view(bucket, view)
             self.assertTrue(response)
@@ -1137,10 +1107,10 @@ class ViewBasicTests(unittest.TestCase):
             self.log.info(response)
 
     def test_create_view(self):
-        master = self.servers[0]
-        rest = RestConnection(master)
         #find the first bucket
         bucket = "default"
+        master = self.servers[0]
+        rest = RestConnection(master)
         view_name = "dev_" + str(uuid.uuid4())[:5]
         key = str(uuid.uuid4())
         doc_name = "test_create_view_{0}".format(key)
@@ -1149,8 +1119,7 @@ class ViewBasicTests(unittest.TestCase):
         mc.set(key, 0, 0, json.dumps(value))
         mc.get(key)
         map_fn = "function (doc) { if (doc.name == \"" + doc_name + "\") { emit(doc.name, doc.age);}}"
-        function = ViewBaseTests._create_function(self, rest, bucket, view_name, map_fn)
-        rest.create_view(bucket, view_name, function)
+        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name)
         self.assertTrue(results, "results are null")

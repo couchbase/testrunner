@@ -3,6 +3,7 @@ import logger
 import time
 import unittest
 from threading import Thread
+from couchbase.document import View
 from membase.api.rest_client import RestConnection
 from viewtests import ViewBaseTests
 from memcached.helper.data_helper import VBucketAwareMemcached, DocumentGenerator
@@ -200,7 +201,7 @@ class QueryView:
                  prefix=None,
                  name = None,
                  fn_str = None,
-                 reduce_fn = '',
+                 reduce_fn = None,
                  queries = None,
                  create_on_init = True):
 
@@ -216,29 +217,13 @@ class QueryView:
         self.name = (name, default_name)[name is None]
         self.fn_str = (fn_str, default_fn_str)[fn_str is None]
         self.reduce_fn = reduce_fn
-        self.fn = self._set_view_fn_from_attrs(rest)
         self.results = unittest.TestResult()
 
         # queries defined for this view
         self.queries = (queries, list())[queries is None]
 
         if create_on_init:
-            self.create(rest)
-
-
-    def _set_view_fn_from_attrs(self, rest):
-        return ViewBaseTests._create_function(self, rest,
-                                              self.bucket,
-                                              self.name,
-                                              self.fn_str,
-                                              self.reduce_fn)
-
-    # create this view
-    def create(self, rest):
-        res = rest.create_view(self.bucket,
-                               self.name,
-                               self.fn)
-        return res
+            rest.create_view(self.name, self.bucket, [View(self.name, self.fn_str, self.reduce_fn)])
 
     # query this view
     def run_queries(self, tc, verify_results = False):
@@ -265,7 +250,6 @@ class QueryView:
                 # first verify all doc_names get reported in the view
                 # for windows, we need more than 20+ times
                 while attempt < 40 and num_keys != expected_num_docs:
-
                     self.log.info("Quering view {0} with params: {1}".format(view_name, params));
                     results = ViewBaseTests._get_view_results(tc, rest,
                         "default", view_name, limit=None, extra_params=params)
