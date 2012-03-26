@@ -1294,13 +1294,14 @@ class WarmUpMemcachedTest(unittest.TestCase):
         present_count = int(stats["curr_items"])
         self.log.info("ep curr_items : {0}, inserted_items {1}".format(present_count, curr_items))
         start = time.time()
-        while (time.time() - start) <= timeout_in_seconds:
-            if present_count < curr_items:
+        while present_count < curr_items:
+            if (time.time() - start) <= timeout_in_seconds:
                 stats = self.onenodemc.stats()
                 present_count = int(stats["curr_items"])
                 self.log.info("curr_items : {0}".format(present_count))
                 time.sleep(1)
             else:
+
                 self.fail("Timed out waiting for warmup")
 
         self.log.info("ep curr_items : {0}, inserted_items {1}".format(present_count, curr_items))
