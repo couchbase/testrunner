@@ -1316,6 +1316,7 @@ class RestParser(object):
             if 'vBucketMapForward' in vBucketServerMap:
                 #let's gather the forward map
                 vBucketMapForward = vBucketServerMap['vBucketMapForward']
+                counter = 0
                 for vbucket in vBucketMapForward:
                     #there will be n number of replicas
                     vbucketInfo = vBucket()
@@ -1324,6 +1325,8 @@ class RestParser(object):
                         for i in range(1, len(vbucket)):
                             if vbucket[i] != -1:
                                 vbucketInfo.replica.append(serverList[vbucket[i]])
+                    vbucketInfo.id = counter
+                    counter += 1
                     bucket.forward_map.append(vbucketInfo)
             vBucketMap = vBucketServerMap['vBucketMap']
             counter = 0
