@@ -709,6 +709,34 @@ class VBucketAwareMemcached(object):
         self.vBucketMap = v
         self.vBucketMapReplica = r
 
+    def reset_vbucket(self, rest, key):
+        vBucketId = crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)
+        forward_map = rest.get_bucket(self.bucket).forward_map
+        if not forward_map:
+           forward_map =  rest.get_vbuckets(self.bucket)
+        nodes = rest.get_nodes()
+        
+        for vBucket in forward_map:
+            if vBucketId == vBucket.id:
+                self.vBucketMap[vBucket.id] = vBucket.master
+                # it has changed , then to different server or a new server
+                masterIp = vBucket.master.split(":")[0]
+                masterPort = int(vBucket.master.split(":")[1])
+                if self.vBucketMap[vBucketId] not in self.memcacheds:
+                    server = TestInputServer()
+                    server.rest_username = rest.username
+                    server.rest_password = rest.password
+                    for node in nodes:
+                        if node.ip == masterIp and node.memcached == masterPort:
+                            server.port = node.port
+                    server.ip = masterIp
+                    self.memcacheds[vBucket.master] = MemcachedClientHelper.direct_client(server, self.bucket)
+                    return True
+                else:
+                    # if no one is using that memcached connection anymore just close the connection
+                    return True
+        return False
+
     def request_map(self, rest, bucket):
         memcacheds = {}
         vBucketMap = {}
@@ -740,9 +768,10 @@ class VBucketAwareMemcached(object):
             try:
                 for node in nodes:
                     if node.ip == serverIp and node.memcached == serverPort:
-                        server.port = node.port
-                        memcacheds[server_str] =\
-                            MemcachedClientHelper.direct_client(server, bucket)
+                        if server_str not in memcacheds:
+                            server.port = node.port
+                            memcacheds[server_str] =\
+                                MemcachedClientHelper.direct_client(server, bucket)
                         break
             except Exception as ex:
                 msg = "unable to establish connection to {0}.cleanup open connections"
