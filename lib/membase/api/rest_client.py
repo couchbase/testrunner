@@ -422,7 +422,7 @@ class RestConnection(object):
                     log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content))
                     return False, content
             except socket.error as e:
-                log.error("socker error while connecting to {0}:{1} error {2}: ".format(self.ip, self.port, e))
+                log.error("socket error while connecting to {0}:{1} error {2}: ".format(self.ip, self.port, e))
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
             except httplib2.ServerNotFoundError as e:
