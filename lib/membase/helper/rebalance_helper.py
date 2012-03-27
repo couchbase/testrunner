@@ -421,6 +421,13 @@ class RebalanceHelper():
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
         nodes = rest.node_statuses()
+        #are all ips the same
+        cluster_run = True
+        firstIp = nodes[0].ip
+        for node in nodes:
+            if node.ip != firstIp:
+                cluster_run = False
+                break
         nodeIps = ["{0}:{1}".format(node.ip,node.port) for node in nodes]
         log.info("current nodes : {0}".format(nodeIps))
         toBeAdded = []
@@ -429,7 +436,11 @@ class RebalanceHelper():
         if do_shuffle:
             shuffle(selection)
         for server in selection:
-            if not "{0}:{1}".format(server.ip,server.port) in nodeIps:
+            if cluster_run:
+                if not "{0}:{1}".format(firstIp,server.port) in nodeIps:
+                    toBeAdded.append(server)
+                    servers_rebalanced.append(server)
+            elif not "{0}:{1}".format(server.ip,server.port) in nodeIps:
                 toBeAdded.append(server)
                 servers_rebalanced.append(server)
             if len(toBeAdded) == int(how_many):
