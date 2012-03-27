@@ -254,7 +254,7 @@ class ClusterOperationHelper(object):
                 log.info("Set exp_pager_stime flush param on server {0}:{1}".format(server.ip, server.port))
             except Exception as ex:
                 traceback.print_exc()
-                log.error("Unable to set exp_pager_stime flush param on server {0}:{1}".format(server.ip, server.port))
+                log.error("Unable to set exp_pager_stime flush param on memcached {0}:{1}".format(server.ip, server.memcached))
 
     @staticmethod
     def get_mb_stats(servers, key):
