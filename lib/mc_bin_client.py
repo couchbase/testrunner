@@ -106,7 +106,7 @@ class MemcachedClient(object):
             if errcode == 7:
                 try:
                     a, b, vb_state = self.get_vbucket_state(self.vbucketId)
-                    rv += " when vbucket[{0}].state = {1}".format(self.vbucketId, vb_state)
+                    rv += " for vbucket :{0} to mc {1}:{2}".format(self.vbucketId, self.host, self.port)
                 except:
                     pass
             raise MemcachedError(errcode,  rv)
