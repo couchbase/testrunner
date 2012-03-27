@@ -110,7 +110,7 @@ def parse_runlist(tests, filename):
         name = stripped
         if line.startswith(" ") and prefix:
             name = prefix + "." + name
-        prefix = ".".join(name.split(".")[0:-1])
+        prefix = ".".join(name.split(",")[0].split('.')[0:-1])
         append_test(tests, name)
 
 

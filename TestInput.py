@@ -37,10 +37,20 @@ class TestInput(object):
         try:
             return int(value)
         except ValueError:
-            try:
-                return float(value)
-            except ValueError:
-                return value
+            pass
+
+        try:
+            return float(value)
+        except ValueError:
+            pass
+
+        if value.lower() == "false":
+            return False
+
+        if value.lower() == "true":
+            return True
+
+        return value
 
 
 class TestInputServer(object):

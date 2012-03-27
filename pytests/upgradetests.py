@@ -22,8 +22,9 @@ def _get_build(master, version, is_amazon=False):
     builds, changes = BuildQuery().get_all_builds()
     log.info("finding build {0} for machine {1}".format(version, master))
     result = re.search('r', version)
-    product = 'membase-server-enterprise'
-    if re.search('1.8',version):
+    if version.startswith("1.6") or version.startswith("1.7"):
+        product = 'membase-server-enterprise'
+    else:
         product = 'couchbase-server-enterprise'
 
     if result is None:
@@ -75,22 +76,37 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         servers = input.servers
         server = servers[0]
         save_upgrade_config = False
-        if re.search('1.8',input.test_params['version']):
+        if initial_version.startswith("1.7") and input.test_params['version'].startswith("1.8"):
             save_upgrade_config = True
         is_amazon = False
         if input.test_params.get('amazon',False):
             is_amazon = True
+        if initial_version.startswith("1.6") or initial_version.startswith("1.7"):
+            product = 'membase-server-enterprise'
+        else:
+            product = 'couchbase-server-enterprise'
         remote = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
         info = remote.extract_remote_info()
         remote.membase_uninstall()
         remote.couchbase_uninstall()
         builds, changes = BuildQuery().get_all_builds()
-        older_build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
-                                                              os_architecture=info.architecture_type,
-                                                              build_version=initial_version,
-                                                              product='membase-server-enterprise', is_amazon=is_amazon)
-        remote.execute_command('/etc/init.d/membase-server stop')
+        # check to see if we are installing from latestbuilds or releases
+        # note: for newer releases (1.8.0) even release versions can have the
+        #  form 1.8.0r-55
+        if re.search('r', initial_version):
+            builds, changes = BuildQuery().get_all_builds()
+            older_build = BuildQuery().find_membase_build(builds, deliverable_type=info.deliverable_type,
+                                                          os_architecture=info.architecture_type,
+                                                          build_version=initial_version,
+                                                          product=product, is_amazon=is_amazon)
+        else:
+            older_build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
+                                                                  os_architecture=info.architecture_type,
+                                                                  build_version=initial_version,
+                                                                  product=product, is_amazon=is_amazon)
+        remote.stop_membase()
+        remote.stop_couchbase()
         remote.download_build(older_build)
         #now let's install ?
         remote.membase_install(older_build)
@@ -355,6 +371,18 @@ class SingleNodeUpgradeTests(unittest.TestCase):
 
         #TODO : expect a message like 'package membase-server-1.7~basestar-1.x86_64 is already installed'
 
+    def test_upgrade(self):
+        # singlenode paramaterized install
+        input = TestInputSingleton.input
+        initial_version = input.param('initial_version', '1.6.5.3')
+        initialize_cluster = input.param('initialize_cluster', True)
+        create_buckets = input.param('create_buckets', True)
+        insert_data = input.param('insert_data', True)
+        self._install_and_upgrade(initial_version=initial_version,
+                                  initialize_cluster=initialize_cluster,
+                                  create_buckets=create_buckets,
+                                  insert_data=insert_data)
+
 
 class MultipleNodeUpgradeTests(unittest.TestCase):
     #in a 3 node cluster with no buckets shut down all the nodes update all
@@ -534,6 +562,27 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         upgrade_path = ['1.7.2']
         self._install_and_upgrade('1.7.1.1', True, True, False, 10, False, upgrade_path)
 
+    def test_upgrade(self):
+        # multinode paramaterized install
+        input = TestInputSingleton.input
+        initial_version = input.param('initial_version', '1.6.5.3')
+        create_buckets = input.param('create_buckets', True)
+        insert_data = input.param('insert_data', True)
+        start_upgraded_first = input.param('start_upgraded_first', True)
+        load_ratio = input.param('load_ratio', -1)
+        online_upgrade = input.param('online_upgrade', False)
+        upgrade_path = input.param('upgrade_path', [])
+        if upgrade_path:
+            upgrade_path = upgrade_path.split(",")
+
+        self._install_and_upgrade(initial_version=initial_version,
+                                  create_buckets=create_buckets,
+                                  insert_data=insert_data,
+                                  start_upgraded_first=start_upgraded_first,
+                                  load_ratio=load_ratio,
+                                  roll_upgrade=online_upgrade,
+                                  upgrade_path=upgrade_path)
+
     #do some bucket/init related operation
     #now only option x nodes
     #power on upgraded ones first and then the non-upgraded ones
@@ -551,7 +600,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         inserted_keys = []
         log = logger.Logger.get_logger()
         if roll_upgrade:
-            log.info("performing a rolling upgrade")
+            log.info("performing an online upgrade")
         input = TestInputSingleton.input
         rest_settings = input.membase_settings
         servers = input.servers
@@ -559,19 +608,35 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         is_amazon = False
         if input.test_params.get('amazon',False):
             is_amazon = True
+        if initial_version.startswith("1.6") or initial_version.startswith("1.7"):
+            product = 'membase-server-enterprise'
+        else:
+            product = 'couchbase-server-enterprise'
         # install older build on all nodes
         for server in servers:
             remote = RemoteMachineShellConnection(server)
             rest = RestConnection(server)
             info = remote.extract_remote_info()
-            older_build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
+            # check to see if we are installing from latestbuilds or releases
+            # note: for newer releases (1.8.0) even release versions can have the
+            #  form 1.8.0r-55
+            if re.search('r', initial_version):
+                builds, changes = BuildQuery().get_all_builds()
+                older_build = BuildQuery().find_membase_build(builds, deliverable_type=info.deliverable_type,
                                                               os_architecture=info.architecture_type,
                                                               build_version=initial_version,
-                                                              product='membase-server-enterprise', is_amazon=is_amazon)
+                                                              product=product, is_amazon=is_amazon)
+
+            else:
+                older_build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
+                                                                      os_architecture=info.architecture_type,
+                                                                      build_version=initial_version,
+                                                                      product=product, is_amazon=is_amazon)
 
             remote.membase_uninstall()
             remote.couchbase_uninstall()
-            remote.execute_command('/etc/init.d/membase-server stop')
+            remote.stop_membase()
+            remote.stop_couchbase()
             remote.download_build(older_build)
             #now let's install ?
             remote.membase_install(older_build)
@@ -614,15 +679,19 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
         input_version = input.test_params['version']
         node_upgrade_path.append(input_version)
+        current_version = initial_version
+        previous_version = current_version
         #if we dont want to do roll_upgrade ?
         log.info("Upgrade path: {0} -> {1}".format(initial_version, node_upgrade_path))
         log.info("List of servers {0}".format(servers))
         if not roll_upgrade:
             for version in node_upgrade_path:
+                previous_version = current_version
+                current_version = version
                 if version is not initial_version:
                     log.info("Upgrading to version {0}".format(version))
                     self._stop_membase_servers(servers)
-                    if re.search('1.8', version):
+                    if previous_version.startswith("1.7") and current_version.startswith("1.8"):
                         save_upgrade_config = True
 
                     appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
