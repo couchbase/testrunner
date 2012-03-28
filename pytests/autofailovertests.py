@@ -25,6 +25,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             shell.disable_linux_firewall()
+            shell.start_couchbase()
             shell.unpause_memcached()
             shell.unpause_beam()
             shell.disconnect()
@@ -38,6 +39,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             shell.disable_linux_firewall()
+            shell.start_couchbase()
             shell.unpause_memcached()
             shell.unpause_beam()
             shell.disconnect()
