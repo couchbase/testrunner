@@ -12,10 +12,7 @@ class ViewHelper():
             try:
                 start = time.time()
                 query.setConnectionTimeout(60000)
-                if spatial == True:
-                    results = rest.querySpatialView(design_doc_name, view_name, bucket, query)
-                else:
-                    results = rest.queryView(design_doc_name, view_name, bucket, query)
+                results = rest.query_view(design_doc_name, view_name, bucket, query)
                 if results.get(u'errors', []):
                     assert False, "Query error {0} due to {1}".format(view, results.get(u'errors'))
 
@@ -29,4 +26,30 @@ class ViewHelper():
             except Exception as ex:
                 log.error("View not ready, retry in {0} sec. Error: {1}".format(interval, ex))
                 time.sleep(interval)
-        assert False, "Query {0} failed {1} times. Test Failed".format(view, tries)
+                continue
+            elif result.size > 0:
+                log.info("Query took {0} sec, {1} tries".format(duration, (i + 1)))
+                return result, duration
+            else:
+                time.sleep(interval)
+                log.info("Query empty after {0} sec, {1} tries".format(duration, (i + 1)))
+        assert False, "Query {0} failed {1} times. Test Failed".format(view_name, tries)
+
+    @staticmethod
+    def queryViewWaitForKeys(rest, design_doc_name, view_name, bucket, query, expected_keys,
+                             spatial=False, interval=10, timeout=600):
+        log = logger.Logger.get_logger()
+        st = time.time()
+        total_time = 0
+        while (time.time() - st) < timeout:
+            result, duration = ViewHelper.queryViewUntilNotEmpty(rest, view_name, view_name,
+                                                                 bucket, query, spatial)
+            keys = result.getKeys()
+            if len(keys) >= expected_keys:
+                return result, (time.time() - st)
+            else:
+                log.info("Query returned {0} items, expected {1}".format(len(keys), expected_keys))
+                log.info("Retrying query in {0} seconds".format(interval))
+                time.sleep(interval)
+        assert False, "Query ({0}) timeout {1}. Got {2}/{3} keys".format(view_name, timeout,
+                                                                         len(keys), expected_keys)
