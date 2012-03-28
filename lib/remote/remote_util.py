@@ -622,10 +622,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
 
             if vbuckets:
                 if is_membase:
-                    output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export MEMBASE_NUM_VBUCKETS={0}/' /etc/init.d/membase-server".format(vbuckets))
+                    output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export MEMBASE_NUM_VBUCKETS={0}/' /opt/membase/etc/membasebase_init.d".format(vbuckets))
                     self.log_command_output(output, error)
                 elif is_couchbase:
-                    output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export COUCHBASE_NUM_VBUCKETS={0}/' /etc/init.d/couchbase-server".format(vbuckets))
+                    output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export COUCHBASE_NUM_VBUCKETS={0}/' /opt/couchbase/etc/couchbase_init.d".format(vbuckets))
                     self.log_command_output(output, error)
 
             if startserver and is_membase:
