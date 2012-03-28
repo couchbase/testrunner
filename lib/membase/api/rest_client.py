@@ -198,10 +198,12 @@ class RestConnection(object):
         return json.loads(content)
 
     def _query(self, design_doc_name, view_name, bucket, view_type, query, timeout):
-        api = '{0}couchBase/{1}/_design/{2}/_{3}/{4}{5}'.format(self.baseUrl, bucket,
-                                                                design_doc_name, view_type,
-                                                                view_name, str(query))
-
+        if view_name == '_all_docs':
+            api = '{0}couchBase/{1}/{2}{3}'.format(self.baseUrl, bucket, view_name, str(query))
+        else:
+            api = '{0}couchBase/{1}/_design/{2}/_{3}/{4}{5}'.format(self.baseUrl, bucket,
+                                                                    design_doc_name, view_type,
+                                                                    view_name, str(query))
         log.info("index query url: {0}".format(api))
         status, content = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
         return status, content
