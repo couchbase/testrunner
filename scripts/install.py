@@ -227,6 +227,10 @@ class MembaseServerInstaller(Installer):
         info = remote_client.extract_remote_info()
         type = info.type.lower()
         server = params["server"]
+        if "vbuckets" in params:
+            vbuckets = int(params["vbuckets"][0])
+        else:
+            vbuckets = None
         if type == "windows":
             build = self.build_url(params)
             remote_client.download_binary_in_win(build.url, params["product"], params["version"])
@@ -236,7 +240,7 @@ class MembaseServerInstaller(Installer):
             if not downloaded:
                 log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
             path = server.data_path or '/tmp'
-            remote_client.membase_install(build, path=path)
+            remote_client.membase_install(build, path=path, vbuckets=vbuckets)
             ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
             if not ready:
                 log.error("membase-server did not start...")
@@ -315,6 +319,10 @@ class CouchbaseServerInstaller(Installer):
         info = remote_client.extract_remote_info()
         type = info.type.lower()
         server = params["server"]
+        if "vbuckets" in params:
+            vbuckets = int(params["vbuckets"][0])
+        else:
+            vbuckets = None
         if type == "windows":
             build = self.build_url(params)
             remote_client.download_binary_in_win(build.url, params["product"], params["version"])
@@ -325,7 +333,7 @@ class CouchbaseServerInstaller(Installer):
                 log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
             #TODO: need separate methods in remote_util for couchbase and membase install
             path = server.data_path or '/tmp'
-            remote_client.membase_install(build, path=path)
+            remote_client.membase_install(build, path=path, vbuckets=vbuckets)
             log.info('wait 5 seconds for membase server to start')
             time.sleep(5)
 

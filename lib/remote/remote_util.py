@@ -578,7 +578,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
                 self.log_command_output(output, error)
 
-    def membase_install(self, build, startserver=True, path='/tmp'):
+    def membase_install(self, build, startserver=True, path='/tmp', vbuckets=None):
         is_membase = False
         is_couchbase = False
         if build.name.lower().find("membase") != -1:
@@ -602,7 +602,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 self.wait_till_file_added("/cygdrive/c/Program Files/Couchbase/Server/", 'VERSION.txt',
                                           timeout_in_seconds=600)
         elif info.deliverable_type in ["rpm", "deb"]:
-            if startserver:
+            if startserver and vbuckets == None:
                 environment = ""
             else:
                 environment = "INSTALL_DONT_START_SERVER=1 "
@@ -619,6 +619,22 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             else:
                 output, error = self.execute_command('/opt/couchbase/bin/mbenable_core_dumps.sh  {0}'.format(path))
                 self.log_command_output(output, error)
+
+            if vbuckets:
+                if is_membase:
+                    output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export MEMBASE_NUM_VBUCKETS={0}/' /etc/init.d/membase-server".format(vbuckets))
+                    self.log_command_output(output, error)
+                elif is_couchbase:
+                    output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export COUCHBASE_NUM_VBUCKETS={0}/' /etc/init.d/couchbase-server".format(vbuckets))
+                    self.log_command_output(output, error)
+
+            if startserver and is_membase:
+                output, error = self.execute_command('service membase-server start')
+                self.log_command_output(output, error)
+            elif startserver and is_couchbase:
+                output, error = self.execute_command('service couchbase-server start')
+                self.log_command_output(output, error)
+
 
     def membase_install_win(self, build, version, startserver=True):
         is_membase = False
