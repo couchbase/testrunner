@@ -190,14 +190,21 @@ class RestConnection(object):
             raise Exception("unable to create view")
         return json.loads(content)
 
-    #http://10.1.6.108:8091/couchBase/bucket-0/_design/dev_6ca50/_view/dev_6ca50?limit=10&_=1311107815807
-    def view_results(self, bucket, view, params, limit=100, timeout=120):
-        status, json = self._index_results(bucket, "view", view, params, limit, timeout=timeout)
+    def query_view(self, design_doc_name, view_name, bucket, query, timeout=120):
+        status, content = self._query(design_doc_name, view_name, bucket, "view", query,
+                                      timeout)
+        if status == False:
+            raise Exception("unable to query view")
+        return json.loads(content)
 
-        if not status:
-            raise Exception("unable to obtain view results")
+    def _query(self, design_doc_name, view_name, bucket, view_type, query, timeout):
+        api = '{0}couchBase/{1}/_design/{2}/_{3}/{4}{5}'.format(self.baseUrl, bucket,
+                                                                design_doc_name, view_type,
+                                                                view_name, str(query))
 
-        return json
+        log.info("index query url: {0}".format(api))
+        status, content = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
+        return status, content
 
     def get_views_per_vbucket(self, bucket, view):
         vBuckets = self.get_vbuckets(bucket)
