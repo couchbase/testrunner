@@ -11,10 +11,10 @@ class ViewHelper():
         for i in range(0, tries):
             try:
                 start = time.time()
-                query.setConnectionTimeout(60000)
+                query["connectionTimeout"] = 60000
                 results = rest.query_view(design_doc_name, view_name, bucket, query)
                 if results.get(u'errors', []):
-                    assert False, "Query error {0} due to {1}".format(view, results.get(u'errors'))
+                    assert False, "Query error {0} due to {1}".format(view_name, results.get(u'errors'))
 
                 duration = time.time() - start
                 if results.get(u'rows', []) or results.get(u'total_rows', 0) > 0:
@@ -27,12 +27,6 @@ class ViewHelper():
                 log.error("View not ready, retry in {0} sec. Error: {1}".format(interval, ex))
                 time.sleep(interval)
                 continue
-            elif result.size > 0:
-                log.info("Query took {0} sec, {1} tries".format(duration, (i + 1)))
-                return result, duration
-            else:
-                time.sleep(interval)
-                log.info("Query empty after {0} sec, {1} tries".format(duration, (i + 1)))
         assert False, "Query {0} failed {1} times. Test Failed".format(view_name, tries)
 
     @staticmethod
