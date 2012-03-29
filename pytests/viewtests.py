@@ -475,9 +475,9 @@ class ViewBaseTests(unittest.TestCase):
                 params = {"connection_timeout": 60000}
                 params.update(extra_params)
                 if view.find("dev_") == 0:
-                    params["full_set"] = True
+                    params["full_set"] = "true"
                 self.log.info("Params {0}".format(params))
-                results = rest.view_results(bucket, view, params, limit)
+                results = rest.query_view(view, view, bucket, params, limit)
                 if results.get(u'errors', []):
                     self.fail("unable to get view_results for {0} due to error {1}".format(view, results.get(u'errors')))
 
