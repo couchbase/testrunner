@@ -422,12 +422,15 @@ class RebalanceHelper():
         rest = RestConnection(servers[0])
         nodes = rest.node_statuses()
         #are all ips the same
-        cluster_run = True
+        nodes_on_same_ip = True
         firstIp = nodes[0].ip
-        for node in nodes:
-            if node.ip != firstIp:
-                cluster_run = False
-                break
+        if len(nodes) == 1:
+            nodes_on_same_ip  = False
+        else:
+            for node in nodes:
+                if node.ip != firstIp:
+                    nodes_on_same_ip = False
+                    break
         nodeIps = ["{0}:{1}".format(node.ip,node.port) for node in nodes]
         log.info("current nodes : {0}".format(nodeIps))
         toBeAdded = []
@@ -436,15 +439,20 @@ class RebalanceHelper():
         if do_shuffle:
             shuffle(selection)
         for server in selection:
-            if cluster_run:
+            if nodes_on_same_ip:
                 if not "{0}:{1}".format(firstIp,server.port) in nodeIps:
                     toBeAdded.append(server)
                     servers_rebalanced.append(server)
+                    log.info("choosing {0}:{1}".format(server.ip, server.port))
             elif not "{0}:{1}".format(server.ip,server.port) in nodeIps:
                 toBeAdded.append(server)
                 servers_rebalanced.append(server)
+                log.info("choosing {0}:{1}".format(server.ip, server.port))
             if len(toBeAdded) == int(how_many):
                 break
+
+        if len(toBeAdded) < how_many:
+            raise Exception("unable to find {0} nodes to rebalance_in".format(how_many))
 
         for server in toBeAdded:
             otpNode = rest.add_node(master.rest_username, master.rest_password,
