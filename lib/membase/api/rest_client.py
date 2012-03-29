@@ -208,6 +208,12 @@ class RestConnection(object):
         status, content = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
         return status, content
 
+    def view_results(self, bucket, view, params, limit=100, timeout=120):
+        status, json = self._index_results(bucket, "view", view, params, limit, timeout=timeout)
+        if not status:
+            raise Exception("unable to obtain view results")
+        return json
+
     def get_views_per_vbucket(self, bucket, view):
         vBuckets = self.get_vbuckets(bucket)
         views_not_found = []
