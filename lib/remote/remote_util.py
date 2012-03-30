@@ -406,7 +406,7 @@ class RemoteMachineShellConnection:
                 short_version = full_version
             else:
                 tmp = full_version.split("-")
-                if "1.8.0" in tmp[0]:
+                if "1.8.0" in tmp[0] or "1.8.1" in tmp[0]:
                     product = "cb"
                 if "1.7.2" in tmp[0]:
                     product = "mb"
@@ -428,6 +428,9 @@ class RemoteMachineShellConnection:
             product_version = "2.0.0"
         elif "1.8.0" in version:
             product_version = "1.8.0"
+            name = "cb"
+        elif "1.8.1" in version:
+            product_version = "1.8.1"
             name = "cb"
         elif "1.7.2" in version:
             product_version = "1.7.2"
@@ -943,7 +946,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             if exist:
                 log.info("VERSION file exists.  Start to uninstall")
                 build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
-                if "1.8.0" in full_version:
+                if "1.8.0" in full_version or "1.8.1" in full_version:
                     product_name = "couchbase-server-enterprise"
                     product = "cb"
                 log.info('Build name: {0}'.format(build_name))
