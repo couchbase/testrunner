@@ -632,10 +632,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                     self.log_command_output(output, error)
 
             if startserver and is_membase:
-                output, error = self.execute_command('service membase-server start')
+                output, error = self.execute_command('/etc/init.d/membase-server start')
                 self.log_command_output(output, error)
             elif startserver and is_couchbase:
-                output, error = self.execute_command('service couchbase-server start')
+                output, error = self.execute_command('/etc/init.d/couchbase-server start')
                 self.log_command_output(output, error)
 
 
