@@ -44,7 +44,6 @@ class FailoverHelper(object):
                 self.log.info("10 seconds delay to wait for membase-server to shutdown")
             #wait for 5 minutes until node is down
 
-
             for f in failed:
                 if f.port == 8091:
                     self.test.assertTrue(RestHelper(rest).wait_for_node_status(f, "unhealthy", 300),

@@ -527,8 +527,6 @@ class RebalanceHelper():
         assert rest.monitorRebalance(), "rebalance operation failed after adding nodes"
         log.info("rebalance finished")
 
-
-
     @staticmethod
     def getOtpNodeIds(master):
         rest = RestConnection(master)
@@ -545,4 +543,16 @@ class RebalanceHelper():
             if node_for_stat.id.find('127.0.0.1') == -1 and node_for_stat.id.find(master.ip) == -1:
                 picked = node_for_stat
                 break
+        return picked
+
+    @staticmethod
+    def pick_nodes(master, howmany=1):
+        rest = RestConnection(master)
+        nodes = rest.node_statuses()
+        picked = []
+        for node_for_stat in nodes:
+            if node_for_stat.id.find('127.0.0.1') == -1 and node_for_stat.id.find(master.ip) == -1:
+                picked.append(node_for_stat)
+                if len(picked) == howmany:
+                    break
         return picked

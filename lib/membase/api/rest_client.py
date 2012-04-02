@@ -670,7 +670,7 @@ class RestConnection(object):
         api = '{0}{1}'.format(self.baseUrl, 'diag/eval/')
         status, content = self._http_request(api, "POST", code)
         log.info("/diag/eval : status : {0} content : {1}".format(status, content))
-        return status
+        return status, content
 
 
     def monitorRebalance(self):
