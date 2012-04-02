@@ -86,46 +86,6 @@ class SwapRebalanceBaseTest(unittest.TestCase):
             self.assertTrue(ready, msg="wait_for_memcached failed")
 
     @staticmethod
-    def replication_verification(master, bucket_data, replica, test, failed_over=False):
-        asserts = []
-        rest = RestConnection(master)
-        buckets = rest.get_buckets()
-        nodes = rest.node_statuses()
-        test.log.info("expect {0} / {1} replication ? {2}".format(len(nodes),
-            (1.0 + replica), len(nodes) / (1.0 + replica)))
-        if len(nodes) / (1.0 + replica) >= 1:
-            final_replication_state = RestHelper(rest).wait_for_replication(300)
-            msg = "replication state after waiting for up to 5 minutes : {0}"
-            test.log.info(msg.format(final_replication_state))
-            #run expiry_pager on all nodes before doing the replication verification
-            for bucket in buckets:
-                ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)
-                test.log.info("wait for expiry pager to run on all these nodes")
-                time.sleep(30)
-                ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name, 3600)
-                ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)
-                # windows need more than 15 minutes to get number matched
-                replica_match = RebalanceHelper.wait_till_total_numbers_match(bucket=bucket.name,
-                    master=master,
-                    timeout_in_seconds=1200)
-                if not replica_match:
-                    asserts.append("replication was completed but sum(curr_items) dont match the curr_items_total")
-                if not failed_over:
-                    stats = rest.get_bucket_stats(bucket=bucket.name)
-                    RebalanceHelper.print_taps_from_all_nodes(rest, bucket.name)
-                    msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
-                    active_items_match = stats["curr_items"] == bucket_data[bucket.name]["items_inserted_count"]
-                    if not active_items_match:
-                    #                        asserts.append(
-                        test.log.error(
-                            msg.format(stats["curr_items"], bucket_data[bucket.name]["items_inserted_count"]))
-
-        if len(asserts) > 0:
-            for msg in asserts:
-                test.log.error(msg)
-            test.assertTrue(len(asserts) == 0, msg=asserts)
-
-    @staticmethod
     def load_data_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data, test):
         buckets = rest.get_buckets()
         for bucket in buckets:
@@ -370,6 +330,7 @@ class SwapRebalanceTests(unittest.TestCase):
         # Add back the same failed over nodes
 
         #Cleanup the node, somehow
+        #TODO: cluster_run?
         if do_node_cleanup:
             pass
 
