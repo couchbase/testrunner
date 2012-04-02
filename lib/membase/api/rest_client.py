@@ -494,7 +494,7 @@ class RestConnection(object):
         return status
 
     #password:password username:Administrator hostname:127.0.0.1:9002 name:two
-    def remote_clusters(self, remoteIp, remotePort, username, password, name):
+    def add_remote_cluster(self, remoteIp, remotePort, username, password, name):
         #example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
         otpNode = None
         remoteCluster = {}
@@ -511,13 +511,31 @@ class RestConnection(object):
         # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
         if status == True:
             json_parsed = json.loads(content)
-            print json_parsed
             remoteCluster = json_parsed
         else:
             log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
-            raise ClusterRemoteException(nodeIp=remoteIp,remotePort=remotePort)
+            raise Exception("remoteCluster API 'add cluster' failed")
 
         return remoteCluster
+
+
+    def remove_remote_cluster(self, name):
+        #example : name:two
+        otpNode = None
+        msg = "removing remote cluster name:{0}".format(name)
+        log.info(msg)
+        api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(name)
+        params = urllib.urlencode({})
+        status, content = self._http_request(api, 'DELETE', params)
+        #sample response :
+        # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
+        if status == True:
+            json_parsed = json.loads(content)
+        else:
+            log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
+            raise Exception("remoteCluster API 'remove cluster' failed")
+
+        return json_parsed
 
 
     #replicationType:continuous toBucket:default toCluster:two fromBucket:default
@@ -545,7 +563,25 @@ class RestConnection(object):
 
         return create_replication_response
 
-    
+
+    def start_replication(self, type, bucket, dest_ref):
+        controller_resp = self.create_replication(type, bucket, bucket, dest_ref)
+        document = controller_resp[u'document']
+        database = controller_resp[u'database']
+        (true, json_resp) = self._http_request(database, 'POST', json.dumps(document), self._create_capi_headers())
+        resp = json.loads(json_resp)
+        if resp["ok"] == true:
+            return (database, resp["id"])
+        else:
+            log = logger.Logger().get_logger()
+            log.error("failed to start replication: {0}".format(json_resp))
+
+
+    def stop_replication(self, database, rep_id):
+        (true, json_resp) = self._http_request(database + "/{0}".format(rep_id), 'GET', None, self._create_capi_headers())
+        resp = json.loads(json_resp)
+        self._http_request(database + "/{0}?rev={1}".format(rep_id, resp["_rev"]), 'DELETE', None, self._create_capi_headers())
+
 
     #params serverIp : the server to add to this cluster
     #raises exceptions when

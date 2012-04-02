@@ -254,18 +254,22 @@ class RebalanceDataGenerator(object):
     #expect "count","sizes"
     def create_loading_tasks(params):
         log = logger.Logger.get_logger()
-        task = {"ops": params["ops"], "seed": params["seed"], "bucket": params["bucket"],
-                "docs": [], "sizes": params["sizes"]}
+        task = {"ops": params["ops"], "seed": params["seed"], "bucket": params["bucket"], "docs": [], "sizes": params["sizes"]}
         log.info("params : {0}".format(params))
         for size in params["sizes"]:
             info = RebalanceDataGenerator.job_info()
-            kv_template = {"name": "employee-${prefix}-${seed}",
-                           "sequence": "${seed}",
-                           "join_yr": 2007, "join_mo": 10, "join_day": 20,
-                           "email": "${prefix}@couchbase.com",
-                           "job_title": "Software Engineer-${padding}",
-                           "desc": info["desc"].encode("utf-8", "ignore")}
+            if "kv_template" not in params:
+                kv_template = {"name": "employee-${prefix}-${seed}", "sequence": "${seed}",
+                               "join_yr": 2007, "join_mo": 10, "join_day": 20,
+                               "email": "${prefix}@couchbase.com",
+                               "job_title": "Software Engineer-${padding}",
+                               "desc": info["desc"].encode("utf-8", "ignore")}
+            else:
+                kv_template = params["kv_template"]
+
             options = {"size": size, "seed": params["seed"]}
+            if "padding" in params:
+                options["padding"] = params["padding"]
             docs = DocumentGenerator.make_docs(params["count"] / len(params["sizes"]), kv_template, options)
             task["docs"].append(docs)
         return task
@@ -314,10 +318,13 @@ class RebalanceDataGenerator(object):
                     except MemcachedError as e:
                         pass
                 else:
-                    x, y, value = smart.memcached(k).get(k)
-                    actualmd5 = hashlib.md5(value).digest()
-                    if actualmd5 != expected["value"]:
-                        validation_failures[k] = ["value mismatch"]
+                    try:
+                       x, y, value = smart.memcached(k).get(k)
+                       actualmd5 = hashlib.md5(value).digest()
+                       if actualmd5 != expected["value"]:
+                          validation_failures[k] = ["value mismatch"]
+                    except  MemcachedError as e:
+                       validation_failures[k] = ["key not found"]
         return validation_failures
 
     @staticmethod

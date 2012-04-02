@@ -825,7 +825,10 @@ class GeneratedDocuments(object):
         self._kv_template = kv_template
         self._options = options
         self._pointer = 0
-        self._pad = DocumentGenerator._random_string(options["size"])
+        if "padding" in options:
+            self._pad = options["padding"]
+        else:
+           self._pad = DocumentGenerator._random_string(options["size"])
 
     # Required for the for-in syntax
     def __iter__(self):
