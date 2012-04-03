@@ -16,7 +16,6 @@ from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemc
 from memcached.helper.data_helper import MemcachedError
 from remote.remote_util import RemoteMachineShellConnection
 
-
 class ViewBaseTests(unittest.TestCase):
 
     #if we create a bucket and a view let's delete them in the end
@@ -477,7 +476,7 @@ class ViewBaseTests(unittest.TestCase):
                 if view.find("dev_") == 0:
                     params["full_set"] = "true"
                 self.log.info("Params {0}".format(params))
-                results = rest.query_view(view, view, bucket, params, limit)
+                results = rest.query_view(view, view, bucket, params)
                 if results.get(u'errors', []):
                     self.fail("unable to get view_results for {0} due to error {1}".format(view, results.get(u'errors')))
 
