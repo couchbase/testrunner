@@ -2,8 +2,7 @@
 
 import os
 import sys
-sys.path.append("lib")
-sys.path.append("pytests")
+sys.path = ["lib","pytests"] + sys.path
 
 if sys.hexversion < 0x02060000:
     print "Testrunner requires version 2.6+ of python"
