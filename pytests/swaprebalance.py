@@ -130,7 +130,6 @@ class SwapRebalanceBaseTest(unittest.TestCase):
     @staticmethod
     def load_data(master, bucket, keys_count=-1, load_ratio=-1, delete_ratio=0, \
                   expiry_ratio=0, test=None, wait_to_drain=True):
-        log = logger.Logger.get_logger()
         inserted_keys, rejected_keys =\
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
             name=bucket,
@@ -142,7 +141,7 @@ class SwapRebalanceBaseTest(unittest.TestCase):
             expiry_ratio=expiry_ratio,
             moxi=True)
         if wait_to_drain:
-            log.info("wait until data is completely persisted on the disk")
+            test.info("wait until data is completely persisted on the disk")
             ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, timeout_in_seconds=120)
             test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
             ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0, timeout_in_seconds=120)
@@ -151,14 +150,21 @@ class SwapRebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def verify_data(master, inserted_keys, bucket, test):
-        log = logger.Logger.get_logger()
-        log.info("Verifying data")
+        test.log.info("Verifying data")
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, \
             bucket_name=bucket, test=test, concurrency=4)
+
+    @staticmethod
+    def verification(master, test):
+        rest = RestConnection(master)
+        #Verify items count across all node
+        for bucket in rest.get_buckets():
+            verified = RebalanceHelper.verify_items_count(master, bucket.name)
+            test.assertTrue(verified, "Lost items!!.. failing test")
 
 class SwapRebalanceTests(unittest.TestCase):
 
@@ -230,6 +236,8 @@ class SwapRebalanceTests(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
 
+        SwapRebalanceBaseTest.verification(master, self)
+
     def _common_test_body_failed_swap_rebalance(self):
         master = self.servers[0]
         rest = RestConnection(master)
@@ -282,11 +290,14 @@ class SwapRebalanceTests(unittest.TestCase):
             memcached_restarted = rest.diag_eval(command)
             self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
             time.sleep(20)
+
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
                 ejectedNodes=optNodesIds)
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
+
+        SwapRebalanceBaseTest.verification(master, self)
 
     def _add_back_failed_node(self, do_node_cleanup=False):
         master = self.servers[0]
@@ -306,7 +317,7 @@ class SwapRebalanceTests(unittest.TestCase):
             bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
 
         # Start the swap rebalance
-        self.log.info("Starting swap rebalance")
+        self.log.info("Failing over a node")
         self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.failover_factor)
         optNodesIds = [node.id for node in toBeEjectedNodes]
@@ -333,12 +344,13 @@ class SwapRebalanceTests(unittest.TestCase):
         #TODO: cluster_run?
         if do_node_cleanup:
             pass
+        # Make rest connection with node part of cluster
+        rest = RestConnection(self.servers[-1])
 
         # Given the optNode, find ip
         add_back_servers = []
         nodes = rest.get_nodes()
-        current_servers = [node.ip for node in nodes]
-        for server in current_servers:
+        for server in [node.ip for node in nodes]:
             if isinstance(server, unicode):
                 add_back_servers.append(server)
         final_add_back_servers = []
@@ -355,6 +367,8 @@ class SwapRebalanceTests(unittest.TestCase):
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(add_back_servers))
+
+        SwapRebalanceBaseTest.verification(master, self)
 
     def test_swap_rebalance(self):
         self._common_test_body_swap_rebalance()

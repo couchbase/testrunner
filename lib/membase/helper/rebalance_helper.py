@@ -290,8 +290,6 @@ class RebalanceHelper():
         rest = RestConnection(master)
         bucket_info = rest.get_bucket(bucket)
         replica_factor = bucket_info.numReplicas
-        #print out vb_pending_num,vb_active_num,vb_replica_num as well
-        master_stats = rest.get_bucket_stats(bucket)
         vbucket_active_sum = 0
         vbucket_replica_sum = 0
         vbucket_pending_sum = 0
@@ -331,6 +329,7 @@ class RebalanceHelper():
         log.info(msg.format(vbucket_active_sum, vbucket_pending_sum, vbucket_replica_sum))
         msg = 'sum : {0} and sum * replica_factor ({1}) : {2}'
         log.info(msg.format(sum, replica_factor, (sum * (replica_factor + 1))))
+        master_stats = rest.get_bucket_stats(bucket)
         log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
         delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
         delta = abs(delta)
