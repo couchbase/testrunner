@@ -1015,7 +1015,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.use_sudo = False
 
         if self.use_sudo :
-            command = "sudo " + command
+            command = "sudo -i " + command
 
         return self.execute_command_raw(command, debug=debug)
 
