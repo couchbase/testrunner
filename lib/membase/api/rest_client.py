@@ -19,13 +19,14 @@ class RestHelper(object):
         end_time = time.time() + timeout_in_seconds
         while time.time() <= end_time:
             try:
-                if self.is_cluster_healthy(5):
+                status = self.rest.get_nodes_self(5)
+                if status.status == 'healthy':
                     return True
             except ServerUnavailableException:
                 log.error("server {0}:{1} is unavailable".format(self.rest.ip, self.rest.port))
                 time.sleep(1)
         msg = 'unable to connect to the node {0} even after waiting {1} seconds'
-        log.info(msg.format(self.rest.ip,timeout_in_seconds))
+        log.info(msg.format(self.rest.ip, timeout_in_seconds))
         return False
 
     def is_cluster_healthy(self, timeout=120):
@@ -789,11 +790,11 @@ class RestConnection(object):
 
 
     #returns node data for this host
-    def get_nodes_self(self):
+    def get_nodes_self(self, timeout=120):
         node = None
         api = self.baseUrl + 'nodes/self'
 
-        status, content = self._http_request(api)
+        status, content = self._http_request(api, timeout=timeout)
 
         json_parsed = json.loads(content)
 
