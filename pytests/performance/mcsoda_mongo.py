@@ -46,6 +46,7 @@ class StoreMongo(mcsoda.Store):
                   "country": mcsoda.key_to_country(key_num, key_str),
                   "realm": mcsoda.key_to_realm(key_num, key_str),
                   "coins": mcsoda.key_to_coins(key_num, key_str),
+                  "category": mcsoda.key_to_category(key_num, key_str),
                   "achievements": mcsoda.key_to_achievements(key_num, key_str) }
         if cache:
             mongoDocCache[key_num] = d

@@ -147,6 +147,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
                                    country=mcsoda.key_to_country(key_num, key_str),
                                    realm=mcsoda.key_to_realm(key_num, key_str),
                                    coins=mcsoda.key_to_coins(key_num, key_str),
+                                   category=mcsoda.key_to_category(key_num, key_str),
                                    cmds=self.cmds,
                                    int10=self.cmds % 10,
                                    int100=self.cmds % 100,
@@ -166,7 +167,7 @@ if __name__ == "__main__":
                     "               queries=/default/_design/DDOC/_view/by_email?startkey={email}",
                     "",
                     "Available keys for queries templates:",
-                    "    key, name, email, city, country, realm, coins",
+                    "    key, name, email, city, country, realm, coins, category,",
                     "    cmds (the number of commands sent so far),",
                     "    int10, int100, int1000 (various sized integers)"
                     ]

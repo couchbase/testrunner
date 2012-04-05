@@ -873,6 +873,9 @@ def key_to_coins(key_num, key_str):
    sub_key = key_str[-16:]
    return max(0.0, int(sub_key[0:4], 16) / 100.0)
 
+def key_to_category(key_num, key_str):
+   return int(key_str[-12], 16) % 3
+
 def key_to_achievements(key_num, key_str):
    next = 300
    achievements = []
@@ -906,6 +909,7 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
  "country":"%s",
  "realm":"%s",
  "coins":%s,
+ "category":%s,
  "achievements":%s,""" % (key_name, key_str,
                           key_num,
                           key_to_name(key_num, key_str),
@@ -914,6 +918,7 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                           key_to_country(key_num, key_str),
                           key_to_realm(key_num, key_str),
                           key_to_coins(key_num, key_str),
+                          key_to_category(key_num, key_str),
                           key_to_achievements(key_num, key_str))
        if not whitespace:
           d = d.replace("\n ", "")
