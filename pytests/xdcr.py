@@ -233,3 +233,132 @@ class XDCRTests(unittest.TestCase):
                                                             self._poll_sleep,
                                                             self._poll_timeout),
                         "Replication verification failed")
+
+    def test_continuous_bidirectional_sets(self):
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        load_thread_list = []
+
+        # Load cluster a with keys that will be exclusively owned by it
+        kvstore_a0 = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        self._params["seed"] = "cluster-a"
+        self._params["count"] = self._num_items/4
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore_a0)
+        load_thread_list.append(load_thread)
+
+        # Load cluster a with keys that it will share with cluster b and which
+        # will win during conflict resolution
+        kvstore_a1 = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        self._params["seed"] = "cluster-a-wins"
+        self._params["padding"] = "cluster-a-wins"
+        self._params["count"] = self._num_items/4
+
+        # Mutating these keys several times will increase their seqnos and allow
+        # them to win during conflict resolution
+        for i in [1, 2, 3]:
+            task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+            load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                            self._buckets[0],
+                                                            task_def,
+                                                            kvstore_a1)
+            load_thread_list.append(load_thread)
+
+        # Load cluster a with keys that it will share with cluster b but which
+        # will lose during conflict resolution
+        kvstore_a2 = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        self._params["seed"] = "cluster-b-wins"
+        self._params["padding"] = "cluster-a-loses"
+        self._params["count"] = self._num_items/4
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore_a2)
+        load_thread_list.append(load_thread)
+
+        # Load cluster b with keys that will be exclusively owned by it
+        kvstore_b0 = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        self._params["seed"] = "cluster-b"
+        self._params["count"] = self._num_items/4
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_b,
+                                                        self._buckets[0],
+                                                        task_def, kvstore_b0)
+        load_thread_list.append(load_thread)
+
+        # Load cluster b with keys that it will share with cluster a and which
+        # will win during conflict resolution
+        kvstore_b1 = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        self._params["seed"] = "cluster-b-wins"
+        self._params["padding"] = "cluster-b-wins"
+        self._params["count"] = self._num_items/4
+
+        # Mutating these keys several times will increase their seqnos and allow
+        # them to win during conflict resolution
+        for i in [1, 2, 3]:
+            task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+            load_thread = RebalanceDataGenerator.start_load(rest_conn_b,
+                                                            self._buckets[0],
+                                                            task_def,
+                                                            kvstore_b1)
+            load_thread_list.append(load_thread)
+
+        # Load cluster b with keys that it will share with cluster a but which
+        # will lose during conflict resolution
+        kvstore_b2 = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        self._params["seed"] = "cluster-a-wins"
+        self._params["padding"] = "cluster-b-loses"
+        self._params["count"] = self._num_items/4
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_b,
+                                                        self._buckets[0],
+                                                        task_def, kvstore_b2)
+        load_thread_list.append(load_thread)
+
+        # Start all loads concurrently and wait for them to end
+        for lt in load_thread_list:
+            lt.start()
+        for lt in load_thread_list:
+            lt.join()
+
+        # Setup bidirectional replication between cluster a and cluster b
+        replication_type = "continuous"
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        rest_conn_b.add_remote_cluster(master_a.ip, master_a.port,
+                                       master_a.rest_username,
+                                       master_a.rest_password, cluster_ref_a)
+        (rep_database_a, rep_id_a) = rest_conn_a.start_replication(
+                                        replication_type, self._buckets[0],
+                                        cluster_ref_b)
+        (rep_database_b, rep_id_b) = rest_conn_b.start_replication(
+                                        replication_type, self._buckets[0],
+                                        cluster_ref_a)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database_a, rep_id_a))
+        self._state.append((rest_conn_b, cluster_ref_a, rep_database_b, rep_id_b))
+
+        # Verify replicated data on cluster a
+        for rest_conn in [rest_conn_a, rest_conn_b]:
+            for kvstore in [kvstore_a0, kvstore_a1, kvstore_b0, kvstore_b1]:
+                self.assertTrue(
+                    XDCRBaseTest.verify_replicated_data(rest_conn,
+                                                        self._buckets[0],
+                                                        kvstore,
+                                                        self._poll_sleep,
+                                                        self._poll_timeout),
+                    "Replication verification failed")
