@@ -111,11 +111,7 @@ class XDCRBaseTest(unittest.TestCase):
             else:
                 return True
 
-        log = logger.Logger().get_logger()
-        if XDCRBaseTest.poll_for_condition(verify, sleep, timeout):
-            log.info("Verified results of replication")
-        else:
-            log.error("Timed out waiting for replication to complete")
+        return XDCRBaseTest.poll_for_condition(verify, sleep, timeout)
 
 
 class XDCRTests(unittest.TestCase):
@@ -179,9 +175,12 @@ class XDCRTests(unittest.TestCase):
                                                                cluster_ref_b)
 
         # Verify replicated data
-        XDCRBaseTest.verify_replicated_data(rest_conn_b, self._buckets[0],
-                                            kvstore, self._poll_sleep,
-                                            self._poll_timeout)
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+                                                            self._buckets[0],
+                                                            kvstore,
+                                                            self._poll_sleep,
+                                                            self._poll_timeout),
+                        "Replication verification failed")
 
         # Cleanup
         rest_conn_a.stop_replication(rep_database, rep_id)
@@ -227,9 +226,12 @@ class XDCRTests(unittest.TestCase):
         load_thread.join()
 
         # Verify replicated data
-        XDCRBaseTest.verify_replicated_data(rest_conn_b, self._buckets[0],
-                                            kvstore, self._poll_sleep,
-                                            self._poll_timeout)
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+                                                            self._buckets[0],
+                                                            kvstore,
+                                                            self._poll_sleep,
+                                                            self._poll_timeout),
+                        "Replication verification failed")
 
         # Cleanup
         rest_conn_a.stop_replication(rep_database, rep_id)
