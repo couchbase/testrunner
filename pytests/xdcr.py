@@ -131,6 +131,7 @@ class XDCRTests(unittest.TestCase):
                                        "join_mo": 10, "join_day": 20,
                                        "email": "${prefix}@couchbase.com",
                                        "job_title": "Software Engineer-${padding}"}
+        self._state = []
         if not self._clusters:
             self.log.info("No Cluster tags defined in resource file")
             exit(1)
@@ -143,6 +144,9 @@ class XDCRTests(unittest.TestCase):
 
     def tearDown(self):
         self.log.info("Teardown")
+        for (rest_conn, cluster_ref, rep_database, rep_id) in self._state:
+            rest_conn.stop_replication(rep_database, rep_id)
+            rest_conn.remove_remote_cluster(cluster_ref)
         for id, servers in self._clusters.items():
             XDCRBaseTest.common_tearDown(servers, self)
 
@@ -173,6 +177,7 @@ class XDCRTests(unittest.TestCase):
         (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
                                                                self._buckets[0],
                                                                cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
 
         # Verify replicated data
         self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
@@ -181,11 +186,6 @@ class XDCRTests(unittest.TestCase):
                                                             self._poll_sleep,
                                                             self._poll_timeout),
                         "Replication verification failed")
-
-        # Cleanup
-        rest_conn_a.stop_replication(rep_database, rep_id)
-        rest_conn_a.remove_remote_cluster(cluster_ref_b)
-
 
     def test_continuous_unidirectional_sets_deletes(self):
         cluster_ref_b = "cluster_ref_a"
@@ -214,6 +214,7 @@ class XDCRTests(unittest.TestCase):
         (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
                                                                self._buckets[0],
                                                                cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
 
         # Do some deletes
         self._params["ops"] = "delete"
@@ -232,7 +233,3 @@ class XDCRTests(unittest.TestCase):
                                                             self._poll_sleep,
                                                             self._poll_timeout),
                         "Replication verification failed")
-
-        # Cleanup
-        rest_conn_a.stop_replication(rep_database, rep_id)
-        rest_conn_a.remove_remote_cluster(cluster_ref_b)
