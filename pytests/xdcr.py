@@ -24,10 +24,7 @@ class XDCRBaseTest(unittest.TestCase):
     def common_setup(input, testcase):
         # Resource file has 'cluster' tag
         for key, servers in input.clusters.items():
-            for server in servers:
-                ClusterOperationHelper.cleanup_cluster([server])
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
-            BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
+            XDCRBaseTest.common_tearDown(servers, testcase)
             XDCRBaseTest.cluster_initialization(servers)
             XDCRBaseTest.create_buckets(servers, testcase, howmany=1)
             if len(servers) > 1:
@@ -62,22 +59,28 @@ class XDCRBaseTest(unittest.TestCase):
         log = logger.Logger().get_logger()
         master = servers[0]
         log.info('picking server : {0} as the master'.format(master))
-        #if all nodes are on the same machine let's have the bucket_ram_ratio as bucket_ram_ratio * 1/len(servers)
+        # if all nodes are on the same machine let's have the bucket_ram_ratio
+        # as bucket_ram_ratio * 1/len(servers)
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(servers)
         rest = RestConnection(master)
         info = rest.get_nodes_self()
-        rest.init_cluster(username=master.rest_username, password=master.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
+        rest.init_cluster(username=master.rest_username,
+                          password=master.rest_password)
+        rest.init_cluster_memoryQuota(memoryQuota =
+            int(info.mcdMemoryReserved * node_ram_ratio))
 
     @staticmethod
-    def create_buckets(servers, testcase, howmany=1, replica=1, bucket_ram_ratio=(2.0 / 3.0)):
+    def create_buckets(servers, testcase, howmany=1, replica=1,
+                       bucket_ram_ratio=(2.0 / 3.0)):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(servers)
         master = servers[0]
-        BucketOperationHelper.create_multiple_buckets(master, replica, node_ram_ratio * bucket_ram_ratio, howmany=howmany)
+        BucketOperationHelper.create_multiple_buckets(
+            master, replica,node_ram_ratio * bucket_ram_ratio, howmany=howmany)
         rest = RestConnection(master)
         buckets = rest.get_buckets()
         for bucket in buckets:
-            ready = BucketOperationHelper.wait_for_memcached(master, bucket.name)
+            ready = BucketOperationHelper.wait_for_memcached(master,
+                                                             bucket.name)
             testcase.assertTrue(ready, "wait_for_memcached failed")
 
     @staticmethod
@@ -89,7 +92,8 @@ class XDCRBaseTest(unittest.TestCase):
                 return True
             else:
                 time.sleep(sleep)
-                return XDCRBaseTest.poll_for_condition_rec(condition, sleep, (num_iters - 1))
+                return XDCRBaseTest.poll_for_condition_rec(condition, sleep,
+                                                           (num_iters - 1))
 
     @staticmethod
     def poll_for_condition(condition, sleep, timeout):
@@ -100,7 +104,8 @@ class XDCRBaseTest(unittest.TestCase):
     def verify_replicated_data(rest_conn, bucket, kvstore, sleep, timeout):
         # FIXME: Use ep-engine stats for verification
         def verify():
-            errors = RebalanceDataGenerator.do_verification(kvstore, rest_conn, bucket)
+            errors = RebalanceDataGenerator.do_verification(kvstore, rest_conn,
+                                                            bucket)
             if errors:
                 return False
             else:
@@ -158,17 +163,25 @@ class XDCRTests(unittest.TestCase):
         kvstore = ClientKeyValueStore()
         self._params["ops"] = "set"
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a, self._buckets[0], task_def, kvstore)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
         load_thread.start()
         load_thread.join()
 
         # Start replication
         replication_type = "continuous"
-        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port, master_b.rest_username, master_b.rest_password, cluster_ref_b)
-        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type, self._buckets[0], cluster_ref_b)
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
 
         # Verify replicated data
-        XDCRBaseTest.verify_replicated_data(rest_conn_b, self._buckets[0], kvstore, self._poll_sleep, self._poll_timeout)
+        XDCRBaseTest.verify_replicated_data(rest_conn_b, self._buckets[0],
+                                            kvstore, self._poll_sleep,
+                                            self._poll_timeout)
 
         # Cleanup
         rest_conn_a.stop_replication(rep_database, rep_id)
@@ -188,25 +201,35 @@ class XDCRTests(unittest.TestCase):
         kvstore = ClientKeyValueStore()
         self._params["ops"] = "set"
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a, self._buckets[0], task_def, kvstore)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
         load_thread.start()
         load_thread.join()
 
         # Start replication
         replication_type = "continuous"
-        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port, master_b.rest_username, master_b.rest_password, cluster_ref_b)
-        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type, self._buckets[0], cluster_ref_b)
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
 
         # Do some deletes
         self._params["ops"] = "delete"
         self._params["count"] = self._num_items/5
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a, self._buckets[0], task_def, kvstore)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
         load_thread.start()
         load_thread.join()
 
         # Verify replicated data
-        XDCRBaseTest.verify_replicated_data(rest_conn_b, self._buckets[0], kvstore, self._poll_sleep, self._poll_timeout)
+        XDCRBaseTest.verify_replicated_data(rest_conn_b, self._buckets[0],
+                                            kvstore, self._poll_sleep,
+                                            self._poll_timeout)
 
         # Cleanup
         rest_conn_a.stop_replication(rep_database, rep_id)
