@@ -26,6 +26,9 @@ class VerifyVersionTest(unittest.TestCase):
             version = rest.get_pools()
             self.log.info('expected version : {0}'.format(expected_version))
             self.log.info('actual version : {0}'.format(version.implementationVersion))
-            self.assertEqual(first=expected_version,
+            if version.implementationVersion.startswith(expected_version.lower()):
+                self.log.info("CORRECT VERSION INSTALLED")
+            else:
+                self.assertEqual(first=expected_version,
                              second=version.implementationVersion,
-                             msg='version mismatch for server @ %s' % serverInfo.ip)
+                             msg='INCORRECT VERSION INSTALLED for server @ %s' % serverInfo.ip)
