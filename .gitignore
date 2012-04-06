@@ -5,8 +5,6 @@
 *.idea
 *.log
 *.log.*
-*tmp-
-tmp-*
-tmp
+dist/
+logs/
 ns_server_data
-dist

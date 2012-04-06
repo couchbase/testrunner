@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import os
+import errno
 import sys
 sys.path = ["lib","pytests"] + sys.path
 
@@ -121,13 +122,18 @@ def append_test(tests, name):
     else:
         tests.append(name)
 
+def create_logs_folder():
+    if not os.path.exists("logs"):
+        os.makedirs("logs")
+
 if __name__ == "__main__":
-    str_time = time.strftime("%H:%M:%S", time.localtime()).replace(":", "-")
+    str_time = time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())
     names, test_input, arg_i, arg_p , options = parse_args(sys.argv)
 
     xunit = XUnitTestResult()
 
-    tmp_folder = "tmp-{0}".format(str_time)
+    create_logs_folder()
+    tmp_folder = "logs/testrunner-{0}".format(str_time)
     os.makedirs(tmp_folder)
     #this only works on linux/mac
     tmp_folder_abs_path = os.getcwd() + "/" + tmp_folder
