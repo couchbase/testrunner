@@ -281,6 +281,79 @@ class XDCRTests(unittest.TestCase):
                                                             self._poll_timeout),
                         "Verification of replicated revisions failed")
 
+    def test_continuous_unidirectional_recreates(self):
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        # Start load
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
+        load_thread.start()
+        load_thread.join()
+
+        # Start replication
+        replication_type = "continuous"
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        # Verify replicated data
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+                                                            self._buckets[0],
+                                                            kvstore,
+                                                            self._poll_sleep,
+                                                            self._poll_timeout),
+                        "Replication verification failed")
+
+        # Delete all keys
+        self._params["ops"] = "delete"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
+        load_thread.start()
+        load_thread.join()
+
+        # Verify replicated data
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+                                                            self._buckets[0],
+                                                            kvstore,
+                                                            self._poll_sleep,
+                                                            self._poll_timeout),
+                        "Replication verification failed")
+
+        # Recreate the keys with different values
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        self._params["padding"] = "recreated"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
+        load_thread.start()
+        load_thread.join()
+
+        # Verify replicated data
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+                                                            self._buckets[0],
+                                                            kvstore,
+                                                            self._poll_sleep,
+                                                            self._poll_timeout),
+                        "Replication verification failed")
+
     def test_continuous_bidirectional_sets(self):
         cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
