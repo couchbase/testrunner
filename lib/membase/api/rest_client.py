@@ -20,7 +20,7 @@ class RestHelper(object):
         while time.time() <= end_time:
             try:
                 status = self.rest.get_nodes_self(5)
-                if status.status == 'healthy':
+                if status is not None and status.status == 'healthy':
                     return True
             except ServerUnavailableException:
                 log.error("server {0}:{1} is unavailable".format(self.rest.ip, self.rest.port))
