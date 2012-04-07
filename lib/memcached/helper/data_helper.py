@@ -9,9 +9,11 @@ from TestInput import TestInputServer
 from TestInput import TestInputSingleton
 import logger
 import crc32
+import hashlib
 import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
+from memcached.helper.kvstore import ClientKeyValueStore
 from membase.api.rest_client import RestConnection, RestHelper
 import json
 import sys
@@ -715,7 +717,7 @@ class VBucketAwareMemcached(object):
         if not forward_map:
            forward_map =  rest.get_vbuckets(self.bucket)
         nodes = rest.get_nodes()
-        
+
         for vBucket in forward_map:
             if vBucketId == vBucket.id:
                 self.vBucketMap[vBucket.id] = vBucket.master
@@ -814,6 +816,188 @@ class VBucketAwareMemcached(object):
     def done(self):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
 
+class KVStoreAwareSmartClient(VBucketAwareMemcached):
+    def __init__(self, rest, bucket, kv_store = None, info=None):
+        self.log = logger.Logger.get_logger()
+        self.info = info
+        self.bucket = bucket
+        self.memcacheds = {}
+        self.vBucketMap = {}
+        self.kv_store = kv_store or ClientKeyValueStore()
+        self.vBucketMapReplica = {}
+        self.reset(rest)
+
+
+    def set(self, key, value, ttl = -1):
+
+        if ttl >= 0:
+            self.memcached(key).set(key, ttl, 0, value)
+        else:
+            self.memcached(key).set(key, 0, 0, value)
+
+        self.kv_store.write(key, hashlib.md5(value).digest(), ttl)
+
+
+    def delete(self, key):
+        self.memcached(key).delete(key)
+        self.kv_store.delete(key)
+
+    def get_valid_key(self, key):
+        return self.get_key_check_status(key, "valid")
+
+    def get_deleted_key(self, key):
+        return self.get_key_check_status(key, "deleted")
+
+    def get_expired_key(self, key):
+        return self.get_key_check_status(key, "expired")
+
+    def get_all_keys(self):
+        return self.kv_store.keys()
+
+    def get_all_valid_items(self):
+        return self.kv_store.valid_items()
+
+    def get_all_deleted_items(self):
+        return self.kv_store.deleted_items()
+
+    def get_all_expired_items(self):
+        return self.kv_store.expired_items()
+
+    def get_key_check_status(self, key, status):
+        item = self.kv_get(key)
+        if(item is not None  and item["status"] == status):
+            return item
+        else:
+            msg = "key {0} is not valid".format(key)
+            self.log.info(msg)
+            return None
+
+    # safe kvstore retrieval
+    # return dict of {key,status,value,ttl}
+    # or None if not found
+    def kv_get(self, key):
+        item = None
+        try:
+            item = self.kv_store.read(key)
+        except KeyError:
+            msg = "key {0} doesn't exist in store".format(key)
+            #self.log.info(msg)
+
+        return item
+
+    # safe memcached retrieval
+    # return dict of {key, flags, seq, value}
+    # or None if not found
+    def mc_get(self, key):
+        item = None
+        try:
+            x, y, value = self.memcached(key).get(key)
+            v = hashlib.md5(value).digest()
+            item = {}
+            item["key"] = key
+            item["flags"] = x
+            item["seq"] = y
+            item["value"] = v
+        except MemcachedError:
+            msg = "key {0} doesn't exist in memcached".format(key)
+            #self.log.info(msg)
+
+        return item
+
+class KVStoreSmartClientHelper(object):
+
+    @staticmethod
+    def do_verification(client):
+        keys = client.get_all_keys()
+        validation_failures = {}
+        for k in keys:
+            m, valid = KVStoreSmartClientHelper.verify_key(client, k)
+            if(valid == False):
+                validation_failures[k] = m
+
+        return validation_failures
+
+    @staticmethod
+    def verify_key(client, key):
+        status = False
+        msg = ""
+        item = client.kv_get(key)
+        if item is not None:
+            if item["status"] == "deleted":
+                msg, status = \
+                    KVStoreSmartClientHelper.verify_delete(client, key)
+
+            elif item["status"] == "expired":
+                msg, status = \
+                    KVStoreSmartClientHelper.verify_expired(client, key)
+
+            elif item["status"] == "valid":
+                msg, status = \
+                    KVStoreSmartClientHelper.verify_set(client, key)
+
+        return msg, status
+
+    # verify kvstore contains key with valid status
+    # and that key also exists in memcached with
+    # expected value
+    @staticmethod
+    def verify_set(client, key):
+
+        kv_item = client.get_valid_key(key)
+        mc_item= client.mc_get(key)
+        status = False
+        msg = ""
+
+        if(kv_item is not None and mc_item is not None):
+            # compare values
+            if kv_item["value"] == mc_item["value"]:
+                status = True
+            else:
+                msg = "kvstore and memcached values mismatch"
+        elif(kv_item is None):
+            msg = "valid status not set in kv_store"
+        elif(mc_item is None):
+            msg = "key missing from memcached"
+
+        return msg, status
+
+
+    # verify kvstore contains key with deleted status
+    # and that it does not exist in memcached
+    @staticmethod
+    def verify_delete(client, key):
+        deleted_kv_item = client.get_deleted_key(key)
+        mc_item= client.mc_get(key)
+        status = False
+        msg = ""
+
+        if(deleted_kv_item is not None and mc_item is None):
+            status = True
+        elif(deleted_kv_item is None):
+            msg = "delete status not set in kv_store"
+        elif(mc_item is not None):
+            msg = "key still exists in memcached"
+
+        return msg, status
+
+
+    # verify kvstore contains key with expired status
+    # and that key has also expired in memcached
+    @staticmethod
+    def verify_expired(client, key):
+        expired_kv_item = client.get_expired_key(key)
+        mc_item= client.mc_get(key)
+        status = False
+        msg = ""
+
+        if(expired_kv_item is not None and mc_item is None):
+            status = True
+        elif(expired_kv_item is None):
+            msg = "exp. status not set in kv_store"
+        elif(mc_item is not None):
+            msg = "key still exists in memcached"
+
+        return msg, status
 
 def start_reader_process(info, keyset, queue):
     ReaderThread(info, keyset, queue).start()
