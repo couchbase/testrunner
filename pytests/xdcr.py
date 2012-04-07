@@ -159,16 +159,6 @@ class XDCRTests(unittest.TestCase):
         master_b = self._input.clusters.get(1)[0]
         rest_conn_b = RestConnection(master_b)
 
-        # Start load
-        kvstore = ClientKeyValueStore()
-        self._params["ops"] = "set"
-        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
-                                                        self._buckets[0],
-                                                        task_def, kvstore)
-        load_thread.start()
-        load_thread.join()
-
         # Start replication
         replication_type = "continuous"
         rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
@@ -179,7 +169,17 @@ class XDCRTests(unittest.TestCase):
                                                                cluster_ref_b)
         self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
 
-        # Verify replicated data
+        # Start load
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
+        load_thread.start()
+        load_thread.join()
+
+        # Verify replication
         self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
                                                             self._buckets[0],
                                                             kvstore,
@@ -196,16 +196,6 @@ class XDCRTests(unittest.TestCase):
         master_b = self._input.clusters.get(1)[0]
         rest_conn_b = RestConnection(master_b)
 
-        # Start load
-        kvstore = ClientKeyValueStore()
-        self._params["ops"] = "set"
-        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
-                                                        self._buckets[0],
-                                                        task_def, kvstore)
-        load_thread.start()
-        load_thread.join()
-
         # Start replication
         replication_type = "continuous"
         rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
@@ -215,6 +205,16 @@ class XDCRTests(unittest.TestCase):
                                                                self._buckets[0],
                                                                cluster_ref_b)
         self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        # Start load
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
+        load_thread.start()
+        load_thread.join()
 
         # Do some deletes
         self._params["ops"] = "delete"
@@ -329,12 +329,6 @@ class XDCRTests(unittest.TestCase):
                                                         task_def, kvstore_b2)
         load_thread_list.append(load_thread)
 
-        # Start all loads concurrently and wait for them to end
-        for lt in load_thread_list:
-            lt.start()
-        for lt in load_thread_list:
-            lt.join()
-
         # Setup bidirectional replication between cluster a and cluster b
         replication_type = "continuous"
         rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
@@ -351,6 +345,12 @@ class XDCRTests(unittest.TestCase):
                                         cluster_ref_a)
         self._state.append((rest_conn_a, cluster_ref_b, rep_database_a, rep_id_a))
         self._state.append((rest_conn_b, cluster_ref_a, rep_database_b, rep_id_b))
+
+        # Start all loads concurrently and wait for them to end
+        for lt in load_thread_list:
+            lt.start()
+        for lt in load_thread_list:
+            lt.join()
 
         # Verify replicated data on cluster a
         for rest_conn in [rest_conn_a, rest_conn_b]:
