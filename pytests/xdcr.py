@@ -113,6 +113,41 @@ class XDCRBaseTest(unittest.TestCase):
 
         return XDCRBaseTest.poll_for_condition(verify, sleep, timeout)
 
+    @staticmethod
+    def verify_replicated_revs(rest_conn_a, rest_conn_b, bucket, sleep, timeout):
+        def verify():
+            all_docs_resp_a = rest_conn_a.all_docs(bucket)
+            all_docs_resp_b = rest_conn_b.all_docs(bucket)
+            if all_docs_resp_a[u'total_rows'] != all_docs_resp_b[u'total_rows']:
+                return False
+            all_docs_a = all_docs_resp_a[u'rows']
+            all_docs_b = all_docs_resp_b[u'rows']
+            for i in range(all_docs_resp_a[u'total_rows']):
+                doc_a = all_docs_a[i][u'id'], all_docs_a[i][u'value'][u'rev']
+                doc_b = all_docs_b[i][u'id'], all_docs_b[i][u'value'][u'rev']
+                if doc_a != doc_b:
+                    return False
+            return True
+
+        return XDCRBaseTest.poll_for_condition(verify, sleep, timeout)
+
+    @staticmethod
+    def verify_changes_feed(rest_conn_a, rest_conn_b, bucket, sleep, timeout):
+        def verify():
+            for vbucket in range(len(rest_conn_a.get_vbuckets(bucket))):
+                all_docs = []
+                for rest_conn in [rest_conn_a, rest_conn_b]:
+                    changes = rest_conn.changes_feed(bucket, vbucket)
+                    docs = {}
+                    for change in changes[u'results']:
+                        docs[change[u'id']] = change[u'changes'][u'rev']
+                    all_docs.append(docs)
+                if all_docs[0] != all_docs[1]:
+                    return False
+            return True
+
+        return XDCRBaseTest.poll_for_condition(verify, sleep, timeout)
+
 
 class XDCRTests(unittest.TestCase):
     def setUp(self):
