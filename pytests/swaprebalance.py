@@ -25,11 +25,10 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Initialize test params
         self.replica  = self.input.param("replica", 1)
-        self.failover_factor = self.input.param("failover-factor", 1)
-        self.keys_count = self.input.param("keys_count", 10000)
+        self.keys_count = self.input.param("keys-count", 10000)
         self.load_ratio = self.input.param("load-ratio", 1)
         self.num_buckets = self.input.param("num-buckets", 1)
-        self.num_swap = self.input.param("num-swap", 1)
+        self.failover_factor = self.num_swap = self.input.param("num-swap", 1)
         self.num_initial_servers = self.input.param("num-initial-servers", 3)
         self.fail_orchestrator = self.swap_orchestrator = self.input.param("swap-orchestrator", False)
 
@@ -157,12 +156,13 @@ class SwapRebalanceBase(unittest.TestCase):
         BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, \
             bucket_name=bucket, test=test, concurrency=4)
 
+    # Used for items verification active vs. replica
     @staticmethod
-    def verification(master, test):
+    def items_verification(master, test):
         rest = RestConnection(master)
         #Verify items count across all node
         for bucket in rest.get_buckets():
-            verified = RebalanceHelper.verify_items_count(master, bucket.name)
+            verified = RebalanceHelper.wait_till_total_numbers_match(master, bucket.name)
             test.assertTrue(verified, "Lost items!!.. failing test")
 
     @staticmethod
@@ -228,7 +228,10 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
 
-        SwapRebalanceBase.verification(master, self)
+        for bucket in rest.get_buckets():
+            SwapRebalanceBase.verify_data(master, bucket_data[bucket.name].get('inserted_keys'),\
+                bucket.name, self)
+        SwapRebalanceBase.items_verification(master, self)
 
     @staticmethod
     def _common_test_body_failed_swap_rebalance(self):
@@ -289,8 +292,10 @@ class SwapRebalanceBase(unittest.TestCase):
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
-
-        SwapRebalanceBase.verification(master, self)
+        for bucket in rest.get_buckets():
+            SwapRebalanceBase.verify_data(master, bucket_data[bucket.name].get('inserted_keys'),\
+                bucket.name, self)
+        SwapRebalanceBase.items_verification(master, self)
 
     @staticmethod
     def _add_back_failed_node(self, do_node_cleanup=False):
@@ -362,8 +367,66 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(add_back_servers))
 
-        SwapRebalanceBase.verification(master, self)
+        for bucket in rest.get_buckets():
+            SwapRebalanceBase.verify_data(master, bucket_data[bucket.name].get('inserted_keys'), \
+                bucket.name, self)
+        SwapRebalanceBase.items_verification(master, self)
 
+    @staticmethod
+    def _failover_swap_rebalance(self):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        creds = self.input.membase_settings
+        num_initial_servers = self.num_initial_servers
+        intial_severs = self.servers[:num_initial_servers]
+
+        # Cluster all starting set of servers
+        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+
+        self.log.info("inserting some items in the master before adding any nodes")
+        bucket_data = SwapRebalanceBase.bucket_data_init(rest)
+        for bucket in rest.get_buckets():
+            inserted_keys = SwapRebalanceBase.load_data(master, bucket.name, self.keys_count,\
+                self.load_ratio, delete_ratio=0, expiry_ratio=0, test=self, wait_to_drain=True)
+            self.log.info("inserted {0} keys".format(len(inserted_keys)))
+            bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
+            bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
+
+        # Start the swap rebalance
+        self.log.info("Trigger Failover")
+        self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
+        toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.failover_factor)
+        optNodesIds = [node.id for node in toBeEjectedNodes]
+        if self.fail_orchestrator:
+            status, content = ClusterHelper.find_orchestrator(master)
+            self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
+            format(status, content))
+            optNodesIds[0] = content
+
+        #Failover selected nodes
+        for node in optNodesIds:
+            self.log.info("failover node {0} and rebalance afterwards".format(node))
+            rest.fail_over(node)
+
+        new_swap_servers = self.servers[num_initial_servers:num_initial_servers+self.failover_factor]
+        for server in new_swap_servers:
+            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip)
+            msg = "unable to add node {0} to the cluster"
+            self.assertTrue(otpNode, msg.format(server.ip))
+
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+            ejectedNodes=optNodesIds)
+
+        if self.fail_orchestrator:
+            rest = RestConnection(new_swap_servers[0])
+
+        self.assertTrue(rest.monitorRebalance(),
+            msg="rebalance operation failed after adding node {0}".format(new_swap_servers))
+
+        for bucket in rest.get_buckets():
+            SwapRebalanceBase.verify_data(master, bucket_data[bucket.name].get('inserted_keys'),\
+                bucket.name, self)
+        SwapRebalanceBase.items_verification(master, self)
 
 class SwapRebalanceBasicTests(unittest.TestCase):
 
@@ -399,5 +462,8 @@ class SwapRebalanceFailedTests(unittest.TestCase):
         SwapRebalanceBase._common_test_body_failed_swap_rebalance(self)
 
     # Not cluster_run friendly, yet
-    def test_add_back_failed_node_swap_rebalance(self):
+    def test_add_back_failed_node(self):
         SwapRebalanceBase._add_back_failed_node(self, do_node_cleanup=False)
+
+    def test_failover_swap_rebalance(self):
+        SwapRebalanceBase._failover_swap_rebalance(self)

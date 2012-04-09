@@ -311,19 +311,23 @@ class RebalanceHelper():
             if not single_stats or "curr_items" not in single_stats:
                 continue
             sum += single_stats["curr_items"]
-            log.info("curr_items from {0}:{1} : {2}".format(server.ip, server.port, single_stats["curr_items"]))
+            log.info("curr_items from {0}:{1} : {2}".format(server.ip, server.port, \
+                single_stats["curr_items"]))
             if 'vb_pending_num' in single_stats:
                 vbucket_pending_sum += single_stats['vb_pending_num']
                 log.info(
-                    "vb_pending_num from {0}:{1} : {2}".format(server.ip, server.port, single_stats["vb_pending_num"]))
+                    "vb_pending_num from {0}:{1} : {2}".format(server.ip, server.port, \
+                        single_stats["vb_pending_num"]))
             if 'vb_active_num' in single_stats:
                 vbucket_active_sum += single_stats['vb_active_num']
                 log.info(
-                    "vb_active_num from {0}:{1} : {2}".format(server.ip, server.port, single_stats["vb_active_num"]))
+                    "vb_active_num from {0}:{1} : {2}".format(server.ip, server.port, \
+                        single_stats["vb_active_num"]))
             if 'vb_replica_num' in single_stats:
                 vbucket_replica_sum += single_stats['vb_replica_num']
                 log.info(
-                    "vb_replica_num from {0}:{1} : {2}".format(server.ip, server.port, single_stats["vb_replica_num"]))
+                    "vb_replica_num from {0}:{1} : {2}".format(server.ip, server.port, \
+                        single_stats["vb_replica_num"]))
 
         msg = "summation of vb_active_num : {0} vb_pending_num : {1} vb_replica_num : {2}"
         log.info(msg.format(vbucket_active_sum, vbucket_pending_sum, vbucket_replica_sum))
@@ -337,7 +341,8 @@ class RebalanceHelper():
             missing_percentage = delta * 1.0 / sum * (replica_factor + 1)
         else:
             missing_percentage = 100
-        log.info("delta : {0} missing_percentage : {1} replica_factor : {2}".format(delta,missing_percentage,replica_factor))
+        log.info("delta : {0} missing_percentage : {1} replica_factor : {2}".format(delta, \
+            missing_percentage, replica_factor))
         if replica_factor > 1:
            if delta == 0 or missing_percentage < 0.005:
               return True
