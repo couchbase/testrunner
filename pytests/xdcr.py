@@ -220,7 +220,13 @@ class XDCRTests(unittest.TestCase):
                                                             kvstore,
                                                             self._poll_sleep,
                                                             self._poll_timeout),
-                        "Replication verification failed")
+                        "Verification of replicated data failed")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+                                                            rest_conn_b,
+                                                            self._buckets[0],
+                                                            self._poll_sleep,
+                                                            self._poll_timeout),
+                        "Verification of replicated revisions failed")
 
     def test_continuous_unidirectional_sets_deletes(self):
         cluster_ref_b = "cluster_ref_a"
@@ -261,13 +267,19 @@ class XDCRTests(unittest.TestCase):
         load_thread.start()
         load_thread.join()
 
-        # Verify replicated data
+        # Verify replication
         self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
                                                             self._buckets[0],
                                                             kvstore,
                                                             self._poll_sleep,
                                                             self._poll_timeout),
-                        "Replication verification failed")
+                        "Verification of replicated data failed")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+                                                            rest_conn_b,
+                                                            self._buckets[0],
+                                                            self._poll_sleep,
+                                                            self._poll_timeout),
+                        "Verification of replicated revisions failed")
 
     def test_continuous_bidirectional_sets(self):
         cluster_ref_a = "cluster_ref_a"
@@ -387,7 +399,7 @@ class XDCRTests(unittest.TestCase):
         for lt in load_thread_list:
             lt.join()
 
-        # Verify replicated data on cluster a
+        # Verify replicated data
         for rest_conn in [rest_conn_a, rest_conn_b]:
             for kvstore in [kvstore_a0, kvstore_a1, kvstore_b0, kvstore_b1]:
                 self.assertTrue(
@@ -396,4 +408,10 @@ class XDCRTests(unittest.TestCase):
                                                         kvstore,
                                                         self._poll_sleep,
                                                         self._poll_timeout),
-                    "Replication verification failed")
+                    "Verification of replicated data failed")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+                                                            rest_conn_b,
+                                                            self._buckets[0],
+                                                            self._poll_sleep,
+                                                            self._poll_timeout),
+                        "Verification of replicated revisions failed")
