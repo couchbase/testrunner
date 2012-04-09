@@ -45,8 +45,12 @@ class XUnitTestResult(object):
         self.suites = []
 
     def add_test(self, name, time=0, errorType=None, errorMessage=None, status='pass'):
-        #classname
+        #Get the classname
         class_name = name[:name.rfind(".")]
+        # If params are passed to the test
+        if "," in name:
+            class_name = name
+
         matched = False
         for suite in self.suites:
             if suite.name == class_name:
@@ -58,7 +62,6 @@ class XUnitTestResult(object):
             suite.name = class_name
             suite.add_test(name, time, errorType, errorMessage, status)
             self.suites.append(suite)
-
 
     def to_xml(self,suite):
         doc = xml.dom.minidom.Document()

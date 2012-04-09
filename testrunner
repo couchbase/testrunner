@@ -158,6 +158,13 @@ if __name__ == "__main__":
         suite = unittest.TestLoader().loadTestsFromName(name)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         time_taken = time.time() - start_time
+
+        # Concat params to test name
+        # To make tests more readable
+        if TestInputSingleton.input.test_params:
+            for key, value in TestInputSingleton.input.test_params.items():
+                name += "," + key + ":" + value
+
         if result.failures or result.errors:
             for failure in result.failures:
                 test_case, failure_string = failure
@@ -173,7 +180,7 @@ if __name__ == "__main__":
         else:
             xunit.add_test(name=name, time=time_taken)
             results.append({"result": "pass", "name": name, "time": time_taken})
-        xunit.write("{0}/report-{1}.xml".format(tmp_folder, str_time))
+        xunit.write("{0}/report-{1}".format(tmp_folder, str_time))
         xunit.print_summary()
         print "logs and results are available under {0}".format(tmp_folder)
 
