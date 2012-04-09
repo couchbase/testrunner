@@ -817,7 +817,7 @@ class VBucketAwareMemcached(object):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
 
 class KVStoreAwareSmartClient(VBucketAwareMemcached):
-    def __init__(self, rest, bucket, kv_store = None, info=None):
+    def __init__(self, rest, bucket, kv_store = None, info=None, store_enabled = True):
         self.log = logger.Logger.get_logger()
         self.info = info
         self.bucket = bucket
@@ -826,6 +826,7 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         self.kv_store = kv_store or ClientKeyValueStore()
         self.vBucketMapReplica = {}
         self.reset(rest)
+        self.store_enabled = store_enabled
 
 
     def set(self, key, value, ttl = -1):
@@ -835,12 +836,14 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         else:
             self.memcached(key).set(key, 0, 0, value)
 
-        self.kv_store.write(key, hashlib.md5(value).digest(), ttl)
+        if self.store_enabled:
+            self.kv_store.write(key, hashlib.md5(value).digest(), ttl)
 
 
     def delete(self, key):
         self.memcached(key).delete(key)
-        self.kv_store.delete(key)
+        if self.store_enabled:
+            self.kv_store.delete(key)
 
     def get_valid_key(self, key):
         return self.get_key_check_status(key, "valid")
