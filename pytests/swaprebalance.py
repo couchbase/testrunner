@@ -141,7 +141,7 @@ class SwapRebalanceBaseTest(unittest.TestCase):
             expiry_ratio=expiry_ratio,
             moxi=True)
         if wait_to_drain:
-            test.info("wait until data is completely persisted on the disk")
+            test.log.info("wait until data is completely persisted on the disk")
             ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, timeout_in_seconds=120)
             test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
             ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0, timeout_in_seconds=120)
@@ -377,7 +377,7 @@ class SwapRebalanceTests(unittest.TestCase):
         self._common_test_body_swap_rebalance(do_stop_start=True)
 
     def test_failed_swap_rebalance(self):
-        self._common_test_body_failed_swap_rebalance(do_stop_start=True)
+        self._common_test_body_failed_swap_rebalance()
 
     # Not cluster_run friendly, yet
     def test_add_back_failed_node_swap_rebalance(self):
