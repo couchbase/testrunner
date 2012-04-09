@@ -166,14 +166,6 @@ class SwapRebalanceBase(unittest.TestCase):
             verified = RebalanceHelper.verify_items_count(master, bucket.name)
             test.assertTrue(verified, "Lost items!!.. failing test")
 
-class SwapRebalanceTests(unittest.TestCase):
-
-    def setUp(self):
-        SwapRebalanceBase.common_setup(self)
-
-    def tearDown(self):
-        SwapRebalanceBase.common_tearDown(self)
-
     def _common_test_body_swap_rebalance(self, do_stop_start=False):
         master = self.servers[0]
         rest = RestConnection(master)
