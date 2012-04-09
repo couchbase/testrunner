@@ -431,6 +431,62 @@ class XDCRTests(unittest.TestCase):
                                                          self._poll_timeout),
                         "Changes feed verification failed")
 
+    def test_continuous_unidirectional_deletes_2(self):
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        # Load some data on cluster a. Do it a few times so that the seqnos are
+        # bumped up and then delete it.
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        load_thread_list = []
+        for i in [1, 2, 3]:
+            task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+            load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                            self._buckets[0],
+                                                            task_def, kvstore)
+            load_thread_list.append(load_thread)
+
+        for lt in load_thread_list:
+            lt.start()
+        for lt in load_thread_list:
+            lt.join()
+        time.sleep(10)
+
+        self._params["ops"] = "delete"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+                                                        self._buckets[0],
+                                                        task_def, kvstore)
+        load_thread.start()
+        load_thread.join()
+
+        # Start replication to replicate the deletes from cluster a
+        # to cluster b where the keys never existed.
+        replication_type = "continuous"
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        time.sleep(15)
+
+        # Verify replicated data
+        self.assertTrue(XDCRBaseTest.verify_changes_feed(rest_conn_a,
+                                                         rest_conn_b,
+                                                         self._buckets[0],
+                                                         self._poll_sleep,
+                                                         self._poll_timeout),
+                        "Changes feed verification failed")
+
     def test_continuous_bidirectional_sets(self):
         cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
