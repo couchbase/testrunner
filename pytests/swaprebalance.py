@@ -9,7 +9,7 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached, LoadWithMcsoda
 from membase.helper.failover_helper import FailoverHelper
 
-class SwapRebalanceBaseTest(unittest.TestCase):
+class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def common_setup(self):
@@ -374,30 +374,36 @@ class SwapRebalanceTests(unittest.TestCase):
 class SwapRebalanceBasicTests(unittest.TestCase):
 
     def setUp(self):
-        SwapRebalanceBaseTest.common_setup(self)
+        self.common_setup(self)
 
     def tearDown(self):
-        SwapRebalanceBaseTest.common_tearDown(self)
+        self.common_tearDown(self)
 
     def do_test(self):
-        self._common_test_body_swap_rebalance(do_stop_start=True)
+        SwapRebalanceBase._common_test_body_swap_rebalance(do_stop_start=True)
 
 class SwapRebalabanceStartStopTests(unittest.TestCase):
 
     def setUp(self):
-        SwapRebalanceBaseTest.common_setup(self)
+        self.common_setup(self)
 
     def tearDown(self):
-        SwapRebalanceBaseTest.common_tearDown(self)
+        self.common_tearDown(self)
 
     def do_test(self):
-        self._common_test_body_swap_rebalance(do_stop_start=True)
+        SwapRebalanceBase._common_test_body_swap_rebalance(do_stop_start=True)
 
 class SwapRebalanceFailedTests(unittest.TestCase):
 
+    def setUp(self):
+        self.common_setup(self)
+
+    def tearDown(self):
+        self.common_tearDown(self)
+
     def test_failed_swap_rebalance(self):
-        self._common_test_body_failed_swap_rebalance()
+        SwapRebalanceBase._common_test_body_failed_swap_rebalance()
 
     # Not cluster_run friendly, yet
     def test_add_back_failed_node_swap_rebalance(self):
-        self._add_back_failed_node(do_node_cleanup=False)
+        SwapRebalanceBase._add_back_failed_node(do_node_cleanup=False)
