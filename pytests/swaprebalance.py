@@ -374,10 +374,10 @@ class SwapRebalanceTests(unittest.TestCase):
 class SwapRebalanceBasicTests(unittest.TestCase):
 
     def setUp(self):
-        self.common_setup(self)
+        SwapRebalanceBase.common_setup(self)
 
     def tearDown(self):
-        self.common_tearDown(self)
+        SwapRebalanceBase.common_tearDown(self)
 
     def do_test(self):
         SwapRebalanceBase._common_test_body_swap_rebalance(do_stop_start=True)
@@ -385,10 +385,10 @@ class SwapRebalanceBasicTests(unittest.TestCase):
 class SwapRebalabanceStartStopTests(unittest.TestCase):
 
     def setUp(self):
-        self.common_setup(self)
+        SwapRebalanceBase.common_setup(self)
 
     def tearDown(self):
-        self.common_tearDown(self)
+        SwapRebalanceBase.common_tearDown(self)
 
     def do_test(self):
         SwapRebalanceBase._common_test_body_swap_rebalance(do_stop_start=True)
@@ -396,10 +396,10 @@ class SwapRebalabanceStartStopTests(unittest.TestCase):
 class SwapRebalanceFailedTests(unittest.TestCase):
 
     def setUp(self):
-        self.common_setup(self)
+        SwapRebalanceBase.common_setup(self)
 
     def tearDown(self):
-        self.common_tearDown(self)
+        SwapRebalanceBase.common_tearDown(self)
 
     def test_failed_swap_rebalance(self):
         SwapRebalanceBase._common_test_body_failed_swap_rebalance()
