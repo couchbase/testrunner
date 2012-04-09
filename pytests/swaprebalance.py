@@ -126,7 +126,6 @@ class SwapRebalanceBase(unittest.TestCase):
             bucket_data[bucket.name]['inserted_keys'] = []
         return bucket_data
 
-
     @staticmethod
     def load_data(master, bucket, keys_count=-1, load_ratio=-1, delete_ratio=0, \
                   expiry_ratio=0, test=None, wait_to_drain=True):
@@ -166,6 +165,7 @@ class SwapRebalanceBase(unittest.TestCase):
             verified = RebalanceHelper.verify_items_count(master, bucket.name)
             test.assertTrue(verified, "Lost items!!.. failing test")
 
+    @staticmethod
     def _common_test_body_swap_rebalance(self, do_stop_start=False):
         master = self.servers[0]
         rest = RestConnection(master)
@@ -230,6 +230,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         SwapRebalanceBase.verification(master, self)
 
+    @staticmethod
     def _common_test_body_failed_swap_rebalance(self):
         master = self.servers[0]
         rest = RestConnection(master)
@@ -291,6 +292,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         SwapRebalanceBase.verification(master, self)
 
+    @staticmethod
     def _add_back_failed_node(self, do_node_cleanup=False):
         master = self.servers[0]
         rest = RestConnection(master)
