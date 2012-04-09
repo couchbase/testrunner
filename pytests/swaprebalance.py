@@ -21,7 +21,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Clear the state from Previous invalid run
         rest.stop_rebalance()
-        SwapRebalanceBaseTest.common_tearDown(self)
+        SwapRebalanceBase.common_tearDown(self)
 
         # Initialize test params
         self.replica  = self.input.param("replica", 1)
@@ -45,9 +45,9 @@ class SwapRebalanceBase(unittest.TestCase):
         rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
         if self.num_buckets==1:
-            SwapRebalanceBaseTest._create_default_bucket(self, replica=self.replica)
+            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
         else:
-            SwapRebalanceBaseTest._create_multiple_buckets(self, replica=self.replica)
+            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
     @staticmethod
     def common_tearDown(self):
@@ -169,10 +169,10 @@ class SwapRebalanceBase(unittest.TestCase):
 class SwapRebalanceTests(unittest.TestCase):
 
     def setUp(self):
-        SwapRebalanceBaseTest.common_setup(self)
+        SwapRebalanceBase.common_setup(self)
 
     def tearDown(self):
-        SwapRebalanceBaseTest.common_tearDown(self)
+        SwapRebalanceBase.common_tearDown(self)
 
     def _common_test_body_swap_rebalance(self, do_stop_start=False):
         master = self.servers[0]
@@ -185,9 +185,9 @@ class SwapRebalanceTests(unittest.TestCase):
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
 
         self.log.info("inserting some items in the master before adding any nodes")
-        bucket_data = SwapRebalanceBaseTest.bucket_data_init(rest)
+        bucket_data = SwapRebalanceBase.bucket_data_init(rest)
         for bucket in rest.get_buckets():
-            inserted_keys = SwapRebalanceBaseTest.load_data(master, bucket.name, self.keys_count, \
+            inserted_keys = SwapRebalanceBase.load_data(master, bucket.name, self.keys_count, \
                 self.load_ratio, delete_ratio=0, expiry_ratio=0, test=self, wait_to_drain=False)
             self.log.info("inserted {0} keys".format(len(inserted_keys)))
             bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
@@ -236,7 +236,7 @@ class SwapRebalanceTests(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
 
-        SwapRebalanceBaseTest.verification(master, self)
+        SwapRebalanceBase.verification(master, self)
 
     def _common_test_body_failed_swap_rebalance(self):
         master = self.servers[0]
@@ -249,9 +249,9 @@ class SwapRebalanceTests(unittest.TestCase):
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
 
         self.log.info("inserting some items in the master before adding any nodes")
-        bucket_data = SwapRebalanceBaseTest.bucket_data_init(rest)
+        bucket_data = SwapRebalanceBase.bucket_data_init(rest)
         for bucket in rest.get_buckets():
-            inserted_keys = SwapRebalanceBaseTest.load_data(master, bucket.name, self.keys_count,\
+            inserted_keys = SwapRebalanceBase.load_data(master, bucket.name, self.keys_count,\
                 self.load_ratio, delete_ratio=0, expiry_ratio=0, test=self, wait_to_drain=True)
             self.log.info("inserted {0} keys".format(len(inserted_keys)))
             bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
@@ -297,7 +297,7 @@ class SwapRebalanceTests(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
 
-        SwapRebalanceBaseTest.verification(master, self)
+        SwapRebalanceBase.verification(master, self)
 
     def _add_back_failed_node(self, do_node_cleanup=False):
         master = self.servers[0]
@@ -308,9 +308,9 @@ class SwapRebalanceTests(unittest.TestCase):
         RebalanceHelper.rebalance_in(self.servers, len(self.servers)-1)
 
         self.log.info("inserting some items in the master before adding any nodes")
-        bucket_data = SwapRebalanceBaseTest.bucket_data_init(rest)
+        bucket_data = SwapRebalanceBase.bucket_data_init(rest)
         for bucket in rest.get_buckets():
-            inserted_keys = SwapRebalanceBaseTest.load_data(master, bucket.name, self.keys_count,\
+            inserted_keys = SwapRebalanceBase.load_data(master, bucket.name, self.keys_count,\
                 self.load_ratio, delete_ratio=0, expiry_ratio=0, test=self, wait_to_drain=True)
             self.log.info("inserted {0} keys".format(len(inserted_keys)))
             bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
@@ -368,7 +368,7 @@ class SwapRebalanceTests(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(add_back_servers))
 
-        SwapRebalanceBaseTest.verification(master, self)
+        SwapRebalanceBase.verification(master, self)
 
 
 class SwapRebalanceBasicTests(unittest.TestCase):
