@@ -374,7 +374,7 @@ class SwapRebalanceBasicTests(unittest.TestCase):
         SwapRebalanceBase.common_tearDown(self)
 
     def do_test(self):
-        SwapRebalanceBase._common_test_body_swap_rebalance(do_stop_start=True)
+        SwapRebalanceBase._common_test_body_swap_rebalance(self, do_stop_start=True)
 
 class SwapRebalabanceStartStopTests(unittest.TestCase):
 
@@ -385,7 +385,7 @@ class SwapRebalabanceStartStopTests(unittest.TestCase):
         SwapRebalanceBase.common_tearDown(self)
 
     def do_test(self):
-        SwapRebalanceBase._common_test_body_swap_rebalance(do_stop_start=True)
+        SwapRebalanceBase._common_test_body_swap_rebalance(self, do_stop_start=True)
 
 class SwapRebalanceFailedTests(unittest.TestCase):
 
@@ -396,8 +396,8 @@ class SwapRebalanceFailedTests(unittest.TestCase):
         SwapRebalanceBase.common_tearDown(self)
 
     def test_failed_swap_rebalance(self):
-        SwapRebalanceBase._common_test_body_failed_swap_rebalance()
+        SwapRebalanceBase._common_test_body_failed_swap_rebalance(self)
 
     # Not cluster_run friendly, yet
     def test_add_back_failed_node_swap_rebalance(self):
-        SwapRebalanceBase._add_back_failed_node(do_node_cleanup=False)
+        SwapRebalanceBase._add_back_failed_node(self, do_node_cleanup=False)
