@@ -451,7 +451,7 @@ class SwapRebalanceBasicTests(unittest.TestCase):
         SwapRebalanceBase.common_tearDown(self)
 
     def do_test(self):
-        SwapRebalanceBase._common_test_body_swap_rebalance(self, do_stop_start=True)
+        SwapRebalanceBase._common_test_body_swap_rebalance(self, do_stop_start=False)
 
 class SwapRebalabanceStartStopTests(unittest.TestCase):
 
