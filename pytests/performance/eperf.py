@@ -446,9 +446,9 @@ class EPerfMaster(perf.PerfBase):
                           max_creates = self.parami("max_creates", 20000000))
         self.gated_finish(self.input.clients, notify)
 
-    # This is a scacled down version of test_ept_mixed_original with fewer creates.
-    def test_ept_write_original_scaled_down(self):
-        self.spec("EPT-WRITE-original_scaled_down")
+    # This is a small version of test_ept_mixed_original with fewer creates.
+    def test_ept_write_original_1(self):
+        self.spec("EPT-WRITE-original_1")
         items = self.parami("items", 22500000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
