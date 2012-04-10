@@ -43,10 +43,6 @@ class SwapRebalanceBase(unittest.TestCase):
         info = rest.get_nodes_self()
         rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-        if self.num_buckets==1:
-            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
-        else:
-            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
     @staticmethod
     def common_tearDown(self):
@@ -175,6 +171,10 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+        if self.num_buckets==1:
+            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
+        else:
+            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
         self.log.info("inserting some items in the master before adding any nodes")
         bucket_data = SwapRebalanceBase.bucket_data_init(rest)
@@ -243,6 +243,10 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+        if self.num_buckets==1:
+            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
+        else:
+            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
         self.log.info("inserting some items in the master before adding any nodes")
         bucket_data = SwapRebalanceBase.bucket_data_init(rest)
@@ -305,6 +309,11 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all servers
         RebalanceHelper.rebalance_in(self.servers, len(self.servers)-1)
+
+        if self.num_buckets==1:
+            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
+        else:
+            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
         self.log.info("inserting some items in the master before adding any nodes")
         bucket_data = SwapRebalanceBase.bucket_data_init(rest)
@@ -382,6 +391,11 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+
+        if self.num_buckets==1:
+            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
+        else:
+            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
         self.log.info("inserting some items in the master before adding any nodes")
         bucket_data = SwapRebalanceBase.bucket_data_init(rest)
