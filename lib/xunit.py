@@ -91,7 +91,12 @@ class XUnitTestResult(object):
 
     def write(self,prefix):
         for suite in self.suites:
-            report_xml_file = open("{0}-{1}.xml".format(prefix, suite.name), 'w')
+            name = suite.name
+            # If test_params are passed
+            if "," in name:
+                name = name[:name.find(",")]
+
+            report_xml_file = open("{0}-{1}.xml".format(prefix, name), 'w')
             report_xml_file.write(self.to_xml(suite))
             report_xml_file.close()
 
