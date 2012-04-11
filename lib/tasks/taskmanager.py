@@ -3,6 +3,7 @@ import Queue
 import sys
 
 from threading import Thread
+from tasks.task import Task
 
 class TaskManager(Thread):
     def __init__(self):
@@ -12,6 +13,8 @@ class TaskManager(Thread):
         self.running = True
 
     def schedule(self, task, sleep_time=0):
+        if not isinstance(task, Task):
+            raise TypeError("Tried to schedule somthing that's not a task")
         if sleep_time <= 0:
             self.readyq.put(task)
         else:
@@ -31,7 +34,6 @@ class TaskManager(Thread):
                     self.readyq.put(task['task'])
                 else:
                     self.sleepq.put(task)
-                
 
     def stop(self):
         self.running = False

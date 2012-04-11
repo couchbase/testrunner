@@ -40,7 +40,7 @@ class NodeInitializeTask(Task):
         elif self.state == "cluster init":
             self.init_node_memory()
         else:
-            raise Ecxeption("Bad State in NodeInitializationTask")
+            raise Exception("Bad State in NodeInitializationTask")
 
     def init_node(self):
         rest = RestConnection(self.server)
@@ -74,7 +74,7 @@ class BucketCreateTask(Task):
         elif self.state == "checking":
             self.check_bucket_ready()
         else:
-            raise Ecxeption("Bad State in BucketCreateTask")
+            raise Exception("Bad State in BucketCreateTask")
 
     def create_bucket(self, task_manager):
         rest = RestConnection(self.server)
@@ -122,7 +122,7 @@ class BucketDeleteTask(Task):
         elif self.state == "checking":
             self.check_bucket_deleted()
         else:
-            raise Ecxeption("Bad State in BucketDeleteTask")
+            raise Exception("Bad State in BucketDeleteTask")
 
     def delete_bucket(self, task_manager):
         rest = RestConnection(self.server)
@@ -192,7 +192,6 @@ class RebalanceTask(Task):
         except Exception:
             self.state = "finishing"
             self.set_result({"status": "error", "value": e})
-        
 
     def rebalancing(self, task_manager):
         rest = RestConnection(self.servers[0])
