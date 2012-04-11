@@ -46,11 +46,10 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         ClusterHelper.wait_for_ns_servers_or_assert(self.servers, self)
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
 
     @staticmethod
     def _create_default_bucket(self, replica=1):
@@ -229,9 +228,9 @@ class SwapRebalanceBase(unittest.TestCase):
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
 
         for bucket in rest.get_buckets():
-            SwapRebalanceBase.verify_data(master, bucket_data[bucket.name].get('inserted_keys'),\
+            SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
                 bucket.name, self)
-        SwapRebalanceBase.items_verification(master, self)
+        SwapRebalanceBase.items_verification(new_swap_servers[0], self)
 
     @staticmethod
     def _common_test_body_failed_swap_rebalance(self):
@@ -297,9 +296,9 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
         for bucket in rest.get_buckets():
-            SwapRebalanceBase.verify_data(master, bucket_data[bucket.name].get('inserted_keys'),\
+            SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
                 bucket.name, self)
-        SwapRebalanceBase.items_verification(master, self)
+        SwapRebalanceBase.items_verification(new_swap_servers[0], self)
 
     @staticmethod
     def _add_back_failed_node(self, do_node_cleanup=False):
@@ -438,9 +437,9 @@ class SwapRebalanceBase(unittest.TestCase):
             msg="rebalance operation failed after adding node {0}".format(new_swap_servers))
 
         for bucket in rest.get_buckets():
-            SwapRebalanceBase.verify_data(master, bucket_data[bucket.name].get('inserted_keys'),\
+            SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
                 bucket.name, self)
-        SwapRebalanceBase.items_verification(master, self)
+        SwapRebalanceBase.items_verification(new_swap_servers[0], self)
 
 class SwapRebalanceBasicTests(unittest.TestCase):
 
