@@ -22,18 +22,37 @@ class TaskManager(Thread):
             self.sleepq.put({'task': task, 'time': wakeup_time})
 
     def run(self):
-        while not (self.running == False and self.readyq.empty()):
+        while (self.running == True or self.readyq.empty() != True or self.sleepq.empty() != True):
             if self.readyq.empty():
                 time.sleep(1)
             else:
                 task = self.readyq.get()
                 task.step(self)
             for i in range(self.sleepq.qsize()):
-                task = self.sleepq.get()
-                if time.time() >= task['time']:
-                    self.readyq.put(task['task'])
+                s_task = self.sleepq.get()
+                if time.time() >= s_task['time']:
+                    self.readyq.put(s_task['task'])
                 else:
-                    self.sleepq.put(task)
+                    self.sleepq.put(s_task)
+
+
+    def cancel(self):
+
+        # stop queue processing
+        self._Thread__stop()
+        self.join()
+
+        # empty task queue and cancel all tasks
+        self._emptyq_and_cancel(self.readyq)
+        self._emptyq_and_cancel(self.sleepq)
+
+        self.stop()
+
+    def _emptyq_and_cancel(self, queue):
+        for i in range(queue.qsize()):
+            _t = queue.get()
+            if 'cancel' in _t['task'].__dict__:
+                _t.cancel()
 
     def stop(self):
         self.running = False

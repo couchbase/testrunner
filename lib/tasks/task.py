@@ -1,8 +1,13 @@
 import time
 import logger
+from threading import Thread
 from membase.api.rest_client import RestConnection
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
+from memcached.helper.data_helper import KVStoreAwareSmartClient
+from mc_bin_client import MemcachedError
+import copy
+import json
 
 class Task():
     def __init__(self, name):
@@ -213,3 +218,151 @@ class RebalanceTask(Task):
         else:
             self.state = "finishing"
             self.set_result({"status": "success", "value": None})
+
+
+class GenericLoadingTask(Task):
+    def __init__(self, rest, bucket, info = None, kv_store = None, store_enabled = True):
+        Task.__init__(self, "load_gen_task")
+        self.rest = rest
+        self.bucket = bucket
+        self.client = KVStoreAwareSmartClient(rest, bucket, kv_store, info, store_enabled)
+        self.state = "pending"
+
+    def step(self, task_manager):
+        if self.state == "pending":
+            self.do_ops()
+            self.state = "running"
+            task_manager.schedule(self)
+        elif self.state == "running":
+            self.state = "finished"
+        else:
+            raise Exception("Bad State in DocumentGeneratorTask")
+
+    def do_ops(self):
+        noop = "override"
+
+    def do_task_op(self, op, key, value = None, expiration = None):
+        retry_count = 0
+        ok = False
+        value = value.replace(" ", "")
+        while retry_count < 5 and not ok:
+            try:
+                if op == "set":
+                    if expiration is None:
+                        self.client.set(key, value)
+                    else:
+                        self.client.set(key, value, expiration)
+                if op == "get":
+                    self.client.mc_get(key)
+                if op == "delete":
+                    self.client.delete(key)
+                ok = True
+            except MemcachedError as error:
+                if error.status == 7:
+                    client.reset_vbucket(self.rest, key)
+                retry_count += 1
+
+class LoadDocGeneratorTask(Thread, GenericLoadingTask):
+    def __init__(self, rest, doc_generators, bucket = "default", expiration = None, loop = False):
+        Thread.__init__(self)
+        GenericLoadingTask.__init__(self, rest, bucket)
+
+        self.doc_generators = doc_generators
+        self._dcopy = copy.deepcopy(doc_generators)
+        self.expiration = None
+        self.loop = loop
+        self.doc_ids = []
+        self.state = "initializing"
+
+    def cancel(self):
+        self._Thread__stop()
+        self.join()
+        self.log.info("cancelling LoadDocGeneratorTask")
+        self.cancelled = True
+
+    def step(self, task_manager):
+        if self.cancelled:
+            self.result = self.set_result({"status": "cancelled", "value": self.doc_ids})
+        if self.state == "initializing":
+            self.state = "running"
+            self.start()
+            task_manager.schedule(self, 2)
+        elif self.state == "running":
+            self.log.info("{0} documents loaded".format(len(self.doc_ids)))
+            if self.is_alive():
+                task_manager.schedule(self, 2)
+            else:
+                self.join()
+                self.state = "finished"
+                self.set_result({"status" : "success", "value" : self.doc_ids})
+        elif self.state != "finished":
+            raise Exception("Bad State in DocumentGeneratorTask")
+
+
+    def run(self):
+        while True:
+            dg = copy.deepcopy(self.doc_generators)
+            for doc_generator in dg:
+                for value in doc_generator:
+                    _value = value.encode("ascii", "ignore")
+                    _json = json.loads(_value, encoding="utf-8")
+                    _id = _json["_id"].encode("ascii", "ignore")
+                    try:
+                        self.do_task_op("set", _id, _value, self.expiration)
+                        self.doc_ids.append(_id)
+                    except Exception as e:
+                        self.state = "finished"
+                        self.set_result({"status": "error", "value": e})
+                        return
+            if not self.loop:
+                return
+
+class DocumentMutateTask(GenericLoadingTask):
+    def __init__(self, docs, rest, bucket,
+                kv_store = None, info = None,
+                store_enabled = True, expiration = None):
+        GenericLoadingTask.__init__(rest, bucket, kv_store, info, store_enabled)
+        self.docs = docs
+        self.expiration = expiration
+
+    def do_ops(self, json_data):
+        for doc in self.docs:
+            _doc_body = doc.encode("ascii", "ignore")
+            _json = json.loads(_doc_body, encoding="utf-8")
+            _id = _json["_id"].encode("ascii", "ignore")
+            try:
+                self.do_task_op("set", _id, _doc_body, self.expiration)
+            except:
+                self.set_result({"status": "error", "value": "set failed"})
+
+        self.set_result({"status" : "success", "value" : None})
+
+class DocumentAccessTask(GenericLoadingTask):
+    def __init__(self, doc_ids, rest, bucket, info):
+        super(GenericLoadingTask, self).\
+            __init__(rest, bucket, info = info)
+        self.doc_ids = doc_ids
+
+    def do_ops(self):
+        for _id in self.doc_ids:
+                try:
+                    self.do_task_op("get", _id)
+                except:
+                    self.set_result({"status": "error", "value": "get failed"})
+        self.set_result({"status" : "success", "value" : None})
+
+class DocumentDeleteTask(GenericLoadingTask):
+    def __init__(self, doc_ids, info = None, kv_store = None, store_enabled = True):
+        super(GenericLoadingTask, self).\
+            __init__(rest, bucket, kv_store, info, store_enabled)
+        self.doc_ids = doc_ids
+
+    def do_ops(self):
+        for _id in self.doc_ids:
+                try:
+                    self.do_task_op("delete", _id)
+                except:
+                    self.set_result({"status": "error", "value": "deletes failed"})
+        self.set_result({"status" : "success", "value" : None})
+
+
