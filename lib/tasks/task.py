@@ -8,7 +8,11 @@ class Task():
     def __init__(self, name):
         self.log = logger.Logger.get_logger()
         self.name = name
+        self.cancelled = False
         self.res = None
+
+    def cancel(self):
+        self.cancelled = True
 
     def set_result(self, result):
         self.res = result
@@ -30,6 +34,8 @@ class NodeInitializeTask(Task):
         self.server = server
 
     def step(self, task_manager):
+        if self.cancelled:
+            self.result = self.set_result({"status": "cancelled", "value": None})
         if self.state == "initializing":
             self.state = "node init"
             task_manager.schedule(self)
@@ -66,6 +72,8 @@ class BucketCreateTask(Task):
         self.state = "initializing"
 
     def step(self, task_manager):
+        if self.cancelled:
+            self.result = self.set_result({"status": "cancelled", "value": None})
         if self.state == "initializing":
             self.state = "creating"
             task_manager.schedule(self)
@@ -114,6 +122,8 @@ class BucketDeleteTask(Task):
         self.state = "initializing"
 
     def step(self, task_manager):
+        if self.cancelled:
+            self.result = self.set_result({"status": "cancelled", "value": None})
         if self.state == "initializing":
             self.state = "creating"
             task_manager.schedule(self)
@@ -152,6 +162,8 @@ class RebalanceTask(Task):
         self.state = "initializing"
 
     def step(self, task_manager):
+        if self.cancelled:
+            self.result = self.set_result({"status": "cancelled", "value": None})
         if self.state == "initializing":
             self.state = "add_nodes"
             task_manager.schedule(self)
