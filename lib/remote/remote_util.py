@@ -581,7 +581,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
                 self.log_command_output(output, error)
 
-    def membase_install(self, build, startserver=True, path='/tmp'):
+    def membase_install(self, build, startserver=True, path='/tmp', vbuckets=None):
         is_membase = False
         is_couchbase = False
         if build.name.lower().find("membase") != -1:
@@ -605,7 +605,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 self.wait_till_file_added("/cygdrive/c/Program Files/Couchbase/Server/", 'VERSION.txt',
                                           timeout_in_seconds=600)
         elif info.deliverable_type in ["rpm", "deb"]:
-            if startserver:
+            if startserver and vbuckets == None:
                 environment = ""
             else:
                 environment = "INSTALL_DONT_START_SERVER=1 "
@@ -621,6 +621,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 self.log_command_output(output, error)
             else:
                 output, error = self.execute_command('/opt/couchbase/bin/mbenable_core_dumps.sh  {0}'.format(path))
+                self.log_command_output(output, error)
+
+            if vbuckets and is_couchbase:
+                output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export COUCHBASE_NUM_VBUCKETS={0}/' /opt/couchbase/etc/couchbase_init.d".format(vbuckets))
                 self.log_command_output(output, error)
 
             if startserver and is_membase:
@@ -1008,7 +1012,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.use_sudo = False
 
         if self.use_sudo :
-            command = "sudo -i " + command
+            command = "sudo " + command
 
         return self.execute_command_raw(command, debug=debug)
 
