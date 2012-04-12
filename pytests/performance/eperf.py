@@ -9,6 +9,7 @@ import json
 import os
 import gzip
 import ast
+import copy
 
 # membase imports
 from membase.api.rest_client import RestConnection, RestHelper
@@ -202,15 +203,21 @@ class EPerfMaster(perf.PerfBase):
                       ratio_queries = ratio_queries,
                       queries = queries)
 
-    # create view and index documents
-    def index_phase(self, view, bucket="default"):
+    # create design docs and index documents
+    def index_phase(self, ddocs, bucket="default"):
         if self.parami("index_phase", 1) > 0:
-            map_fn = "function (doc) {if(doc.key_num !== undefined){emit(doc.key_num, null);}}"
-            json = create_ddoc_json(self.rest, view, map_fn)
-            self.rest.create_ddoc(bucket, view, json)
-            params={'stale'    : 'false',
-                    'full_set' : 'true'}
-            self.rest.view_results(bucket, view, params)
+            for ddoc_name, d in ddocs.items():
+                d = copy.copy(d)
+                d["language"] = "javascript"
+                d["_id"] = "_design/" + ddoc_name
+                d_json = json.dumps(d)
+                api = "{0}couchBase/{1}/_design/{2}".format(self.rest.baseUrl,
+                                                            bucket, ddoc_name)
+                self.rest._http_request(api, 'PUT', d_json,
+                                        headers=self.rest._create_capi_headers())
+            for ddoc_name, d in ddocs.items():
+                for view_name, x in d["views"].items():
+                    self.rest.query_view(ddoc_name, view_name, bucket, { "limit": 10 })
 
     def latched_rebalance(self, cur):
         if not self.latched_rebalance_done:
@@ -729,55 +736,174 @@ class EPerfMaster(perf.PerfBase):
 
     def test_query_all_docs_mixed_original(self):
         self.spec("QEURY-ALLDOCS-MIXED-original")
+
+    def test_evperf_workload1(self):
+        self.spec("evperf_workload1")
         items = self.parami("items", 45000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
-        view = self.param("view","/default/_all_docs")
-        limit = self.param("limit","10")
-        queries = "{0}?limit={1}".format(view,limit)
-        # self.index_phase(view) # Skip indexing because this is _all_docs, not a secondary index.
+
+        # self.index_phase(...) # Skip indexing because we use _all_docs, not a secondary index.
+
+        view = self.param("view", "/couchBase/default/_all_docs")
+        limit = self.parami("limit", 10)
+        queries = view + "?limit=" + str(limit) + '&startkey="{key}"'
+
+        # Hot-Keys : 20% of total keys
+        #
+        # Read    50% - 95% of GET's should hit a hot key
+        # Insert  10% - N/A
+        # Update  15% - 95% of mutates should mutate a hot key
+        # Delete  5%  - 95% of the deletes should delete a hot key
+        # Queries 20% - A mix of queries on the _all_docs index. Queries may or may not hit hot keys.
+
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_sets = self.paramf('ratio_sets', 0.3),
                           ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.10),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.33),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
                           ratio_hot = self.paramf('ratio_hot', 0.2),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
                           ratio_expirations = self.paramf('ratio_expirations', 0.03),
                           max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.2),
+                          ratio_queries = self.paramf('ratio_queries', 0.2857),
                           queries = queries,
                           proto_prefix = "couchbase")
-
         self.gated_finish(self.input.clients, notify)
 
-    # run eperf tests with various query params
-    #
-    # underlying cbsoda lib supports templating: i.e
-    # -p  prefix=1,num_clients=1,batch=100,load_phase=0,index_phase=1,access_phase=1,items=5000,query_params="{'startkey' : '{int100}' }"
-    def test_query_params_mixed_original(self):
-        self.spec("QUERY-PARAMS-MIXED-original")
+    def test_evperf_workload2(self):
+        self.spec("evperf_workload2")
         items = self.parami("items", 45000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
+        ddocs = {}
+        ddocs["A"] = { "views": {} }
+        ddocs["A"]["views"]["city"] = {}
+        ddocs["A"]["views"]["city"]["map"] = """
+function(doc) {
+  if (doc.city != null) {
+    emit(doc.city, null);
+  }
+}
+"""
+        ddocs["A"]["views"]["city2"] = {}
+        ddocs["A"]["views"]["city2"]["map"] = """
+function(doc) {
+  if (doc.city != null) {
+    emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
+  }
+}
+"""
+        ddocs["B"] = { "views": {} }
+        ddocs["B"]["views"]["realm"] = {}
+        ddocs["B"]["views"]["realm"]["map"] = """
+function(doc) {
+  if (doc.realm != null) {
+    emit(doc.realm, null);
+  }
+}
+"""
+        ddocs["B"]["views"]["experts"] = {}
+        ddocs["B"]["views"]["experts"]["map"] = """
+function(doc) {
+  if (doc.category == 2) {
+    emit([doc.name, doc.coins], null);
+  }
+}
+"""
+        ddocs["C"] = { "views": {} }
+        ddocs["C"]["views"]["experts"] = {}
+        ddocs["C"]["views"]["experts"]["map"] = """
+function(doc) {
+  emit([doc.category, doc.coins], null);
+}
+"""
+        ddocs["C"]["views"]["realm"] = {}
+        ddocs["C"]["views"]["realm"]["map"] = """
+function(doc) {
+  emit([doc.realm, doc.coins], null)
+}
+"""
+        ddocs["C"]["views"]["realm2"] = {}
+        ddocs["C"]["views"]["realm2"]["map"] = """
+function(doc) {
+  emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+}
+"""
+        ddocs["C"]["views"]["category"] = {}
+        ddocs["C"]["views"]["category"]["map"] = """
+function(doc) {
+  emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+}
+"""
+        self.index_phase(ddocs)
 
-        view = self.param("view","test_query_params_mixed_original")
-        limit = self.param("limit","10")
-        query_params = ast.literal_eval(self.param("query_params", "{}"))
-        queries = "/default/_design/{0}/_view/{0}?limit={1}{2}".format(view,limit,params_to_str(query_params))
-        self.index_phase(view)
+        limit = self.parami("limit", 10)
+
+        b = '/couchBase/default/'
+
+        q = {} # TODO: Need quoting and JSON'ification?
+        q['all_docs']    = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
+        q['city']        = b + '_design/A/_view/city?limit=' + str(limit) + '&startkey="{city}"'
+        q['city2']       = b + '_design/A/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
+        q['realm']       = b + '_design/B/_view/realm?limit=30&startkey="{realm}"'
+        q['experts']     = b + '_design/B/_view/experts?limit=30&startkey="{name}"'
+        q['coins-beg']   = b + '_design/C/_view/experts?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
+        q['coins-exp']   = b + '_design/C/_view/experts?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
+        q['and0']        = b + '_design/C/_view/realm?limit=30&startkey=["{realm}",{coins}]'
+        q['and1']        = b + '_design/C/_view/realm?limit=30&startkey=["{realm}",{coins}]'
+        q['and2']        = b + '_design/C/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
+
+        queries_by_kind = [
+            [ # 5
+                q['all_docs']
+                ],
+            [ # 45% / 5 = 9
+                q['city'],
+                q['city2'],
+                q['realm'],
+                q['experts']
+                ],
+            [ # 30% / 5 = 6
+                q['coins-beg'],
+                q['coins-exp']
+                ],
+            [ # 25% / 5 = 5
+                q['and0'],
+                q['and1'],
+                q['and2'],
+                ]
+            ]
+
+        remaining = [5, 9, 6, 5]
+
+        queries = compute_queries(queries_by_kind, remaining)
+        queries = ';'.join(queries)
+        queries = queries.replace('[', '%5B')
+        queries = queries.replace(']', '%5D')
+        queries = queries.replace(',', '%2C')
+
+        # Hot-Keys : 20% of total keys
+        #
+        # Read    45% - 95% of GET's should hit a hot key
+        # Insert  10% - N/A
+        # Update  15% - 95% of mutates should mutate a hot key
+        # Delete  5%  - 95% of the deletes should delete a hot key
+        # Queries _all_docs  5% - A mix of queries on the _all_docs index. Queries may or may not hit hot keys.
+        # Queries on view   20% -
+
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_sets = self.paramf('ratio_sets', 0.3),
                           ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.10),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.33),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
                           ratio_hot = self.paramf('ratio_hot', 0.2),
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
                           ratio_expirations = self.paramf('ratio_expirations', 0.03),
                           max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.2),
+                          ratio_queries = self.paramf('ratio_queries', 0.3571),
                           queries = queries,
                           proto_prefix = "couchbase")
         self.gated_finish(self.input.clients, notify)
@@ -922,22 +1048,17 @@ def params_to_str(params):
             param_str += "&{0}={1}".format(k,v)
     return param_str
 
-#creates a ddoc with a simple map function and optional reduce function.
-def create_ddoc_json(rest, ddoc_name, map_function, reduce_function='',
-                     bucket="default"):
+def compute_queries(queries_by_kind, remaining):
+    i = 0
+    queries = []
 
-    #if this view already exist then get the rev and embed it here ?
-    dict = {"language": "javascript",
-            "_id": "_design/{0}".format(ddoc_name)}
-    try:
-        ddoc_response = rest.get_ddoc(bucket, ddoc_name)
-        if ddoc_response:
-            dict["_rev"] = ddoc_response["_rev"]
-    except:
-        pass
-    if reduce:
-        dict["views"] = {view: {"map": map_function, "reduce": reduce_function}}
-    else:
-        dict["views"] = {view: {"map": map_function}}
-    return json.dumps(dict)
+    while remaining.count(0) < len(remaining):
+        kind = i % len(remaining)
+        count = remaining[kind]
+        if count > 0:
+            remaining[kind] = count - 1
+            queries.append(queries_by_kind[kind][count % len(queries_by_kind[kind])])
+        i = i + 1
+
+    return queries
 

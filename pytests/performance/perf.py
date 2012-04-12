@@ -513,10 +513,10 @@ class PerfBase(unittest.TestCase):
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
 
-        # For query tests
-        # always use StoreCouchbase
+        # For query tests always use StoreCouchbase
         if protocol == "couchbase":
             stores = [StoreCouchbase()]
+
         cur, start_time, end_time = self.mcsoda_run(cfg, cur,
                                                     protocol, host_port, user, pswd,
                                                     stats_collector=sc,

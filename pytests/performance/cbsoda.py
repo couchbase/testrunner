@@ -50,7 +50,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
     def connect_host_port(self, host, port, user, pswd):
         mcsoda.StoreMembaseBinary.connect_host_port(self, host, port, user, pswd)
 
-        self.capi_host_port = (host, 8092)
+        self.capi_host_port = (host, 8091)
         socket.setdefaulttimeout(1.0)
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -141,7 +141,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
             message = query.format(key_str,
                                    key=key_str,
-                                   name=mcsoda.key_to_name(key_num, key_str),
+                                   name=mcsoda.key_to_name(key_num, key_str).replace(" ", "+"),
                                    email=mcsoda.key_to_email(key_num, key_str),
                                    city=mcsoda.key_to_city(key_num, key_str),
                                    country=mcsoda.key_to_country(key_num, key_str),
