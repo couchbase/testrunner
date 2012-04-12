@@ -258,7 +258,13 @@ class GetlTests(unittest.TestCase):
         self.log.info("setting key {0} with expiration {1}".format(key, expiration))
         mc.set(key, expiration, 0, key)
         self.log.info("getl key {0} timeout {1}".format(key, getl_timeout))
-        mc.getl(key, getl_timeout)
+        try:
+            mc.getl(key, getl_timeout)
+        except Exception as ex:
+            if getl_timeout < 0:
+                print ex
+            else:
+                raise
         self.log.info("get key {0} which is locked now".format(key))
         flags_v, cas_v, get_v = mc.get(key)
         self.assertEquals(get_v, key)
