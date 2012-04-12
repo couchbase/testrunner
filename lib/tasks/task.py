@@ -206,7 +206,7 @@ class RebalanceTask(Task):
             rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
             self.state = "rebalancing"
             task_manager.schedule(self)
-        except Exception:
+        except Exception as e:
             self.state = "finishing"
             self.set_result({"status": "error", "value": e})
 
