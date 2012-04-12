@@ -152,7 +152,6 @@ class EPerfMaster(perf.PerfBase):
                      ratio_queries = 0,
                      queries = None,
                      proto_prefix = "membase-binary"):
-
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
             items = self.parami("items", items)
@@ -172,7 +171,7 @@ class EPerfMaster(perf.PerfBase):
                       min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),
                       protocol       = (self.mk_protocol(self.input.servers[0].ip,
-                                        proto_prefix)),
+                                                         proto_prefix)),
                       clients        = self.parami('clients', 1),
                       ratio_sets     = ratio_sets,
                       ratio_misses   = ratio_misses,
@@ -198,9 +197,8 @@ class EPerfMaster(perf.PerfBase):
 
     # create view and index document documents
     def index_phase(self, view, bucket="default"):
-
         if self.parami("index_phase", 1) > 0:
-            map_fn = "function (doc) { if(doc.key_num !== undefined){ emit(doc.key_num, null);}}"
+            map_fn = "function (doc) {if(doc.key_num !== undefined){emit(doc.key_num, null);}}"
             function = create_view_function(self.rest, view, map_fn)
             self.rest.create_view(bucket, view, function)
             params={'stale'    : 'false',
@@ -492,8 +490,7 @@ class EPerfMaster(perf.PerfBase):
         view = self.param("view","/default/_all_docs")
         limit = self.param("limit","10")
         queries = "{0}?limit={1}".format(view,limit)
-
-
+        # self.index_phase(view) # Skip indexing because this is _all_docs, not a secondary index.
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.5),
                           ratio_misses = self.paramf('ratio_misses', 0.05),
@@ -509,7 +506,6 @@ class EPerfMaster(perf.PerfBase):
                           proto_prefix = "couchbase")
 
         self.gated_finish(self.input.clients, notify)
-
 
     # run eperf tests with various query params
     #
@@ -525,9 +521,7 @@ class EPerfMaster(perf.PerfBase):
         limit = self.param("limit","10")
         query_params = ast.literal_eval(self.param("query_params", "{}"))
         queries = "/default/_design/{0}/_view/{0}?limit={1}{2}".format(view,limit,params_to_str(query_params))
-
         self.index_phase(view)
-
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.5),
                           ratio_misses = self.paramf('ratio_misses', 0.05),
@@ -541,9 +535,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_queries = self.paramf('ratio_queries', 0.2),
                           queries = queries,
                           proto_prefix = "couchbase")
-
         self.gated_finish(self.input.clients, notify)
-
 
     def test_ept_mixed_original(self):
         self.spec("EPT-MIXED-original")
@@ -705,7 +697,7 @@ def params_to_str(params):
             param_str += "&{0}={1}".format(k,v)
     return param_str
 
-def create_view_function(rest, view,  function, bucket="default", reduce=''):
+def create_view_function(rest, view, function, bucket="default", reduce=''):
 
     #if this view already exist then get the rev and embed it here ?
     dict = {"language": "javascript",

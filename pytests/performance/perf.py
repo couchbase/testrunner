@@ -164,7 +164,6 @@ class PerfBase(unittest.TestCase):
             pswd = ''
         return protocol, host_port, user, pswd
 
-
     def mk_protocol(self, host, prefix='membase-binary'):
         return self.param('protocol',
                           prefix+'://' + self.input.servers[0].ip + ":8091")
