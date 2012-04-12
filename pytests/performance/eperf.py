@@ -202,12 +202,12 @@ class EPerfMaster(perf.PerfBase):
                       ratio_queries = ratio_queries,
                       queries = queries)
 
-    # create view and index document documents
+    # create view and index documents
     def index_phase(self, view, bucket="default"):
         if self.parami("index_phase", 1) > 0:
             map_fn = "function (doc) {if(doc.key_num !== undefined){emit(doc.key_num, null);}}"
-            function = create_view_function(self.rest, view, map_fn)
-            self.rest.create_view(bucket, view, function)
+            json = create_ddoc_json(self.rest, view, map_fn)
+            self.rest.create_ddoc(bucket, view, json)
             params={'stale'    : 'false',
                     'full_set' : 'true'}
             self.rest.view_results(bucket, view, params)
@@ -922,20 +922,22 @@ def params_to_str(params):
             param_str += "&{0}={1}".format(k,v)
     return param_str
 
-def create_view_function(rest, view, function, bucket="default", reduce=''):
+#creates a ddoc with a simple map function and optional reduce function.
+def create_ddoc_json(rest, ddoc_name, map_function, reduce_function='',
+                     bucket="default"):
 
     #if this view already exist then get the rev and embed it here ?
     dict = {"language": "javascript",
-            "_id": "_design/{0}".format(view)}
+            "_id": "_design/{0}".format(ddoc_name)}
     try:
-        view_response = rest.get_view(bucket, view)
-        if view_response:
-            dict["_rev"] = view_response["_rev"]
+        ddoc_response = rest.get_ddoc(bucket, ddoc_name)
+        if ddoc_response:
+            dict["_rev"] = ddoc_response["_rev"]
     except:
         pass
     if reduce:
-        dict["views"] = {view: {"map": function, "reduce": reduce}}
+        dict["views"] = {view: {"map": map_function, "reduce": reduce_function}}
     else:
-        dict["views"] = {view: {"map": function}}
+        dict["views"] = {view: {"map": map_function}}
     return json.dumps(dict)
 

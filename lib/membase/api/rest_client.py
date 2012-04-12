@@ -181,14 +181,19 @@ class RestConnection(object):
 
         return json_parsed
 
+    # DEPRECATED: use create_ddoc() instead.
     def create_view(self, design_doc_name, bucket_name, views):
+        return self.create_ddoc(design_doc_name, bucket_name, views)
+
+    def create_ddoc(self, design_doc_name, bucket_name, views):
         design_doc = DesignDocument(design_doc_name, views)
         api = "{0}couchBase/{1}/_design/{2}".format(self.baseUrl, bucket_name, design_doc_name)
 
         status, content = self._http_request(api, 'PUT', str(design_doc),
                                             headers=self._create_capi_headers())
         if status == False:
-            raise Exception("unable to create view")
+            raise Exception("unable to create ddoc: " + design_doc_name +
+                            " on bucket: " + bucket_name)
         return json.loads(content)
 
     def query_view(self, design_doc_name, view_name, bucket, query, timeout=120):
@@ -244,11 +249,17 @@ class RestConnection(object):
         return views_per_vbucket
 
 
+    # DEPRECATED: Incorrectly named function kept for backwards compatibility.
     def get_view(self, bucket, view):
-        status, json = self._get_design_doc(bucket, view)
+        log.info("DEPRECATED function get_view(" + view + "). use get_ddoc()")
+        return self.get_ddoc(bucket, view)
+
+
+    def get_ddoc(self, bucket, ddoc_name):
+        status, json = self._get_design_doc(bucket, ddoc_name)
 
         if status == False:
-            raise Exception("unable to get the view definition")
+            raise Exception("unable to get the ddoc definition: " + ddoc_id)
 
         return json
 
