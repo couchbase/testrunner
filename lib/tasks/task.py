@@ -1,6 +1,7 @@
 import time
 import logger
 from threading import Thread
+from exception import TimeoutException
 from membase.api.rest_client import RestConnection
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -14,22 +15,31 @@ class Task():
         self.log = logger.Logger.get_logger()
         self.name = name
         self.cancelled = False
+        self.retries = 0
         self.res = None
 
     def cancel(self):
         self.cancelled = True
 
+    def is_timed_out(self):
+        if self.res is not None and self.res['status'] == 'timed_out':
+            return True
+        return False
+
     def set_result(self, result):
         self.res = result
 
-    def result(self, timeout=None):
+    def result(self, retries=0):
         while self.res is None:
-            if timeout is None:
+            if retries == 0 or self.retries < retries:
                 time.sleep(1)
             else:
-                time.sleep(timeout)
+                self.res = {"status": "timed_out", "value": None}
         if self.res['status'] == 'error':
             raise Exception(self.res['value'])
+        if self.res['status'] == 'timed_out':
+            raise TimeoutException("task {0} timed out, tried {1} times".format(self.name,
+                                                                                self.retries))
         return self.res['value']
 
 class NodeInitializeTask(Task):
@@ -41,7 +51,9 @@ class NodeInitializeTask(Task):
     def step(self, task_manager):
         if self.cancelled:
             self.result = self.set_result({"status": "cancelled", "value": None})
-        if self.state == "initializing":
+        elif self.is_timed_out():
+            return
+        elif self.state == "initializing":
             self.state = "node init"
             task_manager.schedule(self)
         elif self.state == "node init":
@@ -79,7 +91,9 @@ class BucketCreateTask(Task):
     def step(self, task_manager):
         if self.cancelled:
             self.result = self.set_result({"status": "cancelled", "value": None})
-        if self.state == "initializing":
+        elif self.is_timed_out():
+            return
+        elif self.state == "initializing":
             self.state = "creating"
             task_manager.schedule(self)
         elif self.state == "creating":
@@ -129,7 +143,9 @@ class BucketDeleteTask(Task):
     def step(self, task_manager):
         if self.cancelled:
             self.result = self.set_result({"status": "cancelled", "value": None})
-        if self.state == "initializing":
+        elif self.is_timed_out():
+            return
+        elif self.state == "initializing":
             self.state = "creating"
             task_manager.schedule(self)
         elif self.state == "creating":
@@ -169,7 +185,9 @@ class RebalanceTask(Task):
     def step(self, task_manager):
         if self.cancelled:
             self.result = self.set_result({"status": "cancelled", "value": None})
-        if self.state == "initializing":
+        elif self.is_timed_out():
+            return
+        elif self.state == "initializing":
             self.state = "add_nodes"
             task_manager.schedule(self)
         elif self.state == "add_nodes":
@@ -283,7 +301,9 @@ class LoadDocGeneratorTask(Thread, GenericLoadingTask):
     def step(self, task_manager):
         if self.cancelled:
             self.result = self.set_result({"status": "cancelled", "value": self.doc_ids})
-        if self.state == "initializing":
+        elif self.is_timed_out():
+            return
+        elif self.state == "initializing":
             self.state = "running"
             self.start()
             task_manager.schedule(self, 2)
