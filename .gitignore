@@ -8,3 +8,4 @@
 dist/
 logs/
 ns_server_data
+tmp*

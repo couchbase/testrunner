@@ -686,7 +686,7 @@ class EPerfClient(EPerfMaster):
 
     def test_ept_scaled_down_write_no_dgm(self):
         super(EPerfClient, self).test_ept_scaled_down_write_no_dgm_1()
-    
+
     def test_ept_all_in_memory(self):
         super(EPerfClient, self).test_ept_all_in_memory()
 
