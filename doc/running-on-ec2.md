@@ -154,3 +154,68 @@ h2. Run a test
 For example, in your SSH session, run...
 
     ./testrunner -i tmp/fake.ini -t performance.eperf.EPerfMaster.test_ept_scaled_down_write_1 -p mem_quota=4000,items=100000
+
+Notice that the memory quota and number of items is turned down for quick turnaround time.
+
+That's it!
+
+h1. Making and testing changes
+
+Next, you'll probably be wanting to change testrunner, modify tests,
+and try them out before pushing them up for code review.
+
+The way this will work is you'll make code/script changes to
+testrunner on your own personal dev box/laptop.  Then you'll push out
+those changes to your own personal testrunner branch.  Then you'll
+pull those changes onto your EC2 node for testing.  That is, editing
+doesn't happen on your EC2 node (so, you're treating your EC2 cluster
+as your remote compile/run/debug environment).
+
+Here are the steps...
+
+h2. Fork testrunner
+
+Fork couchbase/testrunner to your own personal github account.
+
+Prerequisites: you should have your own github.com account (it's free!)
+
+Log in to http://github.com
+
+Browse to http://github.com/couchbase/testrunner
+
+Hit the "Fork" button
+
+After the hardcore forking action, browse to http://github.com/YOURACCOUNT/testrunner
+
+h2. On your dev box...
+
+In your testrunner project working directory
+
+    git clone git@github.com:couchbase/testrunner.git
+    cd testrunner
+    git remote add YOURACCOUNT git@github.com:YOURACCOUNT/testrunner.git
+    git remote update
+    git checkout master
+    git branch wip
+
+h2. After you make a change...
+
+After you make changes and "git add" and "git commit", then...
+
+    git push YOURACCOUNT wip
+
+h2. Pull the change to your EC2 node...
+
+In your SSH session, some initialization...
+
+    git remote add YOURACCOUNT git://github.com/YOURACCOUNT/testrunner.git
+    git remote update
+    git checkout -b wip YOURACCOUNT/wip
+
+Then, to pull down your change...
+
+    git checkout wip
+    git remote update
+    git pull YOURACCOUNT wip
+
+
