@@ -33,6 +33,7 @@ class EPerfMaster(perf.PerfBase):
         self.level_callbacks = []
         self.latched_rebalance_done = False
         self.is_multi_node = False
+        self.is_leader = self.parami("prefix", 0) == 0
         self.superSetUp();
 
     def superSetUp(self):
