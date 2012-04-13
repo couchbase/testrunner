@@ -58,10 +58,10 @@ def parse_args(argv):
 
 
     if not options.ini:
-        parser.error("you need to specify a resource file")
+        parser.error("please specify an .ini file (-i)")
         parser.print_help()
     if not options.testcase and not options.runlist:
-        parser.error("you need to specify runlist (-c) or a test case (-t)")
+        parser.error("please specify a runlist (-c) or a test case (-t)")
         parser.print_help()
     if options.runlist:
         parse_runlist(tests,options.runlist)
