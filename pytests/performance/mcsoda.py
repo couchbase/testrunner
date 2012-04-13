@@ -1028,7 +1028,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
    while len(threads) > 0:
       threads[0].join(1)
       heartbeat = heartbeat + 1
-      if heartbeat >= 60
+      if heartbeat >= 60:
           heartbeat = 0
           log.info("    mcsoda is running with %s threads" % len(threads))
       threads = [t for t in threads if t.isAlive()]
