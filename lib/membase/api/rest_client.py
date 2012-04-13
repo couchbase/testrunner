@@ -213,8 +213,9 @@ class RestConnection(object):
                                              timeout=timeout)
         return status, content
 
-    def view_results(self, bucket, view, params, limit=100, timeout=120):
-        status, json = self._index_results(bucket, "view", view, params, limit, timeout=timeout)
+    def view_results(self, bucket, ddoc_name, params, limit=100, timeout=120,
+                     view_name=None):
+        status, json = self._index_results(bucket, "view", ddoc_name, params, limit, timeout=timeout, view_name=view_name)
         if not status:
             raise Exception("unable to obtain view results")
         return json
@@ -324,12 +325,15 @@ class RestConnection(object):
 
 
     # type_ is "view" or "spatial"
-    def _index_results(self, bucket, type_, name, params, limit, timeout=120):
+    def _index_results(self, bucket, type_, ddoc_name, params, limit, timeout=120,
+                       view_name=None):
         if type_ == 'all_docs':
             api = self.baseUrl + 'couchBase/{0}/_all_docs'.format(bucket)
         else:
+            if view_name is None:
+                view_name = ddoc_name
             query = 'couchBase/{0}/_design/{1}/_{2}/{3}'
-            api = self.baseUrl + query.format(bucket, name, type_, name)
+            api = self.baseUrl + query.format(bucket, ddoc_name, type_, view_name)
 
         num_params = 0
         if limit != None:
