@@ -73,6 +73,10 @@ If you have errors, wait a little bit as the software is probably still installi
 
 You should see the Couchbase login screen.  Use Administrator and password to login.
 
+h2. Join your nodes.
+
+Next, join your nodes together and rebalance them.
+
 h2. To SSH into your new node(s)
 
 Use...
@@ -87,13 +91,17 @@ After SSH'ing into your node, you can also put load on your configured instance 
 
     /opt/couchbase/bin/memcachetest -l
 
-h2. Join your nodes.
-
-Next, join your nodes together and rebalance them.
-
 h2. Get testrunner
 
-If not already...
+If not already, in your SSH session, install git...
+
+    sudo yum install git
+
+And, if you like emacs...
+
+    sudo yum install emacs
+
+Then, in your SSH session...
 
     git clone git://github.com/couchbase/testrunner.git
 
@@ -103,15 +111,21 @@ To test that you got it, try...
     ./testrunner
     ./testrunner -h
 
+h2. Get your key to onto the EC2 node
+
+For example...
+
+  scp -i ~/steveyen-key.pem ~/steveyen-key.pem ec2-user@ec2-23-22-38-21.compute-1.amazonaws.com:/home/ec2-user/key.pem
+
 h2. Create a testrunner *.ini file
 
-Create a testrunner *.ini that lists your EC2 nodes.
+Create a testrunner *.ini on your EC2 node that lists your EC2 nodes.
 
 For example, the file might be named my-ec2-cluster.ini, with contents like...
 
     [global]
     username:ec2-user
-    ssh_key:/Users/steveyen/steveyen-key.pem
+    ssh_key:/home/ec2-user/key.pem
     
     [membase]
     rest_username:Administrator
@@ -129,8 +143,14 @@ For example, the file might be named my-ec2-cluster.ini, with contents like...
     ip:ec2-23-20-47-95.compute-1.amazonaws.com
     port:8091
 
+h2. Install paramiko
+
+In your SSH session, use...
+
+    sudo yum install python-paramiko
+
 h2. Run a test
 
-For example...
+For example, in your SSH session, run...
 
-    ./testrunner -i tmp/fake.ini -t performance.eperf.EPerfMaster.test_ept_scaled_down_write_1
+    ./testrunner -i tmp/fake.ini -t performance.eperf.EPerfMaster.test_ept_scaled_down_write_1 -p mem_quota=4000,items=100000
