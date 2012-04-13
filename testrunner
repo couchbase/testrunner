@@ -1,7 +1,11 @@
 #!/usr/bin/python
 
+import base64
+import gzip
+from httplib import BadStatusLine
 import os
-import errno
+import urllib2
+import uuid
 import sys
 sys.path = ["lib","pytests"] + sys.path
 
@@ -74,7 +78,6 @@ def parse_args(argv):
     test_input = TestInputParser.get_test_input(argv)
     return tests, test_input, options.ini, options.params , options
 
-
 def find_runlist(filename):
     if filename:
         if os.path.exists(filename):
@@ -113,7 +116,6 @@ def parse_runlist(tests, filename):
         prefix = ".".join(name.split(",")[0].split('.')[0:-1])
         append_test(tests, name)
 
-
 def append_test(tests, name):
     prefix = ".".join(name.split(".")[0:-1])
     if name.find('*') > 0:
@@ -126,6 +128,49 @@ def create_logs_folder():
     if not os.path.exists("logs"):
         os.makedirs("logs")
 
+def create_headers(username, password):
+    authorization = base64.encodestring('%s:%s' % (username, password))
+    return {'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': 'Basic %s' % authorization,
+            'Accept': '*/*'}
+
+def get_server_logs(input, path):
+
+    diag_name = uuid.uuid4()
+    for server in input.servers:
+        print "grabbing diags from ".format(server.ip)
+        diag_url = "http://{0}:{1}/diag".format(server.ip, server.port)
+        print diag_url
+
+        try:
+            req = urllib2.Request(diag_url)
+            req.headers = create_headers(input.membase_settings.rest_username,
+                input.membase_settings.rest_password)
+            filename = "{0}/{1}-{2}-diag.txt".format(path, diag_name, server.ip)
+            page = urllib2.urlopen(req)
+            with open(filename, 'wb') as output:
+                os.write(1, "downloading {0} ...".format(server.ip))
+                while True:
+                    buffer = page.read(65536)
+                    if not buffer:
+                        break
+                    output.write(buffer)
+                    os.write(1, ".")
+            file_input = open('{0}'.format(filename), 'rb')
+            zipped = gzip.open("{0}.gz".format(filename), 'wb')
+            zipped.writelines(file_input)
+            file_input.close()
+            zipped.close()
+
+            os.remove(filename)
+            print "downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename))
+        except urllib2.URLError:
+            print "unable to obtain diags from {0}".format(diag_url)
+        except BadStatusLine:
+            print "unable to obtain diags from {0}".format(diag_url)
+        except Exception:
+            print "unable to obtain diags from {0}".format(diag_url)
+
 if __name__ == "__main__":
     str_time = time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())
     names, test_input, arg_i, arg_p , options = parse_args(sys.argv)
@@ -135,6 +180,7 @@ if __name__ == "__main__":
     create_logs_folder()
     tmp_folder = "logs/testrunner-{0}".format(str_time)
     os.makedirs(tmp_folder)
+
     #this only works on linux/mac
     tmp_folder_abs_path = os.getcwd() + "/" + tmp_folder
     os.environ["TEMP-FOLDER"] = tmp_folder_abs_path
@@ -172,6 +218,11 @@ if __name__ == "__main__":
                 name += "," + key + ":" + value
 
         if result.failures or result.errors:
+            # Immediately get the server logs, if
+            # the test has failed or has errors
+            if "get-logs" in test_input.test_params:
+                get_server_logs(TestInputSingleton.input, tmp_folder)
+
             for failure in result.failures:
                 test_case, failure_string = failure
                 xunit.add_test(name=name, status='fail', time=time_taken,
@@ -188,7 +239,7 @@ if __name__ == "__main__":
             results.append({"result": "pass", "name": name, "time": time_taken})
         xunit.write("{0}/report-{1}".format(tmp_folder, str_time))
         xunit.print_summary()
-        print "logs and results are available under {0}".format(tmp_folder)
+        print "testrunner logs, diags and results are available under {0}".format(tmp_folder)
 
     if "makefile" in test_input.test_params:
         #print out fail for those tests which failed and do sys.exit() error code
