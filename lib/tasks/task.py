@@ -99,7 +99,7 @@ class BucketCreateTask(Task):
         elif self.state == "creating":
             self.create_bucket(task_manager)
         elif self.state == "checking":
-            self.check_bucket_ready()
+            self.check_bucket_ready(task_manager)
         else:
             raise Exception("Bad State in BucketCreateTask")
 
@@ -125,13 +125,18 @@ class BucketCreateTask(Task):
             self.set_result({"status": "error",
                              "value": "Failed to create bucket {0}".format(self.bucket)})
 
-    def check_bucket_ready(self):
-        if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
-            self.set_result({"status": "success", "value": None})
-        else:
-            self.set_result({"status": "error",
-                             "value": "{0} bucket took too long to be ready".format(self.bucket)})
-        self.state == "finished"
+    def check_bucket_ready(self, task_manager):
+        try:
+            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
+                self.set_result({"status": "success", "value": None})
+                self.state == "finished"
+                return
+            else:
+                self.log.info("vbucket map not ready after try {0}".format(self.retries))
+        except Exception as e:
+            self.log.info("vbucket map not ready after try {0}".format(self.retries))
+        self.retries = self.retries + 1
+        task_manager.schedule(self)
 
 class BucketDeleteTask(Task):
     def __init__(self, server, bucket):
