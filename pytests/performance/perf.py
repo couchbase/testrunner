@@ -273,7 +273,9 @@ class PerfBase(unittest.TestCase):
             return
         if total_stats:
             sc.total_stats(total_stats)
+        self.log.info("stopping stats collector")
         sc.stop()
+        self.log.info("stats collector is stopped")
         sc.export(self.spec_reference, self.test_params)
 
     def load(self, num_items, min_value_size=None,
