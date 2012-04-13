@@ -1024,10 +1024,16 @@ def run(cfg, cur, protocol, host_port, user, pswd,
             ((cur.get('cur-gets', 0) + cur.get('cur-sets', 0)) / (t_end - t_start)))
 
    threads = [t for t in threads if t.isAlive()]
+   heartbeat = 0
    while len(threads) > 0:
       threads[0].join(1)
+      heartbeat = heartbeat + 1
+      if heartbeat >= 60
+          heartbeat = 0
+          log.info("    mcsoda is running with %s threads" % len(threads))
       threads = [t for t in threads if t.isAlive()]
 
+   log.info("   mcsoda stopped running.")
    return cur, t_start, t_end
 
 # --------------------------------------------------------
