@@ -9,6 +9,11 @@ import testconstants
 
 log = logger.Logger.get_logger()
 
+try:
+    paralogger = paramiko.util.logging.getLogger()
+    paralogger.setLevel(paramiko.util.logging.WARNING)
+except:
+    pass
 
 class RemoteMachineInfo(object):
     def __init__(self):
