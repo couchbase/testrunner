@@ -149,7 +149,7 @@ class SyncReplicationTest(unittest.TestCase):
             vBucket = crc32.crc32_hash(k)
             mc = self.awareness.memcached(k)
             mc.set(k, 0, 0, value)
-            mc.sync_replication(1, [{"key": k, "vbucket": vBucket}])
+            mc.sync_replication([{"key": k, "vbucket": vBucket}], 1)
         for k in keys:
             mc = self.awareness.memcached(k)
             mc.get(k)
@@ -180,7 +180,7 @@ class SyncReplicationTest(unittest.TestCase):
             mc.set(k, 0, 0, value)
             mc.get(k)
             try:
-                mc.sync_replication(replica, [{"key": k, "vbucket": vBucket}])
+                mc.sync_replication([{"key": k, "vbucket": vBucket}], replica)
                 msg = "server did not raise an error when running sync_replication with {0} replicas"
                 self.fail(msg.format(replica))
             except MemcachedError as error:
@@ -206,8 +206,7 @@ class SyncReplicationTest(unittest.TestCase):
                 count = 0
                 expected_error = 0
                 while count < 100:
-                    a, b, response = not_your_vbucket_mc.sync_replication(1,
-                        [{"key": k, "vbucket": vBucket}])
+                    a, b, response = not_your_vbucket_mc.sync_replication([{"key": k, "vbucket": vBucket}], 1)
                     count += 1
                     self.log.info("response : {0}".format(response))
                     if response and response[0]["event"] != "invalid key":
