@@ -1079,7 +1079,8 @@ class DocumentGenerator(object):
 
 class LoadWithMcsoda(object):
 
-    def __init__(self, master, num_docs, prefix='', bucket='default', password='', protocol='membase-binary', port=11211):
+    def __init__(self, master, num_docs, prefix='', bucket='default', password='',
+                 protocol='membase-binary', port=11211):
 
         rest = RestConnection(master)
         vBuckets = rest.get_vbuckets(bucket)
@@ -1088,7 +1089,7 @@ class LoadWithMcsoda(object):
         self.cfg = {
                 'max-items': num_docs,
                 'max-creates': num_docs,
-                'min-value-size': 512,
+                'min-value-size': 128,
                 'exit-after-creates': 1,
                 'ratio-sets': 1,
                 'ratio-misses': 0,
@@ -1133,7 +1134,8 @@ class LoadWithMcsoda(object):
         return self.cfg
 
     def load_data(self):
-        cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.user, self.pswd, ctl=self.ctl)
+        cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.user, \
+            self.pswd, ctl=self.ctl)
         return cur
 
     def load_stop(self):

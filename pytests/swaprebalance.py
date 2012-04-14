@@ -8,6 +8,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelpe
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached, LoadWithMcsoda
 from membase.helper.failover_helper import FailoverHelper
+from threading import Thread
 
 class SwapRebalanceBase(unittest.TestCase):
 
@@ -25,7 +26,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Initialize test params
         self.replica  = self.input.param("replica", 1)
-        self.keys_count = self.input.param("keys-count", 10000)
+        self.keys_count = self.input.param("keys-count", 100000)
         self.load_ratio = self.input.param("load-ratio", 1)
         self.num_buckets = self.input.param("num-buckets", 1)
         self.failover_factor = self.num_swap = self.input.param("num-swap", 1)
@@ -80,68 +81,6 @@ class SwapRebalanceBase(unittest.TestCase):
             self.assertTrue(ready, msg="wait_for_memcached failed")
 
     @staticmethod
-    def load_data_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data, test):
-        buckets = rest.get_buckets()
-        for bucket in buckets:
-            inserted_count, rejected_count =\
-            MemcachedClientHelper.load_bucket(name=bucket.name,
-                servers=rebalanced_servers,
-                ram_load_ratio=load_ratio,
-                value_size_distribution=distribution,
-                number_of_threads=1,
-                write_only=True,
-                moxi=True)
-            test.log.info('inserted {0} keys'.format(inserted_count))
-            bucket_data[bucket.name]["items_inserted_count"] += inserted_count
-
-    @staticmethod
-    def threads_for_buckets(rest, load_ratio, distribution, rebalanced_servers, bucket_data, delete_ratio=0,
-                            expiry_ratio=0):
-        buckets = rest.get_buckets()
-        for bucket in buckets:
-            threads = MemcachedClientHelper.create_threads(servers=rebalanced_servers,
-                name=bucket.name,
-                ram_load_ratio=load_ratio,
-                value_size_distribution=distribution,
-                number_of_threads=4,
-                delete_ratio=delete_ratio,
-                expiry_ratio=expiry_ratio)
-            [t.start() for t in threads]
-            bucket_data[bucket.name]["threads"] = threads
-        return bucket_data
-
-    @staticmethod
-    def bucket_data_init(rest):
-        bucket_data = {}
-        buckets = rest.get_buckets()
-        for bucket in buckets:
-            bucket_data[bucket.name] = {}
-            bucket_data[bucket.name]['items_inserted_count'] = 0
-            bucket_data[bucket.name]['inserted_keys'] = []
-        return bucket_data
-
-    @staticmethod
-    def load_data(master, bucket, keys_count=-1, load_ratio=-1, delete_ratio=0, \
-                  expiry_ratio=0, test=None, wait_to_drain=True):
-        inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
-            name=bucket,
-            ram_load_ratio=load_ratio,
-            number_of_items=keys_count,
-            number_of_threads=2,
-            write_only=True,
-            delete_ratio=delete_ratio,
-            expiry_ratio=expiry_ratio,
-            moxi=True)
-        if wait_to_drain:
-            test.log.info("wait until data is completely persisted on the disk")
-            ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, timeout_in_seconds=120)
-            test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-            ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0, timeout_in_seconds=120)
-            test.assertTrue(ready, "wait_for ep_flusher_todo == 0 failed")
-        return inserted_keys
-
-    @staticmethod
     def verify_data(master, inserted_keys, bucket, test):
         test.log.info("Verifying data")
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
@@ -161,6 +100,54 @@ class SwapRebalanceBase(unittest.TestCase):
             test.assertTrue(verified, "Lost items!!.. failing test")
 
     @staticmethod
+    def start_load_phase(self, master):
+        loaders = []
+        rest = RestConnection(master)
+        for bucket in rest.get_buckets():
+            loader = {}
+            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
+                password=bucket.saslPassword)
+            loader["mcsoda"].cfg["exit-after-creates"] = 1
+            loader["mcsoda"].cfg["json"] = 0
+            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
+            loader["thread"].daemon = True
+            loaders.append(loader)
+        for loader in loaders:
+            loader["thread"].start()
+        return loaders
+
+    @staticmethod
+    def start_access_phase(self, master):
+        loaders = []
+        rest = RestConnection(master)
+        for bucket in rest.get_buckets():
+            loader = {}
+            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
+                    password=bucket.saslPassword)
+            loader["mcsoda"].cfg["exit-after-creates"] = 0
+            loader["mcsoda"].cfg["ratio-sets"] = 0.8
+            loader["mcsoda"].cfg["ratio-hot"] = 0.6
+            loader["mcsoda"].cfg["ratio-creates"] = 0.08
+            loader["mcsoda"].cfg["ratio-deletes"] = 0.13
+            loader["mcsoda"].cfg["ratio-expirations"] = 0.03
+            loader["mcsoda"].cfg["json"] = 0
+            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
+            loader["thread"].daemon = True
+            loaders.append(loader)
+        for loader in loaders:
+            loader["thread"].start()
+
+        return loaders
+
+    @staticmethod
+    def stop_load(loaders, do_stop=True):
+        if do_stop:
+            for loader in loaders:
+                loader["mcsoda"].load_stop()
+        for loader in loaders:
+            loader["thread"].join()
+
+    @staticmethod
     def _common_test_body_swap_rebalance(self, do_stop_start=False):
         master = self.servers[0]
         rest = RestConnection(master)
@@ -169,23 +156,23 @@ class SwapRebalanceBase(unittest.TestCase):
         intial_severs = self.servers[:num_initial_servers]
 
         # Cluster all starting set of servers
+        self.log.info("INITIAL REBALANCE PHASE")
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+
+        self.log.info("CREATE BUCKET PHASE")
         if self.num_buckets==1:
             SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
         else:
             SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
-        self.log.info("inserting some items in the master before adding any nodes")
-        bucket_data = SwapRebalanceBase.bucket_data_init(rest)
-        for bucket in rest.get_buckets():
-            inserted_keys = SwapRebalanceBase.load_data(master, bucket.name, self.keys_count, \
-                self.load_ratio, delete_ratio=0, expiry_ratio=0, test=self, wait_to_drain=False)
-            self.log.info("inserted {0} keys".format(len(inserted_keys)))
-            bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
-            bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
+        self.log.info("DATA LOAD PHASE")
+        loaders = SwapRebalanceBase.start_load_phase(self, master)
+
+        # Wait till load phase is over
+        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
-        self.log.info("Starting swap rebalance")
         self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
 
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.num_swap)
@@ -208,12 +195,18 @@ class SwapRebalanceBase(unittest.TestCase):
 
         if self.swap_orchestrator:
             rest = RestConnection(new_swap_servers[0])
+            master = new_swap_servers[0]
 
+        self.log.info("DATA ACCESS PHASE")
+        loaders = SwapRebalanceBase.start_access_phase(self, master)
+
+        self.log.info("SWAP REBALANCE PHASE")
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
             ejectedNodes=optNodesIds)
 
         if do_stop_start:
             # Rebalance is stopped at 20%, 40% and 60% completion
+            self.log.info("STOP/START SWAP REBALANCE PHASE")
             for i in [1, 2, 3]:
                 expected_progress = 20*i
                 reached = RestHelper(rest).rebalance_reached(expected_progress)
@@ -227,10 +220,17 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
 
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
+
+        self.log.info("DONE DATA ACCESS PHASE")
         for bucket in rest.get_buckets():
-            SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
-                bucket.name, self)
-        SwapRebalanceBase.items_verification(new_swap_servers[0], self)
+        #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
+        #        bucket.name, self)
+            RebalanceHelper.wait_for_persistence(master, bucket.name)
+
+        self.log.info("VERIFICATION PHASE")
+        SwapRebalanceBase.items_verification(master, self)
 
     @staticmethod
     def _common_test_body_failed_swap_rebalance(self):
@@ -241,23 +241,23 @@ class SwapRebalanceBase(unittest.TestCase):
         intial_severs = self.servers[:num_initial_servers]
 
         # Cluster all starting set of servers
+        self.log.info("INITIAL REBALANCE PHASE")
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+
+        self.log.info("CREATE BUCKET PHASE")
         if self.num_buckets==1:
             SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
         else:
             SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
-        self.log.info("inserting some items in the master before adding any nodes")
-        bucket_data = SwapRebalanceBase.bucket_data_init(rest)
-        for bucket in rest.get_buckets():
-            inserted_keys = SwapRebalanceBase.load_data(master, bucket.name, self.keys_count,\
-                self.load_ratio, delete_ratio=0, expiry_ratio=0, test=self, wait_to_drain=True)
-            self.log.info("inserted {0} keys".format(len(inserted_keys)))
-            bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
-            bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
+        self.log.info("DATA LOAD PHASE")
+        loaders = SwapRebalanceBase.start_load_phase(self, master)
+
+        # Wait till load phase is over
+        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
-        self.log.info("Starting swap rebalance")
         self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.num_swap)
         optNodesIds = [node.id for node in toBeEjectedNodes]
@@ -266,6 +266,7 @@ class SwapRebalanceBase(unittest.TestCase):
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
             optNodesIds[0] = content
+
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
 
@@ -275,15 +276,21 @@ class SwapRebalanceBase(unittest.TestCase):
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
 
-        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
-            ejectedNodes=optNodesIds)
-
         if self.swap_orchestrator:
             rest = RestConnection(new_swap_servers[0])
+            master = new_swap_servers[0]
+
+        self.log.info("DATA ACCESS PHASE")
+        loaders = SwapRebalanceBase.start_access_phase(self, master)
+
+        self.log.info("SWAP REBALANCE PHASE")
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+            ejectedNodes=optNodesIds)
 
         # Rebalance is failed at 20%, 40% and 60% completion
         for i in [1, 2, 3]:
             expected_progress = 20*i
+            self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(expected_progress))
             reached = RestHelper(rest).rebalance_reached(expected_progress)
             command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
             memcached_restarted = rest.diag_eval(command)
@@ -295,10 +302,18 @@ class SwapRebalanceBase(unittest.TestCase):
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
+
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
+
+        self.log.info("DONE DATA ACCESS PHASE")
         for bucket in rest.get_buckets():
-            SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
-                bucket.name, self)
-        SwapRebalanceBase.items_verification(new_swap_servers[0], self)
+        #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
+        #        bucket.name, self)
+            RebalanceHelper.wait_for_persistence(master, bucket.name)
+
+        self.log.info("VERIFICATION PHASE")
+        SwapRebalanceBase.items_verification(master, self)
 
     @staticmethod
     def _add_back_failed_node(self, do_node_cleanup=False):
@@ -307,32 +322,36 @@ class SwapRebalanceBase(unittest.TestCase):
         creds = self.input.membase_settings
 
         # Cluster all servers
+        self.log.info("INITIAL REBALANCE PHASE")
         RebalanceHelper.rebalance_in(self.servers, len(self.servers)-1)
 
+        self.log.info("CREATE BUCKET PHASE")
         if self.num_buckets==1:
             SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
         else:
             SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
-        self.log.info("inserting some items in the master before adding any nodes")
-        bucket_data = SwapRebalanceBase.bucket_data_init(rest)
-        for bucket in rest.get_buckets():
-            inserted_keys = SwapRebalanceBase.load_data(master, bucket.name, self.keys_count,\
-                self.load_ratio, delete_ratio=0, expiry_ratio=0, test=self, wait_to_drain=True)
-            self.log.info("inserted {0} keys".format(len(inserted_keys)))
-            bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
-            bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
+        self.log.info("DATA LOAD PHASE")
+        loaders = SwapRebalanceBase.start_load_phase(self, master)
+
+        # Wait till load phase is over
+        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
-        self.log.info("Failing over a node")
         self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.failover_factor)
         optNodesIds = [node.id for node in toBeEjectedNodes]
+
         if self.fail_orchestrator:
             status, content = ClusterHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
             optNodesIds[0] = content
+            master = self.servers[-1]
+
+        self.log.info("DATA ACCESS PHASE")
+        loaders = SwapRebalanceBase.start_access_phase(self, master)
 
         #Failover selected nodes
         for node in optNodesIds:
@@ -375,9 +394,16 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(add_back_servers))
 
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
+
+        self.log.info("DONE DATA ACCESS PHASE")
         for bucket in rest.get_buckets():
-            SwapRebalanceBase.verify_data(master, bucket_data[bucket.name].get('inserted_keys'), \
-                bucket.name, self)
+        #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
+        #        bucket.name, self)
+            RebalanceHelper.wait_for_persistence(master, bucket.name)
+
+        self.log.info("VERIFICATION PHASE")
         SwapRebalanceBase.items_verification(master, self)
 
     @staticmethod
@@ -389,24 +415,23 @@ class SwapRebalanceBase(unittest.TestCase):
         intial_severs = self.servers[:num_initial_servers]
 
         # Cluster all starting set of servers
+        self.log.info("INITIAL REBALANCE PHASE")
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
 
+        self.log.info("CREATE BUCKET PHASE")
         if self.num_buckets==1:
             SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
         else:
             SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
-        self.log.info("inserting some items in the master before adding any nodes")
-        bucket_data = SwapRebalanceBase.bucket_data_init(rest)
-        for bucket in rest.get_buckets():
-            inserted_keys = SwapRebalanceBase.load_data(master, bucket.name, self.keys_count,\
-                self.load_ratio, delete_ratio=0, expiry_ratio=0, test=self, wait_to_drain=True)
-            self.log.info("inserted {0} keys".format(len(inserted_keys)))
-            bucket_data[bucket.name]['inserted_keys'].extend(inserted_keys)
-            bucket_data[bucket.name]["items_inserted_count"] += len(inserted_keys)
+        self.log.info("DATA LOAD PHASE")
+        loaders = SwapRebalanceBase.start_load_phase(self, master)
+
+        # Wait till load phase is over
+        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
-        self.log.info("Trigger Failover")
         self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.failover_factor)
         optNodesIds = [node.id for node in toBeEjectedNodes]
@@ -416,6 +441,10 @@ class SwapRebalanceBase(unittest.TestCase):
             format(status, content))
             optNodesIds[0] = content
 
+        self.log.info("DATA ACCESS PHASE")
+        loaders = SwapRebalanceBase.start_access_phase(self, master)
+
+        self.log.info("FAILOVER PHASE")
         #Failover selected nodes
         for node in optNodesIds:
             self.log.info("failover node {0} and rebalance afterwards".format(node))
@@ -432,14 +461,22 @@ class SwapRebalanceBase(unittest.TestCase):
 
         if self.fail_orchestrator:
             rest = RestConnection(new_swap_servers[0])
+            master = new_swap_servers[0]
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(new_swap_servers))
 
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
+
+        self.log.info("DONE DATA ACCESS PHASE")
         for bucket in rest.get_buckets():
-            SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
-                bucket.name, self)
-        SwapRebalanceBase.items_verification(new_swap_servers[0], self)
+        #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
+        #        bucket.name, self)
+            RebalanceHelper.wait_for_persistence(master, bucket.name)
+
+        self.log.info("VERIFICATION PHASE")
+        SwapRebalanceBase.items_verification(master, self)
 
 class SwapRebalanceBasicTests(unittest.TestCase):
 
