@@ -1017,6 +1017,12 @@ class GeneratedDocuments(object):
     def __len__(self):
         return self._items
 
+    def reset(self):
+        self._pointer = 0
+
+    def has_next(self):
+        return self._pointer != self._items
+
     # Returns the next value of the iterator
     def next(self):
         if self._pointer == self._items:
