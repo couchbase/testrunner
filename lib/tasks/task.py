@@ -9,6 +9,7 @@ from memcached.helper.data_helper import KVStoreAwareSmartClient, KVStoreSmartCl
 from mc_bin_client import MemcachedError
 import copy
 import json
+import uuid
 
 class Task():
     def __init__(self, name):
@@ -277,7 +278,7 @@ class GenericLoadingTask(Thread, Task):
         elif self.state == "running":
             self.log.info("{0}: {1} ops completed".format(self.name, self.doc_op_count))
             if self.is_alive():
-                task_manager.schedule(self, 2)
+                task_manager.schedule(self, 5)
             else:
                 self.join()
                 self.state = "finished"
@@ -302,7 +303,7 @@ class GenericLoadingTask(Thread, Task):
                     else:
                         self.client.set(key, value, expiration)
                 if op == "get":
-                    self.client.mc_get(key)
+                    value = self.client.mc_get(key)
                 if op == "delete":
                     self.client.delete(key)
                 ok = True
@@ -313,6 +314,8 @@ class GenericLoadingTask(Thread, Task):
             except AssertionError:
                 retry_count = retry_count + 1
 
+        return value
+
 class LoadDocGeneratorTask(GenericLoadingTask):
     def __init__(self, rest, doc_generators, bucket = "default", kv_store = None,
                  store_enabled = True, expiration = None, loop = False):
@@ -321,7 +324,7 @@ class LoadDocGeneratorTask(GenericLoadingTask):
         self.doc_generators = doc_generators
         self.expiration = None
         self.loop = loop
-        self.name = "doc-load-task"
+        self.name = "doc-load-task{0}".format(str(uuid.uuid4())[:7])
 
     def run(self):
         while True:
@@ -349,7 +352,7 @@ class DocumentAccessTask(GenericLoadingTask):
 
         GenericLoadingTask.__init__(self, rest, bucket, info = info)
         self.doc_ids = doc_ids
-        self.name = "doc-get-task"
+        self.name = "doc-get-task{0}".format(str(uuid.uuid4())[:7])
         self.loop = loop
 
     def run(self):
@@ -365,12 +368,42 @@ class DocumentAccessTask(GenericLoadingTask):
                 self.set_result({"status": "success", "value": self.doc_op_count})
                 return
 
+class DocumentExpireTask(GenericLoadingTask):
+    def __init__(self, rest, doc_ids, bucket = "default", info = None,
+                 kv_store = None, store_enabled = True, expiration = 5):
+
+        GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
+        self.doc_ids = doc_ids
+        self.name = "doc-expire-task{0}".format(str(uuid.uuid4())[:7])
+        self.expiration = expiration
+
+    def run(self):
+        for _id in self.doc_ids:
+            try:
+                item = self.do_task_op("get", _id)
+                if item:
+                    val = item['value']
+                    self.do_task_op("set", _id, val, self.expiration)
+                    self.doc_op_count = self.doc_op_count + 1
+                else:
+                    self.set_result({"status": "error",
+                                     "value": "failed get key to expire {0}".format(_id)})
+            except Exception as e:
+                self.set_result({"status": "error",
+                                 "value": "expiration failed {0}".format(e)})
+
+        # wait till docs are 'expected' to be expired before returning success
+        time.sleep(self.expiration)
+        self.set_result({"status": "success", "value": self.doc_op_count})
+
+
 class DocumentDeleteTask(GenericLoadingTask):
     def __init__(self, rest, doc_ids, bucket = "default", info = None,
                  kv_store = None, store_enabled = True):
+
         GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
         self.doc_ids = doc_ids
-        self.name = "doc-delete-task"
+        self.name = "doc-delete-task{0}".format(str(uuid.uuid4())[:7])
 
     def run(self):
         for _id in self.doc_ids:
