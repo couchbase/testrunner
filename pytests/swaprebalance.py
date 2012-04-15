@@ -141,9 +141,8 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def stop_load(loaders, do_stop=True):
-        if do_stop:
-            for loader in loaders:
-                loader["mcsoda"].load_stop()
+        for loader in loaders:
+            loader["mcsoda"].load_stop()
         for loader in loaders:
             loader["thread"].join()
 
@@ -169,7 +168,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        SwapRebalanceBase.stop_load(loaders)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
@@ -254,7 +253,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        SwapRebalanceBase.stop_load(loaders)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
@@ -335,7 +334,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        SwapRebalanceBase.stop_load(loaders)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
@@ -428,7 +427,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        SwapRebalanceBase.stop_load(loaders)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
