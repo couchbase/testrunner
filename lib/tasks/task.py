@@ -10,9 +10,15 @@ from mc_bin_client import MemcachedError
 import copy
 import json
 
+PENDING='PENDING'
+EXECUTING='EXECUTING'
+CHECKING='CHECKING'
+FINISHED='FINISHED'
+
 class Task():
     def __init__(self, name):
         self.log = logger.Logger.get_logger()
+        self.state = PENDING
         self.name = name
         self.cancelled = False
         self.retries = 0
@@ -25,6 +31,27 @@ class Task():
         if self.res is not None and self.res['status'] == 'timed_out':
             return True
         return False
+
+    def step(self, task_manager):
+        if self.cancelled:
+            self.result = self.set_result({"status": "cancelled", "value": None})
+        elif self.is_timed_out():
+            return
+        elif self.state == PENDING:
+            self.state = EXECUTING
+            task_manager.schedule(self)
+        elif self.state == EXECUTING:
+            self.execute(task_manager)
+        elif self.state == CHECKING:
+            self.check(task_manager)
+        else:
+            raise Exception("Bad State in {0}: {1}".format(self.name, self.state))
+
+    def execute(self, task_manager):
+        raise NotImplementedError
+
+    def check(self, task_manager):
+        raise NotImplementedError
 
     def set_result(self, result):
         self.res = result
@@ -45,37 +72,23 @@ class Task():
 class NodeInitializeTask(Task):
     def __init__(self, server):
         Task.__init__(self, "node_init_task")
-        self.state = "initializing"
         self.server = server
+        self.quota = 0
 
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "node init"
-            task_manager.schedule(self)
-        elif self.state == "node init":
-            self.init_node()
-            self.state = "cluster init"
-            task_manager.schedule(self)
-        elif self.state == "cluster init":
-            self.init_node_memory()
-        else:
-            raise Exception("Bad State in NodeInitializationTask")
-
-    def init_node(self):
+    def execute(self, task_manager):
         rest = RestConnection(self.server)
-        rest.init_cluster(self.server.rest_username, self.server.rest_password)
-
-    def init_node_memory(self):
-        rest = RestConnection(self.server)
+        username = self.server.rest_username
+        password = self.server.rest_password
+        rest.init_cluster(username, password)
         info = rest.get_nodes_self()
-        quota = int(info.mcdMemoryReserved * 2 / 3)
-        rest.init_cluster_memoryQuota(self.server.rest_username, self.server.rest_password, quota)
-        self.state = "finished"
-        self.set_result({"status": "success", "value": quota})
+        self.quota = int(info.mcdMemoryReserved * 2 / 3)
+        rest.init_cluster_memoryQuota(username, password, self.quota)
+        self.state = CHECKING
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result({"status": "success", "value": self.quota})
 
 class BucketCreateTask(Task):
     def __init__(self, server, bucket='default', replicas=1, port=11210, size=0, password=None):
@@ -86,24 +99,8 @@ class BucketCreateTask(Task):
         self.port = port
         self.size = size
         self.password = password
-        self.state = "initializing"
 
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "creating"
-            task_manager.schedule(self)
-        elif self.state == "creating":
-            self.create_bucket(task_manager)
-        elif self.state == "checking":
-            self.check_bucket_ready(task_manager)
-        else:
-            raise Exception("Bad State in BucketCreateTask")
-
-    def create_bucket(self, task_manager):
+    def execute(self, task_manager):
         rest = RestConnection(self.server)
         if self.size <= 0:
             info = rest.get_nodes_self()
@@ -118,18 +115,18 @@ class BucketCreateTask(Task):
                                proxyPort=self.port,
                                authType=authType,
                                saslPassword=self.password)
-            self.state = "checking"
+            self.state = CHECKING
             task_manager.schedule(self)
         except BucketCreationException:
-            self.state = "finished"
+            self.state = FINISHED
             self.set_result({"status": "error",
                              "value": "Failed to create bucket {0}".format(self.bucket)})
 
-    def check_bucket_ready(self, task_manager):
+    def check(self, task_manager):
         try:
             if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
                 self.set_result({"status": "success", "value": None})
-                self.state == "finished"
+                self.state == FINISHED
                 return
             else:
                 self.log.info("vbucket map not ready after try {0}".format(self.retries))
@@ -143,41 +140,25 @@ class BucketDeleteTask(Task):
         Task.__init__(self, "bucket_delete_task")
         self.server = server
         self.bucket = bucket
-        self.state = "initializing"
 
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "creating"
-            task_manager.schedule(self)
-        elif self.state == "creating":
-            self.delete_bucket(task_manager)
-        elif self.state == "checking":
-            self.check_bucket_deleted()
-        else:
-            raise Exception("Bad State in BucketDeleteTask")
-
-    def delete_bucket(self, task_manager):
+    def execute(self, task_manager):
         rest = RestConnection(self.server)
         if rest.delete_bucket(self.bucket):
-            self.state = "checking"
+            self.state = CHECKING
             task_manager.schedule(self)
         else:
-            self.state = "finished"
+            self.state = FINISHED
             self.set_result({"status": "error",
                              "value": "Failed to delete bucket {0}".format(self.bucket)})
 
-    def check_bucket_deleted(self):
+    def check(self, task_manager):
         rest = RestConnection(self.server)
         if BucketOperationHelper.wait_for_bucket_deletion(self.bucket, rest, 200):
             self.set_result({"status": "success", "value": None})
         else:
             self.set_result({"status": "error",
                              "value": "{0} bucket took too long to delete".format(self.bucket)})
-        self.state = "finished"
+        self.state = FINISHED
 
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[]):
@@ -185,39 +166,24 @@ class RebalanceTask(Task):
         self.servers = servers
         self.to_add = to_add
         self.to_remove = to_remove
-        self.state = "initializing"
 
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "add_nodes"
-            task_manager.schedule(self)
-        elif self.state == "add_nodes":
+    def execute(self, task_manager):
+        try:
             self.add_nodes(task_manager)
-        elif self.state == "start_rebalance":
             self.start_rebalance(task_manager)
-        elif self.state == "rebalancing":
-            self.rebalancing(task_manager)
-        else:
-            raise Exception("Bad State in RebalanceTask: {0}".format(self.state))
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except Exception as e:
+            self.state = FINISHED
+            self.set_result({"status": "error", "value": e})
 
     def add_nodes(self, task_manager):
         master = self.servers[0]
         rest = RestConnection(master)
-        try:
-            for node in self.to_add:
-                print node
-                self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
-                added = rest.add_node(master.rest_username, master.rest_password,
-                                      node.ip, node.port)
-            self.state = "start_rebalance"
-            task_manager.schedule(self)
-        except Exception as e:
-            self.state = "finished"
-            self.set_result({"status": "error", "value": e})
+        for node in self.to_add:
+            self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
+            added = rest.add_node(master.rest_username, master.rest_password,
+                                  node.ip, node.port)
 
     def start_rebalance(self, task_manager):
         rest = RestConnection(self.servers[0])
@@ -225,21 +191,15 @@ class RebalanceTask(Task):
         ejectedNodes = []
         for node in self.to_remove:
             ejectedNodes.append(node.id)
-        try:
-            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
-            self.state = "rebalancing"
-            task_manager.schedule(self)
-        except Exception as e:
-            self.state = "finishing"
-            self.set_result({"status": "error", "value": e})
+        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
 
-    def rebalancing(self, task_manager):
+    def check(self, task_manager):
         rest = RestConnection(self.servers[0])
         progress = rest._rebalance_progress()
         if progress is not -1 and progress is not 100:
             task_manager.schedule(self, 10)
         else:
-            self.state = "finishing"
+            self.state = FINISHED
             self.set_result({"status": "success", "value": None})
 
 
@@ -249,7 +209,6 @@ class GenericLoadingTask(Thread, Task):
         Task.__init__(self, "load_gen_task")
         self.rest = rest
         self.client = KVStoreAwareSmartClient(rest, bucket, kv_store, info, store_enabled)
-        self.state = "pending"
         self.doc_ids = []
 
     def cancel(self):
@@ -257,24 +216,21 @@ class GenericLoadingTask(Thread, Task):
         self.join()
         self.log.info("cancelling LoadDocGeneratorTask")
 
-    def step(self, task_manager):
-        if self.state == "pending":
-            self.state = "running"
-            task_manager.schedule(self)
-        elif self.state == "running":
-            self.start()
-            self.state = "finished"
-        else:
-            raise Exception("Bad State in DocumentGeneratorTask")
+    def execute(self, task_manager):
+        self.start()
+        self.state = FINISHED
+
+    def check(self, task_manager):
+        pass
 
     def run(self):
         while self.has_next() and not self.cancelled:
             op, key, value, exp = self.next()
             if not self._try_operation(op, key, value, exp):
-                self.state = "finished"
+                self.state = FINISHED
                 self.set_result({"status": "error", "value": "Failed op on {0}".format(key)})
             self.doc_ids.append(key)
-        self.state = "finished"
+        self.state = FINISHED
         self.set_result({"status": "success", "value": self.doc_ids})
 
     def _try_operation(self, op, key, value, exp):
