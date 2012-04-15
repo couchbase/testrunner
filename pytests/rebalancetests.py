@@ -1239,3 +1239,87 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
         log.info("Test inputs {0}".format(self._input.test_params))
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
         self._common_test_body(keys_count, load_ratio, replica, 1, True, delete_ratio, expiry_ratio)
+class RebalanceTaskHelper():
+    @staticmethod
+    def add_node_init_task(tm, server):
+        _t = task.NodeInitializeTask(server)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t)
+
+    @staticmethod
+    def add_nodes_init_task(tm, servers):
+        return [TaskHelper.add_node_init_task(tm, server) for server in servers ]
+
+    @staticmethod
+    def add_bucket_create_task(tm, server, bucket='default', replicas=1, port=11210, size=0,
+                           password=None, monitor = True):
+        _t = task.BucketCreateTask(server, bucket, replicas, port, size, password)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
+
+    @staticmethod
+    def add_bucket_delete_task(tm, server, bucket='default', monitor = True):
+        _t = task.BucketDeleteTask(server, bucket)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
+
+
+    @staticmethod
+    def add_rebalance_task(tm, servers, to_add, to_remove, monitor = False):
+        _t = task.RebalanceTask(servers, to_add, to_remove)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
+
+    @staticmethod
+    def incremental_rebalance_in_tasks(tm, servers, to_add, delay = 0):
+        return [ RebalanceTaskHelper.schedule_task_helper(tm, _t, True, delay) for _t in
+                    [ task.RebalanceTask(servers, [new_server], []) for new_server in to_add ]]
+
+    @staticmethod
+    def incremental_rebalance_out_tasks(tm, servers, to_remove):
+        return [ RebalanceTaskHelper.schedule_task_helper(tm, _t, True) for _t in
+                    [ task.RebalanceTask(servers, [], [old_server]) for old_server in to_remove ]]
+
+
+    @staticmethod
+    def add_doc_gen_task(tm, rest, count, bucket = "default", kv_store = None, store_enabled = True,
+                           kv_template = None, seed = None, sizes = None, expiration = None,
+                           loop = False, monitor = False, doc_generators = None):
+        doc_generators = doc_generators or DocumentGenerator.get_doc_generators(count, kv_template, seed, sizes)
+        _t = task.LoadDocGeneratorTask(rest, doc_generators, bucket, kv_store, store_enabled, expiration, loop)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
+
+    @staticmethod
+    def add_doc_del_task(tm, rest, keys, bucket = "default", info = None,
+                         kv_store = None, store_enabled = True,
+                         monitor = False, delay = 0):
+        _t = task.DocumentDeleteTask(rest, keys, bucket, info, kv_store, store_enabled)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor, delay)
+
+    @staticmethod
+    def add_doc_exp_task(tm, rest, keys, bucket = "default", info = None,
+                         kv_store = None, store_enabled = True,
+                         monitor = False, delay = 0, expiration = 5):
+        _t = task.DocumentExpireTask(rest, keys, bucket, info, kv_store,
+                                     store_enabled, expiration = expiration)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor, delay)
+
+
+
+    @staticmethod
+    def add_doc_get_task(tm, rest, keys, bucket = "default", info = None,
+                         loop = False, monitor = False, delay = 0):
+        _t = task.DocumentAccessTask(rest, keys, bucket, info, loop)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor, delay)
+
+
+    @staticmethod
+    def add_kv_integrity_helper(tm, rest, kv_store, bucket = "default", monitor = True):
+        _t = task.KVStoreIntegrityTask(rest, kv_store, bucket)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
+
+
+    @staticmethod
+    def schedule_task_helper(tm, task, monitor = False, delay = 0):
+        tm.schedule(task, delay)
+        if monitor:
+            return task.result()
+        return task
+
+
