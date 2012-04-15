@@ -821,23 +821,46 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         VBucketAwareMemcached.__init__(self, rest, bucket, info)
         self.kv_store = kv_store or ClientKeyValueStore()
         self.store_enabled = store_enabled
+        self._rlock = threading.Lock()
 
 
     def set(self, key, value, ttl = -1):
 
-        if ttl >= 0:
-            self.memcached(key).set(key, ttl, 0, value)
-        else:
-            self.memcached(key).set(key, 0, 0, value)
 
-        if self.store_enabled:
-            self.kv_store.write(key, hashlib.md5(value).digest(), ttl)
+        self._rlock.acquire()
+        try:
+            if ttl >= 0:
+                self.memcached(key).set(key, ttl, 0, value)
+            else:
+                self.memcached(key).set(key, 0, 0, value)
+
+            if self.store_enabled:
+                self.kv_store.write(key, hashlib.md5(value).digest(), ttl)
+        except MemcachedError as e:
+            self._rlock.release()
+            raise MemcachedError(e.status,  e.msg)
+        except AssertionError:
+            self._rlock.release()
+            raise AssertionError
+
+        self._rlock.release()
+
 
 
     def delete(self, key):
-        self.memcached(key).delete(key)
-        if self.store_enabled:
-            self.kv_store.delete(key)
+        try: 
+            self._rlock.acquire()
+            opaque, cas, data = self.memcached(key).delete(key)
+            if self.store_enabled and cas == 0:
+                self.kv_store.delete(key)
+                self._rlock.release()
+            else:
+                self._rlock.release()
+                raise MemcachedError(7,  "Invalid cas value")
+        except Exception as e:
+            self._rlock.release()
+            raise MemcachedError(7,  e)
+
 
     def get_valid_key(self, key):
         return self.get_key_check_status(key, "valid")
@@ -897,9 +920,17 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
             item["value"] = v
         except MemcachedError:
             msg = "key {0} doesn't exist in memcached".format(key)
-            #self.log.info(msg)
 
         return item
+
+    def kv_mc_sync_get(self, key, status):
+        self._rlock.acquire()
+        kv_item = self.get_key_check_status(key, status)
+        mc_item = self.mc_get(key)
+        self._rlock.release()
+
+        return kv_item, mc_item
+
 
 class KVStoreSmartClientHelper(object):
 
