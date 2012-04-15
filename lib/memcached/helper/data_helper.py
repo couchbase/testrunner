@@ -1104,6 +1104,39 @@ class DocumentGenerator(object):
 
         return doc_gen_iterators
 
+    @staticmethod
+    def get_doc_generators_by_load_ratio(rest,
+                                         bucket='default',
+                                         ram_load_ratio = 1,
+                                         value_size_distribution=None,
+                                         seed = None):
+
+        log = logger.Logger.get_logger()
+
+        if ram_load_ratio < 0 :
+            raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
+                                                message="ram_load_ratio")
+        if not value_size_distribution:
+            value_size_distribution = {16: 0.25, 128: 0.25, 512: 0.25, 1024: 0.25}
+
+        list = []
+
+
+        info = rest.get_bucket(bucket)
+        emptySpace = info.stats.ram - info.stats.memUsed
+        space_to_fill = (int((emptySpace * ram_load_ratio) / 100.0))
+        log.info('space_to_fill : {0}, emptySpace : {1}'.format(space_to_fill, emptySpace))
+        for size, probability in value_size_distribution.items():
+            how_many = int(space_to_fill / (size + 250) * probability)
+            doc_seed = seed or str(uuid.uuid4())
+            kv_template = {"name": "user-${prefix}", "payload": "memcached-json-${prefix}-${padding}",
+                     "size": size, "seed": doc_seed}
+            options = {"size": size, "seed": doc_seed}
+            payload_generator = DocumentGenerator.make_docs(how_many, kv_template, options)
+            list.append({'size': size, 'value': payload_generator, 'how_many': how_many, 'seed' : doc_seed})
+
+        return list
+
 #        docs = DocumentGenerator.make_docs(number_of_items,
 #                {"name": "user-${prefix}", "payload": "payload-${prefix}-${padding}"},
 #                {"size": 1024, "seed": str(uuid.uuid4())})
