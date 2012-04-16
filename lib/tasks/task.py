@@ -7,6 +7,7 @@ from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import KVStoreAwareSmartClient
 from mc_bin_client import MemcachedError
+from tasks.future import Future
 import copy
 import json
 
@@ -15,8 +16,9 @@ EXECUTING='EXECUTING'
 CHECKING='CHECKING'
 FINISHED='FINISHED'
 
-class Task():
+class Task(Future):
     def __init__(self, name):
+        Future.__init__(self)
         self.log = logger.Logger.get_logger()
         self.state = PENDING
         self.name = name
@@ -24,50 +26,23 @@ class Task():
         self.retries = 0
         self.res = None
 
-    def cancel(self):
-        self.cancelled = True
-
-    def is_timed_out(self):
-        if self.res is not None and self.res['status'] == 'timed_out':
-            return True
-        return False
-
     def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == PENDING:
-            self.state = EXECUTING
-            task_manager.schedule(self)
-        elif self.state == EXECUTING:
-            self.execute(task_manager)
-        elif self.state == CHECKING:
-            self.check(task_manager)
-        else:
-            raise Exception("Bad State in {0}: {1}".format(self.name, self.state))
+        if not self.done():
+            if self.state == PENDING:
+                self.state = EXECUTING
+                task_manager.schedule(self)
+            elif self.state == EXECUTING:
+                self.execute(task_manager)
+            elif self.state == CHECKING:
+                self.check(task_manager)
+            elif self.state != FINISHED:
+                raise Exception("Bad State in {0}: {1}".format(self.name, self.state))
 
     def execute(self, task_manager):
         raise NotImplementedError
 
     def check(self, task_manager):
         raise NotImplementedError
-
-    def set_result(self, result):
-        self.res = result
-
-    def result(self, retries=0):
-        while self.res is None:
-            if retries == 0 or self.retries < retries:
-                time.sleep(1)
-            else:
-                self.res = {"status": "timed_out", "value": None}
-        if self.res['status'] == 'error':
-            raise Exception(self.res['value'])
-        if self.res['status'] == 'timed_out':
-            raise TimeoutException("task {0} timed out, tried {1} times".format(self.name,
-                                                                                self.retries))
-        return self.res['value']
 
 class NodeInitializeTask(Task):
     def __init__(self, server):
@@ -88,10 +63,11 @@ class NodeInitializeTask(Task):
 
     def check(self, task_manager):
         self.state = FINISHED
-        self.set_result({"status": "success", "value": self.quota})
+        self.set_result(self.quota)
 
 class BucketCreateTask(Task):
-    def __init__(self, server, bucket='default', replicas=1, port=11210, size=0, password=None):
+    def __init__(self, server, bucket='default', replicas=1, port=11210, size=0,
+                 password=None):
         Task.__init__(self, "bucket_create_task")
         self.server = server
         self.bucket = bucket
@@ -117,15 +93,14 @@ class BucketCreateTask(Task):
                                saslPassword=self.password)
             self.state = CHECKING
             task_manager.schedule(self)
-        except BucketCreationException:
+        except BucketCreationException as e:
             self.state = FINISHED
-            self.set_result({"status": "error",
-                             "value": "Failed to create bucket {0}".format(self.bucket)})
+            self.set_exception(e)
 
     def check(self, task_manager):
         try:
             if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
-                self.set_result({"status": "success", "value": None})
+                self.set_result(True)
                 self.state == FINISHED
                 return
             else:
@@ -148,16 +123,14 @@ class BucketDeleteTask(Task):
             task_manager.schedule(self)
         else:
             self.state = FINISHED
-            self.set_result({"status": "error",
-                             "value": "Failed to delete bucket {0}".format(self.bucket)})
+            self.set_result(False)
 
     def check(self, task_manager):
         rest = RestConnection(self.server)
         if BucketOperationHelper.wait_for_bucket_deletion(self.bucket, rest, 200):
-            self.set_result({"status": "success", "value": None})
+            self.set_result(True)
         else:
-            self.set_result({"status": "error",
-                             "value": "{0} bucket took too long to delete".format(self.bucket)})
+            self.set_result(False)
         self.state = FINISHED
 
 class RebalanceTask(Task):
@@ -175,7 +148,7 @@ class RebalanceTask(Task):
             task_manager.schedule(self)
         except Exception as e:
             self.state = FINISHED
-            self.set_result({"status": "error", "value": e})
+            self.set_exception(e)
 
     def add_nodes(self, task_manager):
         master = self.servers[0]
@@ -200,8 +173,7 @@ class RebalanceTask(Task):
             task_manager.schedule(self, 10)
         else:
             self.state = FINISHED
-            self.set_result({"status": "success", "value": None})
-
+            self.set_result(True)
 
 class GenericLoadingTask(Thread, Task):
     def __init__(self, rest, bucket, info = None, kv_store = None, store_enabled = True):
@@ -228,10 +200,10 @@ class GenericLoadingTask(Thread, Task):
             op, key, value, exp = self.next()
             if not self._try_operation(op, key, value, exp):
                 self.state = FINISHED
-                self.set_result({"status": "error", "value": "Failed op on {0}".format(key)})
+                self.set_result(Exception("Operation failed"))
             self.doc_ids.append(key)
         self.state = FINISHED
-        self.set_result({"status": "success", "value": self.doc_ids})
+        self.set_result(self.doc_ids)
 
     def _try_operation(self, op, key, value, exp):
         retry_count = 0
