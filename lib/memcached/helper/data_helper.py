@@ -818,16 +818,9 @@ class VBucketAwareMemcached(object):
 
 class KVStoreAwareSmartClient(VBucketAwareMemcached):
     def __init__(self, rest, bucket, kv_store = None, info=None, store_enabled = True):
-        self.log = logger.Logger.get_logger()
-        self.info = info
-        self.bucket = bucket
-        self.memcacheds = {}
-        self.vBucketMap = {}
+        VBucketAwareMemcached.__init__(self, rest, bucket, info)
         self.kv_store = kv_store or ClientKeyValueStore()
-        self.vBucketMapReplica = {}
-        self.reset(rest)
         self.store_enabled = store_enabled
-
 
     def set(self, key, value, ttl = -1):
 
