@@ -316,8 +316,11 @@ class RebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def load_all_buckets_task(rest, task_manager, bucket_data, ram_load_ratio,
-                              distribution = None, monitor = True):
+                              distribution = None, keys_count = -1, seed = None,
+                              monitor = True):
         buckets = rest.get_buckets()
+        tasks = None
+
         for bucket in buckets:
             kv_store = ClientKeyValueStore()
             bucket_data[bucket.name]['kv_store'] = kv_store
@@ -325,41 +328,57 @@ class RebalanceBaseTest(unittest.TestCase):
             tasks = RebalanceBaseTest.load_bucket_task_helper(rest, task_manager,
                                                               bucket.name, ram_load_ratio,
                                                               kv_store = kv_store,
+                                                              keys_count = keys_count,
+                                                              seed = seed,
                                                               monitor = monitor)
+        return tasks
 
     @staticmethod
     def load_bucket_task_helper(rest, task_manager, bucket, ram_load_ratio,
                                 kv_store = None, distribution = None,
-                                monitor = True):
+                                keys_count = -1, seed = None, monitor = True):
 
         log = logger.Logger().get_logger()
-
-        # create document generators based on value_size_distrobution
-        doc_gen_configs = \
-            DocumentGenerator.get_doc_generators_by_load_ratio(rest,
-                                                               bucket,
-                                                               ram_load_ratio,
-                                                               distribution)
-
         tasks = []
 
-        for config in doc_gen_configs:
+        if keys_count == -1:
+            # create document generators based on value_size_distrobution
+            doc_gen_configs = \
+                DocumentGenerator.get_doc_generators_by_load_ratio(rest,
+                                                                   bucket,
+                                                                   ram_load_ratio,
+                                                                   distribution)
 
-            doc_gen = config['value']
-            how_many = config['how_many']
-            size = config['size']
-            seed = config['seed']
 
-            # start bucket loading task
-            msg = "start task to send {0} items with value of size : {1}"
-            log.info(msg.format(how_many, size))
+            for config in doc_gen_configs:
 
-            task = RebalanceTaskHelper.add_doc_gen_task(task_manager, rest,
-                                                        how_many, bucket,
-                                                        kv_store = kv_store,
-                                                        doc_generators = [doc_gen],
+                doc_gen = config['value']
+                how_many = config['how_many']
+                size = config['size']
+                seed = config['seed']
+
+                # start bucket loading task
+                msg = "start task to send {0} items with value of size : {1}"
+                log.info(msg.format(how_many, size))
+
+                task = RebalanceTaskHelper.add_doc_gen_task(task_manager, rest,
+                                                            how_many, bucket,
+                                                            kv_store = kv_store,
+                                                            doc_generators = [doc_gen],
+                                                            monitor = monitor)
+                tasks.append({'task' : task, 'seed' : seed})
+        else:
+            msg = "start task to send {0} items to bucket {1}"
+            log.info(msg.format(keys_count, bucket))
+            task = RebalanceTaskHelper.add_doc_gen_task(task_manager,
+                                                        rest,
+                                                        keys_count,
+                                                        bucket,
+                                                        kv_store,
+                                                        seed = seed,
                                                         monitor = monitor)
             tasks.append({'task' : task, 'seed' : seed})
+
 
         return tasks
 
@@ -435,7 +454,8 @@ class IncrementalRebalanceComboTests(unittest.TestCase):
         buckets = rest.get_buckets()
 
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
-                                                bucket_data, load_ratio)
+                                                bucket_data, load_ratio,
+                                                keys_count = keys_count)
 
         for server in self._servers[1:]:
 
@@ -497,13 +517,13 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         rest = RestConnection(master)
         rebalanced_servers = [master]
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
-        buckets = rest.get_buckets()
 
         for server in self._servers[1:]:
 
             # load bucket data
             RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
-                                                    bucket_data, load_ratio)
+                                                    bucket_data, load_ratio,
+                                                    keys_count = keys_count)
 
             # rebalance in a server
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
@@ -737,7 +757,8 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
                 # load bucket data
                 RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
-                                                        bucket_data, load_ratio)
+                                                        bucket_data, load_ratio,
+                                                        keys_count = keys_count)
 
                 # rebalance out a server
                 RebalanceTaskHelper.add_rebalance_task(self.task_manager,
@@ -877,7 +898,7 @@ class StopRebalanceTests(unittest.TestCase):
             toBeEjectedNode = RebalanceHelper.pick_node(master)
             RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
                                                     bucket_data, ram_ratio,
-                                                    distribution)
+                                                    distribution = distribution)
 
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             #let's start/step rebalance three times
