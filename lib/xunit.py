@@ -21,7 +21,7 @@ class XUnitTestCase(object):
         self.name = ""
         self.time = 0
         self.error = None
-
+        self.params = ''
 #
 # XUnitTestCaseError has type and message
 #
@@ -44,7 +44,7 @@ class XUnitTestResult(object):
     def __init__(self):
         self.suites = []
 
-    def add_test(self, name, time=0, errorType=None, errorMessage=None, status='pass'):
+    def add_test(self, name, time=0, errorType=None, errorMessage=None, status='pass', params=''):
         #Get the classname
         class_name = name[:name.rfind(".")]
         # If params are passed to the test
@@ -54,16 +54,16 @@ class XUnitTestResult(object):
         matched = False
         for suite in self.suites:
             if suite.name == class_name:
-                suite.add_test(name,time,errorType,errorMessage,status)
+                suite.add_test(name, time, errorType, errorMessage, status, params=params)
                 matched = True
                 break
         if not matched:
             suite = XUnitTestSuite()
             suite.name = class_name
-            suite.add_test(name, time, errorType, errorMessage, status)
+            suite.add_test(name, time, errorType, errorMessage, status, params=params)
             self.suites.append(suite)
 
-    def to_xml(self,suite):
+    def to_xml(self, suite):
         doc = xml.dom.minidom.Document()
         testsuite = doc.createElement('testsuite')
         #<testsuite name="nosetests" tests="1" errors="1" failures="0" skip="0">
@@ -76,7 +76,8 @@ class XUnitTestResult(object):
         testsuite.setAttribute('skip', str(suite.skips))
         for testobject in suite.tests:
             testcase = doc.createElement('testcase')
-            testcase.setAttribute('name', testobject.name)
+            full_name = testobject.name+testobject.params
+            testcase.setAttribute('name', full_name)
             testcase.setAttribute('time', str(testobject.time))
             if testobject.error:
                 error = doc.createElement('error')
@@ -89,7 +90,7 @@ class XUnitTestResult(object):
         doc.appendChild(testsuite)
         return doc.toprettyxml()
 
-    def write(self,prefix):
+    def write(self, prefix, params=''):
         for suite in self.suites:
             name = suite.name
             # If test_params are passed
@@ -127,13 +128,14 @@ class XUnitTestSuite(object):
         self.skips = 0
 
     # create a new XUnitTestCase and update the errors/failures/skips count
-    def add_test(self, name, time=0, errorType=None, errorMessage=None, status='pass'):
+    def add_test(self, name, time=0, errorType=None, errorMessage=None, status='pass', params=''):
         #create a test_case and add it to this suite
         # todo: handle 'skip' or 'setup_failure' or other
         # status codes that testrunner might pass to this function
         test = XUnitTestCase()
         test.name = name
         test.time = time
+        test.params = params
         if status == 'fail':
             error = XUnitTestCaseError()
             error.type = errorType

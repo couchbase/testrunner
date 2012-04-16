@@ -213,9 +213,10 @@ if __name__ == "__main__":
 
         # Concat params to test name
         # To make tests more readable
+        params = ''
         if TestInputSingleton.input.test_params:
             for key, value in TestInputSingleton.input.test_params.items():
-                name += "," + key + ":" + value
+                params += "," + key + ":" + value
 
         if result.failures or result.errors:
             # Immediately get the server logs, if
@@ -226,16 +227,16 @@ if __name__ == "__main__":
             for failure in result.failures:
                 test_case, failure_string = failure
                 xunit.add_test(name=name, status='fail', time=time_taken,
-                               errorType='membase.error', errorMessage=failure_string)
+                               errorType='membase.error', errorMessage=failure_string, params=params)
                 break
             for error in result.errors:
                 test_case, error_string = error
                 xunit.add_test(name=name, status='fail', time=time_taken,
-                               errorType='membase.error', errorMessage=error_string)
+                               errorType='membase.error', errorMessage=error_string, params=params)
                 break
             results.append({"result": "fail", "name": name})
         else:
-            xunit.add_test(name=name, time=time_taken)
+            xunit.add_test(name=name, time=time_taken, params=params)
             results.append({"result": "pass", "name": name, "time": time_taken})
         xunit.write("{0}/report-{1}".format(tmp_folder, str_time))
         xunit.print_summary()
