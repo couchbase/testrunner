@@ -43,12 +43,13 @@ class SpatialHelper:
             ClusterOperationHelper.cleanup_cluster([server])
         ClusterOperationHelper.wait_for_ns_servers_or_assert(
             [self.master], self.testcase)
-        self._create_default_bucket()
 
         if do_rebalance:
             rebalanced = ClusterOperationHelper.add_and_rebalance(
                 self.servers)
             self.testcase.assertTrue(rebalanced, "cluster is not rebalanced")
+
+        self._create_default_bucket()
 
 
     def cleanup_cluster(self):
