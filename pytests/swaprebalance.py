@@ -95,9 +95,10 @@ class SwapRebalanceBase(unittest.TestCase):
     def items_verification(master, test):
         rest = RestConnection(master)
         #Verify items count across all node
+        time = 240
         for bucket in rest.get_buckets():
-            verified = RebalanceHelper.wait_till_total_numbers_match(master, bucket.name)
-            test.assertTrue(verified, "Lost items!!.. failing test")
+            verified = RebalanceHelper.wait_till_total_numbers_match(master, bucket.name, timeout_in_seconds=time)
+            test.assertTrue(verified, "Lost items!!.. failing test in {0} secs".format(time))
 
     @staticmethod
     def start_load_phase(self, master):
@@ -110,7 +111,6 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
-            loader["thread"].daemon = True
             loaders.append(loader)
         for loader in loaders:
             loader["thread"].start()
@@ -132,7 +132,6 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["mcsoda"].cfg["ratio-expirations"] = 0.03
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
-            loader["thread"].daemon = True
             loaders.append(loader)
         for loader in loaders:
             loader["thread"].start()
@@ -140,7 +139,7 @@ class SwapRebalanceBase(unittest.TestCase):
         return loaders
 
     @staticmethod
-    def stop_load(loaders, do_stop=True):
+    def stop_load(loaders):
         for loader in loaders:
             loader["mcsoda"].load_stop()
         for loader in loaders:
@@ -223,10 +222,10 @@ class SwapRebalanceBase(unittest.TestCase):
         SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
-        for bucket in rest.get_buckets():
+        #for bucket in rest.get_buckets():
         #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
         #        bucket.name, self)
-            RebalanceHelper.wait_for_persistence(master, bucket.name)
+            #RebalanceHelper.wait_for_persistence(master, bucket.name)
 
         self.log.info("VERIFICATION PHASE")
         SwapRebalanceBase.items_verification(master, self)
@@ -306,10 +305,10 @@ class SwapRebalanceBase(unittest.TestCase):
         SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
-        for bucket in rest.get_buckets():
+        #for bucket in rest.get_buckets():
         #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
         #        bucket.name, self)
-            RebalanceHelper.wait_for_persistence(master, bucket.name)
+        #    RebalanceHelper.wait_for_persistence(master, bucket.name)
 
         self.log.info("VERIFICATION PHASE")
         SwapRebalanceBase.items_verification(master, self)
@@ -397,10 +396,10 @@ class SwapRebalanceBase(unittest.TestCase):
         SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
-        for bucket in rest.get_buckets():
+        #for bucket in rest.get_buckets():
         #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
         #        bucket.name, self)
-            RebalanceHelper.wait_for_persistence(master, bucket.name)
+        #    RebalanceHelper.wait_for_persistence(master, bucket.name)
 
         self.log.info("VERIFICATION PHASE")
         SwapRebalanceBase.items_verification(master, self)
@@ -469,10 +468,10 @@ class SwapRebalanceBase(unittest.TestCase):
         SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
-        for bucket in rest.get_buckets():
+        #for bucket in rest.get_buckets():
         #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
         #        bucket.name, self)
-            RebalanceHelper.wait_for_persistence(master, bucket.name)
+        #    RebalanceHelper.wait_for_persistence(master, bucket.name)
 
         self.log.info("VERIFICATION PHASE")
         SwapRebalanceBase.items_verification(master, self)
