@@ -98,15 +98,16 @@ class RebalanceBaseTest(unittest.TestCase):
                     stats = rest.get_bucket_stats(bucket=bucket.name)
                     RebalanceHelper.print_taps_from_all_nodes(rest, bucket.name)
                     msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
-                    if bucket_data[bucket.name]['kv_store'] != None:
-                        items_inserted = bucket_data[bucket.name]['kv_store'].valid_items()
-                        active_items_match = stats["curr_items"] == len(items_inserted)
-                        if not active_items_match:
-                            test.log.error(msg.format(stats["curr_items"], len(items_inserted)))
-                            asserts.append(msg.format(stats["curr_items"], len(items_inserted)))
+
+                    if bucket_data[bucket.name]['kv_store'] == None:
+                        items_inserted = bucket_data[bucket.name]["items_inserted_count"]
                     else:
-                        test.log.error(msg.format(stats["curr_items"], -1))
-                        asserts.append(msg.format(stats["curr_items"], -1))
+                        items_inserted = len(bucket_data[bucket.name]['kv_store'].valid_items())
+
+                    active_items_match = stats["curr_items"] == items_inserted
+                    if not active_items_match:
+                        test.log.error(msg.format(stats["curr_items"], items_inserted))
+                        asserts.append(msg.format(stats["curr_items"], items_inserted))
 
         if len(asserts) > 0:
             for msg in asserts:
