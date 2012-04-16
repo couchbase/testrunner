@@ -22,6 +22,8 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Clear the state from Previous invalid run
         rest.stop_rebalance()
+        self.load_started = False
+        self.loaders = []
         SwapRebalanceBase.common_tearDown(self)
 
         # Initialize test params
@@ -47,6 +49,8 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
+        if self.load_started:
+            SwapRebalanceBase.stop_load(self.loaders)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
@@ -112,8 +116,11 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
             loaders.append(loader)
+        self.loaders = loaders
+
         for loader in loaders:
             loader["thread"].start()
+        self.load_started = True
         return loaders
 
     @staticmethod
@@ -133,9 +140,10 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
             loaders.append(loader)
+        self.loaders = loaders
         for loader in loaders:
             loader["thread"].start()
-
+        self.load_started = True
         return loaders
 
     @staticmethod
