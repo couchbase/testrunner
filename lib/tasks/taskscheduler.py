@@ -54,6 +54,12 @@ class TaskScheduler():
         return _task
 
     @staticmethod
+    def async_wait_for_stats(tm, stats, bucket):
+        _task = StatsWaitTask(stats, bucket)
+        tm.schedule(_task)
+        return _task
+
+    @staticmethod
     def bucket_create(tm, server, bucket='default', replicas=1, port=11210, size=0, password=None):
         _task = TaskScheduler.async_bucket_create(tm, server, bucket, replicas, port, size,
                                                   password)
@@ -95,4 +101,9 @@ class TaskScheduler():
     def delete_docs(tm, docs, rest, bucket, info=None, kv_store=None, store_enabled=True):
         _task = TaskScheduler.async_delete_docs(tm, docs, rest, bucket, info, kv_store,
                                                 store_enabled)
+        return _task.result()
+
+    @staticmethod
+    def wait_for_stats(tm, stats, bucket):
+        _task = TaskScheduler.async_wait_for_stats(tm, stats, bucket)
         return _task.result()

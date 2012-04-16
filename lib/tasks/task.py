@@ -5,7 +5,7 @@ from exception import TimeoutException
 from membase.api.rest_client import RestConnection
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import KVStoreAwareSmartClient
+from memcached.helper.data_helper import KVStoreAwareSmartClient, MemcachedClientHelper
 from mc_bin_client import MemcachedError
 from tasks.future import Future
 import copy
@@ -174,6 +174,61 @@ class RebalanceTask(Task):
         else:
             self.state = FINISHED
             self.set_result(True)
+
+class StatsWaitTask(Task):
+    EQUAL='=='
+    NOT_EQUAL='!='
+    LESS_THAN='<'
+    LESS_THAN_EQ='<='
+    GREATER_THAN='>'
+    GREATER_THAN_EQ='>='
+
+    def __init__(self, stats, bucket):
+        Task.__init__(self, "stats_wait_task")
+        self.bucket = bucket
+        self.stats = stats
+        self.conns = {}
+
+    def execute(self, task_manager):
+        self.state = CHECKING
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        for node in self.stats:
+            client = self._get_connection(node['server'])
+            for param, stats_list in node['stats'].items():
+                stats = client.stats()
+                for k, v in stats_list.items():
+                    if not stats.has_key(k):
+                        self.state = FINISHED
+                        self.set_exception(Exception("Stat {0} not found".format(k)))
+                        return
+                    if not self._compare(v['compare'], stats[k], v['value']):
+                        task_manager.schedule(self, 5)
+                        return
+        for server, conn in self.conns.items():
+            conn.close()
+        self.state = FINISHED
+        self.set_result(True)
+
+    def _get_connection(self, server):
+        if not self.conns.has_key(server):
+            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+        return self.conns[server]
+
+    def _compare(self, cmp_type, a, b):
+        if isinstance(b, (int, long)) and a.isdigit():
+            a = int(a)
+        elif isinstance(b, (int, long)) and not a.isdigit():
+                return False
+        if (cmp_type == StatsWaitTask.EQUAL and a == b) or\
+            (cmp_type == StatsWaitTask.NOT_EQUAL and a != b) or\
+            (cmp_type == StatsWaitTask.LESS_THAN_EQ and a <= b) or\
+            (cmp_type == StatsWaitTask.GREATER_THAN_EQ and a >= b) or\
+            (cmp_type == StatsWaitTask.LESS_THAN and a < b) or\
+            (cmp_type == StatsWaitTask.GREATER_THAN and a > b):
+            return True
+        return False
 
 class GenericLoadingTask(Thread, Task):
     def __init__(self, rest, bucket, info = None, kv_store = None, store_enabled = True):
