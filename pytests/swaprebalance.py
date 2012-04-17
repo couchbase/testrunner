@@ -131,10 +131,10 @@ class SwapRebalanceBase(unittest.TestCase):
             loader = {}
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
                     password=bucket.saslPassword)
-            loader["mcsoda"].cfg["exit-after-creates"] = 0
+            loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
-            loader["mcsoda"].cfg["ratio-hot"] = 0.6
-            loader["mcsoda"].cfg["ratio-creates"] = 0.08
+            loader["mcsoda"].cfg["ratio-hot"] = 0.2
+            loader["mcsoda"].cfg["ratio-creates"] = 0.5
             loader["mcsoda"].cfg["ratio-deletes"] = 0.13
             loader["mcsoda"].cfg["ratio-expirations"] = 0.03
             loader["mcsoda"].cfg["json"] = 0
