@@ -115,9 +115,9 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
+            loader["thread"].daemon = True
             loaders.append(loader)
         self.loaders = loaders
-
         for loader in loaders:
             loader["thread"].start()
         self.load_started = True
@@ -139,6 +139,7 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["mcsoda"].cfg["ratio-expirations"] = 0.03
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
+            loader["thread"].daemon = True
             loaders.append(loader)
         self.loaders = loaders
         for loader in loaders:
@@ -147,9 +148,10 @@ class SwapRebalanceBase(unittest.TestCase):
         return loaders
 
     @staticmethod
-    def stop_load(loaders):
-        for loader in loaders:
-            loader["mcsoda"].load_stop()
+    def stop_load(loaders, do_stop=True):
+        if do_stop:
+            for loader in loaders:
+                loader["mcsoda"].load_stop()
         for loader in loaders:
             loader["thread"].join()
 
@@ -175,12 +177,12 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders)
+        SwapRebalanceBase.stop_load(loaders, do_stop=False)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
-        self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
-
+        current_nodes = RebalanceHelper.getOtpNodeIds(master)
+        self.log.info("current nodes : {0}".format(current_nodes))
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.num_swap)
         optNodesIds = [node.id for node in toBeEjectedNodes]
 
@@ -188,7 +190,10 @@ class SwapRebalanceBase(unittest.TestCase):
             status, content = ClusterHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                 format(status, content))
-            optNodesIds[0] = content
+            if self.num_swap is len(current_nodes):
+                optNodesIds.append(content)
+            else:
+                optNodesIds[0] = content
 
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
@@ -260,18 +265,23 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders)
+        SwapRebalanceBase.stop_load(loaders, do_stop=False)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
-        self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
+        current_nodes = RebalanceHelper.getOtpNodeIds(master)
+        self.log.info("current nodes : {0}".format(current_nodes))
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.num_swap)
         optNodesIds = [node.id for node in toBeEjectedNodes]
         if self.swap_orchestrator:
             status, content = ClusterHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
-            optNodesIds[0] = content
+            # When swapping all the nodes
+            if self.num_swap is len(current_nodes):
+                optNodesIds.append(content)
+            else:
+                optNodesIds[0] = content
 
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
@@ -341,11 +351,12 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders)
+        SwapRebalanceBase.stop_load(loaders, do_stop=False)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
-        self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
+        current_nodes = RebalanceHelper.getOtpNodeIds(master)
+        self.log.info("current nodes : {0}".format(current_nodes))
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.failover_factor)
         optNodesIds = [node.id for node in toBeEjectedNodes]
 
@@ -353,7 +364,11 @@ class SwapRebalanceBase(unittest.TestCase):
             status, content = ClusterHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
-            optNodesIds[0] = content
+            # When swapping all the nodes
+            if self.num_swap is len(current_nodes):
+                optNodesIds.append(content)
+            else:
+                optNodesIds[0] = content
             master = self.servers[-1]
 
         self.log.info("DATA ACCESS PHASE")
@@ -434,7 +449,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders)
+        SwapRebalanceBase.stop_load(loaders, do_stop=False)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
