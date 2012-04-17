@@ -20,7 +20,7 @@ from memcached.helper.kvstore import ClientKeyValueStore
 NUM_REBALANCE = 2
 DEFAULT_LOAD_RATIO = 5
 DEFAULT_REPLICA = 1
-EXPIRY_RATIO = 0.1
+EXPIRY_RATIO = 0
 DELETE_RATIO = 0.1
 ACCESS_RATIO = 0.80
 
@@ -236,7 +236,6 @@ class RebalanceBaseTest(unittest.TestCase):
 
         # TODO: assert no value greater than 1
         # TODO: assert sum of mutation ratios not greater than 1
-
 
         bucket_task_list = []
 
