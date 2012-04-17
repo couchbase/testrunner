@@ -104,6 +104,7 @@ class PerfBase(unittest.TestCase):
             pass # For example, membase doesn't support auto compaction.
 
     def tearDown(self):
+        print "[perf.tearDown] Calling tearDown()"
         self.tearDownProxy()
 
         if self.sc is not None:
@@ -111,10 +112,14 @@ class PerfBase(unittest.TestCase):
             self.sc = None
 
         if self.parami("tearDownBucket", 0) == 1:
+            print "[perf.tearDown] Tearing down bucket"
             self.tearDownBucket()
+            print "[perf.tearDown] Bucket teared down"
 
         if self.parami("tearDownCluster", 1) == 1:
             self.tearDownCluster()
+
+        print "[perf.tearDown] tearDown routine finished"
 
     def tearDownBucket(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
