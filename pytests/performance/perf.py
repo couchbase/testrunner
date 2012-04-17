@@ -37,7 +37,8 @@ class PerfBase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.vbucket_count = 0
         self.sc = None
-        self.tearDown() # Tear down in case previous run had unclean death.
+        if self.parami("tearDownOnSetUp", 0) == 1:
+            self.tearDown() # Tear down in case previous run had unclean death.
         self.setUpRest()
 
     def setUpRest(self):
@@ -109,8 +110,11 @@ class PerfBase(unittest.TestCase):
             self.sc.stop()
             self.sc = None
 
-        self.tearDownBucket()
-        self.tearDownCluster()
+        if self.parami("tearDownBucket", 0) == 1:
+            self.tearDownBucket()
+
+        if self.parami("tearDownCluster", 1) == 1:
+            self.tearDownCluster()
 
     def tearDownBucket(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
