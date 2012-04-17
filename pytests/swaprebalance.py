@@ -50,6 +50,7 @@ class SwapRebalanceBase(unittest.TestCase):
     @staticmethod
     def common_tearDown(self):
         if self.load_started:
+            self.log.info("Stopping load in Teardown")
             SwapRebalanceBase.stop_load(self.loaders)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
@@ -111,7 +112,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for bucket in rest.get_buckets():
             loader = {}
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
-                password=bucket.saslPassword)
+                password=bucket.saslPassword, prefix=str(bucket.name))
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
@@ -130,7 +131,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for bucket in rest.get_buckets():
             loader = {}
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
-                    password=bucket.saslPassword)
+                    password=bucket.saslPassword, prefix=str(bucket.name))
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
@@ -156,6 +157,13 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["thread"].join()
 
     @staticmethod
+    def create_buckets(self):
+        if self.num_buckets==1:
+            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
+        else:
+            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
+
+    @staticmethod
     def _common_test_body_swap_rebalance(self, do_stop_start=False):
         master = self.servers[0]
         rest = RestConnection(master)
@@ -168,11 +176,7 @@ class SwapRebalanceBase(unittest.TestCase):
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
 
         self.log.info("CREATE BUCKET PHASE")
-        if self.num_buckets==1:
-            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
-        else:
-            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
-
+        SwapRebalanceBase.create_buckets(self)
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
@@ -227,12 +231,11 @@ class SwapRebalanceBase(unittest.TestCase):
                 time.sleep(20)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
                     ejectedNodes=optNodesIds)
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
-
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
         #for bucket in rest.get_buckets():
@@ -256,10 +259,7 @@ class SwapRebalanceBase(unittest.TestCase):
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
 
         self.log.info("CREATE BUCKET PHASE")
-        if self.num_buckets==1:
-            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
-        else:
-            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
+        SwapRebalanceBase.create_buckets(self)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -316,11 +316,11 @@ class SwapRebalanceBase(unittest.TestCase):
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
                 ejectedNodes=optNodesIds)
 
-        self.assertTrue(rest.monitorRebalance(),
-            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
-
         # Stop loaders
         SwapRebalanceBase.stop_load(loaders)
+
+        self.assertTrue(rest.monitorRebalance(),
+            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
 
         self.log.info("DONE DATA ACCESS PHASE")
         #for bucket in rest.get_buckets():
@@ -342,10 +342,7 @@ class SwapRebalanceBase(unittest.TestCase):
         RebalanceHelper.rebalance_in(self.servers, len(self.servers)-1)
 
         self.log.info("CREATE BUCKET PHASE")
-        if self.num_buckets==1:
-            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
-        else:
-            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
+        SwapRebalanceBase.create_buckets(self)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -412,11 +409,11 @@ class SwapRebalanceBase(unittest.TestCase):
 
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
 
-        self.assertTrue(rest.monitorRebalance(),
-            msg="rebalance operation failed after adding node {0}".format(add_back_servers))
-
         # Stop loaders
         SwapRebalanceBase.stop_load(loaders)
+
+        self.assertTrue(rest.monitorRebalance(),
+            msg="rebalance operation failed after adding node {0}".format(add_back_servers))
 
         self.log.info("DONE DATA ACCESS PHASE")
         #for bucket in rest.get_buckets():
@@ -440,10 +437,7 @@ class SwapRebalanceBase(unittest.TestCase):
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
 
         self.log.info("CREATE BUCKET PHASE")
-        if self.num_buckets==1:
-            SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
-        else:
-            SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
+        SwapRebalanceBase.create_buckets(self)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -483,12 +477,11 @@ class SwapRebalanceBase(unittest.TestCase):
         if self.fail_orchestrator:
             rest = RestConnection(new_swap_servers[0])
             master = new_swap_servers[0]
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(new_swap_servers))
-
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
         #for bucket in rest.get_buckets():
