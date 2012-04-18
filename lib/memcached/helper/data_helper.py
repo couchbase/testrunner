@@ -732,6 +732,7 @@ class VBucketAwareMemcached(object):
                         if node.ip == masterIp and node.memcached == masterPort:
                             server.port = node.port
                     server.ip = masterIp
+                    self.log.info("Recevied forward map, reset vbucket map, new direct_client")
                     self.memcacheds[vBucket.master] = MemcachedClientHelper.direct_client(server, self.bucket)
                     return True
                 else:
