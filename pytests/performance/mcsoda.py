@@ -687,6 +687,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
               conn.s.send(buf)
               sent += len(buf)
            except:
+              print "EXCEPTION: StoreMembaseBinary.inflight_send"
               pass
         return sent
 
@@ -739,6 +740,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
            try:
               self.awareness.reset()
            except:
+              print "EXCEPTION: self.awareness.reset()"
               pass
 
         return received
