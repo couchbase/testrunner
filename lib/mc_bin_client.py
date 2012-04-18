@@ -103,12 +103,7 @@ class MemcachedClient(object):
         assert myopaque is None or opaque == myopaque, \
             "expected opaque %x, got %x" % (myopaque, opaque)
         if errcode:
-            if errcode == 7:
-                try:
-                    a, b, vb_state = self.get_vbucket_state(self.vbucketId)
-                    rv += " for vbucket :{0} to mc {1}:{2}".format(self.vbucketId, self.host, self.port)
-                except:
-                    pass
+            rv += " for vbucket :{0} to mc {1}:{2}".format(self.vbucketId, self.host, self.port)
             raise MemcachedError(errcode,  rv)
         return cmd, opaque, cas, keylen, extralen, rv
 
