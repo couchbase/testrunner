@@ -49,12 +49,11 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
-        if self.load_started:
-            self.log.info("Stopping load in Teardown")
-            SwapRebalanceBase.stop_load(self.loaders)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
+        self.log.info("Stopping load in Teardown")
+        SwapRebalanceBase.stop_load(self.loaders)
         ClusterHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
     @staticmethod
@@ -85,16 +84,6 @@ class SwapRebalanceBase(unittest.TestCase):
             ready = BucketOperationHelper.wait_for_memcached(master, bucket.name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
 
-    @staticmethod
-    def verify_data(master, inserted_keys, bucket, test):
-        test.log.info("Verifying data")
-        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
-        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
-        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, \
-            bucket_name=bucket, test=test, concurrency=4)
-
     # Used for items verification active vs. replica
     @staticmethod
     def items_verification(master, test):
@@ -110,7 +99,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = []
         rest = RestConnection(master)
         for bucket in rest.get_buckets():
-            loader = {}
+            loader = dict()
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
                 password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["exit-after-creates"] = 1
@@ -118,10 +107,8 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
             loader["thread"].daemon = True
             loaders.append(loader)
-        self.loaders = loaders
         for loader in loaders:
             loader["thread"].start()
-        self.load_started = True
         return loaders
 
     @staticmethod
@@ -129,7 +116,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = []
         rest = RestConnection(master)
         for bucket in rest.get_buckets():
-            loader = {}
+            loader = dict()
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
                     password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["exit-after-creates"] = 1
@@ -142,10 +129,8 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
             loader["thread"].daemon = True
             loaders.append(loader)
-        self.loaders = loaders
         for loader in loaders:
             loader["thread"].start()
-        self.load_started = True
         return loaders
 
     @staticmethod
@@ -231,11 +216,12 @@ class SwapRebalanceBase(unittest.TestCase):
                 time.sleep(20)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
                     ejectedNodes=optNodesIds)
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
+
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
         #for bucket in rest.get_buckets():
@@ -316,11 +302,11 @@ class SwapRebalanceBase(unittest.TestCase):
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
                 ejectedNodes=optNodesIds)
 
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
-
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
+
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
         #for bucket in rest.get_buckets():
@@ -409,11 +395,11 @@ class SwapRebalanceBase(unittest.TestCase):
 
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
 
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
-
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(add_back_servers))
+
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
         #for bucket in rest.get_buckets():
@@ -477,11 +463,12 @@ class SwapRebalanceBase(unittest.TestCase):
         if self.fail_orchestrator:
             rest = RestConnection(new_swap_servers[0])
             master = new_swap_servers[0]
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(new_swap_servers))
+
+        # Stop loaders
+        SwapRebalanceBase.stop_load(loaders)
 
         self.log.info("DONE DATA ACCESS PHASE")
         #for bucket in rest.get_buckets():

@@ -7,7 +7,6 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from mc_bin_client import MemcachedClient, MemcachedError
 
-import threading
 
 log = logger.Logger.get_logger()
 
