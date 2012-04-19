@@ -112,7 +112,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for bucket in rest.get_buckets():
             loader = {}
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
-                password=bucket.saslPassword, prefix=str(bucket.name))
+                password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
@@ -131,7 +131,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for bucket in rest.get_buckets():
             loader = {}
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
-                    password=bucket.saslPassword, prefix=str(bucket.name))
+                    password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
