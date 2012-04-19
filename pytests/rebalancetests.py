@@ -278,7 +278,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
             # get ratio of current keys
             if len(keys_to_get) > 0:
-                del_task =  \
+                get_task =  \
                     RebalanceTaskHelper.add_doc_get_task(task_manager, rest,
                                                          keys_to_get,
                                                          bucket = bucket)
