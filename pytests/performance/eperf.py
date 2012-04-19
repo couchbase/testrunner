@@ -251,7 +251,7 @@ class EPerfMaster(perf.PerfBase):
 
     def test_ept_all_in_memory_scaled_down_read(self):
         self.spec("EPT-ALL-IN-MEMORY-SCALED-DOWN-READ.1")
-        items = self.parami("items",1000000)
+        items = self.parami("items",200000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 2), items)
         # Read:Insert:Update:Delete Ratio = 90:3:6:1.
@@ -264,7 +264,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
                           ratio_expirations = self.paramf('ratio_expirations', 0.005),
-                          max_creates    = self.parami("max_creates", 1000000))
+                          max_creates    = self.parami("max_creates", 200000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_write_1(self):
