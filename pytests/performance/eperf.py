@@ -588,7 +588,7 @@ class EPerfMaster(perf.PerfBase):
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_write_original_2_15M_5_995(self):
-        self.test_ept_write_original_2(self, items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995):
+        self.test_ept_write_original_2(self, items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
 
     def test_query_all_docs_mixed_original(self):
         self.spec("QEURY-ALLDOCS-MIXED-original")
