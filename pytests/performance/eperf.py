@@ -569,9 +569,9 @@ class EPerfMaster(perf.PerfBase):
         self.gated_finish(self.input.clients, notify)
 
     # hot itmes are 1/4 of the original_1
-    def test_ept_write_original_2(self):
-        self.spec("EPT-WRITE-original_2")
-        items = self.parami("items", 22500000)
+    def test_ept_write_original_2(self, items=22500000, ratio_hot=0.05, ratio_hot_gets_sets=0.95):
+        self.spec("EPT-WRITE-original_2-" + str(ratio_hot) + "-" + str(ratio_hot_get_set))
+        items = self.parami("items", items)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
@@ -580,12 +580,15 @@ class EPerfMaster(perf.PerfBase):
                           ratio_misses = self.paramf('ratio_misses', 0.05),
                           ratio_creates = self.paramf('ratio_creates', 0.1875),
                           ratio_deletes = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot = self.paramf('ratio_hot', 0.05),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_hot = self.paramf('ratio_hot', ratio_hot),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_gets_sets),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_gets_sets),
                           ratio_expirations = self.paramf('ratio_expirations', 0.025),
                           max_creates = self.parami("max_creates", 10000000))
         self.gated_finish(self.input.clients, notify)
+
+    def test_ept_write_original_2_15M_5_995(self):
+        self.test_ept_write_original_2(self, items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995):
 
     def test_query_all_docs_mixed_original(self):
         self.spec("QEURY-ALLDOCS-MIXED-original")
