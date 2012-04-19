@@ -9,6 +9,8 @@ import uuid
 import random
 import re
 import mc_bin_client
+import exceptions
+import socket
 
 from memcached.helper.data_helper import VBucketAwareMemcached
 from membase.api.rest_client import RestConnection
@@ -98,15 +100,24 @@ class Config(object):
             usage("missing file")
 
 
-def get_aware(awareness, key):
-    try:
-        val = awareness.memcached(key).get(key)
-    except mc_bin_client.MemcachedError as e:
-        if e.status == 7:
-            awareness.reset_vbucket(rest, key)
+def get_aware(awareness, rest, key):
+    timeout = 60 + time.time()
+    passed = False
+    while time.time() < timeout and not passed:
+        try:
             val = awareness.memcached(key).get(key)
-        else:
-            raise e
+            passed = True
+        except mc_bin_client.MemcachedError as e:
+            if e.status == 7:
+                awareness.reset_vbucket(rest, key)
+            else:
+                raise e
+        except exceptions.EOFError:
+            awareness.reset(rest)
+        except socket.error:
+            awareness.reset(rest)
+    if not passed:
+        raise Exception("failed get after 60 seconds")
     return val
 
 
@@ -126,7 +137,7 @@ if __name__ == "__main__":
     for key, val_expected in kv.iteritems():
         if val_expected[3]:
             try:
-                val = get_aware(awareness, key)
+                val = get_aware(awareness, rest, key)
                 if val[2] != val_expected[2]:
                     badval += 1
             except mc_bin_client.MemcachedError as e:
@@ -136,11 +147,11 @@ if __name__ == "__main__":
                     raise e
         else:
             try:
-                val = get_aware(awareness, key)
+                val = get_aware(awareness, rest, key)
                 undeleted += 1
             except mc_bin_client.MemcachedError as e:
                 if e.status != 1:
-                    undeleted += 1
+                    raise e
 
     awareness.done()
 

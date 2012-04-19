@@ -9,6 +9,8 @@ import uuid
 import random
 import re
 import mc_bin_client
+import exceptions
+import socket
 
 from memcached.helper.data_helper import VBucketAwareMemcached
 from membase.api.rest_client import RestConnection
@@ -111,25 +113,43 @@ class Config(object):
             usage("missing file")
 
 
-def set_aware(awareness, key, exp, flags, val):
-    try:
-        awareness.memcached(key).set(key, exp, flags, value)
-    except mc_bin_client.MemcachedError as e:
-        if e.status == 7:
-            awareness.reset_vbucket(rest, key)
+def set_aware(awareness, rest, key, exp, flags, val):
+    timeout = 60 + time.time()
+    passed = False
+    while time.time() < timeout and not passed:
+        try:
             awareness.memcached(key).set(key, exp, flags, value)
-        else:
-            raise e
+            passed = True
+        except mc_bin_client.MemcachedError as e:
+            if e.status == 7:
+                awareness.reset_vbucket(rest, key)
+            else:
+                raise e
+        except exceptions.EOFError:
+            awareness.reset(rest)
+        except socket.error:
+            awareness.reset(rest)
+    if not passed:
+        raise Exception("failed set after 60 seconds")
 
-def delete_aware(awareness, key):
-    try:
-        awareness.memcached(key).delete(key)
-    except mc_bin_client.MemcachedError as e:
-        if e.status == 7:
-            awareness.reset_vbucket(rest, key)
+def delete_aware(awareness, rest, key):
+    timeout = 60 + time.time()
+    passed = False
+    while time.time() < timeout and not passed:
+        try:
             awareness.memcached(key).delete(key)
-        else:
-            raise e
+            passed = True
+        except mc_bin_client.MemcachedError as e:
+            if e.status == 7:
+                awareness.reset_vbucket(rest, key)
+            else:
+                raise e
+        except exceptions.EOFError:
+            awareness.reset(rest)
+        except socket.error:
+            awareness.reset(rest)
+    if not passed:
+        raise Exception("failed delete after 60 seconds")
 
 
 if __name__ == "__main__":
@@ -141,23 +161,22 @@ if __name__ == "__main__":
     rest = RestConnection(config.master)
     awareness = VBucketAwareMemcached(rest, config.bucket)
 
-
     for i in range(config.sets):
         key = config.prefix + str(i)
         value = str(uuid.uuid4())
         kv.set(key, 0, 0, value)
-        set_aware(awareness, key, 0, 0, value)
+        set_aware(awareness, rest, key, 0, 0, value)
 
     for i in range(config.mutations):
         key = config.prefix + str(random.randint(0, config.sets))
         value = str(uuid.uuid4())
         kv.set(key, 0, 0, value)
-        set_aware(awareness, key, 0, 0, value)
+        set_aware(awareness, rest, key, 0, 0, value)
 
     for i in range(config.deletes):
         key = config.prefix + str(i)
         kv.delete(key)
-        delete_aware(awareness, key)
+        delete_aware(awareness, rest, key)
 
     awareness.done()
     kv.save(config.filename)
