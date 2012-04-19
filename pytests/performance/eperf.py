@@ -335,8 +335,8 @@ class EPerfMaster(perf.PerfBase):
     def test_ept_scaled_down_write_2_20_995(self):
         self.test_ept_scaled_down_write_2(ratio_hot=0.20, ratio_hot_get_set=0.995)
 
-    def test_ept_scaled_down_mixed(self):
-        self.spec("EPT-SCALED-DOWN-MIXED")
+    def test_ept_scaled_down_mixed(self, ratio_hot=0.2, ratio_hot_get_set=0.95):
+        self.spec("EPT-SCALED-DOWN-MIXED-" + str(ratio_hot) + "-" + str(ratio_hot_get_set))
         items = self.parami("items", 3000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 2), items)
@@ -346,12 +346,29 @@ class EPerfMaster(perf.PerfBase):
                           ratio_misses = self.paramf('ratio_misses', 0.05),
                           ratio_creates = self.paramf('ratio_creates', 0.08),
                           ratio_deletes = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_hot = self.paramf('ratio_hot', ratio_hot),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_get_set),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_get_set),
                           ratio_expirations = self.paramf('ratio_expirations', 0.03),
                           max_creates = self.parami("max_creates", 300000))
         self.gated_finish(self.input.clients, notify)
+
+    def test_ept_scaled_down_mixed_2(self):
+        self.test_ept_scaled_down_mixed(ratio_hot=0.05, ratio_hot_get_set=0.95)
+
+    def test_ept_scaled_down_mixed_2_5_98(self):
+        self.test_ept_scaled_down_mixed(ratio_hot=0.05, ratio_hot_get_set=0.98)
+    def test_ept_scaled_down_mixed_2_5_99(self):
+        self.test_ept_scaled_down_mixed(ratio_hot=0.05, ratio_hot_get_set=0.99)
+    def test_ept_scaled_down_mixed_2_5_995(self):
+        self.test_ept_scaled_down_mixed(ratio_hot=0.05, ratio_hot_get_set=0.995)
+
+    def test_ept_scaled_down_mixed_2_20_98(self):
+        self.test_ept_scaled_down_mixed(ratio_hot=0.20, ratio_hot_get_set=0.98)
+    def test_ept_scaled_down_mixed_2_20_99(self):
+        self.test_ept_scaled_down_mixed(ratio_hot=0.20, ratio_hot_get_set=0.99)
+    def test_ept_scaled_down_mixed_2_20_995(self):
+        self.test_ept_scaled_down_mixed(ratio_hot=0.20, ratio_hot_get_set=0.995)
 
     def test_ept_scaled_down_write_no_dgm_1(self):
         self.spec("EPT-SCALED-DOWN-WRITE-NO-DGM.1")
