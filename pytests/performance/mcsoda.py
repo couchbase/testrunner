@@ -311,7 +311,7 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
        cur['pos'] = pos
        x = pos
 
-    return int(base + (x % positive(range)))
+    return int((base + (x % positive(range))) % num_items)
 
 def positive(x):
     if x > 0:

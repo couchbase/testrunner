@@ -149,10 +149,10 @@ class EPerfMaster(perf.PerfBase):
                      ratio_hot_sets = 0,
                      ratio_expirations = 0,
                      max_creates    = 0,
-                     hot_shift = 0,
-                     ratio_queries = 0,
-                     queries = None,
-                     proto_prefix = "membase-binary"):
+                     hot_shift      = 10,
+                     ratio_queries  = 0,
+                     queries        = None,
+                     proto_prefix   = "membase-binary"):
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
             items = self.parami("items", items)
