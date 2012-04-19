@@ -570,7 +570,7 @@ class EPerfMaster(perf.PerfBase):
 
     # hot itmes are 1/4 of the original_1
     def test_ept_write_original_2(self, items=22500000, ratio_hot=0.05, ratio_hot_gets_sets=0.95):
-        self.spec("EPT-WRITE-original_2-" + str(ratio_hot) + "-" + str(ratio_hot_get_set))
+        self.spec("EPT-WRITE-original_2-" + str(ratio_hot) + "-" + str(ratio_hot_gets_sets))
         items = self.parami("items", items)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
