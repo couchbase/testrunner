@@ -1,7 +1,6 @@
 import time
 import logger
 from threading import Thread
-from exception import TimeoutException
 from membase.api.rest_client import RestConnection
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
