@@ -202,7 +202,7 @@ if __name__ == "__main__":
             log_config_filename = tmp_folder_abs_path + "/" + dotnames[len(dotnames) - 1] + ".logging.conf"
         create_log_file(log_config_filename,log_name, options.loglevel)
         logging.config.fileConfig(log_config_filename)
-        print("  ./testrunner {0} {1} -t {2}".format(arg_i or "", arg_p or "", name))
+        print("  ./testrunner -i {0} {1} -t {2}".format(arg_i or "", arg_p or "", name))
         name = name.split(",")[0]
 
         TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
