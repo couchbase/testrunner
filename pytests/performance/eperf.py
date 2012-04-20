@@ -410,10 +410,10 @@ class EPerfMaster(perf.PerfBase):
         self.test_ept_mixed_1(ratio_hot=0.05, ratio_hot_gets_sets=0.995)
 
     def test_ept_mixed_1_15M_5_995(self):
-        self.test_ept_mixed_1(item=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+        self.test_ept_mixed_1(items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
 
     def test_ept_mixed_1_22M_5_995(self):
-        self.test_ept_mixed_1(item=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+        self.test_ept_mixed_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
 
     def test_ept_rebalance_low_1(self):
         self.spec("EPT-REBALANCE-LOW-FETCH.1")
