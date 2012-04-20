@@ -1,12 +1,11 @@
 from random import shuffle
 import time
 import logger
-from membase.api.exception import StatsUnavailableException
+from membase.api.exception import StatsUnavailableException, ServerAlreadyJoinedException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from mc_bin_client import MemcachedClient, MemcachedError
-
 
 log = logger.Logger.get_logger()
 
@@ -494,8 +493,6 @@ class RebalanceHelper():
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
         except:
             log.error("rebalance failed, trying again after {0} seconds".format(timeout))
-            time.sleep(timeout)
-            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
 
     @staticmethod
     def begin_rebalance_out(master, servers, timeout=5):
@@ -520,8 +517,6 @@ class RebalanceHelper():
             rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
         except:
             log.error("rebalance failed, trying again after {0} seconds".format(timeout))
-            time.sleep(timeout)
-            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
 
     @staticmethod
     def end_rebalance(master):
