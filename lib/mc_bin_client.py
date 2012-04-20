@@ -22,7 +22,8 @@ class MemcachedError(exceptions.Exception):
     """Error raised when a command fails."""
 
     def __init__(self, status, msg):
-        supermsg='Memcached error #' + `status`
+        error_msg = error_to_str(status)
+        supermsg='Memcached error #' + `status` + ' ' + `error_msg`
         if msg: supermsg += ":  " + msg
         exceptions.Exception.__init__(self, supermsg)
 
@@ -453,3 +454,35 @@ class MemcachedClient(object):
     def deregister_tap_client(self, tap_name):
         """Deregister the TAP client with a given name."""
         return self._doCmd(memcacheConstants.CMD_DEREGISTER_TAP_CLIENT, tap_name, '')
+
+def error_to_str(errno):
+    if errno == 0x01:
+        return "Not found"
+    elif errno == 0x02:
+        return "Exists"
+    elif errno == 0x03:
+        return "Too big"
+    elif errno == 0x04:
+        return "Invalid"
+    elif errno == 0x05:
+        return "Not stored"
+    elif errno == 0x06:
+        return "Bad Delta"
+    elif errno == 0x07:
+        return "Not my vbucket"
+    elif errno == 0x20:
+        return "Auth error"
+    elif errno == 0x21:
+        return "Auth continue"
+    elif errno == 0x81:
+        return "Unknown Command"
+    elif errno == 0x82:
+        return "No Memory"
+    elif errno == 0x83:
+        return "Not Supported"
+    elif errno == 0x84:
+        return "Internal error"
+    elif errno == 0x85:
+        return "Busy"
+    elif errno == 0x86:
+        return "Temporary failure"
