@@ -9,6 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelpe
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteUtilHelper
 
 DEFAULT_LOAD_RATIO = 5
 DEFAULT_REPLICA = 1
@@ -19,16 +20,7 @@ class FailoverBaseTest(unittest.TestCase):
     @staticmethod
     def common_setup(input, testcase):
         servers = input.servers
-        for server in servers:
-            shell = RemoteMachineShellConnection(server)
-            if shell.is_membase_installed():
-                shell.start_membase()
-            else:
-                shell.start_couchbase()
-            o, r = shell.execute_command("iptables -F")
-            shell.log_command_output(o, r)
-            shell.disconnect()
-        time.sleep(10)
+        RemoteUtilHelper.common_basic_setup(servers)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         for server in servers:
             ClusterOperationHelper.cleanup_cluster([server])
@@ -36,16 +28,7 @@ class FailoverBaseTest(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(servers, testcase):
-        for server in servers:
-            shell = RemoteMachineShellConnection(server)
-            if shell.is_membase_installed():
-                shell.start_membase()
-            else:
-                shell.start_couchbase()
-            o, r = shell.execute_command("iptables -F")
-            shell.log_command_output(o, r)
-            shell.disconnect()
-            #also flush the firewall rules
+        RemoteUtilHelper.common_basic_setup(servers)
         log = logger.Logger.get_logger()
         log.info("10 seconds delay to wait for membase-server to start")
         time.sleep(10)
@@ -216,7 +199,7 @@ class FailoverTests(unittest.TestCase):
                     self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
                 elif failover_reason == "firewall":
-                    self.enable_firewall(node)
+                    RemoteUtilHelper.enable_firewall(self._servers,node)
                     self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
 
@@ -255,22 +238,5 @@ class FailoverTests(unittest.TestCase):
                 else:
                     shell.stop_couchbase()
                     log.info("Couchbase stopped")
-                shell.disconnect()
-                break
-
-    def enable_firewall(self, node):
-        log = logger.Logger.get_logger()
-        for server in self._servers:
-            rest = RestConnection(server)
-            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
-                continue
-            server_ip = rest.get_nodes_self().ip
-            if server_ip == node.ip:
-                shell = RemoteMachineShellConnection(server)
-                o, r = shell.execute_command("iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
-                shell.log_command_output(o, r)
-                log.info("enabled firewall on {0}".format(server))
-                o, r = shell.execute_command("iptables --list")
-                shell.log_command_output(o, r)
                 shell.disconnect()
                 break

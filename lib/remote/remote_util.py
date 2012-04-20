@@ -6,6 +6,7 @@ import logger
 import time
 from builds.build_query import BuildQuery
 import testconstants
+from membase.api.rest_client import RestConnection, RestHelper
 
 log = logger.Logger.get_logger()
 
@@ -217,11 +218,16 @@ class RemoteMachineShellConnection:
     def download_build(self, build):
         return self.download_binary(build.url, build.deliverable_type, build.name)
 
-    def disable_linux_firewall(self):
-        output, error = self.execute_command_raw('iptables -F')
-        self.log_command_output(output, error)
-        output, error = self.execute_command_raw('iptables -t nat -F')
-        self.log_command_output(output, error)
+    def disable_firewall(self):
+        info = self.extract_remote_info()
+        if info.type.lower() == "windows":
+            self.execute_command('netsh advfirewall set publicprofile state off')
+            self.execute_command('netsh advfirewall set privateprofile state off')
+        else:
+            output, error = self.execute_command('/sbin/iptables -F')
+            self.log_command_output(output, error)
+            output, error = self.execute_command('/sbin/iptables -t nat -F')
+            self.log_command_output(output, error)
 
     def download_binary(self, url, deliverable_type, filename):
         info = self.extract_remote_info()
@@ -234,6 +240,7 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T /IM iexplore.*')
             self.execute_command('taskkill /F /T /IM WerFault.*')
             self.execute_command('taskkill /F /T /IM memcached.exe')
+            self.disable_firewall()
             output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
             self.log_command_output(output, error)
             output, error = self.execute_command(
@@ -255,7 +262,7 @@ class RemoteMachineShellConnection:
             log.info('comparing md5 sum and downloading if needed')
             output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
             self.log_command_output(output, error)
-            self.disable_linux_firewall()
+            self.disable_firewall()
             #check if the file exists there now ?
             return self.file_exists('/tmp', filename)
             #for linux environment we can just
@@ -345,6 +352,7 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM WerFault.*')
         self.execute_command('taskkill /F /T /IM Firefox.*')
         self.execute_command('taskkill /F /T /IM memcached.exe')
+        self.disable_firewall()
         output, error = self.execute_command(
              "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O {1}_{2}.exe';ls -l;".format(
                 url, name, version))
@@ -1256,3 +1264,41 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                     return size[0]
                 else:
                     return 0
+
+class RemoteUtilHelper(object):
+
+    @staticmethod
+    def enable_firewall(servers, node):
+        for server in servers:
+            rest = RestConnection(server)
+            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
+                continue
+            server_ip = rest.get_nodes_self().ip
+            if server_ip == node.ip:
+                shell = RemoteMachineShellConnection(server)
+                info = shell.extract_remote_info()
+                if info.type.lower() == "windows":
+                    shell.execute_command('netsh advfirewall set publicprofile state on')
+                    shell.execute_command('netsh advfirewall set privateprofile state on')
+                else:
+                    o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+                    shell.log_command_output(o, r)
+                    log.info("enabled firewall on {0}".format(server))
+                    o, r = shell.execute_command("/sbin/iptables --list")
+                    shell.log_command_output(o, r)
+                shell.disconnect()
+                break
+
+    @staticmethod
+    def common_basic_setup(servers):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            if shell.is_membase_installed():
+                shell.start_membase()
+            else:
+                shell.start_couchbase()
+            shell.disable_firewall()
+            shell.unpause_memcached()
+            shell.unpause_beam()
+            shell.disconnect()
+        time.sleep(10)

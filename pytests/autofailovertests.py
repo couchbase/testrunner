@@ -9,6 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteUtilHelper
 
 
 class AutoFailoverBaseTest(unittest.TestCase):
@@ -22,27 +23,14 @@ class AutoFailoverBaseTest(unittest.TestCase):
     @staticmethod
     def common_setup(input, testcase):
         servers = input.servers
-        for server in servers:
-            shell = RemoteMachineShellConnection(server)
-            shell.disable_linux_firewall()
-            shell.start_couchbase()
-            shell.unpause_memcached()
-            shell.unpause_beam()
-            shell.disconnect()
-        time.sleep(10)
+        RemoteUtilHelper.common_basic_setup(servers)
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
 
     @staticmethod
     def common_tearDown(servers, testcase):
-        for server in servers:
-            shell = RemoteMachineShellConnection(server)
-            shell.disable_linux_firewall()
-            shell.start_couchbase()
-            shell.unpause_memcached()
-            shell.unpause_beam()
-            shell.disconnect()
+        RemoteUtilHelper.common_basic_setup(servers)
         log = logger.Logger.get_logger()
         log.info("10 seconds delay to wait for couchbase-server to start")
         time.sleep(10)
@@ -340,10 +328,10 @@ class AutoFailoverTests(unittest.TestCase):
     def _enable_firewall(self, server):
         log = logger.Logger.get_logger()
         shell = RemoteMachineShellConnection(server)
-        o,r = shell.execute_command("iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
         shell.log_command_output(o, r)
         log.info("enabled firewall on {0}".format(server))
-        o,r = shell.execute_command("iptables --list")
+        o,r = shell.execute_command("/sbin/iptables --list")
         shell.log_command_output(o, r)
         shell.disconnect()
 
