@@ -22,6 +22,18 @@ _STATE_TO_DESCRIPTION_MAP = {
 # Logger for internal use by the futures package.
 LOGGER = logging.getLogger("concurrent.futures")
 
+class Error(Exception):
+    """Base class for all future-related exceptions."""
+    pass
+
+class CancelledError(Error):
+    """The Future was cancelled."""
+    pass
+
+class TimeoutError(Error):
+    """The operation exceeded the given deadline."""
+    pass
+
 class Future(object):
     """Represents the result of an asynchronous computation."""
 
@@ -144,6 +156,7 @@ class Future(object):
             elif self._state == FINISHED:
                 return self.__get_result()
             else:
+                self.set_exception(TimeoutError())
                 raise TimeoutError()
 
     def exception(self, timeout=None):
@@ -177,6 +190,7 @@ class Future(object):
             elif self._state == FINISHED:
                 return self._exception
             else:
+                self.set_exception(TimeoutError())
                 raise TimeoutError()
 
     # The following methods should only be used by Executors and in tests.
