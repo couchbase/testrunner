@@ -198,7 +198,7 @@ class StatsWaitTask(Task):
         for node in self.stats:
             client = self._get_connection(node['server'])
             for param, stats_list in node['stats'].items():
-                stats = client.stats()
+                stats = client.stats(param)
                 for k, v in stats_list.items():
                     if not stats.has_key(k):
                         self.state = FINISHED
