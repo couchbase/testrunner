@@ -161,8 +161,10 @@ class RebalanceTask(Task):
         rest = RestConnection(self.servers[0])
         nodes = rest.node_statuses()
         ejectedNodes = []
-        for node in self.to_remove:
-            ejectedNodes.append(node.id)
+        for server in self.to_remove:
+            for node in nodes:
+                if server.ip == node.ip and server.port == node.port:
+                    ejectedNodes.append(node.id)
         rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
 
     def check(self, task_manager):
