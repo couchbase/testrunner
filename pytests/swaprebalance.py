@@ -119,7 +119,7 @@ class SwapRebalanceBase(unittest.TestCase):
             loader = dict()
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
                     password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
-            loader["mcsoda"].cfg["exit-after-creates"] = 1
+            loader["mcsoda"].cfg["exit-after-creates"] = 0
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
             loader["mcsoda"].cfg["ratio-creates"] = 0.5
@@ -139,7 +139,7 @@ class SwapRebalanceBase(unittest.TestCase):
             for loader in loaders:
                 loader["mcsoda"].load_stop()
         for loader in loaders:
-            loader["thread"].join()
+            loader["thread"].join(60)
 
     @staticmethod
     def create_buckets(self):
@@ -442,9 +442,6 @@ class SwapRebalanceBase(unittest.TestCase):
             format(status, content))
             optNodesIds[0] = content
 
-        self.log.info("DATA ACCESS PHASE")
-        loaders = SwapRebalanceBase.start_access_phase(self, master)
-
         self.log.info("FAILOVER PHASE")
         #Failover selected nodes
         for node in optNodesIds:
@@ -457,12 +454,15 @@ class SwapRebalanceBase(unittest.TestCase):
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
 
-        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
-            ejectedNodes=optNodesIds)
-
         if self.fail_orchestrator:
             rest = RestConnection(new_swap_servers[0])
             master = new_swap_servers[0]
+
+        self.log.info("DATA ACCESS PHASE")
+        loaders = SwapRebalanceBase.start_access_phase(self, master)
+
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+            ejectedNodes=optNodesIds)
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(new_swap_servers))
