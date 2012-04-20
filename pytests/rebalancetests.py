@@ -405,18 +405,8 @@ class RebalanceBaseTest(unittest.TestCase):
     def do_kv_and_replica_verification(master, task_manager, bucket_data, replica, self):
 
         rest = RestConnection(master)
-        buckets = rest.get_buckets()
 
         RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
-
-        for bucket in buckets:
-            if bucket_data[bucket.name]['kv_store'] is not None:
-                current_active_items = \
-                    bucket_data[bucket.name]['kv_store'].valid_items()
-                RebalanceBaseTest.verify_data(master,
-                                              current_active_items,
-                                              bucket.name,
-                                              self)
 
         final_replication_state = RestHelper(rest).wait_for_replication(300)
         msg = "replication state after waiting for up to 5 minutes : {0}"
