@@ -520,9 +520,9 @@ class EPerfMaster(perf.PerfBase):
         self.gated_finish(self.input.clients, notify)
 
     # This is a small version of test_ept_read_original with fewer creates.
-    def test_ept_read_original_1(self):
-        self.spec("EPT-READ-original_1")
-        items = self.parami("items", 15000000)
+    def test_ept_read_original_1(self, items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.95):
+        self.spec("EPT-READ-original_1-" + str(ratio_hot) + "-" + str(ratio_hot_gets_sets))
+        items = self.parami("items", items)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 90:3:6:1.
@@ -531,12 +531,18 @@ class EPerfMaster(perf.PerfBase):
                           ratio_misses = self.paramf('ratio_misses', 0.05),
                           ratio_creates = self.paramf('ratio_creates', 0.30),
                           ratio_deletes = self.paramf('ratio_deletes', 0.1428),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_hot = self.paramf('ratio_hot', ratio_hot),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_gets_sets),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_gets_sets),
                           ratio_expirations = self.paramf('ratio_expirations', 0.005),
                           max_creates = self.parami("max_creates", 5400000))
         self.gated_finish(self.input.clients, notify)
+
+    def test_ept_read_original_1_15M_5_995(self):
+        self.test_ept_write_original_2(items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+
+    def test_ept_write_original_1_22M_5_995(self):
+        self.test_ept_write_original_2(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
 
     def test_ept_write_original(self):
         self.spec("EPT-WRITE-original")
