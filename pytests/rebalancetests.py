@@ -405,8 +405,18 @@ class RebalanceBaseTest(unittest.TestCase):
     def do_kv_and_replica_verification(master, task_manager, bucket_data, replica, self):
 
         rest = RestConnection(master)
+        buckets = rest.get_buckets()
 
         RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+
+        for bucket in buckets:
+            if bucket_data[bucket.name]['kv_store'] is not None:
+                current_active_items = \
+                    bucket_data[bucket.name]['kv_store'].valid_items()
+                RebalanceBaseTest.verify_data(master,
+                                              current_active_items,
+                                              bucket.name,
+                                              self)
 
         final_replication_state = RestHelper(rest).wait_for_replication(300)
         msg = "replication state after waiting for up to 5 minutes : {0}"
@@ -435,7 +445,7 @@ class IncrementalRebalanceComboTests(unittest.TestCase):
         self.task_manager.cancel()
         self.task_manager.join()
 
-    #load data add one node , rebalance add another node rebalance
+    #load data concurrently w/ rebalance, adding another loading of mutated items
     def _common_test_body(self, keys_count=-1, load_ratio=-1, replica=1, rebalance_in=2, verify=True):
         master = self._servers[0]
         rest = RestConnection(master)
@@ -454,8 +464,6 @@ class IncrementalRebalanceComboTests(unittest.TestCase):
                                                 DELETE_RATIO = DELETE_RATIO,
                                                 ACCESS_RATIO = ACCESS_RATIO,
                                                 EXPIRY_RATIO = EXPIRY_RATIO)
-
-
             # rebalance in a server
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                                                    [master],
@@ -497,7 +505,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         self.task_manager.cancel()
         self.task_manager.join()
 
-    #load data add one node , rebalance add another node rebalance
+    # Concurrently load data & mutate data,  add one node , rebalance add another node rebalance
     def _common_test_body(self, keys_count=-1,
                           load_ratio=-1, replica=1,
                           rebalance_in=2, verify=True,
@@ -507,27 +515,50 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         rebalanced_servers = [master]
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
+        RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
+            bucket_data, load_ratio,
+            keys_count = keys_count)
+
         for server in self._servers[1:]:
 
-            # load bucket data
-            RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
-                                                    bucket_data, load_ratio,
-                                                    keys_count = keys_count)
+           # start document load
+            RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager,
+                bucket_data,
+                new_doc_seed= str(uuid.uuid4())[0:7],
+                DELETE_RATIO = DELETE_RATIO,
+                ACCESS_RATIO = ACCESS_RATIO,
+                EXPIRY_RATIO = EXPIRY_RATIO)
+
+            # Adding stuff for mutated items
+            RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager,
+                bucket_data,
+                new_doc_seed= str(uuid.uuid4())[0:7],
+                DELETE_RATIO = DELETE_RATIO,
+                ACCESS_RATIO = ACCESS_RATIO,
+                EXPIRY_RATIO = EXPIRY_RATIO)
 
             # rebalance in a server
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
-                                                   [master],
-                                                   [server],
-                                                   [], True)
+                [master],
+                [server],
+                [], True)
 
+            # wait for loading tasks to finish
+            RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
+
+
+            self.log.info("Starting Verification of KV store")
             # verification step
             if verify:
                 RebalanceBaseTest.do_kv_and_replica_verification(master,
-                                                                 self.task_manager,
-                                                                 bucket_data,
-                                                                 replica,
-                                                                 self)
+                    self.task_manager,
+                    bucket_data,
+                    replica,
+                    self)
+                self.log.info("Completed Verification of KV store")
 
+            else:
+                self.log.info("This does not verify stuff")
 
     def test_load(self):
         log = logger.Logger().get_logger()
@@ -540,8 +571,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             expiry_ratio = float(self._input.test_params.get('expiry-ratio', EXPIRY_RATIO))
         log.info("keys_count, replica, load_ratio: {0} {1} {2}".format(keys_count, replica, load_ratio))
         RebalanceBaseTest.common_setup(self._input, self, replica=replica)
-        self._common_test_body(keys_count, load_ratio, replica, True, delete_ratio, expiry_ratio)
-
+        self._common_test_body(keys_count, load_ratio, replica, 2, True, delete_ratio, expiry_ratio)
 
 class IncrementalRebalanceInWithParallelLoad(unittest.TestCase):
     def setUp(self):
@@ -739,15 +769,34 @@ class IncrementalRebalanceOut(unittest.TestCase):
                                                self._servers[1:],
                                                [], True)
 
-        nodes = rest.node_statuses()
+        if len(rest.node_statuses()) > 2:
 
-        if len(nodes) > 2:
-            for node in nodes[1:]:
+            nodes_before_rebalance_out = rest.node_statuses()
+            for node in nodes_before_rebalance_out:
+                if node.ip == master.ip and node.port == master.port:
+                    continue
 
                 # load bucket data
                 RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
-                                                        bucket_data, load_ratio,
-                                                        keys_count = keys_count)
+                bucket_data, load_ratio,
+                keys_count = keys_count)
+
+                # start document load
+                RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager,
+                    bucket_data,
+                    new_doc_seed= str(uuid.uuid4())[0:7],
+                    DELETE_RATIO = DELETE_RATIO,
+                    ACCESS_RATIO = ACCESS_RATIO,
+                    EXPIRY_RATIO = EXPIRY_RATIO)
+
+                # Adding stuff for mutated items
+                RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager,
+                    bucket_data,
+                    new_doc_seed= str(uuid.uuid4())[0:7],
+                    DELETE_RATIO = DELETE_RATIO,
+                    ACCESS_RATIO = ACCESS_RATIO,
+                    EXPIRY_RATIO = EXPIRY_RATIO)
+
 
                 # rebalance out a server
                 RebalanceTaskHelper.add_rebalance_task(self.task_manager,
@@ -755,7 +804,13 @@ class IncrementalRebalanceOut(unittest.TestCase):
                                                        [],
                                                        [node], True)
 
-                # verification step
+
+                 # wait for loading tasks to finish
+                RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
+
+                self.log.info("rebalancing out {0}".format(node.ip))
+
+#                # verification step
                 RebalanceBaseTest.do_kv_and_replica_verification(master,
                                                                  self.task_manager,
                                                                  bucket_data,
