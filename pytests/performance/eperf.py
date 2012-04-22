@@ -303,8 +303,12 @@ class EPerfMaster(perf.PerfBase):
                           max_creates    = self.parami("max_creates", 300000))
         self.gated_finish(self.input.clients, notify)
 
-    def test_ept_scaled_down_write_2(self, ratio_hot=0.05, ratio_hot_get_set=0.95):
-        self.spec("EPT-SCALED-DOWN-WRITE.2-" + str(ratio_hot) + "-" + str(ratio_hot_get_set))
+    def test_ept_scaled_down_write_2(self, ratio_hot=0.05, ratio_hot_get_set=0.95,
+                                     max_creates=300000):
+        self.spec("EPT-SCALED-DOWN-WRITE.2-" +
+                  str(ratio_hot) + "-" +
+                  str(ratio_hot_get_set) + "-" +
+                  str(max_creates))
         items = self.parami("items",3000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 2), items)
@@ -318,7 +322,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_get_set),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_get_set),
                           ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates    = self.parami("max_creates", 300000))
+                          max_creates    = self.parami("max_creates", max_creates))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_scaled_down_write_2_5_98(self):
@@ -388,8 +392,10 @@ class EPerfMaster(perf.PerfBase):
                           max_creates    = self.parami("max_creates", 300000))
         self.gated_finish(self.input.clients, notify)
 
-    def test_ept_mixed_1(self, items=7000000, ratio_hot=0.2, ratio_hot_gets_sets=0.95):
-        self.spec("EPT-MIXED.1-" + str(ratio_hot) + "-" + str(ratio_hot_gets_sets))
+    def test_ept_mixed_1(self, items=7000000, ratio_hot=0.2, ratio_hot_gets_sets=0.95,
+                         max_creates=5000000):
+        self.spec("EPT-MIXED.1-" + str(ratio_hot) + "-" + str(ratio_hot_gets_sets) + "-" +
+                  str(max_creates))
         items = self.parami("items", items)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
@@ -403,7 +409,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_gets_sets),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_gets_sets),
                           ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates    = self.parami("max_creates", 5000000))
+                          max_creates    = self.parami("max_creates", max_creates))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_mixed_1_5_995(self):
@@ -414,6 +420,10 @@ class EPerfMaster(perf.PerfBase):
 
     def test_ept_mixed_1_22M_5_995(self):
         self.test_ept_mixed_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+
+    def test_ept_mixed_1_22M_5_995_15M(self):
+        self.test_ept_mixed_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995,
+                              max_creates=15000000)
 
     def test_ept_rebalance_low_1(self):
         self.spec("EPT-REBALANCE-LOW-FETCH.1")
@@ -520,8 +530,13 @@ class EPerfMaster(perf.PerfBase):
         self.gated_finish(self.input.clients, notify)
 
     # This is a small version of test_ept_read_original with fewer creates.
-    def test_ept_read_original_1(self, items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.95):
-        self.spec("EPT-READ-original_1-" + str(ratio_hot) + "-" + str(ratio_hot_gets_sets))
+    def test_ept_read_original_1(self, items=15000000,
+                                 ratio_hot=0.05, ratio_hot_gets_sets=0.95,
+                                 max_creates=5400000):
+        self.spec("EPT-READ-original_1-" +
+                  str(ratio_hot) + "-" +
+                  str(ratio_hot_gets_sets) + "-" +
+                  str(max_creates))
         items = self.parami("items", items)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
@@ -535,7 +550,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_gets_sets),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_gets_sets),
                           ratio_expirations = self.paramf('ratio_expirations', 0.005),
-                          max_creates = self.parami("max_creates", 5400000))
+                          max_creates = self.parami("max_creates", max_creates))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_read_original_1_15M_5_995(self):
@@ -543,6 +558,10 @@ class EPerfMaster(perf.PerfBase):
 
     def test_ept_read_original_1_22M_5_995(self):
         self.test_ept_read_original_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+
+    def test_ept_read_original_1_22M_5_995_15M(self):
+        self.test_ept_read_original_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995,
+                                      max_creates=15000000)
 
     def test_ept_write_original(self):
         self.spec("EPT-WRITE-original")
@@ -582,8 +601,13 @@ class EPerfMaster(perf.PerfBase):
         self.gated_finish(self.input.clients, notify)
 
     # hot itmes are 1/4 of the original_1
-    def test_ept_write_original_2(self, items=22500000, ratio_hot=0.05, ratio_hot_gets_sets=0.95):
-        self.spec("EPT-WRITE-original_2-" + str(ratio_hot) + "-" + str(ratio_hot_gets_sets))
+    def test_ept_write_original_2(self, items=22500000,
+                                  ratio_hot=0.05, ratio_hot_gets_sets=0.95,
+                                  max_creates=10000000):
+        self.spec("EPT-WRITE-original_2-" +
+                  str(ratio_hot) + "-" +
+                  str(ratio_hot_gets_sets) + "-" +
+                  str(max_creates))
         items = self.parami("items", items)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
@@ -597,7 +621,7 @@ class EPerfMaster(perf.PerfBase):
                           ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_gets_sets),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_gets_sets),
                           ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates = self.parami("max_creates", 10000000))
+                          max_creates = self.parami("max_creates", max_creates))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_write_original_2_15M_5_995(self):
@@ -605,6 +629,10 @@ class EPerfMaster(perf.PerfBase):
 
     def test_ept_write_original_2_22M_5_995(self):
         self.test_ept_write_original_2(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+
+    def test_ept_write_original_2_22M_5_995_30M(self):
+        self.test_ept_write_original_2(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995,
+                                       max_creates=30000000)
 
     def test_query_all_docs_mixed_original(self):
         self.spec("QEURY-ALLDOCS-MIXED-original")
