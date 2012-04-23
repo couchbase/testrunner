@@ -23,13 +23,13 @@ pdfname = args[6]
 # pdfname = "ept-write-nonjson-180-200r452"
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
- # baseline_build="1.8.0r-55-g80f24f2-community"
- # new_build = "2.0.0r-710-toy-community"
- # test_name = "EPT-WRITE-original"
- # dbip = "couchdb2.couchbaseqe.com"
- # dbname= "eperf"
- # pdfname = "one"
- # i_builds = c("1.7.2r-22-geaf53ef", new_build)
+  # baseline_build="1.8.1r-764-rel-enterprise"
+  # new_build = "2.0.0r-1131-debug-enterprise"
+  # test_name = "EPT-MIXED.1-0.05-0.995"
+  # dbip = "couchdb2.couchbaseqe.com"
+  # dbname= "eperf"
+  # pdfname = "one"
+  # i_builds = c("1.7.2r-22-geaf53ef", new_build)
 i_builds = c(baseline_build, new_build)
 
 cat(paste("args : ",args,""),sep="\n")
@@ -179,6 +179,7 @@ ns_server_data $ops <- as.numeric(ns_server_data $ops)
 ns_server_data $ep_bg_fetched <- as.numeric(ns_server_data $ep_bg_fetched)
 ns_server_data $ep_tmp_oom_errors <- as.numeric(ns_server_data $ep_tmp_oom_errors)
 ns_server_data $vb_active_resident_items_ratio <- as.numeric(ns_server_data $vb_active_resident_items_ratio)
+ns_server_data $vb_replica_resident_items_ratio <- as.numeric(ns_server_data $vb_replica_resident_items_ratio)
 ns_server_data $vb_active_eject <- as.numeric(ns_server_data $vb_active_eject)
 ns_server_data $vb_replica_eject <- as.numeric(ns_server_data $vb_replica_eject)
 ns_server_data $ep_tap_replica_queue_backoff <- as.numeric(ns_server_data $ep_tap_replica_queue_backoff)
@@ -754,6 +755,12 @@ p <- addopts(p,"vb_active_resident_items_ratio")
 print(p)
 makeFootnote(footnote)
 
+cat("generating vb_replica_resident_items_ratio \n")
+p <- ggplot(ns_server_data, aes(row, vb_replica_resident_items_ratio, color=buildinfo.version , label= prettySize(vb_replica_resident_items_ratio))) + labs(x="----time (sec)--->", y="vb_replica_resident_items_ratio")
+p <- p + geom_point()
+p <- addopts(p,"vb_replica_resident_items_ratio")
+print(p)
+makeFootnote(footnote)
 
 
 cat("generating cur_items_total \n")
@@ -818,6 +825,15 @@ p <- p + geom_point()
 p <- addopts(p,"cache_miss percentage")
 print(p)
 makeFootnote(footnote)
+
+cat("generating cache_miss ( between 0-5 ) \n")
+ns_server_data$cache_miss_0_5 <- ifelse(ns_server_data $cache_miss>5,5,x$cache_miss)
+p <- ggplot(ns_server_data, aes(row, cache_miss_0_5, color=buildinfo.version , label= cache_miss_0_5)) + labs(x="----time (sec)--->", y="cache_miss percentage")
+p <- p + geom_point()
+p <- addopts(p,"cache_miss percentage 0-5")
+print(p)
+makeFootnote(footnote)
+
 
 
 cat("Latency-get 90th\n")
