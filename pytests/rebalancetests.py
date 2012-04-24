@@ -864,41 +864,50 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
-        creds = self.input.membase_settings
-        rebalanced_servers = [master]
 
-        otpNode = None
+        self.log.info("INTIAL LOAD")
+        RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager, bucket_data, self.load_ratio,
+            keys_count = self.keys_count)
+
+        rebalance_out = False
         for server in self.servers[1:]:
-            if otpNode:
-                # rebalance out the previous node
-                ejectedNodes = [otpNode.id]
+            if rebalance_out:
+                # Pick a node to rebalance out, other than master
+                ejectedNodes = [RebalanceHelper.pick_node(master)]
             else:
                 ejectedNodes = []
-            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
-            self.log.info("adding node {0}, removing node {1} and rebalance afterwards".format(server.ip, ejectedNodes))
-            otpNode = rest.add_node(creds.rest_username,
-                                    creds.rest_password,
-                                    server.ip)
-            msg = "unable to add node {0} to the cluster and remove node {1}"
-            self.assertTrue(otpNode, msg.format(server.ip, ejectedNodes))
-            distribution = RebalanceBaseTest.get_distribution(self.load_ratio)
-            bucket_data = RebalanceBaseTest.threads_for_buckets(rest, self.load_ratio, distribution, rebalanced_servers,
-                                                                bucket_data,
-                                                                delete_ratio=self.delete_ratio, expiry_ratio=self.expiry_ratio)
+            current_nodes = RebalanceHelper.getOtpNodeIds(master)
+            self.log.info("current nodes : {0}".format(current_nodes))
+            self.log.info("adding node {0}, removing node {1} and rebalance afterwards".format(server.ip,
+                [node.ip for node in ejectedNodes]))
 
-            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
-            self.assertTrue(rest.monitorRebalance(),
-                            msg="rebalance operation failed after adding node {0} and removing node {1}".format(
-                                server.ip, ejectedNodes))
-            rebalanced_servers.append(server)
+            self.log.info("START PARALLEL LOAD")
+            RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
+                DELETE_RATIO = self.delete_ratio,
+                ACCESS_RATIO = self.access_ratio, EXPIRY_RATIO = self.expiry_ratio)
 
-            for name in bucket_data:
-                for thread in bucket_data[name]["threads"]:
-                    thread.join()
-                    bucket_data[name]["items_inserted_count"] += thread.inserted_keys_count()
-            if self.do_verify:
-                RebalanceBaseTest.replication_verification(master, bucket_data, self.replica, self)
+            self.log.info("INCREMENTAL REBALANCE IN/OUT")
+            # rebalance in/out a server
+            RebalanceTaskHelper.add_rebalance_task(self.task_manager,
+                [master],
+                [server],
+                ejectedNodes, True)
+            # wait for loading tasks to finish
+            RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
 
+            # Make sure we have at least 3 nodes, for replica=2
+            if len(current_nodes) > 2:
+                rebalance_out = True
+
+        if self.do_verify:
+            self.log.info("VERIFICATION")
+            RebalanceBaseTest.do_kv_and_replica_verification(master,
+                    self.task_manager,
+                    bucket_data,
+                    self.replica,
+                    self)
+        else:
+            self.log.info("NO VERIFICATION")
 
     def test_load(self):
         self._common_test_body()
