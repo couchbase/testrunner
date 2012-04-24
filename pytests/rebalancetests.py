@@ -724,27 +724,24 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self)
 
-    #load data add one node , rebalance add another node rebalance
-    def _common_test_body(self, items, replica=1, moxi=False):
-        master = self._servers[0]
+    def _common_test_body(self, moxi=False):
+        master = self.servers[0]
         rest = RestConnection(master)
-        creds = self._input.membase_settings
+        creds = self.input.membase_settings
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
-        for server in self._servers[1:]:
+        for server in self.servers[1:]:
             self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
             self.log.info("adding node {0}:{1} and rebalance afterwards".format(server.ip, server.port))
             otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster {1}"
             self.assertTrue(otpNode, msg.format(server.ip, master.ip))
-            distribution = RebalanceBaseTest.get_distribution(items)
             for name in bucket_data:
                 inserted_keys, rejected_keys =\
-                MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self._servers[0]],
+                MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.servers[0]],
                                                                       name=name,
                                                                       ram_load_ratio=-1,
-                                                                      number_of_items=items,
-                                                                      value_size_distribution=distribution,
+                                                                      number_of_items=self.keys_count,
                                                                       number_of_threads=1,
                                                                       write_only=True)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
@@ -755,8 +752,6 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                 self.assertTrue(rest.monitorRebalance(),
                                 msg="rebalance operation failed after adding node {0}".format(server.ip))
                 break
-
-        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
 
     @staticmethod
     def _reader_thread(self, inserted_keys, bucket_data, moxi=False):
@@ -782,12 +777,10 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                         smartclient = VBucketAwareMemcached(rest, name)
 
     def test_10k_moxi(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(10 * 1000, moxi=True)
+        self._common_test_body(moxi=True)
 
     def test_10k_memcached(self):
-        RebalanceBaseTest.common_setup(self._input, self, replica=1)
-        self._common_test_body(10 * 1000)
+        self._common_test_body()
 
 
 class FailoverRebalanceRepeatTests(unittest.TestCase):
