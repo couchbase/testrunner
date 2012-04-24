@@ -827,7 +827,7 @@ print(p)
 makeFootnote(footnote)
 
 cat("generating cache_miss ( between 0-5 ) \n")
-ns_server_data$cache_miss_0_5 <- ifelse(ns_server_data $cache_miss>5,5,x$cache_miss)
+ns_server_data$cache_miss_0_5 <- ifelse(ns_server_data $cache_miss>5,5, ns_server_data$cache_miss)
 p <- ggplot(ns_server_data, aes(row, cache_miss_0_5, color=buildinfo.version , label= cache_miss_0_5)) + labs(x="----time (sec)--->", y="cache_miss percentage")
 p <- p + geom_point()
 p <- addopts(p,"cache_miss percentage 0-5")
