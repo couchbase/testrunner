@@ -2,21 +2,28 @@ import uuid
 import logger
 import time
 import unittest
+import json
+import sys
 from threading import Thread
 from couchbase.document import View
 from membase.api.rest_client import RestConnection
 from viewtests import ViewBaseTests
-from memcached.helper.data_helper import VBucketAwareMemcached, DocumentGenerator
-import json
-import sys
+from memcached.helper.data_helper import VBucketAwareMemcached, DocumentGenerator, KVStoreAwareSmartClient
+from tasks import task, taskmanager
+from memcached.helper.kvstore import ClientKeyValueStore
 
 class ViewQueryTests(unittest.TestCase):
 
     def setUp(self):
         ViewBaseTests.common_setUp(self)
 
+        self.task_manager = taskmanager.TaskManager()
+        self.task_manager.start()
+
     def tearDown(self):
         ViewBaseTests.common_tearDown(self)
+
+        self.task_manager.cancel()
 
     def test_simple_dataset_stale_queries(self):
         # init dataset for test
@@ -33,6 +40,11 @@ class ViewQueryTests(unittest.TestCase):
         data_set = SimpleDataSet(self._rconn(), self.num_docs)
         data_set.add_all_query_sets()
         self._query_test_init(data_set)
+
+    def test_simple_dataset_include_queries(self):
+        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set.add_include_docs_queries([data_set.views[0]])
+        self._query_test_init(data_set, tm = self.task_manager)
 
     def test_employee_dataset_startkey_endkey_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
@@ -137,24 +149,33 @@ class ViewQueryTests(unittest.TestCase):
     # set to False if you plan on running _query_all_views()
     # later in the test case
     ###
-    def _query_test_init(self, data_set, verify_results = True):
+    def _query_test_init(self, data_set, verify_results = True, tm = None):
         views = data_set.views
+        rest = self._rconn()
+        load_task = None
 
-        # start loading data
-        t = Thread(target=data_set.load,
-                   name="load_data_set",
-                   args=(self, views[0]))
-        t.start()
+        if tm is None:
+            # start loading data using old method
+            load_task = Thread(target=data_set.load,
+                               name="load_data_set",
+                               args=(self, views[0]))
+            load_task.start()
+        else:
+            load_task = data_set.load_with_tm(tm, rest)
+            time.sleep(2)
 
         # run queries while loading data
-        while(t.is_alive()):
+        while(load_task.is_alive()):
             self._query_all_views(views, False)
             time.sleep(5)
-        t.join()
+        if 'result' in dir(load_task):
+            load_task.result()
+        else:
+            load_task.join()
 
         # results will be verified if verify_results set
         if verify_results:
-            self._query_all_views(views, verify_results)
+            self._query_all_views(views, verify_results, data_set.kv_store)
         else:
             self._check_view_intergrity(views)
 
@@ -162,13 +183,13 @@ class ViewQueryTests(unittest.TestCase):
     ##
     # run all queries for all views in parallel
     ##
-    def _query_all_views(self, views, verify_results = True):
+    def _query_all_views(self, views, verify_results = True, kv_store = None):
 
         query_threads = []
         for view in views:
             t = Thread(target=view.run_queries,
                name="query-{0}".format(view.name),
-               args=(self, verify_results))
+               args=(self, verify_results, kv_store))
             query_threads.append(t)
             t.start()
 
@@ -226,7 +247,7 @@ class QueryView:
             rest.create_view(self.name, self.bucket, [View(self.name, self.fn_str, self.reduce_fn)])
 
     # query this view
-    def run_queries(self, tc, verify_results = False):
+    def run_queries(self, tc, verify_results = False, kv_store = None):
         rest = tc._rconn()
 
         if not len(self.queries) > 0 :
@@ -261,6 +282,7 @@ class QueryView:
                             .format(view_name, attempt, query.expected_num_groups,
                                     num_keys, expected_num_docs));
                     else:
+
                         num_keys = len(ViewBaseTests._get_keys(self, results))
                         self.log.info("{0}: attempt {1} retrieved value {2} expected: {3}" \
                             .format(view_name, attempt, num_keys, expected_num_docs));
@@ -268,6 +290,7 @@ class QueryView:
                     attempt += 1
 
                     time.sleep(delay)
+
                 if(num_keys != expected_num_docs):
                     msg = "Query failed: {0} Documents Retrieved,  expected {1}"
                     val = msg.format(num_keys, expected_num_docs)
@@ -277,11 +300,50 @@ class QueryView:
                         self.log.error(val)
                         self.log.error("Last query result:\n\n%s\n\n" % (json.dumps(results, sort_keys=True, indent=4)))
                         self.results.addFailure(tc, sys.exc_info())
+
+                if 'include_docs' in params:
+                    self.view_doc_integrity(tc, results, expected_num_docs, kv_store)
+
             else:
                 # query without verification
                 self.log.info("Quering view {0} with params: {1}".format(view_name, params));
                 results = ViewBaseTests._get_view_results(tc, rest, "default", view_name,
                                                           limit=None, extra_params=params)
+
+
+    def view_doc_integrity(self, tc, results, expected_num_docs, kv_store):
+        rest = tc._rconn()
+
+        try:
+            kv_client = KVStoreAwareSmartClient(rest,
+                                                self.bucket,
+                                                kv_store = kv_store)
+            valid_keys = kv_client.get_all_valid_items()
+            tc.assertEquals(len(valid_keys), expected_num_docs)
+
+            # retrieve doc from view result and compare with memcached
+            for row in results['rows']:
+
+                # retrieve doc from view result
+                tc.assertTrue('doc' in row, "malformed view result")
+                view_doc = row['doc']
+                doc_id = str(view_doc['_id'])
+
+                # retrieve doc from memcached
+                mc_item = kv_client.mc_get_full(doc_id)
+                tc.assertFalse(mc_item == None, "document missing from memcached")
+                mc_doc = json.loads(mc_item["value"])
+
+                # compare
+                for key in mc_doc.keys():
+                    err_msg = "error verifying document id {0}: retrieved value {1} expected {2}"
+                    err_msg_fmt = err_msg.format(doc_id, mc_doc[key], view_doc[key])
+                    tc.assertEquals(mc_doc[key], view_doc[key], err_msg_fmt)
+
+        except AssertionError :
+            self.log.error("error during data verification")
+            self.results.addFailure(tc, sys.exc_info())
+
 
     """
         helper function for verifying results when _count reduce is used.
@@ -320,6 +382,7 @@ class EmployeeDataSet:
         self.bucket = bucket
         self.rest = rest
         self.name = "employee_dataset"
+        self.kv_store = None
 
 
     def calc_total_doc_count(self):
@@ -535,7 +598,8 @@ class SimpleDataSet:
         self.num_docs = num_docs
         self.views = self.create_views(rest)
         self.name = "simple_dataset"
-
+        self.kv_store = ClientKeyValueStore()
+        self.kv_template = {"name": "doc-${prefix}-${seed}-", "age": "${prefix}"}
 
     def create_views(self, rest):
         view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
@@ -544,6 +608,27 @@ class SimpleDataSet:
     def load(self, tc, view, verify_docs_loaded = True):
         doc_names = ViewBaseTests._load_docs(tc, self.num_docs, view.prefix, verify_docs_loaded)
         return doc_names
+
+    def load_with_tm(self, task_manager, rest,
+                     bucket = "default",
+                     seed = None,
+                     monitor = False):
+        return \
+            DataLoadHelper.add_doc_gen_task(task_manager, rest,
+                                            self.num_docs,
+                                            bucket = bucket,
+                                            kv_template = self.kv_template,
+                                            kv_store = self.kv_store,
+                                            seed = seed,
+                                            monitor = monitor)
+
+    def add_include_docs_queries(self, views = None):
+        views = views or self.views
+
+        for view in views:
+            index_size = view.index_size
+            view.queries += [QueryHelper({"include_docs" : "true"}, index_size)]
+
 
     def add_startkey_endkey_queries(self, views = None):
 
@@ -583,6 +668,27 @@ class SimpleDataSet:
     def add_all_query_sets(self, views = None):
         self.add_startkey_endkey_queries(views)
         self.add_stale_queries(views)
+
+class DataLoadHelper:
+    @staticmethod
+    def add_doc_gen_task(tm, rest, count, bucket = "default",
+                         kv_store = None, store_enabled = True,
+                         kv_template = None, seed = None,
+                         sizes = None, expiration = None,
+                         loop = False, monitor = False,
+                         doc_generators = None):
+
+        doc_generators = doc_generators or \
+            DocumentGenerator.get_doc_generators(count, kv_template, seed, sizes)
+        t = task.LoadDocGeneratorTask(rest, doc_generators, bucket, kv_store,
+                                      store_enabled, expiration, loop)
+
+        tm.schedule(t)
+        if monitor:
+            return t.result()
+        return t
+
+
 
 class QueryHelper:
     def __init__(self, params, expected_num_docs, expected_num_groups = 1):
