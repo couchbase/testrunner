@@ -671,16 +671,18 @@ class StopRebalanceTests(unittest.TestCase):
         self._common_test_body()
 
     def _common_test_body(self):
-        #the ratio is relative to the number of nodes ?
+
         master = self.servers[0]
         rest = RestConnection(master)
-        creds = self.input.membase_settings
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
-        ClusterHelper.add_all_nodes_or_assert(master, self.servers, creds, self)
-        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
-        self.assertTrue(rest.monitorRebalance(),
-                        msg="rebalance operation failed after adding nodes")
+        # add all servers
+        self.log.info("INTIAL REBALANCE ALL NODES")
+        RebalanceTaskHelper.add_rebalance_task(self.task_manager, [master], self.servers[1:],
+            [], True)
+        self.log.info("INTIAL LOAD")
+        RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager, bucket_data, self.load_ratio,
+            keys_count = self.keys_count)
 
         nodes = rest.node_statuses()
 
