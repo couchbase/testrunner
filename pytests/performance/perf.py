@@ -360,7 +360,8 @@ class PerfBase(unittest.TestCase):
                 "end-time": end_time }
 
         if is_eperf:
-            self.wait_until_drained()
+            if self.parami("load_wait_until_drained", 1) == 1:
+                self.wait_until_drained()
             self.end_stats(sc, ops)
 
         return ops, start_time, end_time
@@ -516,9 +517,13 @@ class PerfBase(unittest.TestCase):
                 'tot-misses': cur.get('cur-misses', 0),
                 "start-time": start_time,
                 "end-time": end_time }
-        self.wait_until_drained()
+
+        if self.parami("loop_wait_until_drained", 0) == 1:
+            self.wait_until_drained()
+
         if self.parami("collect_stats", 1):
             self.end_stats(sc, ops)
+
         return ops, start_time, end_time
 
     def loop_bg(self, num_ops, num_items=None, min_value_size=None,
