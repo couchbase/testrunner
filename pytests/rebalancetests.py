@@ -1,8 +1,6 @@
 from random import shuffle
 import time
 import unittest
-import uuid
-import json
 from TestInput import TestInputSingleton
 import logger
 from membase.api.rest_client import RestConnection, RestHelper
