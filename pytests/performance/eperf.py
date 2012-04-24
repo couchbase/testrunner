@@ -818,29 +818,6 @@ class EPerfClient(EPerfMaster):
             sc = super(EPerfMaster, self).mk_stats(verbosity)
         return sc
 
-    def test_ept_read(self):
-        super(EPerfClient, self).test_ept_read()
-
-    def test_ept_write(self):
-        super(EPerfClient, self).test_ept_write()
-
-    def test_ept_mixed(self):
-        super(EPerfClient, self).test_ept_mixed()
-
-    def test_ept_rebalance_low(self):
-        super(EPerfClient, self).test_ept_rebalance_low()
-
-    def test_ept_rebalance_med(self):
-        super(EPerfClient, self).test_ept_rebalance_med()
-
-    def test_ept_scaled_down_write(self):
-        super(EPerfClient, self).test_ept_scaled_down_write_1()
-
-    def test_ept_scaled_down_write_no_dgm(self):
-        super(EPerfClient, self).test_ept_scaled_down_write_no_dgm_1()
-
-    def test_ept_all_in_memory(self):
-        super(EPerfClient, self).test_ept_all_in_memory()
 
 def params_to_str(params):
     param_str = ""
