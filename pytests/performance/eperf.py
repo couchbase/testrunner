@@ -1,17 +1,16 @@
-# Executive performance dashboard tests.
+"""
+Executive performance dashboard tests.
+"""
 
-import unittest
-import uuid
+# general imports
 import logger
 import time
 import json
 import os
-import threading
 import gzip
 import ast
 
-from TestInput import TestInputSingleton
-
+# membase imports
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -19,7 +18,9 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from membase.performance.stats import StatsCollector, CallbackStatsCollector
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 
-import testconstants
+# testrunner imports
+from TestInput import TestInputSingleton
+from perf_defaults import PerfDefaults
 import perf
 
 class EPerfMaster(perf.PerfBase):
@@ -109,6 +110,11 @@ class EPerfMaster(perf.PerfBase):
 
     # Gets the vbucket count
     def gated_start(self, clients):
+        """
+        @deprecate
+        Remove when we delete test functions.
+        No useful? we are calling setupBased1() on SetUp() in perf.py
+        """
         if not self.is_master:
             self.setUpBase1()
 
@@ -212,6 +218,85 @@ class EPerfMaster(perf.PerfBase):
             self.delayed_rebalance(self.parami("num_nodes_after", 15), 0.01)
 
     # ---------------------------------------------
+
+    def test_eperf_read(self):
+        """
+        Eperf read test, using parameters from conf/*.conf file.
+        """
+        self.spec("test_eperf_read")
+        items = self.parami("items", PerfDefaults.items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        self.access_phase(items,
+                          ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                          ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                          ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                          ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                          ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                          max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+
+    def test_eperf_write(self):
+        """
+        Eperf write test, using parameters from conf/*.conf file.
+        """
+        self.spec("test_eperf_write")
+        items = self.parami("items", PerfDefaults.items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        self.access_phase(items,
+                          ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                          ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                          ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                          ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                          ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                          max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+
+    def test_eperf_mixed(self):
+        """
+        Eperf mixed test, using parameters from conf/*.conf file.
+        """
+        self.spec("test_eperf_mixed")
+        items = self.parami("items", PerfDefaults.items)
+        notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        self.access_phase(items,
+                          ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                          ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                          ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                          ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                          ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                          max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+
+    def test_eperf_rebalance(self):
+        """
+        Eperf rebalance test, using parameters from conf/*.conf file.
+        """
+        self.spec("test_eperf_rebalance")
+        items = self.parami("items", PerfDefaults.items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        num_clients = self.parami("num_clients", len(self.input.clients) or 1)
+        rebalance_after = self.parami("rebalance_after", PerfDefaults.rebalance_after)
+        self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
+                                getattr(self, "latched_rebalance"))]
+        self.access_phase(items,
+                          ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                          ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                          ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                          ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                          ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                          max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+
+    # -- read, write and rebalance tests below this line need to be replaced by conf files ---
 
     def test_ept_read_1(self):
         self.spec("EPT-READ.1")
