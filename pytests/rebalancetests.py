@@ -701,9 +701,8 @@ class StopRebalanceTests(unittest.TestCase):
             #pick a node that is not the master node
             toBeEjectedNode = RebalanceHelper.pick_node(master)
             RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
-                                                    bucket_data, ram_ratio,
-                                                    distribution = distribution)
-
+                bucket_data, self.load_ratio,
+                keys_count = self.keys_count)
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             #let's start/step rebalance three times
             for i in range(0, self.num_rebalance):
@@ -715,7 +714,7 @@ class StopRebalanceTests(unittest.TestCase):
                 stopped = rest.stop_rebalance()
                 self.assertTrue(stopped, msg="unable to stop rebalance")
                 time.sleep(20)
-                RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
+                RebalanceBaseTest.replication_verification(master, bucket_data, self.replica, self)
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
