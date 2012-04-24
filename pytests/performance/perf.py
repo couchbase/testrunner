@@ -256,7 +256,7 @@ class PerfBase(unittest.TestCase):
         remote.log_command_output(output, error)
 
     def spec(self, reference):
-        self.spec_reference = reference
+        self.spec_reference = self.param("spec", reference)
         self.log.info("spec: " + reference)
 
     def mk_stats(self, verbosity):
