@@ -818,6 +818,9 @@ class EPerfClient(EPerfMaster):
             sc = super(EPerfMaster, self).mk_stats(verbosity)
         return sc
 
+    def test_wait_until_drained(self):
+        self.wait_until_drained()
+
 
 def params_to_str(params):
     param_str = ""
