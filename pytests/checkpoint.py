@@ -104,6 +104,45 @@ class CheckpointTests(unittest.TestCase):
             self.fail("New checkpoint not created")
         self._set_checkpoint_timeout(self.servers[:self.num_servers], self.bucket, str(600))
 
+    def checkpoint_collapse(self):
+        param = 'checkpoint'
+        chk_size = 5000
+        num_items = 25000
+        stat_key = 'vb_0:last_closed_checkpoint_id'
+        stat_chk_itms = 'vb_0:num_checkpoint_items'
+
+        master = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, ACTIVE)
+        slave1 = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, REPLICA1)
+        slave2 = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, REPLICA2)
+        self._set_checkpoint_size(self.servers[:self.num_servers], self.bucket, str(chk_size))
+        m_stats = StatsCommon.get_stats([master], self.bucket, param, stat_key)
+        self._stop_replication(slave2, self.bucket)
+        load_thread = self.generate_load(master, self.bucket, num_items)
+        load_thread.join()
+
+        stats = []
+        chk_pnt = str(int(m_stats[m_stats.keys()[0]]) + (num_items / chk_size))
+        chk_items = num_items - (chk_size * 2)
+        StatsCommon.build_stat_check(master, param, stat_key, '==', chk_pnt, stats)
+        StatsCommon.build_stat_check(slave1, param, stat_key, '==', chk_pnt, stats)
+        StatsCommon.build_stat_check(slave1, param, stat_chk_itms, '>=', str(num_items), stats)
+        task = TaskScheduler.async_wait_for_stats(self.task_manager, stats, self.bucket)
+        try:
+            task.result(60)
+        except TimeoutError:
+            self.fail("Checkpoint not collapsed")
+
+        stats = []
+        self._start_replication(slave2, self.bucket)
+        chk_pnt = str(int(m_stats[m_stats.keys()[0]]) + (num_items / chk_size))
+        StatsCommon.build_stat_check(slave2, param, stat_key, '==', chk_pnt, stats)
+        StatsCommon.build_stat_check(slave1, param, stat_chk_itms, '<', num_items, stats)
+        task = TaskScheduler.async_wait_for_stats(self.task_manager, stats, self.bucket)
+        try:
+            task.result(60)
+        except TimeoutError:
+            self.fail("Checkpoints not replicated to secondary slave")
+
     def checkpoint_deduplication(self):
         param = 'checkpoint'
         stat_key = 'vb_0:num_checkpoint_items'
