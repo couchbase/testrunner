@@ -44,6 +44,9 @@ class RebalanceBaseTest(unittest.TestCase):
         self.num_rebalance = self.input.param("num-rebalance", 1)
         self.do_ascii = self.input.param("ascii", False)
         self.do_verify = self.input.param("do-verify", True)
+        self.repeat = self._input.param("repeat", 1)
+        self.max_ops_per_second = self._input.param("max_ops_per_second", 500)
+        self.min_item_size = self._input.param("min_item_size", 128)
 
         self.log.info('picking server : {0} as the master'.format(master))
 
@@ -458,35 +461,31 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         self._common_test_body()
 
 
-class IncrementalRebalanceWithParallelLoad(unittest.TestCase):
+class IncrementalRebalanceWithMcsoda(unittest.TestCase):
+
     def setUp(self):
-        self._input = TestInputSingleton.input
-        self._servers = self._input.servers
-        self.log = logger.Logger().get_logger()
+        RebalanceBaseTest.common_setup(self)
 
     def tearDown(self):
-        RebalanceBaseTest.common_tearDown(self._servers, self)
+        RebalanceBaseTest.common_tearDown(self)
 
     #load data add one node , rebalance add another node rebalance, then remove each node
-    def _common_test_body(self, keys_count, repeat, max_ops_per_second, min_item_size):
-        master = self._servers[0]
+    def _common_test_body(self):
+        master = self.servers[0]
         rest = RestConnection(master)
-        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
-        creds = self._input.membase_settings
-        rebalanced_servers = [master]
 
         # start load, max_ops_per_second is the combined limit for all buckets
         buckets = rest.get_buckets()
         loaders = []
-        self.log.info("max-ops-per-second per bucket: {0}".format(max_ops_per_second / len(buckets)))
+        self.log.info("max-ops-per-second per bucket: {0}".format(self.max_ops_per_second / len(buckets)))
         for bucket in buckets:
             loader = {}
-            loader["mcsoda"] = LoadWithMcsoda(master, keys_count, prefix='', bucket=bucket.name,password=bucket.saslPassword, protocol='membase-binary')
-#            loader["mcsoda"] = LoadWithMcsoda(master, keys_count, prefix='', bucket=bucket.name, password=bucket.saslPassword, protocol='memcached-binary', port=11211)
+            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, prefix='', bucket=bucket.name,
+                password=bucket.saslPassword, protocol='membase-binary')
             loader["mcsoda"].cfg["max-ops"] = 0
-            loader["mcsoda"].cfg["max-ops-per-sec"] = max_ops_per_second / len(buckets)
+            loader["mcsoda"].cfg["max-ops-per-sec"] = self.max_ops_per_second / len(buckets)
             loader["mcsoda"].cfg["exit-after-creates"] = 0
-            loader["mcsoda"].cfg["min-value-size"] = min_item_size
+            loader["mcsoda"].cfg["min-value-size"] = self.min_item_size
             loader["mcsoda"].cfg["json"] = 0
             loader["mcsoda"].cfg["batch"] = 100
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
@@ -496,9 +495,8 @@ class IncrementalRebalanceWithParallelLoad(unittest.TestCase):
         for loader in loaders:
             loader["thread"].start()
 
-
-        for iteration in range(repeat):
-            for server in self._servers[1:]:
+        for iteration in range(self.repeat):
+            for server in self.servers[1:]:
                 self.log.info("iteration {0}: ".format(iteration))
                 self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
                 self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
@@ -517,7 +515,7 @@ class IncrementalRebalanceWithParallelLoad(unittest.TestCase):
                         if rebalance_try > 5:
                             raise e
 
-            for server in self._servers[1:]:
+            for server in self.servers[1:]:
                 self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master)))
                 self.log.info("removing node {0} and rebalance afterwards".format(server.ip))
 
@@ -542,19 +540,8 @@ class IncrementalRebalanceWithParallelLoad(unittest.TestCase):
         for loader in loaders:
             loader["thread"].join()
 
-
     def test_load(self):
-        log = logger.Logger().get_logger()
-        repeat = self._input.param("repeat", 1)
-        keys_count = self._input.param("keys_count", 1000)
-        replica = self._input.param("replica", 1)
-        max_ops_per_second = self._input.param("max_ops_per_second", 500)
-        min_item_size = self._input.param("min_item_size", 128)
-
-        log.info("repeat: {0}, keys_count: {1}, replica: {2}, max_ops_per_second: {3}, min_item_size: {4}".format(repeat, keys_count, replica, max_ops_per_second, min_item_size))
-
-        RebalanceBaseTest.common_setup(self._input, self, replica=replica)
-        self._common_test_body(keys_count, repeat, max_ops_per_second, min_item_size)
+        self._common_test_body()
 
 
 class IncrementalRebalanceOut(unittest.TestCase):
