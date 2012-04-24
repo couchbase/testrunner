@@ -907,15 +907,20 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
     # return dict of {key, flags, seq, value}
     # or None if not found
     def mc_get(self, key):
+        item = self.mc_get_full(key)
+        item["value"] = hashlib.md5(value).digest()
+        return item
+
+    # unhashed value
+    def mc_get_full(self, key):
         item = None
         try:
             x, y, value = self.memcached(key).get(key)
-            v = hashlib.md5(value).digest()
             item = {}
             item["key"] = key
             item["flags"] = x
             item["seq"] = y
-            item["value"] = v
+            item["value"] = value
         except MemcachedError:
             msg = "key {0} doesn't exist in memcached".format(key)
 
