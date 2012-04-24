@@ -824,10 +824,7 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         self.store_enabled = store_enabled
         self._rlock = threading.Lock()
 
-
     def set(self, key, value, ttl = -1):
-
-
         self._rlock.acquire()
         try:
             if ttl >= 0:
@@ -843,10 +840,11 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         except AssertionError:
             self._rlock.release()
             raise AssertionError
+        except:
+            self._rlock.release()
+            raise Exception("General Exception from KVStoreAwareSmartClient.set()")
 
         self._rlock.release()
-
-
 
     def delete(self, key):
         try: 
@@ -861,7 +859,6 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         except Exception as e:
             self._rlock.release()
             raise MemcachedError(7,  e)
-
 
     def get_valid_key(self, key):
         return self.get_key_check_status(key, "valid")

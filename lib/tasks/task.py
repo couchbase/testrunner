@@ -11,6 +11,12 @@ import copy
 import json
 import uuid
 
+#TODO: Setup stacktracer
+#TODO: Needs "easy_install pygments"
+#import stacktracer
+#stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
+
+
 class Task():
     def __init__(self, name):
         self.log = logger.Logger.get_logger()
@@ -307,13 +313,9 @@ class GenericLoadingTask(Thread, Task):
                 if op == "delete":
                     self.client.delete(key)
                 ok = True
-            except MemcachedError as error:
-                if error.status == 7:
-                    self.client.reset_vbucket(self.rest, key)
-                retry_count = retry_count + 1
-            except AssertionError:
-                retry_count = retry_count + 1
-
+            except Exception as e:
+                retry_count += 1
+                self.client.reset_vbucket(self.rest, key)
         return value
 
 class LoadDocGeneratorTask(GenericLoadingTask):
@@ -336,10 +338,12 @@ class LoadDocGeneratorTask(GenericLoadingTask):
                     _id = _json["_id"].encode("ascii", "ignore")
                     try:
                         self.do_task_op("set", _id, _value, self.expiration)
-                        self.doc_op_count = self.doc_op_count + 1
+                        self.doc_op_count += 1
                     except Exception as e:
                         self.state = "finished"
                         self.set_result({"status": "error", "value": e})
+                        return
+                    except:
                         return
             if not self.loop:
                 self.set_result({"status": "success", "value": self.doc_op_count})
