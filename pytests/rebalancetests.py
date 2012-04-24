@@ -921,7 +921,7 @@ class RebalanceTaskHelper():
 
     @staticmethod
     def add_nodes_init_task(tm, servers):
-        return [TaskHelper.add_node_init_task(tm, server) for server in servers ]
+        return [RebalanceTaskHelper.add_node_init_task(tm, server) for server in servers ]
 
     @staticmethod
     def add_bucket_create_task(tm, server, bucket='default', replicas=1, port=11210, size=0,
