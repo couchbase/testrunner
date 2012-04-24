@@ -361,7 +361,8 @@ class PerfBase(unittest.TestCase):
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
 
-        cur, start_time, end_time = self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd)
+        cur, start_time, end_time = self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
+                                                    why="load")
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
@@ -379,7 +380,8 @@ class PerfBase(unittest.TestCase):
         return ops, start_time, end_time
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
-                   stats_collector = None, stores = None, ctl = None):
+                   stats_collector = None, stores = None, ctl = None,
+                   why = None):
         return mcsoda.run(cfg, cur, protocol, host_port, user, pswd,
                           stats_collector=stats_collector,
                           stores=stores,
@@ -520,7 +522,8 @@ class PerfBase(unittest.TestCase):
         cur, start_time, end_time = self.mcsoda_run(cfg, cur,
                                                     protocol, host_port, user, pswd,
                                                     stats_collector=sc,
-                                                    ctl=ctl, stores=stores)
+                                                    ctl=ctl, stores=stores,
+                                                    why="loop")
 
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),

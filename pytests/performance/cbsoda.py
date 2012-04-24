@@ -118,7 +118,6 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
         return received_mc + received_capi
 
-
     def cmd_append(self, cmd, key_num, key_str, data, expiration, grp):
         if cmd[0] == 'q':
             self.cmds += 1

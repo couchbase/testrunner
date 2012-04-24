@@ -10,6 +10,7 @@ import os
 import gzip
 import ast
 import copy
+import mcsoda
 
 # membase imports
 from membase.api.rest_client import RestConnection, RestHelper
@@ -757,6 +758,9 @@ class EPerfMaster(perf.PerfBase):
         # Delete  5%  - 95% of the deletes should delete a hot key
         # Queries 20% - A mix of queries on the _all_docs index. Queries may or may not hit hot keys.
 
+        self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
+        self.fg_max_ops = self.parami("fg_max_ops", 1000000)
+
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.3),
                           ratio_misses = self.paramf('ratio_misses', 0.05),
@@ -893,6 +897,9 @@ function(doc) {
         # Queries _all_docs  5% - A mix of queries on the _all_docs index. Queries may or may not hit hot keys.
         # Queries on view   20% -
 
+        self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
+        self.fg_max_ops = self.parami("fg_max_ops", 1000000)
+
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.3),
                           ratio_misses = self.paramf('ratio_misses', 0.05),
@@ -1019,6 +1026,8 @@ class EPerfClient(EPerfMaster):
         self.latched_rebalance_done = False
         self.setUpBase0()
         self.is_leader = self.parami("prefix", 0) == 0
+        self.bg_max_ops_per_sec = 0
+        self.fg_max_ops = 0
 
         pass # Skip super's setUp().  The master should do the real work.
 
@@ -1039,6 +1048,61 @@ class EPerfClient(EPerfMaster):
 
     def test_wait_until_drained(self):
         self.wait_until_drained()
+
+
+# The EVPerfClient subclass deploys another background thread to drive
+# a concurrent amount of memcached traffic, during the "loop" or
+# access phase.  Otherwise, with the basic EPerfClient, the http
+# queries would gate the ops/second performance due to mcsoda's
+# lockstep batching.
+#
+class EVPerfClient(EPerfClient):
+
+    def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
+                   stats_collector = None, stores = None, ctl = None,
+                   why = None):
+        self.bg_thread = None
+        self.bg_thread_ctl = None
+
+        # If non-zero background ops/second, the background thread,
+        # with cloned parameters, doesn't do any queries, only basic
+        # key-value ops.
+        if why == "loop" and self.parami("bg_max_ops_per_sec", self.bg_max_ops_per_sec):
+            self.bg_thread_cfg = copy.deepcopy(cfg)
+            self.bg_thread_cfg['max-ops-per-sec'] = self.parami("bg_max_ops_per_sec",
+                                                                self.bg_max_ops_per_sec)
+            self.bg_thread_cfg['ratio-queries'] = self.paramf("bg_ratio_queries", 0.0)
+            self.bg_thread_cfg['queries'] = self.param("bg_queries", "")
+            self.bg_thread_cur = copy.deepcopy(cur)
+            self.bg_thread_ctl = { 'run_ok': True }
+
+            from cbsoda import StoreCouchbase
+
+            self.bg_stores = [StoreCouchbase()]
+
+            self.bg_thread = threading.Thread(target=mcsoda.run,
+                                              args=(self.bg_thread_cfg,
+                                                    self.bg_thread_cur,
+                                                    protocol, host_port, user, pswd,
+                                                    None, self.bg_stores, self.bg_thread_ctl))
+            self.bg_thread.daemon = True
+            self.bg_thread.start()
+
+            # Also, the main mcsoda run should do no memcached/key-value requests.
+            cfg['max-ops'] = self.parami("fg_max_ops", self.fg_max_ops)
+            cfg['ratio-sets'] = self.paramf("fg_ratio_sets", 0.0)
+            cfg['ratio-queries'] = self.paramf("fg_ratio_queries", 1.0)
+
+        rv_cur, start_time, end_time = \
+            super(EVPerfClient, self).mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
+                                                 stats_collector=stats_collector,
+                                                 stores=stores,
+                                                 ctl=ctl,
+                                                 why=why)
+        if self.bg_thread_ctl:
+            self.bg_thread_ctl['run_ok'] = False
+
+        return rv_cur, start_time, end_time
 
 
 def params_to_str(params):
