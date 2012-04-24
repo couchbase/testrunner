@@ -462,7 +462,7 @@ class ViewBaseTests(unittest.TestCase):
             self.assertEquals(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn)
 
     @staticmethod
-    def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}):
+    def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}, type_="view"):
         # increase number of try to 40 to test on windows
         num_tries = self.input.param('num-tries', 40)
         timeout = self.input.param('timeout', 10)
@@ -476,7 +476,11 @@ class ViewBaseTests(unittest.TestCase):
                 if view.find("dev_") == 0:
                     params["full_set"] = "true"
                 self.log.info("Params {0}".format(params))
-                results = rest.query_view(view, view, bucket, params)
+                if type_ == "all_docs":
+                    results = rest.all_docs(bucket, params, limit)
+                else:
+                    results = rest.query_view(view, view, bucket, params)
+
                 if results.get(u'errors', []):
                     self.fail("unable to get view_results for {0} due to error {1}".format(view, results.get(u'errors')))
 

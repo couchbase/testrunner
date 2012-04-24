@@ -53,6 +53,25 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_startkey_endkey_queries()
         self._query_test_init(data_set)
 
+    def test_employee_dataset_alldocs_queries(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+        data_set.add_all_docs_queries()
+        self._query_test_init(data_set)
+
+    def test_employee_dataset_alldocs_queries_rebalance_in(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+        data_set.add_all_docs_queries()
+        self._query_test_init(data_set, False)
+
+        # rebalance_in and verify loaded data
+        ViewBaseTests._begin_rebalance_in(self)
+        self._query_all_views(data_set.views)
+        ViewBaseTests._end_rebalance(self)
+
     def test_employee_dataset_startkey_endkey_docid_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
@@ -273,7 +292,11 @@ class QueryView:
                 while attempt < 40 and num_keys != expected_num_docs:
                     self.log.info("Quering view {0} with params: {1}".format(view_name, params));
                     results = ViewBaseTests._get_view_results(tc, rest,
-                        "default", view_name, limit=None, extra_params=params)
+                                                              self.bucket,
+                                                              view_name,
+                                                              limit=None,
+                                                              extra_params=params,
+                                                              type_ = query.type_)
 
                     # check if this is a reduced query using _count
                     if self.reduce_fn is '_count':
@@ -307,8 +330,9 @@ class QueryView:
             else:
                 # query without verification
                 self.log.info("Quering view {0} with params: {1}".format(view_name, params));
-                results = ViewBaseTests._get_view_results(tc, rest, "default", view_name,
-                                                          limit=None, extra_params=params)
+                results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
+                                                          limit=None, extra_params=params,
+                                                          type_ = query.type_)
 
 
     def view_doc_integrity(self, tc, results, expected_num_docs, kv_store):
@@ -384,7 +408,6 @@ class EmployeeDataSet:
         self.name = "employee_dataset"
         self.kv_store = None
 
-
     def calc_total_doc_count(self):
         return self.years * self.months * self.days * self.docs_per_day * len(self.get_data_sets())
 
@@ -416,6 +439,42 @@ class EmployeeDataSet:
                                           "end_key"   : "[2008,1,1]",
                                           "descending"   : "true",
                                           "inclusive_end" : "true"}, index_size/2 + offset)]
+
+
+
+    def add_all_docs_queries(self, views = None):
+
+        if views is None:
+            views = []
+
+            # only select views that will index entire dataset
+            # and do not have a reduce function
+            # if user doesn't override
+            for view in self.views:
+                if view.index_size == self.calc_total_doc_count():
+                    if view.reduce_fn is None:
+                        views.append(view)
+
+        for view in views:
+            index_size = view.index_size
+            offset = self.docs_per_day
+
+
+            section_size = index_size/len(self.get_data_sets())
+
+            view.queries += [QueryHelper({"start_key": '"arch0000-2008_10_1"'}, index_size - section_size),
+                             QueryHelper({"start_key" : '"ui0000-2008_10_1"'}, index_size  - section_size*2),
+                             QueryHelper({"start_key" : '"arch0000-2008_10_1"',
+                                          "end_key"   : '"ui0000-2008_10_1"',
+                                          "inclusive_end" : "false"}, section_size),
+                             # test design docs are included when start_key not specified
+                             QueryHelper({"end_key" : '"ui0000-2008_10_1"',
+                                          "inclusive_end" : "false"}, index_size  - section_size + len(self.views))]
+
+            # set all_docs flag
+            for query in view.queries:
+                query.type_ = "all_docs"
+
 
     """
         Create queries for testing docids on duplicate start_key result ids.
@@ -691,10 +750,15 @@ class DataLoadHelper:
 
 
 class QueryHelper:
-    def __init__(self, params, expected_num_docs, expected_num_groups = 1):
+    def __init__(self, params,
+                 expected_num_docs,
+                 expected_num_groups = 1,
+                 type_ = "view"):
+
         self.params = params
 
         # number of docs this query should return
         self.expected_num_docs = expected_num_docs
         self.expected_num_groups = expected_num_groups
+        self.type_ = type_   # "view" or "all_docs"
 
