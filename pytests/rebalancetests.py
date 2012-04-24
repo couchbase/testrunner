@@ -587,6 +587,9 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
         if len(nodes) > 2:
             for node in nodes[1:]:
+                # Never pick master node
+                if node.ip == master.ip:
+                    continue
                 self.log.info("START PARALLEL LOAD")
                 RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
                     DELETE_RATIO = self.delete_ratio,
