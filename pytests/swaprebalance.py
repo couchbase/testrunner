@@ -297,7 +297,7 @@ class SwapRebalanceBase(unittest.TestCase):
             command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
             memcached_restarted = rest.diag_eval(command)
             self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
-            time.sleep(20)
+            time.sleep(5)
 
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
                 ejectedNodes=optNodesIds)
