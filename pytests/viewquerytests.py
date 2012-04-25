@@ -274,6 +274,8 @@ class QueryView:
             return
 
         view_name = self.name
+        max_dupe_result_count = \
+            tc.input.param('max-dupe-result-count', 5)
 
         for query in self.queries:
             params = query.params
@@ -289,8 +291,9 @@ class QueryView:
 
                 # first verify all doc_names get reported in the view
                 # for windows, we need more than 20+ times
+                result_count_stats = {}
                 while attempt < 40 and num_keys != expected_num_docs:
-                    self.log.info("Quering view {0} with params: {1}".format(view_name, params));
+                    self.log.info("Quering view {0} with params: {1}".format(view_name, params))
                     results = ViewBaseTests._get_view_results(tc, rest,
                                                               self.bucket,
                                                               view_name,
@@ -303,15 +306,23 @@ class QueryView:
                         num_keys = self._verify_count_reduce_helper(query, results)
                         self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
                             .format(view_name, attempt, query.expected_num_groups,
-                                    num_keys, expected_num_docs));
+                                    num_keys, expected_num_docs))
                     else:
 
                         num_keys = len(ViewBaseTests._get_keys(self, results))
                         self.log.info("{0}: attempt {1} retrieved value {2} expected: {3}" \
-                            .format(view_name, attempt, num_keys, expected_num_docs));
+                            .format(view_name, attempt, num_keys, expected_num_docs))
 
                     attempt += 1
-
+                    if num_keys not in result_count_stats:
+                        result_count_stats[num_keys] = 1
+                    else:
+                        if result_count_stats[num_keys] == max_dupe_result_count:
+                            self.log.error("Last query result:\n\n%s\n\n" % (json.dumps(results, sort_keys=True, indent=4)))
+                            self.results.addFailure(tc, sys.exc_info())
+                            break
+                        else:
+                            result_count_stats[num_keys] += 1
                     time.sleep(delay)
 
                 if(num_keys != expected_num_docs):
