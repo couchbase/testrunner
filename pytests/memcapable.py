@@ -1216,8 +1216,6 @@ class WarmUpMemcachedTest(unittest.TestCase):
                                       memoryQuota=info.mcdMemoryReserved)
         ClusterOperationHelper.cleanup_cluster([self.master])
         ClusterOperationHelper.wait_for_ns_servers_or_assert([self.master], self)
-        self._create_default_bucket()
-        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
         self._log_start()
 
     def tearDown(self):
@@ -1264,8 +1262,11 @@ class WarmUpMemcachedTest(unittest.TestCase):
 
     def _do_warmup(self, howmany, timeout_in_seconds=1800):
         # max_time is in micro seconds
-        #flush the bucket
-        self.onenodemc.flush()
+        # recreate bucket instead of flush
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+        self._create_default_bucket()
+        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
+
         self._insert_data(howmany)
         curr_items = int(self.onenodemc.stats()["curr_items"])
         uptime = int(self.onenodemc.stats()["uptime"])
