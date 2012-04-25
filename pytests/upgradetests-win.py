@@ -233,6 +233,12 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   create_buckets=True)
 
 
+    def test_single_node_upgrade_s4_1_8_0(self):
+        self._install_and_upgrade(initial_version='1.8.0',
+                                  initialize_cluster=True,
+                                  insert_data=True,
+                                  create_buckets=True)
+
 class MultipleNodeUpgradeTests(unittest.TestCase):
 
     def test_m6_1_6_5_3_1(self):
@@ -369,6 +375,22 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_multiple_version_upgrade_start_all_9(self):
         upgrade_path = ['1.7.2']
         self._install_and_upgrade('1.7.1.1', True, True, False, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_10(self):
+        upgrade_path = ['1.7.2', '1.8.0']
+        self._install_and_upgrade('1.7.1.1', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_10(self):
+        upgrade_path = ['1.7.2', '1.8.0']
+        self._install_and_upgrade('1.7.1.1', True, True, False, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_one_11(self):
+        upgrade_path = ['1.8.0']
+        self._install_and_upgrade('1.7.2', True, True, True, 10, False, upgrade_path)
+
+    def test_multiple_version_upgrade_start_all_11(self):
+        upgrade_path = ['1.8.0']
+        self._install_and_upgrade('1.7.2', True, True, False, 10, False, upgrade_path)
 
     #do some bucket/init related operation
     #now only option x nodes
