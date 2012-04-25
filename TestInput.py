@@ -141,6 +141,12 @@ class TestInputParser():
         else:
             input = TestInputParser.parse_from_command_line(argv)
         input.test_params = params
+
+        if "num_clients" not in input.test_params.keys() and input.clients:   # do not override the command line value
+            input.test_params["num_clients"] = len(input.clients)
+        if "num_nodes" not in input.test_params.keys() and input.servers:
+            input.test_params["num_nodes"] = len(input.servers)
+
         return input
 
     @staticmethod
