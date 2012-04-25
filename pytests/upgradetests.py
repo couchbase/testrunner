@@ -14,6 +14,7 @@ import testconstants
 
 TIMEOUT_SECS = 30
 
+
 def _get_build(master, version, is_amazon=False):
     log = logger.Logger.get_logger()
     remote = RemoteMachineShellConnection(master)
@@ -28,21 +29,20 @@ def _get_build(master, version, is_amazon=False):
         product = 'couchbase-server-enterprise'
 
     if result is None:
-        appropriate_build = BuildQuery().find_membase_release_build(product,
-                                                                    info.deliverable_type,
-                                                                    info.architecture_type,
-                                                                    version.strip(),
-                                                                    is_amazon=is_amazon)
+        appropriate_build = BuildQuery().\
+            find_membase_release_build(product, info.deliverable_type,
+                info.architecture_type, version.strip(), is_amazon=is_amazon)
     else:
-        appropriate_build = BuildQuery().find_membase_build(builds, product,
-                                                            info.deliverable_type,
-                                                            info.architecture_type,
-                                                            version.strip(),
-                                                            is_amazon=is_amazon)
+        appropriate_build = BuildQuery().\
+            find_membase_build(builds, product, info.deliverable_type,
+                info.architecture_type, version.strip(), is_amazon=is_amazon)
+
     return appropriate_build
 
+
 def _create_load_multiple_bucket(self, server, bucket_data, howmany=2):
-    created = BucketOperationHelper.create_multiple_buckets(server, 1, howmany=howmany)
+    created = BucketOperationHelper.create_multiple_buckets(server,
+        1, howmany=howmany)
     self.assertTrue(created, "unable to create multiple buckets")
     rest = RestConnection(server)
     buckets = rest.get_buckets()
@@ -52,15 +52,15 @@ def _create_load_multiple_bucket(self, server, bucket_data, howmany=2):
         self.assertTrue(ready, "wait_for_memcached failed")
         #let's insert some data
         distribution = {2 * 1024: 0.5, 20: 0.5}
-        bucket_data[bucket.name]["inserted_keys"], bucket_data[bucket.name]["reject_keys"] =\
-        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server], name=bucket.name,
-                                                              ram_load_ratio=2.0,
-                                                              number_of_threads=2,
-                                                              value_size_distribution=distribution,
-                                                              write_only=True,
-                                                              moxi=True)
+        bucket_data[bucket.name]["inserted_keys"],\
+            bucket_data[bucket.name]["reject_keys"] =\
+        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
+            name=bucket.name, ram_load_ratio=2.0, number_of_threads=2,
+            value_size_distribution=distribution, write_only=True,
+            moxi=True)
         RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_flusher_todo', 0)
+        RebalanceHelper.wait_for_stats(server, bucket.name, 'ep_flusher_todo',
+            0)
 
 
 class SingleNodeUpgradeTests(unittest.TestCase):
@@ -79,7 +79,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         if initial_version.startswith("1.7") and input.test_params['version'].startswith("1.8"):
             save_upgrade_config = True
         is_amazon = False
-        if input.test_params.get('amazon',False):
+        if input.test_params.get('amazon', False):
             is_amazon = True
         if initial_version.startswith("1.6") or initial_version.startswith("1.7"):
             product = 'membase-server-enterprise'
@@ -511,11 +511,11 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_one_4(self):
-        upgrade_path = ['1.7.0', '1.7.1.1','1.7.2']
+        upgrade_path = ['1.7.0', '1.7.1.1', '1.7.2']
         self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_all_4(self):
-        upgrade_path = ['1.7.0', '1.7.1.1','1.7.2']
+        upgrade_path = ['1.7.0', '1.7.1.1', '1.7.2']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_one_2(self):
@@ -572,6 +572,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         load_ratio = input.param('load_ratio', -1)
         online_upgrade = input.param('online_upgrade', False)
         upgrade_path = input.param('upgrade_path', [])
+        do_new_rest = input.param('do_new_rest', False)
         if upgrade_path:
             upgrade_path = upgrade_path.split(",")
 
@@ -581,7 +582,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                                   start_upgraded_first=start_upgraded_first,
                                   load_ratio=load_ratio,
                                   roll_upgrade=online_upgrade,
-                                  upgrade_path=upgrade_path)
+                                  upgrade_path=upgrade_path,
+                                  do_new_rest=do_new_rest)
 
     #do some bucket/init related operation
     #now only option x nodes
@@ -593,7 +595,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                              start_upgraded_first=True,
                              load_ratio=-1,
                              roll_upgrade=False,
-                             upgrade_path=[]):
+                             upgrade_path=[],
+                             do_new_rest=False):
         node_upgrade_path = []
         node_upgrade_path.extend(upgrade_path)
         #then start them in whatever order you want
@@ -606,7 +609,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         servers = input.servers
         save_upgrade_config = False
         is_amazon = False
-        if input.test_params.get('amazon',False):
+        if input.test_params.get('amazon', False):
             is_amazon = True
         if initial_version.startswith("1.6") or initial_version.startswith("1.7"):
             product = 'membase-server-enterprise'
@@ -769,6 +772,10 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 otpNodeIds = []
                 for node in nodes:
                     otpNodeIds.append(node.id)
+                if do_new_rest:
+                    # Issue rest call to the newly added node
+                    # MB-5108
+                    rest = RestConnection(server)
                 rebalanceStarted = rest.rebalance(otpNodeIds, [])
                 self.assertTrue(rebalanceStarted,
                                 "unable to start rebalance on master node {0}".format(master.ip))
@@ -776,7 +783,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 rebalanceSucceeded = rest.monitorRebalance()
                 self.assertTrue(rebalanceSucceeded,
                                 "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
-                #ClusterOperationHelper.verify_persistence(servers, self)
 
             #TODO: how can i verify that the cluster init config is preserved
             # verify data on upgraded nodes
@@ -791,7 +797,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     BucketOperationHelper.keys_exist_or_assert(bucket_data[bucket.name]["inserted_keys"],
                                                                master,
                                                                bucket.name, self)
-
 
     def _save_config(self, rest_settings, server):
         log = logger.Logger.get_logger()
@@ -847,5 +852,3 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         BucketOperationHelper.keys_exist_or_assert(keys=inserted_keys, server=master, bucket_name='default',
                                                                    test=self)
-
-
