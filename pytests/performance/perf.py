@@ -1,13 +1,9 @@
 import unittest
-import uuid
 import logger
 import time
-import json
-import os
 import threading
 
-from TestInput import TestInputSingleton
-
+# membase imports
 from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -16,8 +12,10 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from membase.performance.stats import StatsCollector
 from remote.remote_util import RemoteMachineShellConnection
 from cbsoda import StoreCouchbase
-import testconstants
 
+# testrunner imports
+from TestInput import TestInputSingleton
+from perf_defaults import PerfDefaults
 import mcsoda
 
 def TODO():
@@ -37,7 +35,7 @@ class PerfBase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.vbucket_count = 0
         self.sc = None
-        if self.parami("tearDownOnSetUp", 0) == 1:
+        if self.parami("tear_down_on_setup", PerfDefaults.tear_down_on_setup) == 1:
             self.tearDown() # Tear down in case previous run had unclean death.
         self.setUpRest()
 
@@ -104,37 +102,54 @@ class PerfBase(unittest.TestCase):
             pass # For example, membase doesn't support auto compaction.
 
     def tearDown(self):
-        print "[perf.tearDown] Calling tearDown()"
-        self.tearDownProxy()
+        if self.parami("tear_down", 0) == 1:
+            print "[perf.tearDown] tearDown routine skipped"
+            return
+
+        print "[perf.tearDown] tearDown routine starts"
+
+        if self.parami("tear_down_proxy", 1) == 1:
+            self.tearDownProxy()
+        else:
+            print "[perf.tearDown] Proxy tearDown skipped"
 
         if self.sc is not None:
             self.sc.stop()
             self.sc = None
 
-        if self.parami("tearDownBucket", 0) == 1:
-            print "[perf.tearDown] Tearing down bucket"
+        if self.parami("tear_down_bucket", 0) == 1:
             self.tearDownBucket()
-            print "[perf.tearDown] Bucket teared down"
+        else:
+            print "[perf.tearDown] Bucket tearDown skipped"
 
-        if self.parami("tearDownCluster", 1) == 1:
+        if self.parami("tear_down_cluster", 1) == 1:
             self.tearDownCluster()
+        else:
+            print "[perf.tearDown] Cluster tearDown skipped"
 
         print "[perf.tearDown] tearDown routine finished"
 
     def tearDownBucket(self):
+        print "[perf.tearDown] Tearing down bucket"
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
+        print "[perf.tearDown] Bucket teared down"
 
     def tearDownCluster(self):
+        print "[perf.tearDown] Tearing down cluster"
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
+        print "[perf.tearDown] Cluster teared down"
 
     def setUpProxy(self, bucket=None):
+        print "[perf.tearDown] Tearing down proxy"
         bucket = bucket or self.param("bucket", "default")
         if len(self.input.moxis) > 0:
             shell = RemoteMachineShellConnection(self.input.moxis[0])
             shell.start_moxi(self.input.servers[0].ip, bucket,
                              self.input.moxis[0].port)
             shell.disconnect()
+        print "[perf.tearDown] Proxy teared down"
+
 
     def tearDownProxy(self):
         if len(self.input.moxis) > 0:

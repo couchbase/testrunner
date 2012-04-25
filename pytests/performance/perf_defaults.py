@@ -6,6 +6,7 @@ DO NOT overwrite.
 
 class PerfDefaults:
 
+    # general
     num_nodes           =    10
 
     # load phase
@@ -25,3 +26,11 @@ class PerfDefaults:
 
     # rebalance
     rebalance_after     =    200000
+
+    # control
+    loop_wait_until_drained =   0
+    tear_down               =   1        # 1: enabled, 0: disabled
+    tear_down_proxy         =   1        # (prerequsite: tear_down = 1) tear down proxy,  1: enabled, 0: disabled
+    tear_down_bucket        =   0        # (prerequsite: tear_down = 1) tear down bucket,  1: enabled, 0: disabled
+    tear_down_cluster       =   1        # (prerequsite: tear_down = 1) tear down server cluster, 1: enabled, 0: disabled
+    tear_down_on_setup      =   0        # teardown routine to clean up resources during startup. 1: enabled, 0: disabled

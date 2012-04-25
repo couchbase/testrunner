@@ -225,17 +225,19 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_read")
         items = self.parami("items", PerfDefaults.items)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
-        self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                          ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                          ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                          ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                          ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                          max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+        if self.parami("load_phase", 1) == 1:
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        if self.parami("access_phase", 1) == 1:
+            self.access_phase(items,
+                              ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                              ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                              ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                              ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                              ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                              max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
 
     def test_eperf_write(self):
         """
@@ -243,17 +245,19 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_write")
         items = self.parami("items", PerfDefaults.items)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
-        self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                          ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                          ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                          ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                          ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                          max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+        if self.parami("load_phase", 1) == 1:
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        if self.parami("access_phase", 1) == 1:
+            self.access_phase(items,
+                              ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                              ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                              ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                              ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                              ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                              max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
 
     def test_eperf_mixed(self):
         """
@@ -262,17 +266,19 @@ class EPerfMaster(perf.PerfBase):
         self.spec("test_eperf_mixed")
         items = self.parami("items", PerfDefaults.items)
         notify = self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
-        self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                          ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                          ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                          ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                          ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                          max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+        if self.parami("load_phase", 1) == 1:
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        if self.parami("access_phase", 1) == 1:
+            self.access_phase(items,
+                              ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                              ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                              ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                              ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                              ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                              max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
 
     def test_eperf_rebalance(self):
         """
@@ -280,21 +286,23 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_rebalance")
         items = self.parami("items", PerfDefaults.items)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        if self.parami("load_phase", 1) == 1:
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", PerfDefaults.rebalance_after)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                 getattr(self, "latched_rebalance"))]
-        self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                          ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                          ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                          ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                          ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                          max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+        if self.parami("access_phase", 1) == 1:
+            self.access_phase(items,
+                              ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                              ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                              ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                              ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                              ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                              max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
 
     # -- read, write and rebalance tests below this line need to be replaced by conf files ---
 
