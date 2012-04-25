@@ -30,7 +30,7 @@ class EPerfMaster(perf.PerfBase):
         self.dgm = False
         self.is_master = True
         self.input = TestInputSingleton.input
-        self.mem_quota = self.parami("mem_quota", 7000) # for 10G system
+        self.mem_quota = self.parami("mem_quota", PerfDefaults.mem_quota) # for 10G system
         self.level_callbacks = []
         self.latched_rebalance_done = False
         self.is_multi_node = False

@@ -24,9 +24,6 @@ def TODO():
 class PerfBase(unittest.TestCase):
     specURL = "http://hub.internal.couchbase.org/confluence/display/cbit/Black+Box+Performance+Test+Matrix"
 
-    def ram_quota(self):
-        return self.parami("mem_quota", getattr(self, "mem_quota", 6000))
-
     # The setUpBaseX() methods allow subclasses to resequence the
     # setUp() and skip cluster configuration.
     #
@@ -78,14 +75,14 @@ class PerfBase(unittest.TestCase):
         self.rest.init_cluster(master.rest_username, master.rest_password)
         self.rest.init_cluster_memoryQuota(master.rest_username,
                                            master.rest_password,
-                                           memoryQuota=self.ram_quota())
+                                           memoryQuota = self.parami("mem_quota", PerfDefaults.mem_quota))
 
     def setUpBucket(self):
         bucket = self.param("bucket", "default")
 
-        self.rest.create_bucket(bucket=bucket,
-                                ramQuotaMB=self.ram_quota(),
-                                replicaNumber=self.parami("replicas",
+        self.rest.create_bucket(bucket = bucket,
+                                ramQuotaMB = self.parami("mem_quota", PerfDefaults.mem_quota),
+                                replicaNumber = self.parami("replicas",
                                                           getattr(self, "replicas", 1)))
 
         self.assertTrue(RestHelper(self.rest).vbucket_map_ready(bucket, 60),
