@@ -96,10 +96,11 @@ class BuildQuery(object):
 
     def find_membase_release_build(self, product, deliverable_type, os_architecture, build_version, is_amazon=False):
         build_details = build_version
-        if build_version == "1.7.2":
+        if build_version.startswith("1.7.2"):
             build_details = "1.7.2r-20-g6604356"
-        elif build_version == "1.8.0":
-            build_detalis = "1.8.0r-55-g80f24f2"
+        elif build_version.startswith("1.8.0"):
+            build_details = "1.8.0r-55-g80f24f2"
+            product = "couchbase-server-enterprise"
         build = MembaseBuild()
         build.deliverable_type = deliverable_type
         build.time = '0'

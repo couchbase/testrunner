@@ -95,10 +95,10 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                                               build_version=initial_version,
                                                               product='membase-server-enterprise', is_amazon=is_amazon)
         if info.type.lower() == 'windows':
-            if older_build.product == 'membase-server-enterprise':
-                abbr_product = "mb"
-            else:
+            if older_build.product_version.startswith("1.8"):
                 abbr_product = "cb"
+            else:
+                abbr_product = "mb"
             remote.download_binary_in_win(older_build.url, abbr_product, initial_version)
             remote.membase_install_win(older_build, initial_version)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
@@ -109,7 +109,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                 if create_buckets:
                     _create_load_multiple_bucket(self, server, bucket_data, howmany=2)
             version = input.test_params['version']
-            if version.startswith("1.8.0"):
+            if version.startswith("1.8"):
                 abbr_product = "cb"
             appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
@@ -290,6 +290,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_multiple_node_rolling_upgrade_1_7_2(self):
         self._install_and_upgrade('1.7.2', True, True, False, -1, True)
 
+    def test_multiple_node_rolling_upgrade_1_8_0(self):
+        self._install_and_upgrade('1.8.0', True, True, False, -1, True)
+
     # Multiple Version Upgrades
     def test_multiple_version_upgrade_start_one_1(self):
         upgrade_path = ['1.7.0', '1.7.1.1']
@@ -405,10 +408,10 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
             remote.membase_uninstall()
             remote.couchbase_uninstall()
-            if older_build.product == 'membase-server-enterprise':
-                abbr_product = "mb"
-            else:
+            if older_build.product_version.startswith("1.8"):
                 abbr_product = "cb"
+            else:
+                abbr_product = "mb"
             remote.download_binary_in_win(older_build.url, abbr_product, initial_version)
             #now let's install ?
             remote.membase_install_win(older_build, initial_version)
@@ -464,7 +467,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
                     for server in servers:
                         remote = RemoteMachineShellConnection(server)
-                        if version.startswith("1.8.0"):
+                        if version.startswith("1.8"):
                             abbr_product = "cb"
                         remote.download_binary_in_win(appropriate_build.url, abbr_product, version)
                         log.info("###### START UPGRADE. #########")
@@ -496,7 +499,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         # rolling upgrade
         else:
             version = input.test_params['version']
-            if version.startswith("1.8.0"):
+            if version.startswith("1.8"):
                 abbr_product = "cb"
             appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
