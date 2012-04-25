@@ -51,11 +51,32 @@ loading.  Each client is given a different partition of the dataset to
 load.
 
 ## reload phase
+
+The reload phase "touches" a specified set of data, so that the
+cluster will have that data warm and cached in-memory.  The goal of
+the reload phase is to get the cluster to a point of simulated actual
+usage of user deployments.
+
+The reload phase is currently done by a single client, but it can be
+one-day be partitioned for higher performance.
+
+## indexing phase
+
+In this phase, which only applies for Couchbase 2.0 and those systems
+that support indexing, indexes are defined/created on the cluster and
+the data in the cluster is indexed.  The actual index definitions are
+defined by the test spec.
+
 ## access phase
 
+The access phase is the meat of the performance test.
+
 In this phase, one or more concurrent clients access the database
-using a defined mix of commands.  This is done by having testrunner
-call mcsoda with the appropriate, test-specific parameters.
+using a defined mix of commands.  The number of clients and actual mix
+of command types are defined by a test spec.
+
+In the access phase, testrunner invokes mcsoda with the appropriate,
+test-specific parameters.
 
     ./testrunner -i resources/perf/$CLUSTER.ini -c conf/perf/$TESTNAME.conf \
         -p load_phase=0,access_phase=1,...
@@ -102,6 +123,13 @@ example...
 
     ./testrunner -i resources/perf/$CLUSTER.ini -c conf/perf/$TESTNAME.conf \
         -p load_phase=1,access_phase=1,...
+
+# Automated Performance Runs
+
+We use a continuous integraton system, Jenkins, to schedule and
+execute the above phases for each run.  Input parameters to the
+Jenkins job include the BUILD, CLUSTER, TESTNAME, and Jenkins computes
+the START_TIME.
 
 # Immutability Conventions
 
