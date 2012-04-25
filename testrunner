@@ -248,7 +248,8 @@ if __name__ == "__main__":
         params = ''
         if TestInputSingleton.input.test_params:
             for key, value in TestInputSingleton.input.test_params.items():
-                params += "," + key + ":" + value
+                if key and value:
+                    params += "," + str(key) + ":" + str(value)
 
         if result.failures or result.errors:
             # Immediately get the server logs, if
