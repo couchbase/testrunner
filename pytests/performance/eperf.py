@@ -143,7 +143,7 @@ class EPerfMaster(perf.PerfBase):
                       prefix="",
                       start_at=start_at,
                       is_eperf=True)
-            self.loop_prep()
+            self.restartProxy()
 
     def access_phase(self, items,
                      ratio_sets     = 0,
