@@ -79,7 +79,7 @@ class BucketCreateTask(Task):
         rest = RestConnection(self.server)
         if self.size <= 0:
             info = rest.get_nodes_self()
-            size = info.memoryQuota * 2 / 3
+            self.size = info.memoryQuota * 2 / 3
 
         authType = 'none' if self.password is None else 'sasl'
 
@@ -104,7 +104,7 @@ class BucketCreateTask(Task):
                 return
             else:
                 self.log.info("vbucket map not ready after try {0}".format(self.retries))
-        except Exception as e:
+        except Exception:
             self.log.info("vbucket map not ready after try {0}".format(self.retries))
         self.retries = self.retries + 1
         task_manager.schedule(self)
@@ -170,7 +170,7 @@ class RebalanceTask(Task):
     def check(self, task_manager):
         rest = RestConnection(self.servers[0])
         progress = rest._rebalance_progress()
-        if progress is not -1 and progress is not 100:
+        if progress != -1 and progress != 100:
             task_manager.schedule(self, 10)
         else:
             self.state = FINISHED
@@ -275,14 +275,14 @@ class GenericLoadingTask(Thread, Task):
                 return True
             except MemcachedError as error:
                 if error.status == 134:
-                    client.reset_vbucket(self.rest, key)
+                    self.client.reset_vbucket(self.rest, key)
                 retry_count += 1
         return False
 
-    def has_next():
+    def has_next(self):
         raise NotImplementedError
 
-    def next():
+    def next(self):
         raise NotImplementedError
 
 class LoadDocGeneratorTask(GenericLoadingTask):
