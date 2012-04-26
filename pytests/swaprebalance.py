@@ -24,7 +24,7 @@ class SwapRebalanceBase(unittest.TestCase):
         rest.stop_rebalance()
         self.load_started = False
         self.loaders = []
-        SwapRebalanceBase.common_tearDown(self)
+        SwapRebalanceBase.reset(self)
 
         # Initialize test params
         self.replica  = self.input.param("replica", 1)
@@ -34,6 +34,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.failover_factor = self.num_swap = self.input.param("num-swap", 1)
         self.num_initial_servers = self.input.param("num-initial-servers", 3)
         self.fail_orchestrator = self.swap_orchestrator = self.input.param("swap-orchestrator", False)
+        self.skip_cleanup = self.input.param("skip_cleanup", False)
 
         # Make sure the test is setup correctly
         min_servers = int(self.num_initial_servers) + int(self.num_swap)
@@ -49,6 +50,11 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
+        if not self.skip_cleanup:
+            SwapRebalanceBase.reset(self)
+
+    @staticmethod
+    def reset(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
