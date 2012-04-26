@@ -53,6 +53,10 @@ obj.input = TestInputSingleton.input
 if "setUp" in sys.argv:
     obj.setUp()
     what = obj.param("test", "test_ept_read_1")
+    # Parse in case the what/test parameter looks like a fully qualified
+    # "performance.eperf.EVPerfClient.test_foo" instead of just "test_foo".
+    what_arr = what.split('.')
+    what = what_arr[len(what_arr) - 1]
     meth = getattr(obj, what)
     meth()
 else:
