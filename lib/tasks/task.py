@@ -258,6 +258,62 @@ class RebalanceTask(Task):
             self.state = "finishing"
             self.set_result({"status": "error", "value": e})
 
+class FailOverTask(Task):
+    def __init__(self, servers,to_remove=[]):
+        Task.__init__(self, "failover_task")
+        self.servers = servers
+        self.to_remove = to_remove
+        self.state = "initializing"
+
+    def step(self, task_manager):
+        if self.cancelled:
+            self.result = self.set_result({"status": "cancelled", "value": None})
+        elif self.is_timed_out():
+            return
+        elif self.state == "initializing":
+            self.state = "start_failover"
+            task_manager.schedule(self)
+        elif self.state == "start_failover":
+            self.start_failover(task_manager)
+        elif self.state == "failing over":
+            self.failingOver(task_manager)
+        else:
+            raise Exception("Bad State in Failover: {0}".format(self.state))
+
+    def start_failover(self, task_manager):
+        rest = RestConnection(self.servers[0])
+        nodes = rest.node_statuses()
+        ejectedNodes = []
+        for node in self.to_remove:
+            ejectedNodes.append(node.id)
+        try:
+            rest.fail_over(self.to_remove[0])
+            self.state = "failing over"
+            task_manager.schedule(self)
+        except Exception as e:
+            self.state = "finishing"
+            self.set_result({"status": "error", "value": e})
+
+    def failingOver(self, task_manager):
+        rest = RestConnection(self.servers[0])
+        nodes = rest.node_statuses()
+        ejectedNodes = []
+
+        for node in self.to_remove:
+            ejectedNodes.append(node.id)
+            print "ejected node is : {0}".format(ejectedNodes[0])
+
+        progress = rest.fail_over(ejectedNodes[0])
+        if not progress:
+            self.state = "finishing"
+            self.log.info("Error! Missing Parameter ... No node to fail over")
+            self.set_result({"status": "error", "value": None})
+        else:
+            self.state = "finishing"
+            self.log.info("Success! FailedOver node {0}".format([ejectedNodes]))
+            self.set_result({"status": "success", "value": None})
+
+
 #OperationGeneratorTask
 #OperationGenerating
 class GenericLoadingTask(Thread, Task):

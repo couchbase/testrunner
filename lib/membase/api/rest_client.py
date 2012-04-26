@@ -658,9 +658,8 @@ class RestConnection(object):
                 log.error('eject_node error {0}'.format(content))
         return True
 
-
     def fail_over(self, otpNode=None ):
-        if not otpNode:
+        if otpNode is None:
             log.error('otpNode parameter required')
             return False
 
@@ -669,10 +668,12 @@ class RestConnection(object):
 
         status, content = self._http_request(api, 'POST', params)
 
+
         if status == True:
             log.info('fail_over successful')
         else:
             log.error('fail_over error : {0}'.format(content))
+            raise FailoverFailedException(content)
 
         return status
 

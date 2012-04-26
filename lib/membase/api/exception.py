@@ -108,3 +108,7 @@ class ServerAlreadyJoinedException(MembaseHttpException):
 class RebalanceFailedException(MembaseHttpException):
     def __init__(self, string=''):
         self._message = 'Rebalance Failed: {0}'.format(string)
+
+class FailoverFailedException(MembaseHttpException):
+    def __init__(self, string=''):
+        self._message = 'Failover Node failed :{0} '.format(string)
