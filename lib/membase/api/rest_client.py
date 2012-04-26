@@ -548,7 +548,7 @@ class RestConnection(object):
         status, content = self._http_request(api, 'POST', params)
         #sample response :
         # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
-        if status == True:
+        if status:
             json_parsed = json.loads(content)
             remoteCluster = json_parsed
         else:
@@ -568,7 +568,7 @@ class RestConnection(object):
         status, content = self._http_request(api, 'DELETE', params)
         #sample response :
         # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
-        if status == True:
+        if status:
             json_parsed = json.loads(content)
         else:
             log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
@@ -640,7 +640,7 @@ class RestConnection(object):
 
         status, content = self._http_request(api, 'POST', params)
 
-        if status == True:
+        if status:
             json_parsed = json.loads(content)
             otpNodeId = json_parsed['otpNode']
             otpNode = OtpNode(otpNodeId)
@@ -673,7 +673,7 @@ class RestConnection(object):
 
         status, content = self._http_request(api, 'POST', params)
 
-        if status == True:
+        if status:
             log.info('ejectNode successful')
         else:
             if content.find('Prepare join failed. Node is already part of cluster') >= 0:
@@ -694,8 +694,7 @@ class RestConnection(object):
 
         status, content = self._http_request(api, 'POST', params)
 
-
-        if status == True:
+        if status:
             log.info('fail_over successful')
         else:
             log.error('fail_over error : {0}'.format(content))
@@ -718,7 +717,7 @@ class RestConnection(object):
 
         status, content = self._http_request(api, 'POST', params)
 
-        if status == True:
+        if status:
             log.info('rebalance operation started')
         else:
             log.error('rebalance operation failed')
@@ -768,7 +767,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             if "status" in json_parsed:
                 if "errorMessage" in json_parsed:
                     msg = '{0} - rebalance failed'.format(json_parsed)
@@ -801,7 +800,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             rebalanced = json_parsed['balanced']
 
         return rebalanced
@@ -823,7 +822,7 @@ class RestConnection(object):
 
         status, content = self._http_request(api, timeout=timeout)
 
-        if status == True:
+        if status:
             json_parsed = json.loads(content)
             node = RestParser().parse_get_nodes_response(json_parsed)
 
@@ -838,7 +837,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             for key in json_parsed:
                 #each key contain node info
                 value = json_parsed[key]
@@ -860,9 +859,8 @@ class RestConnection(object):
 
         status, content = self._http_request(api)
 
-        if status == True:
+        if status:
             parsed = json.loads(content)
-
         return parsed
 
 
@@ -874,7 +872,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             parsed = json_parsed
 
         return parsed
@@ -888,7 +886,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             version = MembaseServerVersion(json_parsed['implementationVersion'], json_parsed['componentsVersion'])
 
         return version
@@ -903,7 +901,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             for item in json_parsed:
                 bucketInfo = RestParser().parse_get_bucket_json(item)
                 buckets.append(bucketInfo)
@@ -924,7 +922,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             op = json_parsed["op"]
             samples = op["samples"]
             for stat_name in samples:
@@ -963,7 +961,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             if "nodes" in json_parsed:
                 for json_node in json_parsed["nodes"]:
                     node = RestParser().parse_get_nodes_response(json_node)
@@ -988,7 +986,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             op = json_parsed["op"]
             samples = op["samples"]
             for stat_name in samples:
@@ -1005,7 +1003,7 @@ class RestConnection(object):
 
         status, content = self._http_request(api)
 
-        if status == True:
+        if status:
             bucketInfo = RestParser().parse_get_bucket_response(content)
             # log.debug('set stats to {0}'.format(bucketInfo.stats.ram))
 
@@ -1088,7 +1086,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == True:
+        if status:
             settings = AutoFailoverSettings()
             settings.enabled = json_parsed["enabled"]
             settings.count = json_parsed["count"]
@@ -1178,7 +1176,7 @@ class RestConnection(object):
             api = self.baseUrl + "couchBase/{0}%2F{1}".format(bucket, i)
             status, content = httplib2.Http().request(api, "GET")
             data = json.loads(content)
-            if data["compact_running"] == True:
+            if data["compact_running"]:
                 return True, i
         return False, i
 
@@ -1362,7 +1360,6 @@ class vBucket(object):
         self.master = ''
         self.replica = []
         self.id = -1
-
 
 class RestParser(object):
     def parse_get_nodes_response(self, parsed):
