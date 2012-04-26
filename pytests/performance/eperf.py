@@ -11,6 +11,7 @@ import gzip
 import ast
 import copy
 import mcsoda
+import threading
 
 # membase imports
 from membase.api.rest_client import RestConnection, RestHelper
