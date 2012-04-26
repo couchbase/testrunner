@@ -34,7 +34,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.failover_factor = self.num_swap = self.input.param("num-swap", 1)
         self.num_initial_servers = self.input.param("num-initial-servers", 3)
         self.fail_orchestrator = self.swap_orchestrator = self.input.param("swap-orchestrator", False)
-        self.skip_cleanup = self.input.param("skip_cleanup", False)
+        self.skip_cleanup = self.input.param("skip-cleanup", False)
 
         # Make sure the test is setup correctly
         min_servers = int(self.num_initial_servers) + int(self.num_swap)
