@@ -101,7 +101,7 @@ def append_test(tests, name):
         tests.append(name)
 
 def locate_conf_file(filename):
-    print "filname:%s" %filename
+    print "filename:%s" %filename
     if filename:
         if os.path.exists(filename):
             return file(filename)
