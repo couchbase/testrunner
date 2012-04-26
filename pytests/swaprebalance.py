@@ -95,7 +95,7 @@ class SwapRebalanceBase(unittest.TestCase):
     def items_verification(master, test):
         rest = RestConnection(master)
         #Verify items count across all node
-        time = 240
+        time = 600
         for bucket in rest.get_buckets():
             verified = RebalanceHelper.wait_till_total_numbers_match(master, bucket.name, timeout_in_seconds=time)
             test.assertTrue(verified, "Lost items!!.. failing test in {0} secs".format(time))
@@ -106,7 +106,7 @@ class SwapRebalanceBase(unittest.TestCase):
         rest = RestConnection(master)
         for bucket in rest.get_buckets():
             loader = dict()
-            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
+            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,
                 password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["json"] = 0
@@ -123,9 +123,8 @@ class SwapRebalanceBase(unittest.TestCase):
         rest = RestConnection(master)
         for bucket in rest.get_buckets():
             loader = dict()
-            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,\
+            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count/2, bucket=bucket.name,
                     password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
-            loader["mcsoda"].cfg["exit-after-creates"] = 0
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
             loader["mcsoda"].cfg["ratio-creates"] = 0.5
@@ -145,7 +144,7 @@ class SwapRebalanceBase(unittest.TestCase):
             for loader in loaders:
                 loader["mcsoda"].load_stop()
         for loader in loaders:
-            loader["thread"].join(60)
+            loader["thread"].join(300)
 
     @staticmethod
     def create_buckets(self):
@@ -207,7 +206,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_access_phase(self, master)
 
         self.log.info("SWAP REBALANCE PHASE")
-        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
             ejectedNodes=optNodesIds)
 
         if do_stop_start:
@@ -220,7 +219,7 @@ class SwapRebalanceBase(unittest.TestCase):
                 stopped = rest.stop_rebalance()
                 self.assertTrue(stopped, msg="unable to stop rebalance")
                 time.sleep(20)
-                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
                     ejectedNodes=optNodesIds)
 
         self.assertTrue(rest.monitorRebalance(),
@@ -292,7 +291,7 @@ class SwapRebalanceBase(unittest.TestCase):
         loaders = SwapRebalanceBase.start_access_phase(self, master)
 
         self.log.info("SWAP REBALANCE PHASE")
-        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
             ejectedNodes=optNodesIds)
 
         # Rebalance is failed at 20%, 40% and 60% completion
@@ -305,7 +304,7 @@ class SwapRebalanceBase(unittest.TestCase):
             self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
             time.sleep(5)
 
-            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
                 ejectedNodes=optNodesIds)
 
         self.assertTrue(rest.monitorRebalance(),
@@ -352,7 +351,7 @@ class SwapRebalanceBase(unittest.TestCase):
         if self.fail_orchestrator:
             status, content = ClusterHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
-            format(status, content))
+                format(status, content))
             # When swapping all the nodes
             if self.num_swap is len(current_nodes):
                 optNodesIds.append(content)
