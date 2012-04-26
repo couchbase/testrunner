@@ -204,6 +204,11 @@ if __name__ == "__main__":
     TestInputSingleton.input = TestInputParser.get_test_input(sys.argv) # get params from command line
     test_params.update(TestInputSingleton.input.test_params) # ensure command line params get higher priority
     TestInputSingleton.input.test_params = test_params
+    if "hot_load_phase" in TestInputSingleton.input.test_params.keys() \
+        and "hot_init_items" in TestInputSingleton.input.test_params.keys():
+        # reload hot items
+        print "[load phase] Loading initial hot items"
+        TestInputSingleton.input.test_params["items"] = TestInputSingleton.input.test_params["hot_init_items"]
     print "Test input params:"
     print TestInputSingleton.input.test_params
     print
