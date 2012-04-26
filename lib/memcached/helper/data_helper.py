@@ -908,7 +908,8 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
     # or None if not found
     def mc_get(self, key):
         item = self.mc_get_full(key)
-        item["value"] = hashlib.md5(value).digest()
+        if item is not None:
+            item["value"] = hashlib.md5(item["value"]).digest()
         return item
 
     # unhashed value
