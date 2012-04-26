@@ -68,25 +68,6 @@ class TaskScheduler():
         return _task
 
     @staticmethod
-    def async_mutate_docs(tm, docs, rest, bucket, kv_store=None, info=None, store_enabled=True,
-                          expiration=0):
-        _task = DocumentMutateTask(docs, rest, bucket, kv_store, info, store_enabled, expiration)
-        tm.schedule(_task)
-        return _task
-
-    @staticmethod
-    def async_access_docs(tm, docs, rest, bucket, info=None):
-        _task = DocumentAccessTask(docs, rest, bucket, info)
-        tm.schedule(_task)
-        return _task
-
-    @staticmethod
-    def async_delete_docs(tm, docs, rest, bucket, info=None, kv_store=None, store_enabled=True):
-        _task = DocumentDeleteTask(docs, rest, bucket, info, kv_store, store_enabled)
-        tm.schedule(_task)
-        return _task
-
-    @staticmethod
     def async_rebalance(tm, servers, to_add, to_remove):
         """Asyncronously rebalances a cluster
 
@@ -185,24 +166,6 @@ class TaskScheduler():
     @staticmethod
     def load_gen_docs(tm, rest, generator, bucket, expiration, loop=False):
         _task = TaskScheduler.async_load_gen_docs(tm, rest, generator, bucket, expiration, loop)
-        return _task.result()
-
-    @staticmethod
-    def mutate_docs(tm, docs, rest, bucket, kv_store=None, info=None, store_enabled=True,
-                    expiration=0):
-        _task = TaskScheduler.async_mutate_docs(tm, docs, rest, bucket, kv_store, info,
-                                                store_enabled, expiration)
-        return _task.result()
-
-    @staticmethod
-    def access_docs(tm, docs, rest, bucket, info=None):
-        _task = TaskScheduler.async_access_docs(tm, docs, rest, bucket, info)
-        return _task.result()
-
-    @staticmethod
-    def delete_docs(tm, docs, rest, bucket, info=None, kv_store=None, store_enabled=True):
-        _task = TaskScheduler.async_delete_docs(tm, docs, rest, bucket, info, kv_store,
-                                                store_enabled)
         return _task.result()
 
     @staticmethod
