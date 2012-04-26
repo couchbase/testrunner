@@ -471,7 +471,7 @@ class PerfBase(unittest.TestCase):
                 'expiration': expiration or 0,
                 'threads': clients,
                 'json': int(kind == 'json'),
-                'batch': self.parami("batch", 1000),
+                'batch': self.parami("batch", PerfDefaults.batch),
                 'vbuckets': self.vbucket_count,
                 'doc-cache': doc_cache,
                 'prefix': prefix,
@@ -1011,7 +1011,7 @@ class MapReduce(PerfBase):
         self.go_load()
         cfg = { 'min-value-size': self.parami("min_value_size", 1024),
                 'vbuckets': self.vbucket_count,
-                'batch': 1000,
+                'batch':  PerfDefaults.batch,
                 'json': 1 }
         cur = { 'cur-items': self.parami("items", 1000000) }
         ctl = { 'run_ok': True }
