@@ -9,6 +9,7 @@ class PerfDefaults:
     # general
     num_nodes           =    10
     mem_quota           =    6000
+    batch               =    50
 
     # load phase
     items               =    22000000    # 22 million

@@ -328,7 +328,7 @@ class PerfBase(unittest.TestCase):
                 'expiration': expiration or 0,
                 'exit-after-creates': 1,
                 'json': int(kind == 'json'),
-                'batch': self.parami("batch", 1000),
+                'batch': self.parami("batch", PerfDefaults.batch),
                 'vbuckets': self.vbucket_count,
                 'doc-cache': doc_cache,
                 'prefix': prefix,
