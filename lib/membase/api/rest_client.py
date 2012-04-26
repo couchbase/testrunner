@@ -7,7 +7,8 @@ import time
 import logger
 from couchbase.document import DesignDocument, View
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
-from membase.api.exception import BucketCreationException, ServerJoinException, ClusterRemoteException
+from membase.api.exception import BucketCreationException, ServerJoinException, ClusterRemoteException, \
+    RebalanceFailedException
 
 log = logger.Logger.get_logger()
 #helper library methods built on top of RestConnection interface
@@ -757,7 +758,9 @@ class RestConnection(object):
         if status == True:
             if "status" in json_parsed:
                 if "errorMessage" in json_parsed:
-                    log.error('{0} - rebalance failed'.format(json_parsed))
+                    msg = '{0} - rebalance failed'.format(json_parsed)
+                    log.error(msg)
+                    raise RebalanceFailedException(msg)
                 elif json_parsed["status"] == "running":
                     for key in json_parsed:
                         if key.find('@') >= 0:
