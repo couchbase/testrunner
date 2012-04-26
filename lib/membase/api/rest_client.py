@@ -201,7 +201,7 @@ class RestConnection(object):
 
         status, content = self._http_request(api, 'PUT', str(design_doc),
                                             headers=self._create_capi_headers())
-        if status == False:
+        if not status:
             raise Exception("unable to create ddoc: " + design_doc_name +
                             " on bucket: " + bucket_name)
         return json.loads(content)
@@ -209,7 +209,7 @@ class RestConnection(object):
     def query_view(self, design_doc_name, view_name, bucket, query, timeout=120):
         status, content = self._query(design_doc_name, view_name, bucket, "view", query,
                                       timeout)
-        if status == False:
+        if not status:
             raise Exception("unable to query view")
         return json.loads(content)
 
@@ -269,7 +269,7 @@ class RestConnection(object):
     def get_ddoc(self, bucket, ddoc_name):
         status, json = self._get_design_doc(bucket, ddoc_name)
 
-        if status == False:
+        if not status:
             raise Exception("unable to get the ddoc definition: " + ddoc_id)
 
         return json
@@ -282,7 +282,7 @@ class RestConnection(object):
 
         json_parsed = json.loads(content)
 
-        if status == False:
+        if not status:
             raise Exception("unable to create view")
 
         return json_parsed
@@ -291,7 +291,7 @@ class RestConnection(object):
     def delete_view(self,bucket,view):
         status, json = self._delete_design_doc(bucket, view)
 
-        if status == False:
+        if not status:
             raise Exception("unable to delete the view")
 
         return json
@@ -319,7 +319,7 @@ class RestConnection(object):
     def get_spatial(self, bucket, spatial):
         status, json = self._get_design_doc(bucket, spatial)
 
-        if status == False:
+        if not status:
             raise Exception("unable to get the spatial view definition")
 
         return json
@@ -328,7 +328,7 @@ class RestConnection(object):
     def delete_spatial(self, bucket, spatial):
         status, json = self._delete_design_doc(bucket, spatial)
 
-        if status == False:
+        if not status:
             raise Exception("unable to delete the spatial view")
 
         return json
@@ -355,7 +355,8 @@ class RestConnection(object):
             else:
                 api += "?"
             num_params += 1
-            if param in ["key", "startkey", "endkey"] or params[param] == True or params[param] == False:
+
+            if param in ["key", "startkey", "endkey"] or params[param] or not params[param]:
                 api += "{0}={1}".format(param, json.dumps(params[param]))
             else:
                 api += "{0}={1}".format(param, params[param])
@@ -395,7 +396,7 @@ class RestConnection(object):
     def _delete_design_doc(self, bucket, name):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, name)
         status, design_doc = self._get_design_doc(bucket, name)
-        if status == False:
+        if not status:
             raise Exception("unable to delete design document")
 
         status, content = self._http_request(
@@ -722,7 +723,7 @@ class RestConnection(object):
         start = time.time()
         progress = 0
         retry = 0
-        while progress is not -1 and progress is not 100 and retry < 20:
+        while progress != -1 and progress != 100 and retry < 20:
             #-1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
             if progress == -100:
@@ -795,7 +796,7 @@ class RestConnection(object):
 
         status, content = self._http_request(api, 'POST', post)
 
-        if status == False:
+        if not status:
             log.error('unable to logClientError')
 
 
