@@ -687,10 +687,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             #get the process list
             exists = self.file_exists(remotepath, filename)
             if exists:
-                log.error('file still exists : {0}/{1}'.format(remotepath, filename))
+                log.error('at {2} file still exists : {0}/{1}'.format(remotepath, filename, self.ip))
                 time.sleep(1)
             else:
-                log.info('file does not exist anymore : {0}/{1}'.format(remotepath, filename))
+                log.info('at {2} FILE DOES NOT EXIST ANYMORE : {0}/{1}'.format(remotepath, filename, self.ip))
                 deleted = True
         return deleted
 
@@ -701,10 +701,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             #get the process list
             exists = self.file_exists(remotepath, filename)
             if not exists:
-                log.error('file does not exist : {0}/{1}'.format(remotepath, filename))
+                log.error('at {2} file does not exist : {0}/{1}'.format(remotepath, filename, self.ip))
                 time.sleep(1)
             else:
-                log.info('file exists : {0}/{1}'.format(remotepath, filename))
+                log.info('at {2} FILE EXISTS : {0}/{1}'.format(remotepath, filename, self.ip))
                 added = True
         return added
 
