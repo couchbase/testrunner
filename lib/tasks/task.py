@@ -247,12 +247,16 @@ class RebalanceTask(Task):
 
     def rebalancing(self, task_manager):
         rest = RestConnection(self.servers[0])
-        progress = rest._rebalance_progress()
-        if progress is not -1 and progress is not 100:
-            task_manager.schedule(self, 10)
-        else:
+        try:
+            progress = rest._rebalance_progress()
+            if progress is not -1 and progress is not 100:
+                task_manager.schedule(self, 10)
+            else:
+                self.state = "finishing"
+                self.set_result({"status": "success", "value": None})
+        except Exception as e:
             self.state = "finishing"
-            self.set_result({"status": "success", "value": None})
+            self.set_result({"status": "error", "value": e})
 
 #OperationGeneratorTask
 #OperationGenerating
