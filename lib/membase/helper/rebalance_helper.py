@@ -342,7 +342,8 @@ class RebalanceHelper():
         log.info("delta : {0} missing_percentage : {1} replica_factor : {2}".format(delta, \
             missing_percentage, replica_factor))
         if replica_factor > 1:
-           if delta == 0 or missing_percentage < 0.005:
+           # If no items missing then, return True
+           if not delta:
               return True
            return False
         else:
