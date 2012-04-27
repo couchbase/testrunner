@@ -12,6 +12,19 @@ import errno
 
 from membase.api.rest_client import RestConnection
 
+sys.path.append("lib")
+sys.path.append(".")
+
+try:
+   import logging
+   logging.config.fileConfig("mcsoda.logging.conf")
+   log = logging.getLogger()
+except:
+   class P:
+      def error(self, m): print(m)
+      def info(self, m):  print(m)
+   log = P()
+
 class Reader(threading.Thread):
     def __init__(self, src, reader_go, reader_done):
 
