@@ -68,7 +68,6 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
         mcsoda.StoreMembaseBinary.connect_host_port(self, host, port, user, pswd)
 
         self.capi_host_port = (host, 8091)
-        socket.setdefaulttimeout(1.0)
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.capi_skt.connect(self.capi_host_port)
