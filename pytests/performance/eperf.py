@@ -1061,7 +1061,7 @@ class EVPerfClient(EPerfClient):
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
                    stats_collector = None, stores = None, ctl = None,
-                   why = None):
+                   heartbeat = 0, why = None):
         self.bg_thread = None
         self.bg_thread_ctl = None
 
@@ -1085,7 +1085,8 @@ class EVPerfClient(EPerfClient):
                                               args=(self.bg_thread_cfg,
                                                     self.bg_thread_cur,
                                                     protocol, host_port, user, pswd,
-                                                    None, self.bg_stores, self.bg_thread_ctl))
+                                                    None, self.bg_stores, self.bg_thread_ctl,
+                                                    heartbeat, "loop-bg"))
             self.bg_thread.daemon = True
             self.bg_thread.start()
 
@@ -1099,7 +1100,8 @@ class EVPerfClient(EPerfClient):
                                                  stats_collector=stats_collector,
                                                  stores=stores,
                                                  ctl=ctl,
-                                                 why=why)
+                                                 heartbeat=heartbeat,
+                                                 why="loop-fg")
         if self.bg_thread_ctl:
             self.bg_thread_ctl['run_ok'] = False
 

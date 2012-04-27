@@ -127,7 +127,7 @@ def histo_percentile(histo, percentiles):
 
 MIN_VALUE_SIZE = [10]
 
-def run_worker(ctl, cfg, cur, store, prefix):
+def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     i = 0
     t_last_flush = time.time()
     o_last_flush = store.num_ops(cur)
@@ -143,6 +143,9 @@ def run_worker(ctl, cfg, cur, store, prefix):
     if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
        cur['batch'] = 10
 
+    log.info("[mcsoda: %s] starts running." %why)
+    heartbeat_last = t_last
+
     while ctl.get('run_ok', True):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
@@ -152,6 +155,11 @@ def run_worker(ctl, cfg, cur, store, prefix):
            cfg.get('max-creates', 0) > 0 and \
            cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
            break
+
+        heartbeat_duration = time.time() - heartbeat_last
+        if heartbeat != 0 and heartbeat_duration > heartbeat:
+            heartbeat_last += heartbeat_duration
+            log.info("[mcsoda: %s] num_ops = %s. duration = %s" %(why, num_ops, heartbeat_duration))
 
         flushed = store.command(next_cmd(cfg, cur, store))
         i += 1
@@ -938,7 +946,7 @@ PROTOCOL_STORE = { 'memcached-ascii': StoreMemcachedAscii,
                    'none': Store }
 
 def run(cfg, cur, protocol, host_port, user, pswd,
-        stats_collector = None, stores = None, ctl = None):
+        stats_collector = None, stores = None, ctl = None, heartbeat = 0, why = ""):
    if type(cfg['min-value-size']) == type(""):
        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
    if type(cfg['min-value-size']) != type([]):
@@ -1006,7 +1014,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
    try:
       if len(threads) <= 1:
-         run_worker(ctl, cfg, cur, store, "")
+         run_worker(ctl, cfg, cur, store, "", heartbeat, why)
       else:
          for thread in threads:
             thread.daemon = True
@@ -1035,7 +1043,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
           log.info("    mcsoda is running with %s threads" % len(threads))
       threads = [t for t in threads if t.isAlive()]
 
-   log.info("   mcsoda stopped running.")
+   log.info("[mcsoda: %s] stopped running." %why)
    return cur, t_start, t_end
 
 # --------------------------------------------------------

@@ -362,7 +362,7 @@ class PerfBase(unittest.TestCase):
         self.log.info("mcsoda - cur: " + str(cur))
 
         cur, start_time, end_time = self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
-                                                    why="load")
+                                                    heartbeat=self.parami("mcsoda_heartbeat", 0), why="load")
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
@@ -381,11 +381,13 @@ class PerfBase(unittest.TestCase):
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
                    stats_collector = None, stores = None, ctl = None,
-                   why = None):
+                   heartbeat = 0, why = ""):
         return mcsoda.run(cfg, cur, protocol, host_port, user, pswd,
                           stats_collector=stats_collector,
                           stores=stores,
-                          ctl=ctl)
+                          ctl=ctl,
+                          heartbeat=heartbeat,
+                          why=why)
 
     def nodes(self, num_nodes):
         self.is_multi_node = True
@@ -523,7 +525,7 @@ class PerfBase(unittest.TestCase):
                                                     protocol, host_port, user, pswd,
                                                     stats_collector=sc,
                                                     ctl=ctl, stores=stores,
-                                                    why="loop")
+                                                    heartbeat=self.parami("mcsoda_heartbeat", 0),why="loop")
 
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
