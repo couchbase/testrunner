@@ -393,9 +393,14 @@ class Store:
     def cmd_line_get(self, key_num, key_str):
         return key_str
 
-    def readbytes(self, skt, nbytes, buf):
+    def readbytes(self, skt, nbytes, buf, timeout_sec = None):
         while len(buf) < nbytes:
-           data = skt.recv(max(nbytes - len(buf), 4096))
+           if timeout_sec is not None and timeout_sec != 0:
+              skt.settimeout(timeout_sec)
+           try:
+              data = skt.recv(max(nbytes - len(buf), 4096))
+           except timeout:
+              log.error("[mcsoda] recv timed out after %s seconds" %timeout_sec)
            if not data:
               return None, ''
            buf += data
@@ -687,13 +692,17 @@ class StoreMembaseBinary(StoreMemcachedBinary):
            rv.append((server, ''.join(buffers)))
         return rv
 
-    def inflight_send(self, inflight_msg):
+    def inflight_send(self, inflight_msg, timeout_sec = None):
         sent = 0
         for server, buf in inflight_msg:
            try:
               conn = self.awareness.memcacheds[server]
+              if timeout_sec is not None and timeout_sec != 0:
+                conn.s.settimeout(timeout_sec)
               conn.s.send(buf)
               sent += len(buf)
+           except timeout:
+              log.error("[mcsoda] send timed out after %s seconds" %timeout_sec)
            except:
               print "EXCEPTION: StoreMembaseBinary.inflight_send"
               pass
@@ -727,6 +736,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                          errcode == ERR_EBUSY or \
                          errcode == ERR_ETMPFAIL:
                        backoff = True
+                       log.error("[mcsoda] inflight recv errorcode = %s" %errcode)
                  except:
                     reset_my_awareness = True
                     backoff = True
@@ -740,6 +750,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                           self.cfg.get('backoff-factor', 2.0)
            if self.backoff > 0:
               self.cur['cur-backoffs'] = self.cur.get('cur-backoffs', 0) + 1
+              log.info("[mcsoda] inflight recv backoff = %s" %self.backoff)
               time.sleep(self.backoff)
         else:
            self.backoff = 0
@@ -754,7 +765,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         return received
 
     def recvMsgSockBuf(self, sock, buf):
-        pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf)
+        pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf, 3.0)   # 3 seconds should be enough
         magic, cmd, keylen, extralen, dtype, errcode, datalen, opaque, cas = \
             struct.unpack(RES_PKT_FMT, pkt)
         if magic != RES_MAGIC_BYTE:
