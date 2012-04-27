@@ -772,10 +772,11 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 otpNodeIds = []
                 for node in nodes:
                     otpNodeIds.append(node.id)
+                # Issue rest call to the newly added node
+                # MB-5108
                 if do_new_rest:
-                    # Issue rest call to the newly added node
-                    # MB-5108
-                    rest = RestConnection(server)
+                    master = server
+                    rest = RestConnection(master)
                 rebalanceStarted = rest.rebalance(otpNodeIds, [])
                 self.assertTrue(rebalanceStarted,
                                 "unable to start rebalance on master node {0}".format(master.ip))
