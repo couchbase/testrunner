@@ -393,15 +393,13 @@ class Store:
     def cmd_line_get(self, key_num, key_str):
         return key_str
 
-    def readbytes(self, skt, nbytes, buf, timeout_sec = None):
+    def readbytes(self, skt, nbytes, buf):
         while len(buf) < nbytes:
-           if timeout_sec is not None and timeout_sec != 0:
-              skt.settimeout(timeout_sec)
            data = None
            try:
               data = skt.recv(max(nbytes - len(buf), 4096))
            except socket.timeout:
-              log.error("[mcsoda] recv timed out after %s seconds" %timeout_sec)
+              log.error("[mcsoda] recv timed out")
            except Exception as e:
               log.error("[mcsoda] EXCEPTION: skt.recv / readbytes: " + str(e))
            if not data:
@@ -695,17 +693,19 @@ class StoreMembaseBinary(StoreMemcachedBinary):
            rv.append((server, ''.join(buffers)))
         return rv
 
-    def inflight_send(self, inflight_msg, timeout_sec = None):
+    def inflight_send(self, inflight_msg):
+        timeout_sec = self.cfg.get("socket-timeout", 0)
+        if timeout_sec > 0:
+           conn.s.settimeout(timeout_sec)
+
         sent = 0
         for server, buf in inflight_msg:
            try:
               conn = self.awareness.memcacheds[server]
-              if timeout_sec is not None and timeout_sec != 0:
-                conn.s.settimeout(timeout_sec)
               conn.s.send(buf)
               sent += len(buf)
            except socket.timeout:
-              log.error("[mcsoda] skt.send / inflight_send timed out after %s seconds" %timeout_sec)
+              log.error("[mcsoda] skt.send / inflight_send timed out")
               pass
            except Exception as e:
               log.error("[mcsoda] EXCEPTION on skt.send / inflight_send: " + str(e))
@@ -773,7 +773,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         return received
 
     def recvMsgSockBuf(self, sock, buf):
-        pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf, 3.0)   # 3 seconds should be enough
+        pkt, buf = self.readbytes(sock, MIN_RECV_PACKET, buf)
         magic, cmd, keylen, extralen, dtype, errcode, datalen, opaque, cas = \
             struct.unpack(RES_PKT_FMT, pkt)
         if magic != RES_MAGIC_BYTE:
@@ -1100,7 +1100,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
      "backoff-factor":     (2.0,   "Exponential backoff factor on ETMPFAIL errors."),
      "hot-shift":          (0,     "# of keys/sec that hot item subset should shift."),
      "random":             (0,     "When 1, use random keys for gets and updates."),
-     "queries":            ("",    "Query templates; semicolon-separated.")
+     "queries":            ("",    "Query templates; semicolon-separated."),
+     "socket-timeout":     (0,     "Used for socket.settimeout(), in seconds.")
      }
 
   cur_defaults = cur_defaults or {
