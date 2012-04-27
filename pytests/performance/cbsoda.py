@@ -72,10 +72,12 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.capi_skt.connect(self.capi_host_port)
+        self.init_reader(self.capi_skt)
 
+    def init_reader(self, skt):
         self.reader_go = threading.Event()
         self.reader_done = threading.Event()
-        self.reader = Reader(self.capi_skt, self.reader_go, self.reader_done)
+        self.reader = Reader(skt, self.reader_go, self.reader_done)
         self.reader.daemon = True
         self.reader.start()
 
@@ -96,23 +98,24 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
         sent_mc = mcsoda.StoreMembaseBinary.inflight_send(self, for_mc)
 
-        self.reader.inflight += num_capi
-
         sent_capi = len(buf_capi)
         if sent_capi > 0:
             try:
+                self.reader.inflight += num_capi
                 self.capi_skt.send(buf_capi)
             except socket.error, e:
                 log.error("[cbsoda] EXCEPTION: inflight_send / cap_skt.send: " + str(e))
                 if isinstance(e.args, tuple):
                     if e[0] == errno.EPIPE:
-                        #remote-end closed the socket- TODO: why does this happen?
+                        # Remote-end closed the socket - TODO: why does this happen?
                         self.capi_skt.close()
                         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                         self.capi_skt.connect(self.capi_host_port)
+                        self.init_reader(self.capi_skt) # TODO: we lose some stats from the old reader?
 
-                        #resend data
+                        # Resend data
+                        self.reader.inflight = num_capi
                         self.capi_skt.send(buf_capi)
 
         return sent_mc + sent_capi
