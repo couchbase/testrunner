@@ -7,9 +7,10 @@ DO NOT overwrite.
 class PerfDefaults:
 
     # general
-    num_nodes           =    10
-    mem_quota           =    6000
     batch               =    50
+    kind                =    "nonjson"
+    mem_quota           =    6000
+    num_nodes           =    10
 
     # load phase
     items               =    22000000    # 22 million
@@ -32,6 +33,7 @@ class PerfDefaults:
     # control
     load_wait_until_drained =   1        # wait to be drained on the load phase, 1: enabled, 0: disabled
     loop_wait_until_drained =   0        # wait to be drained on the access phase, 1: enabled, 0: disabled
+    mcsoda_heartbeat        =   0        # health check heartbeat message for mcsoda. 0: no heartbeat, ~: in sec
     tear_down               =   1        # 1: enabled, 0: disabled
     tear_down_proxy         =   1        # (prerequsite: tear_down = 1) tear down proxy,  1: enabled, 0: disabled
     tear_down_bucket        =   0        # (prerequsite: tear_down = 1) tear down bucket,  1: enabled, 0: disabled
