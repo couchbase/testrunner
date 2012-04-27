@@ -397,10 +397,13 @@ class Store:
         while len(buf) < nbytes:
            if timeout_sec is not None and timeout_sec != 0:
               skt.settimeout(timeout_sec)
+           data = None
            try:
               data = skt.recv(max(nbytes - len(buf), 4096))
-           except timeout:
+           except socket.timeout:
               log.error("[mcsoda] recv timed out after %s seconds" %timeout_sec)
+           except Exception as e:
+              log.error("[mcsoda] EXCEPTION: skt.recv / readbytes: " + str(e))
            if not data:
               return None, ''
            buf += data
@@ -701,9 +704,11 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                 conn.s.settimeout(timeout_sec)
               conn.s.send(buf)
               sent += len(buf)
-           except timeout:
-              log.error("[mcsoda] send timed out after %s seconds" %timeout_sec)
-           except:
+           except socket.timeout:
+              log.error("[mcsoda] skt.send / inflight_send timed out after %s seconds" %timeout_sec)
+              pass
+           except Exception as e:
+              log.error("[mcsoda] EXCEPTION on skt.send / inflight_send: " + str(e))
               print "EXCEPTION: StoreMembaseBinary.inflight_send"
               pass
         return sent
@@ -737,11 +742,13 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                          errcode == ERR_ETMPFAIL:
                        backoff = True
                        log.error("[mcsoda] inflight recv errorcode = %s" %errcode)
-                 except:
+                 except Exception as e:
+                    log.error("[mcsoda] EXCEPTION: inflight_recv inner: " + str(e))
                     reset_my_awareness = True
                     backoff = True
               conn.recvBuf = recvBuf
            except:
+              log.error("[mcsoda] EXCEPTION: inflight_recv outer: " + str(e))
               reset_my_awareness = True
               backoff = True
 
@@ -758,7 +765,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         if reset_my_awareness:
            try:
               self.awareness.reset()
-           except:
+           except Exception as e:
+              log.error("[mcsoda] EXCEPTION: self.awareness.reset: " + str(e))
               print "EXCEPTION: self.awareness.reset()"
               pass
 

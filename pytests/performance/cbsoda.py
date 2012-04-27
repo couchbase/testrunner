@@ -37,7 +37,7 @@ class Reader(threading.Thread):
 
                 self.inflight -= found
             except Exception as e:
-                # timed out
+                log.error("[cbsoda] EXCEPTION: Reader.run: " + str(e))
                 self.inflight = 0
 
             if self.inflight == 0:
@@ -86,6 +86,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
             try:
                 self.capi_skt.send(buf_capi)
             except socket.error, e:
+                log.error("[cbsoda] EXCEPTION: inflight_send / cap_skt.send: " + str(e))
                 if isinstance(e.args, tuple):
                     if e[0] == errno.EPIPE:
                         #remote-end closed the socket- TODO: why does this happen?
