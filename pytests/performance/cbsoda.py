@@ -42,7 +42,11 @@ class Reader(threading.Thread):
             try:
                 data = self.src.recv(4096)
                 if not data:
-                    break
+                    log.error("[cbsoda] reader recv'ed nothing: %s" % data)
+                    self.reader_done.set()
+                    self.reader_go = None
+                    self.src = None
+                    return
 
                 self.received += len(data)
 
