@@ -47,6 +47,7 @@ class RebalanceBaseTest(unittest.TestCase):
         self.repeat = self.input.param("repeat", 1)
         self.max_ops_per_second = self.input.param("max_ops_per_second", 500)
         self.min_item_size = self.input.param("min_item_size", 128)
+        self.do_stop = self.input.param("do-stop", False)
 
         self.log.info('picking server : {0} as the master'.format(master))
 
@@ -440,7 +441,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                                                    [master],
                                                    [server],
-                                                   [], True)
+                                                   [], self.do_stop, monitor=True)
 
             # wait for loading tasks to finish
             RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
@@ -585,7 +586,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
                 RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                                                        [master],
                                                        [],
-                                                       [node], True)
+                                                       [node], self.do_stop, monitor=True)
                 # wait for loading tasks to finish
                 RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
                 self.log.info("DONE LOAD AND REBALANCE")
@@ -655,66 +656,6 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
             time.sleep(20)
 
             RebalanceBaseTest.replication_verification(master, bucket_data, self.replica, self)
-            nodes = rest.node_statuses()
-
-
-class StopRebalanceTests(unittest.TestCase):
-
-    def setUp(self):
-        RebalanceBaseTest.common_setup(self)
-
-    def tearDown(self):
-        RebalanceBaseTest.common_tearDown(self)
-
-    def stop_rebalance(self):
-        RebalanceBaseTest.common_setup(self)
-        self._common_test_body()
-
-    def _common_test_body(self):
-
-        master = self.servers[0]
-        rest = RestConnection(master)
-        bucket_data = RebalanceBaseTest.bucket_data_init(rest)
-
-        # add all servers
-        self.log.info("INTIAL REBALANCE ALL NODES")
-        RebalanceTaskHelper.add_rebalance_task(self.task_manager, [master], self.servers[1:],
-            [], True)
-        self.log.info("INTIAL LOAD")
-        RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager, bucket_data, self.load_ratio,
-            keys_count = self.keys_count)
-
-        nodes = rest.node_statuses()
-
-        #dont rebalance out the current node
-        while len(nodes) > 1:
-            #pick a node that is not the master node
-            toBeEjectedNode = RebalanceHelper.pick_node(master)
-            RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
-                bucket_data, self.load_ratio,
-                keys_count = self.keys_count)
-            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
-            #let's start/step rebalance three times
-            for i in range(0, self.num_rebalance):
-                self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
-                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
-                expected_progress = 30
-                reached = RestHelper(rest).rebalance_reached(expected_progress)
-                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
-                stopped = rest.stop_rebalance()
-                self.assertTrue(stopped, msg="unable to stop rebalance")
-                time.sleep(20)
-                RebalanceBaseTest.replication_verification(master, bucket_data, self.replica, self)
-            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
-            self.assertTrue(rest.monitorRebalance(),
-                            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
-            time.sleep(20)
-            RebalanceBaseTest.do_kv_and_replica_verification(master,
-                                                             self.task_manager,
-                                                             bucket_data,
-                                                             self.replica,
-                                                             self)
-
             nodes = rest.node_statuses()
 
 
@@ -1010,8 +951,10 @@ class RebalanceTaskHelper():
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
     @staticmethod
-    def add_rebalance_task(tm, servers, to_add, to_remove, monitor = False):
-        _t = task.RebalanceTask(servers, to_add, to_remove)
+    def add_rebalance_task(tm, servers, to_add, to_remove, do_stop=False,
+                           progress=30, monitor = False):
+        _t = task.RebalanceTask(servers, to_add, to_remove, do_stop=do_stop,
+                                progress=progress)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
     @staticmethod
@@ -1028,7 +971,6 @@ class RebalanceTaskHelper():
     def incremental_rebalance_out_tasks(tm, servers, to_remove):
         return [ RebalanceTaskHelper.schedule_task_helper(tm, _t, True) for _t in
                     [ task.RebalanceTask(servers, [], [old_server]) for old_server in to_remove ]]
-
 
     @staticmethod
     def add_doc_gen_task(tm, rest, count, bucket = "default", kv_store = None, store_enabled = True,

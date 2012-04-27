@@ -192,11 +192,13 @@ class BucketDeleteTask(Task):
         self.state = "finished"
 
 class RebalanceTask(Task):
-    def __init__(self, servers, to_add=[], to_remove=[]):
+    def __init__(self, servers, to_add=[], to_remove=[], do_stop=False, progress=30):
         Task.__init__(self, "rebalance_task")
         self.servers = servers
         self.to_add = to_add
         self.to_remove = to_remove
+        self.do_stop = do_stop
+        self.progress = progress
         self.state = "initializing"
 
     def step(self, task_manager):
@@ -211,6 +213,8 @@ class RebalanceTask(Task):
             self.add_nodes(task_manager)
         elif self.state == "start_rebalance":
             self.start_rebalance(task_manager)
+        elif self.state == "stop_rebalance":
+            self.stop_rebalance(task_manager)
         elif self.state == "rebalancing":
             self.rebalancing(task_manager)
         else:
@@ -245,12 +249,30 @@ class RebalanceTask(Task):
             self.state = "finishing"
             self.set_result({"status": "error", "value": e})
 
+    def stop_rebalance(self, task_manager):
+        rest = RestConnection(self.servers[0])
+        try:
+            rest.stop_rebalance()
+            # We don't want to start rebalance immediately
+            self.log.info("Rebalance Stopped, sleep for 20 secs")
+            time.sleep(20)
+            self.do_stop = False
+            self.state = "start_rebalance"
+            task_manager.schedule(self)
+        except Exception as e:
+            self.state = "finishing"
+            self.set_result({"status": "error", "value": e})
+
     def rebalancing(self, task_manager):
         rest = RestConnection(self.servers[0])
         try:
             progress = rest._rebalance_progress()
             if progress is not -1 and progress is not 100:
-                task_manager.schedule(self, 10)
+                if self.do_stop and progress >= self.progress :
+                    self.state = "stop_rebalance"
+                    task_manager.schedule(self, 1)
+                else:
+                    task_manager.schedule(self, 1)
             else:
                 self.state = "finishing"
                 self.set_result({"status": "success", "value": None})
