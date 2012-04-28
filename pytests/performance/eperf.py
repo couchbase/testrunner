@@ -148,6 +148,13 @@ class EPerfMaster(perf.PerfBase):
                       is_eperf=True)
             self.restartProxy()
 
+    def access_phase_clients_start_at(self):
+        num_clients = self.parami("num_clients", len(self.input.clients) or 1)
+        start_at = int(self.paramf("start_at", 1.0) * \
+                           (self.parami("prefix", 0) * \
+                                self.access_phase_items / num_clients))
+        return num_clients, start_at
+
     def access_phase(self, items,
                      ratio_sets     = 0,
                      ratio_misses   = 0,
@@ -164,11 +171,8 @@ class EPerfMaster(perf.PerfBase):
                      proto_prefix   = "membase-binary"):
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
-            items = self.parami("items", items)
-            num_clients = self.parami("num_clients", len(self.input.clients) or 1)
-            start_at = int(self.paramf("start_at", 1.0) * \
-                           (self.parami("prefix", 0) * items /
-                            num_clients))
+            self.access_phase_items = items = self.parami("items", items)
+            num_clients, start_at = self.access_phase_clients_start_at()
             start_delay = self.parami("start_delay", 2 * 60) # 2 minute delay.
             if start_delay > 0:
                 time.sleep(start_delay * self.parami("prefix", 0))
@@ -1091,7 +1095,8 @@ class EVPerfClient(EPerfClient):
             self.bg_thread.start()
 
             # Also, the main mcsoda run should do no memcached/key-value requests.
-            cfg['max-ops'] = self.parami("fg_max_ops", self.fg_max_ops)
+            num_clients, start_at = self.access_phase_clients_start_at()
+            cfg['max-ops'] = start_at + (self.parami("fg_max_ops", self.fg_max_ops) / num_clients)
             cfg['ratio-sets'] = self.paramf("fg_ratio_sets", 0.0)
             cfg['ratio-queries'] = self.paramf("fg_ratio_queries", 1.0)
 
