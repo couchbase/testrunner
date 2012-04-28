@@ -403,6 +403,7 @@ class Store:
            except Exception as e:
               log.error("[mcsoda] EXCEPTION: skt.recv / readbytes: " + str(e))
            if not data:
+              log.error("[mcsoda] skt.read error: connection broken.")
               return None, ''
            buf += data
         return buf[:nbytes], buf[nbytes:]
@@ -694,24 +695,41 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         return rv
 
     def inflight_send(self, inflight_msg):
+        """
+        If timeout value is 0,
+        blocks until everything been sent out \
+        or the connection breaks.
+        """
         timeout_sec = self.cfg.get("socket-timeout", 0)
         if timeout_sec > 0:
            conn.s.settimeout(timeout_sec)
 
-        sent = 0
+        sent_total = 0
         for server, buf in inflight_msg:
-           try:
-              conn = self.awareness.memcacheds[server]
-              conn.s.send(buf)
-              sent += len(buf)
-           except socket.timeout:
-              log.error("[mcsoda] skt.send / inflight_send timed out")
-              pass
-           except Exception as e:
-              log.error("[mcsoda] EXCEPTION on skt.send / inflight_send: " + str(e))
-              print "EXCEPTION: StoreMembaseBinary.inflight_send"
-              pass
-        return sent
+
+           length = len(buf)
+           if length == 0:
+               continue
+
+           sent_tuple = 0   # byte sent out per tuple in inflight_msg
+           while sent_tuple < length:
+                try:
+                    conn = self.awareness.memcacheds[server]
+                    sent = conn.s.send(buf)
+                    if sent == 0:
+                       log.error("[mcsoda] skt.send return 0: connection broken.")
+                       break
+                    sent_tuple += sent
+                except socket.timeout:
+                    log.error("[mcsoda] skt.send / inflight_send timed out")
+                    pass
+                except Exception as e:
+                    log.error("[mcsoda] EXCEPTION on skt.send / inflight_send: " + str(e))
+                    print "EXCEPTION: StoreMembaseBinary.inflight_send"
+                    pass
+
+           sent_total += sent_tuple
+        return sent_total
 
     def inflight_recv(self, inflight, inflight_grp, expectBuffer=None):
         received = 0
