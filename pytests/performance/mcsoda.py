@@ -765,7 +765,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                     reset_my_awareness = True
                     backoff = True
               conn.recvBuf = recvBuf
-           except:
+           except Exception as e:
               log.error("[mcsoda] EXCEPTION: inflight_recv outer: " + str(e))
               reset_my_awareness = True
               backoff = True
