@@ -16,20 +16,20 @@ while read line ; do
     fi
     if [[ "$section" == "[servers]" && "$line" != "" ]] ; then
         servers_count=$((servers_count + 1))
-    fi        
+    fi
 done < $ini
 
 wd=$(pwd)
 pushd .
 cd ../ns_server
-./cluster_run --nodes=$servers_count &> $wd/logs/cluster_run.log &
+python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
 pid=$!
 popd
 
 if [[ -f $conf ]] ; then
-    ./testrunner -c $conf -i $ini 2>&1 -p makefile=True | tee logs/make_test.log
+    python ./testrunner -c $conf -i $ini 2>&1 -p makefile=True | tee make_test.log
 else
-    ./testrunner -t $conf -i $ini 2>&1 -p makefile=True | tee logs/make_test.log
+    python ./testrunner -t $conf -i $ini 2>&1 -p makefile=True | tee make_test.log
 fi
 kill $pid
 wait
