@@ -441,7 +441,7 @@ class StoreMemcachedBinary(Store):
         self.target = target
         self.host_port = (target + ":11211").split(':')[0:2]
         self.host_port[1] = int(self.host_port[1])
-        self.connect_host_port(self.host_port[0], self.host_port[1], user, pswd, bucket)
+        self.connect_host_port(self.host_port[0], self.host_port[1], user, pswd, bucket=bucket)
         self.inflight_reinit()
         self.queue = []
         self.cmds = 0
