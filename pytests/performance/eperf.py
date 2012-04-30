@@ -768,6 +768,9 @@ class EPerfMaster(perf.PerfBase):
         self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
         self.fg_max_ops = self.parami("fg_max_ops", 1000000)
 
+        # Rotate host so multiple clients don't hit the same HTTP/REST server.
+        host = self.input.servers[self.parami("prefix", 0) % len(self.input.servers)].ip
+
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.3),
                           ratio_misses = self.paramf('ratio_misses', 0.05),
@@ -780,7 +783,8 @@ class EPerfMaster(perf.PerfBase):
                           max_creates = self.parami("max_creates", 30000000),
                           ratio_queries = self.paramf('ratio_queries', 0.2857),
                           queries = queries,
-                          proto_prefix = "couchbase")
+                          proto_prefix = "couchbase",
+                          host = host)
         self.gated_finish(self.input.clients, notify)
 
     def test_evperf_workload2(self):
@@ -907,6 +911,9 @@ function(doc) {
         self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
         self.fg_max_ops = self.parami("fg_max_ops", 1000000)
 
+        # Rotate host so multiple clients don't hit the same HTTP/REST server.
+        host = self.input.servers[self.parami("prefix", 0) % len(self.input.servers)].ip
+
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.3),
                           ratio_misses = self.paramf('ratio_misses', 0.05),
@@ -919,7 +926,8 @@ function(doc) {
                           max_creates = self.parami("max_creates", 30000000),
                           ratio_queries = self.paramf('ratio_queries', 0.3571),
                           queries = queries,
-                          proto_prefix = "couchbase")
+                          proto_prefix = "couchbase",
+                          host = host)
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_mixed_original(self):
