@@ -70,7 +70,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
         mcsoda.StoreMembaseBinary.connect_host_port(self, host, port, user, pswd, bucket=bucket)
 
-        self.capi_host_port = (host, 8091)
+        self.capi_host_port = (host, 8092)
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.capi_skt.connect(self.capi_host_port)
@@ -185,8 +185,8 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
 
 if __name__ == "__main__":
-    extra_examples=["          %s couchbase://127.0.0.1:8091 ratio-queries=0.2",
-                    "          %s couchbase://127.0.0.1:8091 ratio-queries=0.2 \\",
+    extra_examples=["          %s couchbase://127.0.0.1:8092 ratio-queries=0.2",
+                    "          %s couchbase://127.0.0.1:8092 ratio-queries=0.2 \\",
                     "               queries=/default/_design/DDOC/_view/by_email?startkey={email}",
                     "",
                     "Available keys for queries templates:",

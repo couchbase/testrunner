@@ -217,8 +217,8 @@ class EPerfMaster(perf.PerfBase):
                 d["language"] = "javascript"
                 d["_id"] = "_design/" + ddoc_name
                 d_json = json.dumps(d)
-                api = "{0}couchBase/{1}/_design/{2}".format(self.rest.baseUrl,
-                                                            bucket, ddoc_name)
+                api = "{0}/{1}/_design/{2}".format(self.rest.baseUrl,
+                                                   bucket, ddoc_name)
                 self.rest._http_request(api, 'PUT', d_json,
                                         headers=self.rest._create_capi_headers())
             for ddoc_name, d in ddocs.items():
@@ -751,7 +751,7 @@ class EPerfMaster(perf.PerfBase):
 
         # self.index_phase(...) # Skip indexing because we use _all_docs, not a secondary index.
 
-        view = self.param("view", "/couchBase/default/_all_docs")
+        view = self.param("view", "/default/_all_docs")
         limit = self.parami("limit", 10)
         queries = view + "?limit=" + str(limit) + '&startkey="{key}"'
 
@@ -850,7 +850,7 @@ function(doc) {
 
         limit = self.parami("limit", 10)
 
-        b = '/couchBase/default/'
+        b = '/default/'
 
         q = {} # TODO: Need quoting and JSON'ification?
         q['all_docs']    = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
