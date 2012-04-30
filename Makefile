@@ -21,6 +21,8 @@ else
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 endif
 
+test-simple:
+	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/simple.conf
 test-quick:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/dev-quick.conf
 
