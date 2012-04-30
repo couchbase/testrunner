@@ -8,7 +8,7 @@ import logger
 from couchbase.document import DesignDocument, View
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
 from membase.api.exception import BucketCreationException, ServerJoinException, ClusterRemoteException, \
-    RebalanceFailedException
+    RebalanceFailedException, FailoverFailedException
 
 log = logger.Logger.get_logger()
 #helper library methods built on top of RestConnection interface
