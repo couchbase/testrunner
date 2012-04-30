@@ -22,7 +22,9 @@ done < $ini
 wd=$(pwd)
 pushd .
 cd ../ns_server
-python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
+make dataclean
+make
+COUCHBASE_NUM_VBUCKETS=64 python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
 pid=$!
 popd
 
