@@ -435,13 +435,13 @@ class Store:
 
 class StoreMemcachedBinary(Store):
 
-    def connect(self, target, user, pswd, cfg, cur):
+    def connect(self, target, user, pswd, cfg, cur, bucket="default"):
         self.cfg = cfg
         self.cur = cur
         self.target = target
         self.host_port = (target + ":11211").split(':')[0:2]
         self.host_port[1] = int(self.host_port[1])
-        self.connect_host_port(self.host_port[0], self.host_port[1], user, pswd)
+        self.connect_host_port(self.host_port[0], self.host_port[1], user, pswd, bucket)
         self.inflight_reinit()
         self.queue = []
         self.cmds = 0
@@ -455,7 +455,7 @@ class StoreMemcachedBinary(Store):
         self.xfer_sent = 0
         self.xfer_recv = 0
 
-    def connect_host_port(self, host, port, user, pswd):
+    def connect_host_port(self, host, port, user, pswd, bucket="default"):
         self.conn = mc_bin_client.MemcachedClient(host, port)
         if user:
            self.conn.sasl_auth_plain(user, pswd)
@@ -665,14 +665,21 @@ class StoreMemcachedBinary(Store):
 
 class StoreMembaseBinary(StoreMemcachedBinary):
 
-    def connect_host_port(self, host, port, user, pswd):
+    def connect_host_port(self, host, port, user, pswd, bucket="default"):
+        """
+        Connect to the server host using REST API.
+        Username and password should be rest_username and rest_password, \
+        generally they are different from ssh identities.
+        """
         from membase.api.rest_client import RestConnection
         from memcached.helper.data_helper import VBucketAwareMemcached
+
         info = { "ip": host, "port": port,
-                 'username': user or 'default',
-                 'password': pswd or '' }
+                 'username': user or self.cfg.get("rest_username", "Administrator"),
+                 'password': pswd or self.cfg.get("rest_password", "password") }
+
         rest = RestConnection(info)
-        self.awareness = VBucketAwareMemcached(rest, user or 'default', info)
+        self.awareness = VBucketAwareMemcached(rest, bucket, info)
         self.backoff = 0
         self.xfer_sent = 0
         self.xfer_recv = 0
@@ -983,7 +990,7 @@ PROTOCOL_STORE = { 'memcached-ascii': StoreMemcachedAscii,
                    'none': Store }
 
 def run(cfg, cur, protocol, host_port, user, pswd,
-        stats_collector = None, stores = None, ctl = None, heartbeat = 0, why = ""):
+        stats_collector = None, stores = None, ctl = None, heartbeat = 0, why = "", bucket = "default"):
    if type(cfg['min-value-size']) == type(""):
        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
    if type(cfg['min-value-size']) != type([]):
@@ -1015,7 +1022,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
       log.info("store: %s - %s" % (i, store.__class__))
 
-      store.connect(host_port, user, pswd, cfg, cur)
+      store.connect(host_port, user, pswd, cfg, cur, bucket)
       store.stats_collector(stats_collector)
 
       threads.append(threading.Thread(target=run_worker,

@@ -70,6 +70,8 @@ class PerfBase(unittest.TestCase):
         ClusterOperationHelper.flush_os_caches(self.input.servers)
 
     def setUpCluster(self):
+        print "[perf.setUpCluster] Setting up cluster"
+
         master = self.input.servers[0]
 
         self.rest.init_cluster(master.rest_username, master.rest_password)
@@ -78,6 +80,8 @@ class PerfBase(unittest.TestCase):
                                            memoryQuota = self.parami("mem_quota", PerfDefaults.mem_quota))
 
     def setUpBucket(self):
+        print "[perf.setUpBucket] Setting up bucket"
+
         bucket = self.param("bucket", "default")
 
         self.rest.create_bucket(bucket = bucket,
@@ -138,15 +142,13 @@ class PerfBase(unittest.TestCase):
         print "[perf.tearDown] Cluster teared down"
 
     def setUpProxy(self, bucket=None):
-        print "[perf.tearDown] Tearing down proxy"
+        print "[perf.tearDown] Setting up proxy"
         bucket = bucket or self.param("bucket", "default")
         if len(self.input.moxis) > 0:
             shell = RemoteMachineShellConnection(self.input.moxis[0])
             shell.start_moxi(self.input.servers[0].ip, bucket,
                              self.input.moxis[0].port)
             shell.disconnect()
-        print "[perf.tearDown] Proxy teared down"
-
 
     def tearDownProxy(self):
         if len(self.input.moxis) > 0:
@@ -181,8 +183,8 @@ class PerfBase(unittest.TestCase):
         else:
             protocol = 'memcached-' + protocol_in
             host_port = self.target_host_port(use_direct=use_direct)
-            user = ''
-            pswd = ''
+            user = self.param("rest_username", "Administrator")
+            pswd = self.param("rest_password", "password")
         return protocol, host_port, user, pswd
 
     def mk_protocol(self, host, prefix='membase-binary'):
@@ -356,13 +358,21 @@ class PerfBase(unittest.TestCase):
         # always use membase-binary
         if self.is_multi_node:
             protocol=self.mk_protocol(self.input.servers[0].ip)
+
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
+
+        if not user.strip():
+            user = self.param("rest_username", "Administrator")
+        if not pswd.strip():
+            pswd = self.param("rest_password", "password")
+
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
 
         cur, start_time, end_time = self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
-                                                    heartbeat=self.parami("mcsoda_heartbeat", 0), why="load")
+                                                    heartbeat=self.parami("mcsoda_heartbeat", 0), why="load",
+                                                    bucket=self.param("bucket", "default"))
         self.num_items_loaded = num_items
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
@@ -381,13 +391,14 @@ class PerfBase(unittest.TestCase):
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
                    stats_collector = None, stores = None, ctl = None,
-                   heartbeat = 0, why = ""):
+                   heartbeat = 0, why = "", bucket = "default"):
         return mcsoda.run(cfg, cur, protocol, host_port, user, pswd,
                           stats_collector=stats_collector,
                           stores=stores,
                           ctl=ctl,
                           heartbeat=heartbeat,
-                          why=why)
+                          why=why,
+                          bucket=bucket)
 
     def nodes(self, num_nodes):
         self.is_multi_node = True
