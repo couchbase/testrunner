@@ -339,7 +339,7 @@ def choose_entry(arr, n):
 
 class Store:
 
-    def connect(self, target, user, pswd, cfg, cur):
+    def connect(self, target, user, pswd, cfg, cur, bucket="default"):
        self.target = target
        self.cfg = cfg
        self.cur = cur
@@ -821,7 +821,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
 
 class StoreMemcachedAscii(Store):
 
-    def connect(self, target, user, pswd, cfg, cur):
+    def connect(self, target, user, pswd, cfg, cur, bucket="default"):
         self.cfg = cfg
         self.cur = cur
         self.target = target
@@ -1022,7 +1022,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
       log.info("store: %s - %s" % (i, store.__class__))
 
-      store.connect(host_port, user, pswd, cfg, cur, bucket)
+      store.connect(host_port, user, pswd, cfg, cur, bucket=bucket)
       store.stats_collector(stats_collector)
 
       threads.append(threading.Thread(target=run_worker,

@@ -64,8 +64,8 @@ class Reader(threading.Thread):
 
 class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
-    def connect_host_port(self, host, port, user, pswd):
-        mcsoda.StoreMembaseBinary.connect_host_port(self, host, port, user, pswd)
+    def connect_host_port(self, host, port, user, pswd, bucket="default"):
+        mcsoda.StoreMembaseBinary.connect_host_port(self, host, port, user, pswd, bucket=bucket)
 
         self.capi_host_port = (host, 8091)
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
