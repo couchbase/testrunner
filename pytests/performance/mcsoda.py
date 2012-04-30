@@ -399,11 +399,14 @@ class Store:
            try:
               data = skt.recv(max(nbytes - len(buf), 4096))
            except socket.timeout:
-              log.error("[mcsoda] recv timed out")
+              log.error("[mcsoda] EXCEPTION: Store.readbytes-socket.timeout / recv timed out")
+              self.cur["cur-ex-Store.readbytes-socket.timeout"] = self.cur.get("cur-ex-Store.readbytes-socket.timeout", 0) + 1
            except Exception as e:
-              log.error("[mcsoda] EXCEPTION: skt.recv / readbytes: " + str(e))
+              log.error("[mcsoda] EXCEPTION: Store.readbytes: " + str(e))
+              self.cur["cur-ex-Store.readbytes"] = self.cur.get("cur-ex-Store.readbytes", 0) + 1
            if not data:
-              log.error("[mcsoda] skt.read error: connection broken.")
+              log.error("[mcsoda] Store.readbytes-nodata / skt.read no data.")
+              self.cur["cur-Store.readbytes-nodata"] = self.cur.get("cur-Store.readbytes-odata", 0) + 1
               return None, ''
            buf += data
         return buf[:nbytes], buf[nbytes:]
@@ -724,15 +727,17 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                     conn = self.awareness.memcacheds[server]
                     sent = conn.s.send(buf)
                     if sent == 0:
-                       log.error("[mcsoda] skt.send return 0: connection broken.")
+                       log.error("[mcsoda] StoreMembaseBinary.send-zero / skt.send returned 0.")
+                       self.cur["cur-StoreMembaseBinary.send-zero"] = self.cur.get("cur-StoreMembaseBinary.send-zero", 0) + 1
                        break
                     sent_tuple += sent
                 except socket.timeout:
-                    log.error("[mcsoda] skt.send / inflight_send timed out")
+                    log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.send-socket.timeout / inflight_send timed out")
+                    self.cur["cur-ex-StoreMembaseBinary.send-socket.timeout"] = self.cur.get("cur-ex-StoreMembaseBinary.send-socket.timeout", 0) + 1
                     pass
                 except Exception as e:
-                    log.error("[mcsoda] EXCEPTION on skt.send / inflight_send: " + str(e))
-                    print "EXCEPTION: StoreMembaseBinary.inflight_send"
+                    log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.send / inflight_send: " + str(e))
+                    self.cur["cur-ex-StoreMembaseBinary.send"] = self.cur.get("cur-ex-StoreMembaseBinary.send", 0) + 1
                     pass
 
            sent_total += sent_tuple
@@ -768,12 +773,14 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                        backoff = True
                        log.error("[mcsoda] inflight recv errorcode = %s" %errcode)
                  except Exception as e:
-                    log.error("[mcsoda] EXCEPTION: inflight_recv inner: " + str(e))
+                    log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.recvMsgSockBuf / inflight_recv inner: " + str(e))
+                    self.cur["cur-ex-StoreMembaseBinary.recvMsgSockBuf"] = self.cur.get("cur-ex-StoreMembaseBinary.recvMsgSockBuf", 0) + 1
                     reset_my_awareness = True
                     backoff = True
               conn.recvBuf = recvBuf
            except Exception as e:
-              log.error("[mcsoda] EXCEPTION: inflight_recv outer: " + str(e))
+              log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.inflight_recv / outer: " + str(e))
+              self.cur["cur-ex-StoreMembaseBinary.inflight_recv"] = self.cur.get("cur-ex-StoreMembaseBinary.inflight_recv", 0) + 1
               reset_my_awareness = True
               backoff = True
 
@@ -791,7 +798,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
            try:
               self.awareness.reset()
            except Exception as e:
-              log.error("[mcsoda] EXCEPTION: self.awareness.reset: " + str(e))
+              log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.awareness.reset: " + str(e))
+              self.cur["cur-ex-StoreMembaseBinary.awareness.reset"] = self.cur.get("cur-ex-StoreMembaseBinary.awareness.reset", 0) + 1
               print "EXCEPTION: self.awareness.reset()"
               pass
 

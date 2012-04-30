@@ -26,11 +26,12 @@ except:
    log = P()
 
 class Reader(threading.Thread):
-    def __init__(self, src, reader_go, reader_done):
+    def __init__(self, src, reader_go, reader_done, cur):
 
         self.src = src
         self.reader_go = reader_go
         self.reader_done = reader_done
+        self.cur = cur
         self.inflight = 0
         self.received = 0
         threading.Thread.__init__(self)
@@ -42,7 +43,8 @@ class Reader(threading.Thread):
             try:
                 data = self.src.recv(4096)
                 if not data:
-                    log.error("[cbsoda] reader recv'ed nothing: %s" % data)
+                    log.error("[cbsoda] Reader.recv-nodata / reader recv'ed nothing: %s" % data)
+                    self.cur["cur-Reader.recv-nodata"] = self.cur.get("cur-Reader.recv-nodata", 0) + 1
                     self.reader_done.set()
                     self.reader_go = None
                     self.src = None
@@ -55,6 +57,7 @@ class Reader(threading.Thread):
                 self.inflight -= found
             except Exception as e:
                 log.error("[cbsoda] EXCEPTION: Reader.run: " + str(e))
+                self.cur["cur-ex-Reader.run"] = self.cur.get("cur-ex-Reader.run", 0) + 1
                 self.inflight = 0
 
             if self.inflight == 0:
@@ -76,7 +79,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
     def init_reader(self, skt):
         self.reader_go = threading.Event()
         self.reader_done = threading.Event()
-        self.reader = Reader(skt, self.reader_go, self.reader_done)
+        self.reader = Reader(skt, self.reader_go, self.reader_done, self.cur)
         self.reader.daemon = True
         self.reader.start()
 
@@ -103,7 +106,8 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
                 self.reader.inflight += num_capi
                 self.capi_skt.send(buf_capi)
             except socket.error, e:
-                log.error("[cbsoda] EXCEPTION: inflight_send / cap_skt.send: " + str(e))
+                log.error("[cbsoda] EXCEPTION: StoreCouchbase.inflight_send-socket.error / capi_skt.send: " + str(e))
+                self.cur["cur-ex-StoreCouchbase.inflight_send-socket.error"] = self.cur.get("cur-ex-StoreCouchbase.inflight_send-socket.error", 0) + 1
                 if isinstance(e.args, tuple):
                     if e[0] == errno.EPIPE:
                         # Remote-end closed the socket - TODO: why does this happen?
