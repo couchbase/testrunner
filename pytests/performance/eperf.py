@@ -168,7 +168,8 @@ class EPerfMaster(perf.PerfBase):
                      hot_shift      = 10,
                      ratio_queries  = 0,
                      queries        = None,
-                     proto_prefix   = "membase-binary"):
+                     proto_prefix   = "membase-binary",
+                     host           = None):
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
             self.access_phase_items = items = self.parami("items", items)
@@ -178,14 +179,15 @@ class EPerfMaster(perf.PerfBase):
                 time.sleep(start_delay * self.parami("prefix", 0))
             max_creates = self.parami("max_creates", max_creates) / num_clients
             self.is_multi_node = False
+            if host is None:
+                host = self.input.servers[0].ip
             self.loop(num_ops        = 0,
                       num_items      = items,
                       max_items      = items + max_creates + 1,
                       max_creates    = max_creates,
                       min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),
-                      protocol       = (self.mk_protocol(self.input.servers[0].ip,
-                                                         proto_prefix)),
+                      protocol       = self.mk_protocol(host, proto_prefix),
                       clients        = self.parami('clients', 1),
                       ratio_sets     = ratio_sets,
                       ratio_misses   = ratio_misses,
