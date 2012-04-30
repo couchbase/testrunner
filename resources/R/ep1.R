@@ -143,7 +143,7 @@ names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','
  }
 
 builds_list <- fbl
-builds_list <- builds_list[builds_list$build %in% i_builds & builds_list$test_name == test_name & builds_list$is_json=='0',]
+builds_list <- builds_list[builds_list$build %in% i_builds & builds_list$test_name == test_name,]
 print(builds_list)
 # Following metrics are to be fetch from CouchDB and plotted
 metric_list = c('ns_server_data', 'systemstats', 'latency-get','latency-set')
