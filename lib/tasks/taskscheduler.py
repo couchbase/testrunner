@@ -207,7 +207,7 @@ class TaskScheduler():
 
     @staticmethod
     def wait_for_stats(tm, stats, bucket):
-    """Synchronously wait for stats
+        """Synchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
         couchbase.stats_tool.StatsCommon.build_stat_check(...) for a description of
