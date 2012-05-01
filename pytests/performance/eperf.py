@@ -894,7 +894,7 @@ function(doc) {
         remaining = [5, 9, 6, 5]
 
         queries = compute_queries(queries_by_kind, remaining,
-                                  self.param("query-suffix", ""))
+                                  self.param("query_suffix", ""))
         queries = ';'.join(queries)
         queries = queries.replace('[', '%5B')
         queries = queries.replace(']', '%5D')
