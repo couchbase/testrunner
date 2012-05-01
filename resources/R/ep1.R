@@ -34,7 +34,7 @@ i_builds = c(baseline_build, new_build)
 
 cat(paste("args : ",args,""),sep="\n")
 
-commaize <- function(x, ...) {		
+commaize <- function(x, ...) {
 	prettySize(x)
 #	format(x, decimal.mark = ",", trim = TRUE, scientific = FALSE, ...)
 }
@@ -118,7 +118,7 @@ createProcessUsageDataFrame <- function(bb,process) {
             print(unique(graphed$unique_id))
 			graphed <- transform(graphed,cpu_time = as.numeric(utime) + as.numeric(stime))
 		    counterdiff <- diff(graphed$cpu_time)
-			graphed[,"cpu_time_diff"] <- append(c(0), counterdiff)		
+			graphed[,"cpu_time_diff"] <- append(c(0), counterdiff)
 			temp_data_frame <- rbind(temp_data_frame,  graphed)
 	}
 	temp_data_frame
@@ -146,7 +146,7 @@ builds_list <- fbl
 builds_list <- builds_list[builds_list$build %in% i_builds & builds_list$test_name == test_name,]
 print(builds_list)
 # Following metrics are to be fetch from CouchDB and plotted
-metric_list = c('ns_server_data', 'systemstats', 'latency-get','latency-set')
+metric_list = c('ns_server_data', 'systemstats', 'latency-get','latency-set') #unused
 
 # Get ns_server_data
 
@@ -338,6 +338,37 @@ for(a_build in levels(all_builds)) {
 	result <- rbind(result,filtered)
 }
 latency_set <- result
+
+# Get Latency-query
+cat("generating latency-query\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-query", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-query"))
+}
+latency_query <- result
+latency_query$row <- as.numeric(latency_query$row)
+latency_query$mystery <- as.numeric(latency_query$mystery)
+latency_query$percentile_99th <- as.numeric(latency_query$percentile_99th) * 1000
+latency_query$percentile_95th <- as.numeric(latency_query$percentile_95th) * 1000
+latency_query$percentile_90th <- as.numeric(latency_query$percentile_90th) * 1000
+
+all_builds = factor(latency_query$buildinfo.version)
+result <- data.frame()
+for(a_build in levels(all_builds)) {
+	tt <- latency_query[latency_query $buildinfo.version==a_build,]
+	tt$mystery <- as.numeric(tt$mystery)
+	min_myst = min(tt$mystery)
+	filtered = transform(tt,row=mystery-min_myst)
+	result <- rbind(result,filtered)
+}
+latency_query <- result
 
 # Get Data size on disk
 cat("generating disk usage over time")
@@ -626,7 +657,52 @@ for(build in levels(builds)) {
 	}
 }
 
+for(build in levels(builds)) {
 
+	fi <-latency_query[latency_query$buildinfo.version==build & latency_query$client_id ==0, ]
+	d <- mean(fi$percentile_90th)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "latency-query (90th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-query (90th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+}
+
+for(build in levels(builds)) {
+
+	fi <-latency_query[latency_query$buildinfo.version==build & latency_query$client_id ==0, ]
+	d <- mean(fi$percentile_95th)
+
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "latency_query (95th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency_query (95th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+
+}
+
+for(build in levels(builds)) {
+
+	fi <-latency_query[latency_query$buildinfo.version==build & latency_query$client_id ==0, ]
+	d1 <- mean(fi$percentile_99th)
+	print(d1)
+	if(build == baseline){
+		row <-c ("baseline", "latency-query (99th)", as.numeric(d1))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency_query (99th)", as.numeric(d1))
+		combined <- rbind(combined, row)
+	}
+}
 
 p <- combined[2:nrow(combined), ]
 p$value <- as.numeric(p$value)
@@ -649,7 +725,9 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[11])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[12])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[4])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[13])))
-
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[14])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[15])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[16])))
 
 CB <- c()
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[1]/3600)))
@@ -665,10 +743,13 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[11])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[12])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[4])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[13])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[14])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[15])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[16])))
 
 
 testdf <- data.frame(MB,CB)
-rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)")
+rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)" )
 plot.new()
 col1 <- paste(unlist(strsplit(baseline_build, "-"))[1],"-",unlist(strsplit(baseline_build, "-"))[2])
 col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2]) 
@@ -882,6 +963,26 @@ cat("Latency-set 99th\n")
 p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
 p <- p + geom_point()
 p <- addopts(p,"Latency-set 99th  percentile")
+print(p)
+makeFootnote(footnote)
+
+cat("Latency-query 90th\n")
+temp <- latency_query[latency_query$client_id ==0,]
+p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
+p <- p + geom_point()
+p <- addopts(p,"Latency-query 90th  percentile")
+print(p)
+makeFootnote(footnote)
+cat("Latency-query 95th\n")
+p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
+p <- p + geom_point()
+p <- addopts(p,"Latency-query 95th  percentile")
+print(p)
+makeFootnote(footnote)
+cat("Latency-query 99th\n")
+p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
+p <- p + geom_point()
+p <- addopts(p,"Latency-query 99th  percentile")
 print(p)
 makeFootnote(footnote)
 
