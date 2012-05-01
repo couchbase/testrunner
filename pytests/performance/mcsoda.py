@@ -143,7 +143,12 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
        cur['batch'] = 10
 
+    log.info("[mcsoda: %s] starts cfg: %s" %(why, cfg))
+    log.info("[mcsoda: %s] starts cur: %s" %(why, cur))
+    log.info("[mcsoda: %s] starts store: %s" %(why, store))
+    log.info("[mcsoda: %s] starts prefix: %s" %(why, prefix))
     log.info("[mcsoda: %s] starts running." %why)
+
     heartbeat_last = t_last
 
     while ctl.get('run_ok', True):
