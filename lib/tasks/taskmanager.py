@@ -49,7 +49,7 @@ class TaskManager(Thread):
         self.stop()
 
     def _emptyq_and_cancel(self, queue):
-        for i in range(queue.qsize()):
+        while not queue.empty():
             _t = queue.get()
             _t['task'].cancel()
 
