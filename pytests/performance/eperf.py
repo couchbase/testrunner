@@ -1080,6 +1080,8 @@ class EVPerfClient(EPerfClient):
         self.bg_thread = None
         self.bg_thread_ctl = None
 
+        num_clients, start_at = self.access_phase_clients_start_at()
+
         # If non-zero background ops/second, the background thread,
         # with cloned parameters, doesn't do any queries, only basic
         # key-value ops.
@@ -1106,10 +1108,11 @@ class EVPerfClient(EPerfClient):
             self.bg_thread.start()
 
             # Also, the main mcsoda run should do no memcached/key-value requests.
-            num_clients, start_at = self.access_phase_clients_start_at()
-            cfg['max-ops'] = start_at + (self.parami("fg_max_ops", self.fg_max_ops) / num_clients)
             cfg['ratio-sets'] = self.paramf("fg_ratio_sets", 0.0)
             cfg['ratio-queries'] = self.paramf("fg_ratio_queries", 1.0)
+
+        if why == "loop" and self.parami("fg_max_ops", self.fg_max_ops):
+            cfg['max-ops'] = start_at + (self.parami("fg_max_ops", self.fg_max_ops) / num_clients)
 
         rv_cur, start_time, end_time = \
             super(EVPerfClient, self).mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
