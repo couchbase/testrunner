@@ -734,11 +734,11 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                 except socket.timeout:
                     log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.send-socket.timeout / inflight_send timed out")
                     self.cur["cur-ex-StoreMembaseBinary.send-socket.timeout"] = self.cur.get("cur-ex-StoreMembaseBinary.send-socket.timeout", 0) + 1
-                    pass
+                    break
                 except Exception as e:
                     log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.send / inflight_send: " + str(e))
                     self.cur["cur-ex-StoreMembaseBinary.send"] = self.cur.get("cur-ex-StoreMembaseBinary.send", 0) + 1
-                    pass
+                    break
 
            sent_total += sent_tuple
         return sent_total
