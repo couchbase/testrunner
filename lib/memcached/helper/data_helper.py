@@ -1161,11 +1161,12 @@ class DocumentGenerator(object):
 
 class LoadWithMcsoda(object):
 
-    def __init__(self, master, num_docs, prefix='', bucket='default', password='',
-                 protocol='membase-binary', port=11211):
+    def __init__(self, master, num_docs, prefix='', bucket='default', user='Administrator',
+                 password='', protocol='membase-binary', port=11211):
 
         rest = RestConnection(master)
-        vBuckets = rest.get_vbuckets(bucket)
+        self.bucket = bucket
+        vBuckets = rest.get_vbuckets(self.bucket)
         self.vbucket_count = len(vBuckets)
 
         self.cfg = {
@@ -1184,14 +1185,16 @@ class LoadWithMcsoda(object):
                 'expiration': 0,
                 'threads': 1,
                 'json': 1,
-                'batch': 1000,
+                'batch': 100,
                 'vbuckets': self.vbucket_count,
                 'doc-cache': 0,
+                'doc-gen':0,
                 'prefix': prefix,
+                'socket-timeout': 60,
         }
 
         self.protocol = protocol
-        self.user = bucket
+        self.user = user
         self.pswd = password
 
         if protocol == 'membase-binary':
@@ -1217,7 +1220,7 @@ class LoadWithMcsoda(object):
 
     def load_data(self):
         cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.user, \
-            self.pswd, ctl=self.ctl)
+            self.pswd, ctl=self.ctl, bucket=self.bucket)
         return cur
 
     def load_stop(self):
