@@ -62,8 +62,22 @@ class TaskScheduler():
         return _task
 
     @staticmethod
-    def async_load_gen_docs(tm, rest, generator, bucket, expiration, loop=False):
-        _task = LoadDocGeneratorTask(rest, generator, bucket, expiration, loop)
+    def async_load_gen_docs(tm, server, bucket, generator, kv_store, op_type, exp = 0):
+        _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp)
+        tm.schedule(_task)
+        return _task
+
+    @staticmethod
+    def async_workload(tm, server, bucket, kv_store, num_ops, create, read, update, delete,
+                       exp):
+        _task = WorkloadTask(server, bucket, kv_store, num_ops, create, read, update,
+                             delete, exp)
+        tm.schedule(_task)
+        return _task
+
+    @staticmethod
+    def async_verify_data(tm, server, bucket, kv_store):
+        _task = ValidateDataTask(server, bucket, kv_store)
         tm.schedule(_task)
         return _task
 
@@ -164,8 +178,20 @@ class TaskScheduler():
         return _task.result()
 
     @staticmethod
-    def load_gen_docs(tm, rest, generator, bucket, expiration, loop=False):
-        _task = TaskScheduler.async_load_gen_docs(tm, rest, generator, bucket, expiration, loop)
+    def load_gen_docs(tm, server, bucket, generator, kv_store, op_type, exp = 0):
+        _task = TaskScheduler.async_load_gen_docs(tm, server, bucket, generator, kv_store,
+                                                  op_type, exp)
+        return _task.result()
+
+    @staticmethod
+    def workload(tm, server, bucket, kv_store, num_ops, create, read, update, delete, exp):
+        _task = TaskScheduler.async_workload(tm, server, bucket, kv_store, num_ops, create,
+                                             read, update, delete, exp)
+        return _task.result()
+
+    @staticmethod
+    def verify_data(tm, server, bucket, kv_store):
+        _task = TaskScheduler.async_verify_data(tm, server, bucket, kv_store)
         return _task.result()
 
     @staticmethod
