@@ -1102,7 +1102,7 @@ class EVPerfClient(EPerfClient):
                                               args=(self.bg_thread_cfg,
                                                     self.bg_thread_cur,
                                                     protocol, host_port, user, pswd,
-                                                    None, self.bg_stores, self.bg_thread_ctl,
+                                                    stats_collector, self.bg_stores, self.bg_thread_ctl,
                                                     heartbeat, "loop-bg"))
             self.bg_thread.daemon = True
             self.bg_thread.start()
