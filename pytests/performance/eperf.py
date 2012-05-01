@@ -859,7 +859,7 @@ function(doc) {
 
         b = '/default/'
 
-        q = {} # TODO: Need quoting and JSON'ification?
+        q = {}
         q['all_docs']    = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
         q['city']        = b + '_design/A/_view/city?limit=' + str(limit) + '&startkey="{city}"'
         q['city2']       = b + '_design/A/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
@@ -896,19 +896,62 @@ function(doc) {
 
         queries = compute_queries(queries_by_kind, remaining,
                                   self.param("query_suffix", ""))
-        queries = ';'.join(queries)
-        queries = queries.replace('[', '%5B')
-        queries = queries.replace(']', '%5D')
-        queries = queries.replace(',', '%2C')
+        queries = join_queries(queries)
 
-        # Hot-Keys : 20% of total keys
-        #
-        # Read    45% - 95% of GET's should hit a hot key
-        # Insert  10% - N/A
-        # Update  15% - 95% of mutates should mutate a hot key
-        # Delete  5%  - 95% of the deletes should delete a hot key
-        # Queries _all_docs  5% - A mix of queries on the _all_docs index. Queries may or may not hit hot keys.
-        # Queries on view   20% -
+        self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
+        self.fg_max_ops = self.parami("fg_max_ops", 1000000)
+
+        # Rotate host so multiple clients don't hit the same HTTP/REST server.
+        host = self.input.servers[self.parami("prefix", 0) % len(self.input.servers)].ip
+
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.3),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.33),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
+                          max_creates = self.parami("max_creates", 30000000),
+                          ratio_queries = self.paramf('ratio_queries', 0.3571),
+                          queries = queries,
+                          proto_prefix = "couchbase",
+                          host = host)
+        self.gated_finish(self.input.clients, notify)
+
+    def test_vperf1(self):
+        # Like test_workload2, but just one design doc, one view.
+        self.spec("vperf1")
+        items = self.parami("items", 1000000)
+        notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami("num_nodes", 10), items)
+        ddocs = {}
+        ddocs["A"] = { "views": {} }
+        ddocs["A"]["views"]["city"] = {}
+        ddocs["A"]["views"]["city"]["map"] = """
+function(doc) {
+  if (doc.city != null) {
+    emit(doc.city, null);
+  }
+}
+"""
+        self.index_phase(ddocs)
+
+        limit = self.parami("limit", 10)
+
+        b = '/default/'
+
+        q = {}
+        q['city'] = b + '_design/A/_view/city?limit=' + str(limit) + '&startkey="{city}"'
+
+        queries_by_kind = [ [ q['city'] ] ]
+
+        remaining = [1]
+
+        queries = compute_queries(queries_by_kind, remaining,
+                                  self.param("query_suffix", ""))
+        queries = join_queries(queries)
 
         self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
         self.fg_max_ops = self.parami("fg_max_ops", 1000000)
@@ -1149,5 +1192,12 @@ def compute_queries(queries_by_kind, remaining, suffix=""):
             queries.append(k[count % len(k)] + suffix)
         i = i + 1
 
+    return queries
+
+def join_queries(queries):
+    queries = ';'.join(queries)
+    queries = queries.replace('[', '%5B')
+    queries = queries.replace(']', '%5D')
+    queries = queries.replace(',', '%2C')
     return queries
 
