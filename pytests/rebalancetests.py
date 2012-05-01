@@ -832,7 +832,7 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                 [master],
                 [server],
-                ejectedNodes, True)
+                ejectedNodes, monitor=True)
             # wait for loading tasks to finish
             RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
 
