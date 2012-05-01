@@ -711,8 +711,6 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         or the connection breaks.
         """
         timeout_sec = self.cfg.get("socket-timeout", 0)
-        if timeout_sec > 0:
-           conn.s.settimeout(timeout_sec)
 
         sent_total = 0
         for server, buf in inflight_msg:
@@ -725,6 +723,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
            while sent_tuple < length:
                 try:
                     conn = self.awareness.memcacheds[server]
+                    if timeout_sec > 0:
+                       conn.s.settimeout(timeout_sec)
                     sent = conn.s.send(buf)
                     if sent == 0:
                        log.error("[mcsoda] StoreMembaseBinary.send-zero / skt.send returned 0.")
