@@ -1185,7 +1185,7 @@ class LoadWithMcsoda(object):
                 'expiration': 0,
                 'threads': 1,
                 'json': 1,
-                'batch': 100,
+                'batch': 10,
                 'vbuckets': self.vbucket_count,
                 'doc-cache': 0,
                 'doc-gen':0,
