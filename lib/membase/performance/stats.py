@@ -126,7 +126,9 @@ class StatsCollector(object):
                "latency-get-recent":self._task["latency"].get('percentile-latency-get-recent', []),
                "latency-delete":self._task["latency"].get('percentile-latency-delete', []),
                "latency-delete-recent":self._task["latency"].get('percentile-latency-delete-recent', []),
-        }
+               "latency-query":self._task["latency"].get('percentile-latency-query', []),
+               "latency-query-recent":self._task["latency"].get('percentile-latency-query-recent', []),
+               }
 
         if self.client_id:
             filename = str(self.client_id)+'.loop'
