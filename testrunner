@@ -146,7 +146,7 @@ def parse_conf_file(filename, tests, params):
             continue
         name = stripped
         if prefix and prefix.lower() == "params":
-            args = stripped.split("=")
+            args = stripped.split("=", 1)
             if len(args) == 2:
                 params[args[0]] = args[1]
             continue
