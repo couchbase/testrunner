@@ -1076,7 +1076,7 @@ class EVPerfClient(EPerfClient):
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
                    stats_collector = None, stores = None, ctl = None,
-                   heartbeat = 0, why = None):
+                   heartbeat = 0, why = None, bucket="default"):
         self.bg_thread = None
         self.bg_thread_ctl = None
 
