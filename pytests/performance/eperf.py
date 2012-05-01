@@ -204,7 +204,7 @@ class EPerfMaster(perf.PerfBase):
                       prefix         = "",
                       collect_server_stats = self.is_leader,
                       start_at       = start_at,
-                      report         = int(max_creates * 0.1),
+                      report         = self.parami('report', int(max_creates * 0.1)),
                       exit_after_creates = self.parami('exit_after_creates', 1),
                       hot_shift = self.parami('hot_shift', hot_shift),
                       is_eperf=True,
