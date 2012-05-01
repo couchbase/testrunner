@@ -401,6 +401,10 @@ class PerfBase(unittest.TestCase):
                           bucket=bucket)
 
     def nodes(self, num_nodes):
+        if len(self.input.servers) == 1:
+            self.log.info("WARNING: running on single node cluster")
+            return
+
         self.is_multi_node = True
         self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1, do_shuffle=False))
 
