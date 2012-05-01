@@ -893,7 +893,8 @@ function(doc) {
 
         remaining = [5, 9, 6, 5]
 
-        queries = compute_queries(queries_by_kind, remaining)
+        queries = compute_queries(queries_by_kind, remaining,
+                                  self.param("query-suffix", ""))
         queries = ';'.join(queries)
         queries = queries.replace('[', '%5B')
         queries = queries.replace(']', '%5D')
@@ -1130,7 +1131,7 @@ def params_to_str(params):
             param_str += "&{0}={1}".format(k,v)
     return param_str
 
-def compute_queries(queries_by_kind, remaining):
+def compute_queries(queries_by_kind, remaining, suffix=""):
     i = 0
     queries = []
 
@@ -1139,7 +1140,8 @@ def compute_queries(queries_by_kind, remaining):
         count = remaining[kind]
         if count > 0:
             remaining[kind] = count - 1
-            queries.append(queries_by_kind[kind][count % len(queries_by_kind[kind])])
+            k = queries_by_kind[kind]
+            queries.append(k[count % len(k)] + suffix)
         i = i + 1
 
     return queries
