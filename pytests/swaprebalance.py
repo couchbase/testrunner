@@ -144,7 +144,10 @@ class SwapRebalanceBase(unittest.TestCase):
             for loader in loaders:
                 loader["mcsoda"].load_stop()
         for loader in loaders:
-            loader["thread"].join(300)
+            if do_stop:
+                loader["thread"].join(300)
+            else:
+                loader["thread"].join()
 
     @staticmethod
     def create_buckets(self):
