@@ -80,18 +80,21 @@ class DocumentGenerator(KVGenerator):
         self.itr += 1
         return json_doc['_id'], json.dumps(json_doc).encode("ascii", "ignore")
 
+class BlobGenerator(KVGenerator):
+    def __init__(self, name, seed, value_size, start=0, end=10000):
+        KVGenerator.__init__(self, name, start, end)
+        self.seed = seed
+        self.value_size = value_size
+        self.itr = self.start
 
-    """Resets the iterator back to the beginning of the list."""
-    def reset(self):
-        self.itr = 0
+    def next(self):
+        if self.itr >= self.end:
+            raise StopIteration
 
-    def __iter__(self):
-        return self
-
-    def __len__(self):
-        if len(self.args) == 0:
-            return 0
-        size = 1
-        for arg in self.args:
-            size = size * len(arg)
-        return size
+        key = self.name + str(self.itr)
+        value = self.seed + str(self.itr)
+        extra = self.value_size - len(value)
+        if extra > 0:
+            value += 'a' * extra
+        self.itr += 1
+        return key, value
