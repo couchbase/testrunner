@@ -351,7 +351,6 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM iexplore.*')
         self.execute_command('taskkill /F /T /IM WerFault.*')
         self.execute_command('taskkill /F /T /IM Firefox.*')
-        self.execute_command('taskkill /F /T /IM memcached.exe')
         self.disable_firewall()
         output, error = self.execute_command(
              "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O {1}_{2}.exe';ls -l;".format(
