@@ -13,7 +13,7 @@ mongoDocCache = {}
 
 class StoreMongo(mcsoda.Store):
 
-    def connect(self, target, user, pswd, cfg, cur):
+    def connect(self, target, user, pswd, cfg, cur, bucket=None):
         self.cfg = cfg
         self.cur = cur
         self.target = target

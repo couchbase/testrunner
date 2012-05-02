@@ -97,7 +97,7 @@ class EPerfMasterMongo(eperf.EPerfMaster):
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
                    stats_collector = None, stores = None, ctl = None,
-                   why = None):
+                   heartbeat=None, why = None, bucket=None):
         return mcsoda.run(cfg, cur, protocol, host_port, user, pswd,
                           stats_collector=stats_collector,
                           stores=[mcsoda_mongo.StoreMongo()],
