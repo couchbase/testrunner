@@ -529,7 +529,8 @@ class RemoteMachineShellConnection:
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
-        if version.startswith("1.8.1") and initial_version.startswith("1.8.0"):
+        initial_versions = ["1.7.2", "1.7.2r", "1.8.0", "1.8.0r"]
+        if version.startswith("1.8.1") and initial_version in initial_versions:
             self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
                                            architecture, windows_name, version, "modreg")
             self.stop_schedule_tasks()
