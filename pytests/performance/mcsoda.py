@@ -135,6 +135,8 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     o_last = store.num_ops(cur)
     xfer_sent_last = 0
     xfer_recv_last = 0
+    store.why = why
+    store.stats_ops = cfg.get("stats_ops", 10000)
 
     report = cfg.get('report', 0)
     hot_shift = cfg.get('hot-shift', 0)
@@ -606,9 +608,10 @@ class StoreMemcachedBinary(Store):
             self.add_timing_sample(latency_cmd, latency_end - latency_start)
 
         if self.sc:
-            if self.ops - self.previous_ops > 10000:
+            if self.ops - self.previous_ops > self.stats_ops:
                 self.previous_ops = self.ops
                 self.save_stats()
+                print "[mcsoda %s] save_stats : %s" %(self.why, latency_cmd)
 
     def save_stats(self):
         for key in self.cur:

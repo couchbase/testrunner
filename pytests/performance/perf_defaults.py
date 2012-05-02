@@ -34,6 +34,7 @@ class PerfDefaults:
     load_wait_until_drained =   1        # wait to be drained on the load phase, 1: enabled, 0: disabled
     loop_wait_until_drained =   0        # wait to be drained on the access phase, 1: enabled, 0: disabled
     mcsoda_heartbeat        =   0        # health check heartbeat message for mcsoda. 0: no heartbeat, ~: in sec
+    mcsoda_fg_stats_ops     =   1000     # fg ops threshold to persist latency stats
     tear_down               =   1        # 1: enabled, 0: disabled
     tear_down_proxy         =   1        # (prerequsite: tear_down = 1) tear down proxy,  1: enabled, 0: disabled
     tear_down_bucket        =   0        # (prerequsite: tear_down = 1) tear down bucket,  1: enabled, 0: disabled
