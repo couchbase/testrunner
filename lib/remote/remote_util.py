@@ -343,7 +343,6 @@ class RemoteMachineShellConnection:
             return False
 
     def download_binary_in_win(self, url, name, version):
-        info = self.extract_remote_info()
         self.execute_command('taskkill /F /T /IM msiexec32.exe')
         self.execute_command('taskkill /F /T /IM msiexec.exe')
         self.execute_command('taskkill /F /T IM setup.exe')
