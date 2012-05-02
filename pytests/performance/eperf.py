@@ -149,6 +149,7 @@ class EPerfMaster(perf.PerfBase):
             self.restartProxy()
 
     def access_phase_clients_start_at(self):
+        self.access_phase_items = self.parami("items", PerfDefaults.items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         start_at = int(self.paramf("start_at", 1.0) * \
                            (self.parami("prefix", 0) * \
@@ -172,7 +173,7 @@ class EPerfMaster(perf.PerfBase):
                      host           = None):
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
-            self.access_phase_items = items = self.parami("items", items)
+            items = self.parami("items", items)
             num_clients, start_at = self.access_phase_clients_start_at()
             start_delay = self.parami("start_delay", 2 * 60) # 2 minute delay.
             if start_delay > 0:
