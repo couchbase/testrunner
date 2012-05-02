@@ -220,8 +220,8 @@ class EPerfMaster(perf.PerfBase):
                 d["language"] = "javascript"
                 d["_id"] = "_design/" + ddoc_name
                 d_json = json.dumps(d)
-                api = "{0}{1}/_design/{2}".format(self.rest.baseUrl,
-                                                  bucket, ddoc_name)
+                api = "{0}couchBase/{1}/_design/{2}".format(self.rest.baseUrl,
+                                                            bucket, ddoc_name)
                 self.rest._http_request(api, 'PUT', d_json,
                                         headers=self.rest._create_capi_headers())
             for ddoc_name, d in ddocs.items():
