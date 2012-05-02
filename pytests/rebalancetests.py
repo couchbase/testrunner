@@ -441,7 +441,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                                                    [master],
                                                    [server],
-                                                   [], self.do_stop, monitor=True)
+                                                   [], do_stop=self.do_stop)
 
             # wait for loading tasks to finish
             RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
@@ -563,7 +563,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
         RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                                                [master],
                                                self.servers[1:],
-                                               [], True)
+                                               [], monitor=True)
         self.log.info("INTIAL LOAD")
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
             bucket_data, self.load_ratio,
@@ -586,7 +586,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
                 RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                                                        [master],
                                                        [],
-                                                       [node], self.do_stop, monitor=True)
+                                                       [node], do_stop=self.do_stop)
                 # wait for loading tasks to finish
                 RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
                 self.log.info("DONE LOAD AND REBALANCE")
@@ -832,7 +832,7 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                 [master],
                 [server],
-                ejectedNodes, monitor=True)
+                ejectedNodes, do_stop=self.do_stop)
             # wait for loading tasks to finish
             RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
 
@@ -884,7 +884,7 @@ class RebalanceInOutWithFailover(unittest.TestCase):
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                 [master],
                 [server],
-                [], True)
+                [], do_stop=self.do_stop)
 
             nodes = rest.node_statuses()
             # Do the failover-rebalance out, only for a cluser > 3
@@ -910,7 +910,7 @@ class RebalanceInOutWithFailover(unittest.TestCase):
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                 [master],
                 [],
-                [toBeEjectedNode], True)
+                [toBeEjectedNode], do_stop=self.do_stop)
 
             # wait for all tasks to finish
             RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
@@ -951,11 +951,11 @@ class RebalanceTaskHelper():
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
     @staticmethod
-    def add_rebalance_task(tm, servers, to_add, to_remove, do_stop=False,
-                           progress=30, monitor = False):
+    def add_rebalance_task(tm, servers, to_add, to_remove, monitor=False,
+                           do_stop=False, progress=30):
         _t = task.RebalanceTask(servers, to_add, to_remove, do_stop=do_stop,
                                 progress=progress)
-        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
+        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor=monitor)
 
     @staticmethod
     def add_failover_task(tm, servers, to_remove, monitor = False):
