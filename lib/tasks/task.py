@@ -10,6 +10,8 @@ from mc_bin_client import MemcachedError
 import copy
 import json
 import uuid
+from mc_bin_client import MemcachedClient
+from memcached.helper.data_helper import MemcachedClientHelper
 
 #TODO: Setup stacktracer
 #TODO: Needs "easy_install pygments"
@@ -46,8 +48,9 @@ class Task():
             raise Exception(self.res['value'])
         if self.res['status'] == 'timed_out':
             raise TimeoutException("task {0} timed out, tried {1} times".format(self.name,
-                                                                                self.retries))
+                self.retries))
         return self.res['value']
+
 
 class NodeInitializeTask(Task):
     def __init__(self, server):
@@ -83,6 +86,7 @@ class NodeInitializeTask(Task):
         rest.init_cluster_memoryQuota(self.server.rest_username, self.server.rest_password, quota)
         self.state = "finished"
         self.set_result({"status": "success", "value": quota})
+
 
 class BucketCreateTask(Task):
     def __init__(self, server, bucket='default', replicas=1, port=11210, size=0, password=None):
@@ -120,11 +124,11 @@ class BucketCreateTask(Task):
 
         try:
             rest.create_bucket(bucket=self.bucket,
-                               ramQuotaMB=self.size,
-                               replicaNumber=self.replicas,
-                               proxyPort=self.port,
-                               authType=authType,
-                               saslPassword=self.password)
+                ramQuotaMB=self.size,
+                replicaNumber=self.replicas,
+                proxyPort=self.port,
+                authType=authType,
+                saslPassword=self.password)
             self.state = "checking"
             task_manager.schedule(self)
         except BucketCreationException:
@@ -145,8 +149,9 @@ class BucketCreateTask(Task):
         self.retries = self.retries + 1
         task_manager.schedule(self)
 
+
 class BucketDeleteTask(Task):
-    def __init__(self, server, bucket = "default"):
+    def __init__(self, server, bucket="default"):
         Task.__init__(self, "bucket_delete_task")
         self.server = server
         self.bucket = bucket
@@ -191,6 +196,7 @@ class BucketDeleteTask(Task):
                              "value": "{0} bucket took too long to delete".format(self.bucket)})
         self.state = "finished"
 
+
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[], do_stop=False, progress=30):
         Task.__init__(self, "rebalance_task")
@@ -200,6 +206,24 @@ class RebalanceTask(Task):
         self.do_stop = do_stop
         self.progress = progress
         self.state = "initializing"
+        self.log.info("tcmalloc fragmentation stats before Rebalance ")
+        self.getStats(self.servers[0])
+
+    def getStats(self, servers):
+        rest = RestConnection(self.servers[0])
+        nodes = rest.node_statuses()
+        buckets = rest.get_buckets()
+
+        for node in nodes:
+            for bucket in buckets:
+                bucket = bucket.name
+                _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
+                         "password": self.servers[0].rest_password}
+                try:
+                    mc = MemcachedClientHelper.direct_client(_node, bucket)
+                    self.log.info("Bucket :{0} ip {1} : Stats {2} \n".format(bucket, node.ip, mc.stats("memory")))
+                except Exception:
+                    self.log.info("Server {0} not yet part of the cluster".format(node.ip))
 
     def step(self, task_manager):
         if self.cancelled:
@@ -228,7 +252,7 @@ class RebalanceTask(Task):
                 print node
                 self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
                 added = rest.add_node(master.rest_username, master.rest_password,
-                                      node.ip, node.port)
+                    node.ip, node.port)
             self.state = "start_rebalance"
             task_manager.schedule(self)
         except Exception as e:
@@ -268,7 +292,7 @@ class RebalanceTask(Task):
         try:
             progress = rest._rebalance_progress()
             if progress is not -1 and progress is not 100:
-                if self.do_stop and progress >= self.progress :
+                if self.do_stop and progress >= self.progress:
                     self.state = "stop_rebalance"
                     task_manager.schedule(self, 1)
                 else:
@@ -276,12 +300,15 @@ class RebalanceTask(Task):
             else:
                 self.state = "finishing"
                 self.set_result({"status": "success", "value": None})
+                self.log.info("tcmalloc fragmentation stats after Rebalance ")
+                self.getStats(self.servers[0])
         except Exception as e:
             self.state = "finishing"
             self.set_result({"status": "error", "value": e})
 
+
 class FailOverTask(Task):
-    def __init__(self, servers,to_remove=[]):
+    def __init__(self, servers, to_remove=[]):
         Task.__init__(self, "failover_task")
         self.servers = servers
         self.to_remove = to_remove
@@ -339,7 +366,7 @@ class FailOverTask(Task):
 #OperationGeneratorTask
 #OperationGenerating
 class GenericLoadingTask(Thread, Task):
-    def __init__(self, rest, bucket, kv_store = None, store_enabled = True, info = None):
+    def __init__(self, rest, bucket, kv_store=None, store_enabled=True, info=None):
         Thread.__init__(self)
         Task.__init__(self, "gen_task")
         self.rest = rest
@@ -370,14 +397,14 @@ class GenericLoadingTask(Thread, Task):
             else:
                 self.join()
                 self.state = "finished"
-                self.set_result({"status" : "success", "value" : self.doc_op_count})
+                self.set_result({"status": "success", "value": self.doc_op_count})
         elif self.state != "finished":
             raise Exception("Bad State in DocumentGeneratorTask")
 
     def do_ops(self):
         noop = "override"
 
-    def do_task_op(self, op, key, value = None, expiration = None):
+    def do_task_op(self, op, key, value=None, expiration=None):
         retry_count = 0
         ok = False
         if value is not None:
@@ -400,9 +427,10 @@ class GenericLoadingTask(Thread, Task):
                 self.client.reset_vbucket(self.rest, key)
         return value
 
+
 class LoadDocGeneratorTask(GenericLoadingTask):
-    def __init__(self, rest, doc_generators, bucket = "default", kv_store = None,
-                 store_enabled = True, expiration = None, loop = False):
+    def __init__(self, rest, doc_generators, bucket="default", kv_store=None,
+                 store_enabled=True, expiration=None, loop=False):
         GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
 
         self.doc_generators = doc_generators
@@ -433,10 +461,9 @@ class LoadDocGeneratorTask(GenericLoadingTask):
 
 
 class DocumentAccessTask(GenericLoadingTask):
-    def __init__(self, rest, doc_ids, bucket = "default",
-                 info = None, loop = False):
-
-        GenericLoadingTask.__init__(self, rest, bucket, info = info)
+    def __init__(self, rest, doc_ids, bucket="default",
+                 info=None, loop=False):
+        GenericLoadingTask.__init__(self, rest, bucket, info=info)
         self.doc_ids = doc_ids
         self.name = "doc-get-task{0}".format(str(uuid.uuid4())[:7])
         self.loop = loop
@@ -454,10 +481,10 @@ class DocumentAccessTask(GenericLoadingTask):
                 self.set_result({"status": "success", "value": self.doc_op_count})
                 return
 
-class DocumentExpireTask(GenericLoadingTask):
-    def __init__(self, rest, doc_ids, bucket = "default", info = None,
-                 kv_store = None, store_enabled = True, expiration = 5):
 
+class DocumentExpireTask(GenericLoadingTask):
+    def __init__(self, rest, doc_ids, bucket="default", info=None,
+                 kv_store=None, store_enabled=True, expiration=5):
         GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
         self.doc_ids = doc_ids
         self.name = "doc-expire-task{0}".format(str(uuid.uuid4())[:7])
@@ -484,25 +511,25 @@ class DocumentExpireTask(GenericLoadingTask):
 
 
 class DocumentDeleteTask(GenericLoadingTask):
-    def __init__(self, rest, doc_ids, bucket = "default", info = None,
-                 kv_store = None, store_enabled = True):
-
+    def __init__(self, rest, doc_ids, bucket="default", info=None,
+                 kv_store=None, store_enabled=True):
         GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
         self.doc_ids = doc_ids
         self.name = "doc-delete-task{0}".format(str(uuid.uuid4())[:7])
 
     def run(self):
         for _id in self.doc_ids:
-                try:
-                    self.do_task_op("delete", _id)
-                    self.doc_op_count = self.doc_op_count + 1
-                except Exception as e:
-                    self.set_result({"status": "error",
-                                     "value": "deletes failed {0}".format(e)})
-        self.set_result({"status" : "success", "value" : self.doc_op_count})
+            try:
+                self.do_task_op("delete", _id)
+                self.doc_op_count = self.doc_op_count + 1
+            except Exception as e:
+                self.set_result({"status": "error",
+                                 "value": "deletes failed {0}".format(e)})
+        self.set_result({"status": "success", "value": self.doc_op_count})
+
 
 class KVStoreIntegrityTask(Task, Thread):
-    def __init__(self, rest, kv_store, bucket = "default"):
+    def __init__(self, rest, kv_store, bucket="default"):
         self.state = "initializing"
         self.res = None
         Thread.__init__(self)
