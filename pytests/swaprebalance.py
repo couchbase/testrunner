@@ -498,7 +498,7 @@ class SwapRebalanceBasicTests(unittest.TestCase):
     def do_test(self):
         SwapRebalanceBase._common_test_body_swap_rebalance(self, do_stop_start=False)
 
-class SwapRebalabanceStartStopTests(unittest.TestCase):
+class SwapRebalanceStartStopTests(unittest.TestCase):
 
     def setUp(self):
         SwapRebalanceBase.common_setup(self)
