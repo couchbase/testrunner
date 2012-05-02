@@ -24,8 +24,8 @@ class VerifyVersionTest(unittest.TestCase):
             rest = RestConnection(serverInfo)
             rest.log_client_error('test_verify_version test-method running')
             version = rest.get_pools()
-            self.log.info('expected version : {0}'.format(expected_version))
-            self.log.info('actual version : {0}'.format(version.implementationVersion))
+            self.log.info('expected version on node {0} is {1}'.format(serverInfo.ip, expected_version))
+            self.log.info('actual version on node {0} is {1}'.format(serverInfo.ip, version.implementationVersion))
             if version.implementationVersion.startswith(expected_version.lower()):
                 self.log.info("CORRECT VERSION INSTALLED")
             else:
