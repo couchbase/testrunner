@@ -526,20 +526,35 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
-    def membase_upgrade_win(self, architecture, windows_name, version):
+    def membase_upgrade_win(self, architecture, windows_name, version, initial_version=''):
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
+        if version.startswith("1.8.1") and initial_version.startswith("1.8.0"):
+            self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
+                                           architecture, windows_name, version, "modreg")
+            self.stop_schedule_tasks()
+            log.info('sleep for 5 seconds before running task schedule to modify 1.8.0r register')
+            time.sleep(5)
+            output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+            self.log_command_output(output, error)
+            log.info('pause 30 seconds to execute modify register script')
+            time.sleep(30)
+            log.info('********* CONTINUE UPGRADE PROCCESS **********')
         self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
-                                       architecture, windows_name, version, task)
+                                        architecture, windows_name, version, task)
         self.stop_schedule_tasks()
         log.info('sleep for 5 seconds before running task schedule upgrade me')
         time.sleep(5)
         # run task schedule to upgrade Membase server
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
-        self.wait_till_file_deleted(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
-        self.wait_till_file_added(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
+        if initial_version.startswith("1.8.0"):
+            self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+            self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        else:
+            self.wait_till_file_deleted(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
+            self.wait_till_file_added(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
         log.info('wait 30 seconds for server to start up completely')
         time.sleep(30)
 
