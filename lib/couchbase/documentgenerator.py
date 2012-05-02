@@ -1,7 +1,28 @@
-import copy
 import json
 
-class DocumentGenerator(object):
+class KVGenerator(object):
+    def __init__(self, name, start, end):
+        self.name = name
+        self.start = start
+        self.end = end
+        self.itr = start
+
+    def has_next(self):
+        return self.itr < self.end
+
+    def next(self):
+        raise NotImplementedError
+
+    def reset(self):
+        self.itr = self.start
+
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return self.end - self.start
+
+class DocumentGenerator(KVGenerator):
     """ An idempotent document generator."""
 
     def __init__(self, name, template, *args, **kwargs):
@@ -21,19 +42,23 @@ class DocumentGenerator(object):
             *args: A list for each argument in the template
             *kwargs: Special constrains for the document generator
         """
-        self.name = name
-        self.template = template
         self.args = args
+        self.template = template
+
+        size = 0
+        if not len(self.args) == 0:
+            size = 1
+            for arg in self.args:
+                size *= len(arg)
+
+        KVGenerator.__init__(self, name, 0, size)
 
         if 'start' in kwargs:
+            self.start = kwargs['start']
             self.itr = kwargs['start']
-        else:
-            self.itr = 0
 
         if 'end' in kwargs:
             self.end = kwargs['end']
-        else:
-            self.end = len(self)
 
     """Creates the next generated document and increments the iterator.
 
@@ -55,12 +80,6 @@ class DocumentGenerator(object):
         self.itr += 1
         return json_doc['_id'], json.dumps(json_doc).encode("ascii", "ignore")
 
-    """Whether or not the iterator is at the end of the list
-
-    Return:
-        True if we have more documents to generate, False otherwise."""
-    def has_next(self):
-        return self.itr < self.end
 
     """Resets the iterator back to the beginning of the list."""
     def reset(self):
