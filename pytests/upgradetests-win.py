@@ -116,7 +116,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
             remote.download_binary_in_win(appropriate_build.url, abbr_product, version)
             remote.stop_membase()
             log.info("###### START UPGRADE. #########")
-            remote.membase_upgrade_win(info.architecture_type, info.windows_name, version)
+            remote.membase_upgrade_win(info.architecture_type, info.windows_name, version, initial_version)
             remote.disconnect()
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
 
