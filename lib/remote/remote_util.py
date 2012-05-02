@@ -352,10 +352,14 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM WerFault.*')
         self.execute_command('taskkill /F /T /IM Firefox.*')
         self.disable_firewall()
-        output, error = self.execute_command(
-             "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O {1}_{2}.exe';ls -l;".format(
-                url, name, version))
-        self.log_command_output(output, error)
+        exist = self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name, version))
+        if not exist:
+            output, error = self.execute_command(
+                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O {1}_{2}.exe';ls -l;".format(
+                    url, name, version))
+            self.log_command_output(output, error)
+        else:
+            log.info('File {0}_{1}.exe exist in tmp directory'.format(name, version))
         return self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name, version))
 
     def copy_file_local_to_remote(self, src_path, des_path):
