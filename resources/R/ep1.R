@@ -100,7 +100,7 @@ ggplotAllProcessesCpuUsageWithFacets <- function(df,title) {
                 p <- p + stat_smooth(se = TRUE)
                 p <- p + labs(y='stime+utime', x="----time (every 10 secs) --->")
                 p <- p + opts(title=paste(title))
-                p <- p + scale_y_continuous(formatter="commaize",expand=c(0,0),limits = c(min(temp_data_frame$cpu_time_diff),quantile(temp_data_frame$cpu_time_diff,0.99)))
+                p <- p + scale_y_continuous(labels="commaize",expand=c(0,0),limits = c(min(temp_data_frame$cpu_time_diff),quantile(temp_data_frame$cpu_time_diff,0.99)))
                 p <- p + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = 1, linetype='solid'))
             p <- p + opts(axis.ticks = theme_segment(colour = 'red', size = 1, linetype = 'dashed'))
                 p <- p + facet_wrap(~buildinfo.version, ncol=3, scales='free')
@@ -573,7 +573,7 @@ geom_bar(stat='identity', position='dodge') +
   geom_hline(yintercept=.10, lty=3) +
   geom_hline(yintercept=-.10, lty=3) +
   scale_y_continuous(limits=c(-1 * (magnitude_limit - 1), magnitude_limit - 1),
-                     formatter=function(n) sprintf("%.1fx", abs(n) + 1)) +
+                     labels=function(n) sprintf("%.1fx", abs(n) + 1)) +
   opts(title=paste(builds_list$test_name,':', baseline_build, ':', new_build )) +
   labs(y='(righter is better)', x='') +
   geom_text(aes(x=test, y=ifelse(abs(position) < .5, .5, sign(position) * -.5),
@@ -973,7 +973,7 @@ makeFootnote(footnote)
 if (nrow(latency_get_histo) > 0) {
     cat("plotting latency-get histogram \n")
     p <- ggplot(latency_get_histo, aes(time, count, color=buildinfo.version , label= prettySize(count))) + labs(x="----latency (ms)--->", y="count")
-    p <- p + geom_point() + scale_x_continuous(formatter="commaize")
+    p <- p + geom_point() + scale_x_continuous(labels="commaize")
     p <- addopts(p,"Latency get histogram")
     print(p)
     makeFootnote(footnote)
