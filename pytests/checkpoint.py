@@ -6,8 +6,7 @@ import unittest
 from threading import Thread
 from tasks.future import TimeoutError
 from TestInput import TestInputSingleton
-from tasks.taskmanager import TaskManager
-from tasks.taskscheduler import TaskScheduler
+from couchbase.cluster import Cluster
 from couchbase.stats_tools import StatsCommon
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -24,8 +23,7 @@ Replica3="replica3"
 class CheckpointTests(unittest.TestCase):
 
     def setUp(self):
-        self.task_manager = TaskManager()
-        self.task_manager.start()
+        self.cluster = Cluster()
 
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
@@ -42,23 +40,22 @@ class CheckpointTests(unittest.TestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([master], self)
         # End: Should be in a before class function
 
-        self.quota = TaskScheduler.init_node(self.task_manager, master)
+        self.quota = self.cluster.init_node(master)
         self.old_vbuckets = self._get_vbuckets(master)
         ClusterOperationHelper.set_vbuckets(master, 1)
-        TaskScheduler.bucket_create(self.task_manager, master, self.bucket,
-                                    num_replicas, 12001, self.quota)
-        TaskScheduler.rebalance(self.task_manager, self.servers[:self.num_servers],
-                                self.servers[1:self.num_servers], [])
+        self.cluster.bucket_create(master, self.bucket, num_replicas, 12001, self.quota)
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
 
     def tearDown(self):
         master = self.servers[0]
         ClusterOperationHelper.set_vbuckets(master, self.old_vbuckets)
         rest = RestConnection(master)
         rest.stop_rebalance()
-        TaskScheduler.rebalance(self.task_manager, self.servers[:self.num_servers], [],
-                                self.servers[1:self.num_servers])
-        TaskScheduler.bucket_delete(self.task_manager, master, self.bucket)
-        self.task_manager.stop()
+        self.cluster.rebalance(self.servers[:self.num_servers], [],
+                               self.servers[1:self.num_servers])
+        self.cluster.bucket_delete(master, self.bucket)
+        self.cluster.shutdown()
 
     def checkpoint_create_items(self):
         param = 'checkpoint'
@@ -74,7 +71,7 @@ class CheckpointTests(unittest.TestCase):
         stats = []
         for server, value in chk_stats.items():
             StatsCommon.build_stat_check(server, param, stat_key, '>', value, stats)
-        task = TaskScheduler.async_wait_for_stats(self.task_manager, stats, self.bucket)
+        task = self.cluster.async_wait_for_stats(stats, self.bucket)
         try:
             timeout = 30 if (num_items * .001) < 30 else num_items * .001
             task.result(timeout)
@@ -97,7 +94,7 @@ class CheckpointTests(unittest.TestCase):
         load_thread.join()
         log.info("Sleeping for {0} seconds)".format(timeout))
         time.sleep(timeout)
-        task = TaskScheduler.async_wait_for_stats(self.task_manager, stats, self.bucket)
+        task = self.cluster.async_wait_for_stats(stats, self.bucket)
         try:
             task.result(60)
         except TimeoutError:
@@ -126,7 +123,7 @@ class CheckpointTests(unittest.TestCase):
         StatsCommon.build_stat_check(master, param, stat_key, '==', chk_pnt, stats)
         StatsCommon.build_stat_check(slave1, param, stat_key, '==', chk_pnt, stats)
         StatsCommon.build_stat_check(slave1, param, stat_chk_itms, '>=', str(num_items), stats)
-        task = TaskScheduler.async_wait_for_stats(self.task_manager, stats, self.bucket)
+        task = self.cluster.async_wait_for_stats(stats, self.bucket)
         try:
             task.result(60)
         except TimeoutError:
@@ -137,7 +134,7 @@ class CheckpointTests(unittest.TestCase):
         chk_pnt = str(int(m_stats[m_stats.keys()[0]]) + (num_items / chk_size))
         StatsCommon.build_stat_check(slave2, param, stat_key, '==', chk_pnt, stats)
         StatsCommon.build_stat_check(slave1, param, stat_chk_itms, '<', num_items, stats)
-        task = TaskScheduler.async_wait_for_stats(self.task_manager, stats, self.bucket)
+        task = self.cluster.async_wait_for_stats(stats, self.bucket)
         try:
             task.result(60)
         except TimeoutError:
@@ -160,7 +157,7 @@ class CheckpointTests(unittest.TestCase):
         stats = []
         StatsCommon.build_stat_check(master, param, stat_key, '==', 4501, stats)
         StatsCommon.build_stat_check(slave1, param, stat_key, '==', 4501, stats)
-        task = TaskScheduler.async_wait_for_stats(self.task_manager, stats, self.bucket)
+        task = self.cluster.async_wait_for_stats(stats, self.bucket)
         try:
             task.result(60)
         except TimeoutError:

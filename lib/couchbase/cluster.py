@@ -1,4 +1,5 @@
 from tasks.future import Future
+from tasks.taskmanager import TaskManager
 from tasks.task import *
 
 
@@ -8,15 +9,18 @@ This module is contains the top-level API's for scheduling and executing tasks. 
 API provides a way to run task do syncronously and asynchronously.
 """
 
-class TaskScheduler():
-    """An API for scheduling and executing asyncronous and synchronous tasks"""
-    @staticmethod
-    def async_bucket_create(tm, server, bucket='default', replicas=1, port=11210, size=0,
+class Cluster(object):
+    """An API for interacting with Couchbase clusters"""
+
+    def __init__(self):
+        self.task_manager = TaskManager()
+        self.task_manager.start()
+
+    def async_bucket_create(self, server, bucket='default', replicas=1, port=11210, size=0,
                            password=None):
         """Asynchronously creates a bucket
 
         Parameters:
-            tm - The task manager that this task should be scheduled to. (TaskManager)
             server - The server to create the bucket on. (TestInputServer)
             bucket - The name of the bucket to be created. (String)
             replicas - The number of replicas for this bucket. (int)
@@ -27,26 +31,23 @@ class TaskScheduler():
         Returns:
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, bucket, replicas, port, size, password)
-        tm.schedule(_task)
+        self.task_manager.schedule(_task)
         return _task
 
-    @staticmethod
-    def async_bucket_delete(tm, server, bucket='default'):
+    def async_bucket_delete(self, server, bucket='default'):
         """Asynchronously deletes a bucket
 
         Parameters:
-            tm - The task manager that this task should be scheduled to. (TaskManager)
             server - The server to delete the bucket on. (TestInputServer)
             bucket - The name of the bucket to be deleted. (String)
 
         Returns:
             BucketDeleteTask - A task future that is a handle to the scheduled task."""
         _task = BucketDeleteTask(server, bucket)
-        tm.schedule(_task)
+        self.task_manager.schedule(_task)
         return _task
 
-    @staticmethod
-    def async_init_node(tm, server):
+    def async_init_node(self, server):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -58,31 +59,27 @@ class TaskScheduler():
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
         _task = NodeInitializeTask(server)
-        tm.schedule(_task)
+        self.task_manager.schedule(_task)
         return _task
 
-    @staticmethod
-    def async_load_gen_docs(tm, server, bucket, generator, kv_store, op_type, exp = 0):
+    def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp = 0):
         _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp)
-        tm.schedule(_task)
+        self.task_manager.schedule(_task)
         return _task
 
-    @staticmethod
-    def async_workload(tm, server, bucket, kv_store, num_ops, create, read, update, delete,
-                       exp):
+    def async_workload(self, server, bucket, kv_store, num_ops, create, read, update,
+                       delete, exp):
         _task = WorkloadTask(server, bucket, kv_store, num_ops, create, read, update,
                              delete, exp)
-        tm.schedule(_task)
+        self.task_manager.schedule(_task)
         return _task
 
-    @staticmethod
-    def async_verify_data(tm, server, bucket, kv_store):
+    def async_verify_data(self, server, bucket, kv_store):
         _task = ValidateDataTask(server, bucket, kv_store)
-        tm.schedule(_task)
+        self.task_manager.schedule(_task)
         return _task
 
-    @staticmethod
-    def async_rebalance(tm, servers, to_add, to_remove):
+    def async_rebalance(self, servers, to_add, to_remove):
         """Asyncronously rebalances a cluster
 
         Parameters:
@@ -93,11 +90,10 @@ class TaskScheduler():
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
         _task = RebalanceTask(servers, to_add, to_remove)
-        tm.schedule(_task)
+        self.task_manager.schedule(_task)
         return _task
 
-    @staticmethod
-    def async_wait_for_stats(tm, stats, bucket):
+    def async_wait_for_stats(self, stats, bucket):
         """Asynchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
@@ -105,22 +101,20 @@ class TaskScheduler():
         the stats structure and how it can be built.
 
         Parameters:
-            tm - The task manager that this task should be scheduled to. (TaskManager)
             stats - The stats structure that contains the state to look for. (See above)
             bucket - The name of the bucket (String)
 
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
         _task = StatsWaitTask(stats, bucket)
-        tm.schedule(_task)
+        self.task_manager.schedule(_task)
         return _task
 
-    @staticmethod
-    def bucket_create(tm, server, bucket='default', replicas=1, port=11210, size=0, password=None):
+    def bucket_create(self, server, bucket='default', replicas=1, port=11210, size=0,
+                      password=None):
         """Synchronously creates a bucket
 
         Parameters:
-            tm - The task manager that this task should be scheduled to. (TaskManager)
             server - The server to create the bucket on. (TestInputServer)
             bucket - The name of the bucket to be created. (String)
             replicas - The number of replicas for this bucket. (int)
@@ -130,26 +124,22 @@ class TaskScheduler():
 
         Returns:
             boolean - Whether or not the bucket was created."""
-        _task = TaskScheduler.async_bucket_create(tm, server, bucket, replicas, port, size,
-                                                  password)
+        _task = self.async_bucket_create(server, bucket, replicas, port, size, password)
         return _task.result()
 
-    @staticmethod
-    def bucket_delete(tm, server, bucket='default'):
+    def bucket_delete(self, server, bucket='default'):
         """Synchronously deletes a bucket
 
         Parameters:
-            tm - The task manager that this task should be scheduled to. (TaskManager)
             server - The server to delete the bucket on. (TestInputServer)
             bucket - The name of the bucket to be deleted. (String)
 
         Returns:
             boolean - Whether or not the bucket was deleted."""
-        _task = TaskScheduler.async_bucket_delete(tm, server, bucket)
+        _task = self.async_bucket_delete(server, bucket)
         return _task.result()
 
-    @staticmethod
-    def init_node(tm, server):
+    def init_node(self, server):
         """Synchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -160,11 +150,10 @@ class TaskScheduler():
 
         Returns:
             boolean - Whether or not the node was properly initialized."""
-        _task = TaskScheduler.async_init_node(tm, server)
+        _task = self.async_init_node(server)
         return _task.result()
 
-    @staticmethod
-    def rebalance(tm, servers, to_add, to_remove):
+    def rebalance(self, servers, to_add, to_remove):
         """Syncronously rebalances a cluster
 
         Parameters:
@@ -174,28 +163,23 @@ class TaskScheduler():
 
         Returns:
             boolean - Whether or not the rebalance was successful"""
-        _task = TaskScheduler.async_rebalance(tm, servers, to_add, to_remove)
+        _task = self.async_rebalance(servers, to_add, to_remove)
         return _task.result()
 
-    @staticmethod
-    def load_gen_docs(tm, server, bucket, generator, kv_store, op_type, exp = 0):
-        _task = TaskScheduler.async_load_gen_docs(tm, server, bucket, generator, kv_store,
-                                                  op_type, exp)
+    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp = 0):
+        _task = self.async_load_gen_docs(server, bucket, generator, kv_store, op_type, exp)
         return _task.result()
 
-    @staticmethod
-    def workload(tm, server, bucket, kv_store, num_ops, create, read, update, delete, exp):
-        _task = TaskScheduler.async_workload(tm, server, bucket, kv_store, num_ops, create,
-                                             read, update, delete, exp)
+    def workload(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp):
+        _task = self.async_workload(server, bucket, kv_store, num_ops, create, read, update,
+                                    delete, exp)
         return _task.result()
 
-    @staticmethod
-    def verify_data(tm, server, bucket, kv_store):
-        _task = TaskScheduler.async_verify_data(tm, server, bucket, kv_store)
+    def verify_data(self, server, bucket, kv_store):
+        _task = self.async_verify_data(server, bucket, kv_store)
         return _task.result()
 
-    @staticmethod
-    def wait_for_stats(tm, stats, bucket):
+    def wait_for_stats(self, stats, bucket):
         """Synchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
@@ -203,11 +187,13 @@ class TaskScheduler():
         the stats structure and how it can be built.
 
         Parameters:
-            tm - The task manager that this task should be scheduled to. (TaskManager)
             stats - The stats structure that contains the state to look for. (See above)
             bucket - The name of the bucket (String)
 
         Returns:
             boolean - Whether or not the correct stats state was seen"""
-        _task = TaskScheduler.async_wait_for_stats(tm, stats, bucket)
+        _task = self.async_wait_for_stats(stats, bucket)
         return _task.result()
+
+    def shutdown(self, force=False):
+        self.task_manager.shutdown(force)
