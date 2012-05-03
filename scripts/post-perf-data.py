@@ -202,6 +202,30 @@ if __name__ == "__main__":
                 index = index + 1
             del input_json["membasestats"]
 
+        for histogram in input_json.keys():
+            if histogram.startswith("latency") and histogram.endswith("histogram"):
+                print "flattening {0} snapshot".format(histogram)
+                if not isinstance(input_json[histogram], dict):
+                    print "Error: cannot flatten {0} snapshot: not a dict or empty".format(histogram)
+                    continue
+                if not "client_id" in input_json[histogram]:
+                    print "Error: cannot flatten {0} snapshot: no client_id".format(histogram)
+                    continue
+
+                client_id = input_json[histogram].get("client_id", "")
+                del input_json[histogram]["client_id"]
+                attachments[histogram] = []
+                index = 1
+                for key, value in input_json[histogram].iteritems():
+                    lr = {"row":index,
+                          "time":key,
+                          "count":value,
+                          "client_id":client_id}
+                    lr.update(z)
+                    attachments[histogram].append(lr)
+                    index += 1
+                del input_json[histogram]
+
         for latency in input_json.keys():
             if latency.startswith('latency'):
                 print "flattening {0}".format(latency)

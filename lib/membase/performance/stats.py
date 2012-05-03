@@ -90,10 +90,22 @@ class StatsCollector(object):
 
     def export(self, name, test_params):
         for latency in self._task["latency"].keys():
+
+            # save the last histogram snapshot
             histos = self._task["latency"].get(latency, [])
+
+            if histos:
+                key = latency + "-histogram"
+                self._task["latency"][key] = histos[-1].copy()
+                del self._task["latency"][key]["delta"]
+                self._task["latency"][key]["client_id"] = self.client_id
+
+            # calculate percentiles
             key = 'percentile-' + latency
             self._task["latency"][key] = []
             for histo in histos:
+                # for every sample histogram, produce a temp summary:
+                # temp = [90 per, 95 per, 99 per, client_id, delta]
                 temp = []
                 delta = histo['delta']
                 del histo['delta']
@@ -120,12 +132,15 @@ class StatsCollector(object):
                "dispatcher": self._task.get("dispatcher", []),
                "bucket-size":self._task.get("bucket_size", []),
                "data-size": self._task.get("data_size_stats", []),
+               "latency-set-histogram":self._task["latency"].get("latency-set-histogram", []),
                "latency-set":self._task["latency"].get('percentile-latency-set', []),
                "latency-set-recent":self._task["latency"].get('percentile-latency-set-recent', []),
+               "latency-get-histogram":self._task["latency"].get("latency-get-histogram", []),
                "latency-get":self._task["latency"].get('percentile-latency-get', []),
                "latency-get-recent":self._task["latency"].get('percentile-latency-get-recent', []),
                "latency-delete":self._task["latency"].get('percentile-latency-delete', []),
                "latency-delete-recent":self._task["latency"].get('percentile-latency-delete-recent', []),
+               "latency-query-histogram":self._task["latency"].get("latency-query-histogram", []),
                "latency-query":self._task["latency"].get('percentile-latency-query', []),
                "latency-query-recent":self._task["latency"].get('percentile-latency-query-recent', []),
                }
