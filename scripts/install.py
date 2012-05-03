@@ -487,12 +487,16 @@ class MongoInstaller(Installer):
                                           " --logpath ./{0}/log/mongod-27018.out" \
                                           " --dbpath ./{0}/data/data-27018". \
                                           format(server.product_name))
-        time.sleep(20) # So that mongos can connect to stabilized mongod.
-        remote_client.execute_command(("./{0}/bin/mongos --port 27017 --fork" \
+
+        log.info("check that config server started before launching mongos")
+        if self.is_socket_active(host=server.ip, port=27019):
+            remote_client.execute_command(("./{0}/bin/mongos --port 27017 --fork" \
                                            " --logpath ./{0}/log/mongos-27017.out" \
                                            " --configdb " + server.ip + ":27019"). \
                                           format(server.product_name))
-
+        else:
+            log.error("Connection with MongoDB config server was not established.")
+            sys.exit()
 
 class InstallerJob(object):
     def sequential_install(self, params):
