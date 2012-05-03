@@ -8,6 +8,7 @@ import logging
 import sys
 from threading import Thread
 from datetime import datetime
+import socket
 
 sys.path.append(".")
 sys.path.append("lib")
@@ -191,6 +192,33 @@ class Installer(object):
         info = RemoteMachineShellConnection(server).extract_remote_info()
         raise Exception(msg.format(names, version, info.deliverable_type))
 
+    def is_socket_active(self, host, port, timeout=300):
+        """ Check if remote socket is open and active
+
+        Keyword arguments:
+        host -- remote address
+        port -- remote port
+        timeout -- check timeout (in seconds)
+
+        Returns:
+        True -- socket is active
+        False -- otherwise
+
+        """
+        start_time = time.time()
+
+        sckt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        while time.time() - start_time < timeout:
+            try:
+                sckt.connect((host, port))
+                sckt.shutdown(2)
+                sckt.close()
+                return True
+            except:
+                time.sleep(10)
+
+        return False
 
 class MembaseServerInstaller(Installer):
     def __init__(self):
