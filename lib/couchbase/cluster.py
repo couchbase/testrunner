@@ -16,21 +16,49 @@ class Cluster(object):
         self.task_manager = TaskManager()
         self.task_manager.start()
 
-    def async_bucket_create(self, server, bucket='default', replicas=1, port=11210, size=0,
-                           password=None):
-        """Asynchronously creates a bucket
+    def async_create_default_bucket(self, server, size, replicas=1):
+        """Asynchronously creates the default bucket
 
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
-            bucket - The name of the bucket to be created. (String)
+            size - The size of the bucket to be created. (int)
             replicas - The number of replicas for this bucket. (int)
-            port - The port to create the bucket on. Only used for non-sasl buckets. (int)
-            password - The password for this bucket. If specified a sasl bucket will be
-            create. (String)
 
         Returns:
             BucketCreateTask - A task future that is a handle to the scheduled task."""
-        _task = BucketCreateTask(server, bucket, replicas, port, size, password)
+        _task = BucketCreateTask(server, 'default', replicas, size)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_create_sasl_bucket(self, server, name, password, size, replicas):
+        """Asynchronously creates a sasl bucket
+
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            password - The password for this bucket. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
+
+        Returns:
+            BucketCreateTask - A task future that is a handle to the scheduled task."""
+        _task = BucketCreateTask(server, name, replicas, size, password=password)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_create_standard_bucket(self, server, name, port, size, replicas):
+        """Asynchronously creates a standard bucket
+
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
+
+        Returns:
+            BucketCreateTask - A task future that is a handle to the scheduled task."""
+        _task = BucketCreateTask(server, name, replicas, size, port)
         self.task_manager.schedule(_task)
         return _task
 
@@ -110,21 +138,48 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def bucket_create(self, server, bucket='default', replicas=1, port=11210, size=0,
-                      password=None):
-        """Synchronously creates a bucket
+    def create_default_bucket(self, server, size, replicas=1):
+        """Synchronously creates the default bucket
 
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
-            bucket - The name of the bucket to be created. (String)
+            size - The size of the bucket to be created. (int)
             replicas - The number of replicas for this bucket. (int)
-            port - The port to create the bucket on. Only used for non-sasl buckets. (int)
-            password - The password for this bucket. If specified a sasl bucket will be
-            create. (String)
 
         Returns:
             boolean - Whether or not the bucket was created."""
-        _task = self.async_bucket_create(server, bucket, replicas, port, size, password)
+        _task = self.async_create_default_bucket(server, size, replicas)
+        return _task.result()
+
+    def create_sasl_bucket(self, server, name, password, size, replicas):
+        """Synchronously creates a sasl bucket
+
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            password - The password for this bucket. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
+
+        Returns:
+            boolean - Whether or not the bucket was created."""
+        _task = async_create_sasl_bucket(server, name, password, replicas, size)
+        self.task_manager.schedule(_task)
+        return _task.result()
+
+    def create_standard_bucket(self, server, name, port, size, replicas):
+        """Synchronously creates a standard bucket
+
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
+
+        Returns:
+            boolean - Whether or not the bucket was created."""
+        _task = self.async_create_standard_bucket(server, name, port, size, replicas)
         return _task.result()
 
     def bucket_delete(self, server, bucket='default'):

@@ -43,7 +43,7 @@ class CheckpointTests(unittest.TestCase):
         self.quota = self.cluster.init_node(master)
         self.old_vbuckets = self._get_vbuckets(master)
         ClusterOperationHelper.set_vbuckets(master, 1)
-        self.cluster.bucket_create(master, self.bucket, num_replicas, 12001, self.quota)
+        self.cluster.create_default_bucket(master, self.quota, num_replicas)
         self.cluster.rebalance(self.servers[:self.num_servers],
                                self.servers[1:self.num_servers], [])
 

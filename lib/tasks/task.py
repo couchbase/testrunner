@@ -66,7 +66,7 @@ class NodeInitializeTask(Task):
         self.set_result(self.quota)
 
 class BucketCreateTask(Task):
-    def __init__(self, server, bucket='default', replicas=1, port=11210, size=0,
+    def __init__(self, server, bucket='default', replicas=1, size=0, port=11211,
                  password=None):
         Task.__init__(self, "bucket_create_task")
         self.server = server
