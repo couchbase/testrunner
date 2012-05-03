@@ -74,6 +74,24 @@ class EPerfMaster(perf.PerfBase):
 
         self.aggregate_all_stats(len(clients))
 
+    def merge_dict(self, output, input):
+        """
+        Merge two dicts. Add values together if key exists in both dicts.
+        """
+        if output is None or not output:
+            return input
+
+        if input is None or not input:
+            return output
+
+        for key, value in input.iteritems():
+            if key in output.keys():
+                output[key] += value
+            else:
+                output[key] = value
+
+        return output
+
     def aggregate_all_stats(self, len_clients):
         i = 0
         file = gzip.open("{0}.loop.json.gz".format(i), 'rb')
@@ -93,6 +111,9 @@ class EPerfMaster(perf.PerfBase):
              dict = json.loads(dict)
              for key, value in dict.items():
                  if key in merge_keys:
+                     if key.endswith("histogram"):
+                         self.merge_dict(final_json[key], value)
+                         continue
                      final_json[key].extend(value)
 
         file = gzip.open("{0}.json.gz".format('final'), 'wb')
