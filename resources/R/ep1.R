@@ -373,6 +373,58 @@ if (nrow(latency_query) > 0) {
     latency_query <- result
 }
 
+# Get Latency-get histogram
+cat("generating latency-get histogram")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-get-histogram", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-get histogram"))
+}
+latency_get_histo <- result
+latency_get_histo$time <- as.numeric(latency_get_histo$time) * 1000
+latency_get_histo$count <- as.numeric(latency_get_histo$count)
+
+
+# Get Latency-set histogram
+cat("generating latency-set histogram")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-set-histogram", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-set histogram"))
+}
+latency_set_histo <- result
+latency_set_histo$time <- as.numeric(latency_set_histo$time) * 1000
+latency_set_histo$count <- as.numeric(latency_set_histo$count)
+
+# Get Latency-query histogram
+cat("generating latency-query histogram")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-query-histogram", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-query histogram"))
+}
+latency_query_histo <- result
+latency_query_histo$time <- as.numeric(latency_query_histo$time) * 1000
+latency_query_histo$count <- as.numeric(latency_query_histo$count)
+
 # Get Data size on disk
 cat("generating disk usage over time")
 result <- data.frame()
@@ -918,6 +970,32 @@ p <- addopts(p,"cache_miss percentage 0-5")
 print(p)
 makeFootnote(footnote)
 
+if (nrow(latency_get_histo) > 0) {
+    cat("plotting latency-get histogram \n")
+    p <- ggplot(latency_get_histo, aes(time, count, color=buildinfo.version , label= prettySize(count))) + labs(x="----latency (ms)--->", y="count")
+    p <- p + geom_point() + scale_x_continuous(formatter="commaize")
+    p <- addopts(p,"Latency get histogram")
+    print(p)
+    makeFootnote(footnote)
+}
+
+if (nrow(latency_set_histo) > 0) {
+    cat("plotting latency-set histogram \n")
+    p <- ggplot(latency_set_histo, aes(time, count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (ms)--->", y="count")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency set histogram")
+    print(p)
+    makeFootnote(footnote)
+}
+
+if (nrow(latency_query_histo) > 0) {
+    cat("plotting latency-query histogram \n")
+    p <- ggplot(latency_query_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (ms)--->", y="count")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency query histogram")
+    print(p)
+    makeFootnote(footnote)
+}
 
 
 cat("Latency-get 90th\n")
