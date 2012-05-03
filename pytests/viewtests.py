@@ -43,7 +43,7 @@ class ViewBaseTests(unittest.TestCase):
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
         ClusterOperationHelper.wait_for_ns_servers_or_assert([master], self)
-
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         if self.num_buckets==1:
             ViewBaseTests._create_default_bucket(self, replica=self.replica)
         else:
@@ -692,7 +692,6 @@ class ViewBaseTests(unittest.TestCase):
         # if no new items are set for timeout seconds, we abort
         self.docs_inserted = []
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
-        MemcachedClientHelper.direct_client(self.servers[0], bucket).flush()
         inserted_index = []
         time_to_timeout = 0
         while not self.shutdown_load_data:
