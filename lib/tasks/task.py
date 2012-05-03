@@ -1,5 +1,6 @@
 import logger
 import random
+import string
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
 from membase.api.rest_client import RestConnection
@@ -258,9 +259,13 @@ class GenericLoadingTask(Thread, Task):
         raise NotImplementedError
 
     def _unlocked_create(self, partition, key, value):
-        value_json = json.loads(value)
-        value_json['mutated'] = 0
-        value = json.dumps(value_json)
+        try:
+            value_json = json.loads(value)
+            value_json['mutated'] = 0
+            value = json.dumps(value_json)
+        except ValueError:
+            index = random.choice(range(len(value)))
+            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index+1:]
 
         try:
             self.client.set(key, self.exp, 0, value)
@@ -283,10 +288,13 @@ class GenericLoadingTask(Thread, Task):
         value = partition.get_valid(key)
         if value is None:
             return
-
-        value_json = json.loads(value)
-        value_json['mutated'] += 1
-        value = json.dumps(value_json)
+        try:
+            value_json = json.loads(value)
+            value_json['mutated'] += 1
+            value = json.dumps(value_json)
+        except ValueError:
+            index = random.choice(range(len(value)))
+            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index+1:]
 
         try:
             self.client.set(key, self.exp, 0, value)
