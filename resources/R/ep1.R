@@ -57,7 +57,7 @@ addopts <- function(aplot,atitle) {
 	aplot <- aplot + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = ))
 	aplot <- aplot + opts(axis.ticks = theme_segment(colour = 'red', size = 1))
 	aplot <- aplot + opts(title=paste(atitle, sep=''))
-	aplot <- aplot + scale_color_brewer() + scale_y_continuous(formatter="commaize")
+	aplot <- aplot + scale_color_brewer() + scale_y_continuous(labels=commaize)
 }
 
 prettySize <- function(s, fmt="%.2f") {
@@ -353,22 +353,25 @@ for(index in 1:nrow(builds_list)) {
 	},error=function(e)e, finally=print("Error getting latency-query"))
 }
 latency_query <- result
-latency_query$row <- as.numeric(latency_query$row)
-latency_query$mystery <- as.numeric(latency_query$mystery)
-latency_query$percentile_99th <- as.numeric(latency_query$percentile_99th) * 1000
-latency_query$percentile_95th <- as.numeric(latency_query$percentile_95th) * 1000
-latency_query$percentile_90th <- as.numeric(latency_query$percentile_90th) * 1000
+if (nrow(latency_query) > 0) {
 
-all_builds = factor(latency_query$buildinfo.version)
-result <- data.frame()
-for(a_build in levels(all_builds)) {
-	tt <- latency_query[latency_query $buildinfo.version==a_build,]
-	tt$mystery <- as.numeric(tt$mystery)
-	min_myst = min(tt$mystery)
-	filtered = transform(tt,row=mystery-min_myst)
-	result <- rbind(result,filtered)
+    latency_query$row <- as.numeric(latency_query$row)
+    latency_query$mystery <- as.numeric(latency_query$mystery)
+    latency_query$percentile_99th <- as.numeric(latency_query$percentile_99th) * 1000
+    latency_query$percentile_95th <- as.numeric(latency_query$percentile_95th) * 1000
+    latency_query$percentile_90th <- as.numeric(latency_query$percentile_90th) * 1000
+
+    all_builds = factor(latency_query$buildinfo.version)
+    result <- data.frame()
+    for(a_build in levels(all_builds)) {
+        tt <- latency_query[latency_query $buildinfo.version==a_build,]
+        tt$mystery <- as.numeric(tt$mystery)
+        min_myst = min(tt$mystery)
+        filtered = transform(tt,row=mystery-min_myst)
+        result <- rbind(result,filtered)
+    }
+    latency_query <- result
 }
-latency_query <- result
 
 # Get Data size on disk
 cat("generating disk usage over time")
@@ -966,27 +969,30 @@ p <- addopts(p,"Latency-set 99th  percentile")
 print(p)
 makeFootnote(footnote)
 
-cat("Latency-query 90th\n")
-temp <- latency_query[latency_query$client_id ==0,]
-p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
-p <- p + geom_point()
-p <- addopts(p,"Latency-query 90th  percentile")
-print(p)
-makeFootnote(footnote)
-cat("Latency-query 95th\n")
-p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
-p <- p + geom_point()
-p <- addopts(p,"Latency-query 95th  percentile")
-print(p)
-makeFootnote(footnote)
-cat("Latency-query 99th\n")
-p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
-p <- p + geom_point()
-p <- addopts(p,"Latency-query 99th  percentile")
-print(p)
-makeFootnote(footnote)
+if (nrow(latency_query) > 0) {
 
+    cat("Latency-query 90th\n")
+    temp <- latency_query[latency_query$client_id ==0,]
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-query 90th  percentile")
+    print(p)
+    makeFootnote(footnote)
 
+    cat("Latency-query 95th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-query 95th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-query 99th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-query 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
+}
 
 # cat("generating cpu_util \n")
 # p <- ggplot(ns_server_data_system, aes(row, cpu_util, color=buildinfo.version , label= cpu_util)) + labs(x="----time (sec)--->", y="cpu_util")
