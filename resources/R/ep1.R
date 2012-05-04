@@ -973,7 +973,7 @@ makeFootnote(footnote)
 if (nrow(latency_get_histo) > 0) {
     cat("plotting latency-get histogram \n")
     p <- ggplot(latency_get_histo, aes(time, count, color=buildinfo.version , label= prettySize(count))) + labs(x="----latency (ms)--->", y="count")
-    p <- p + geom_point() + scale_x_continuous(labels="commaize")
+    p <- p + geom_point()
     p <- addopts(p,"Latency get histogram")
     print(p)
     makeFootnote(footnote)
