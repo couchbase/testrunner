@@ -937,7 +937,7 @@ class ViewBaseTests(unittest.TestCase):
                                      "username": master.rest_username,
                                      "password": master.rest_password})
             results = ViewBaseTests._get_view_results(self, n_rest, bucket, view_name, num_docs,
-                                             extra_params={"stale": False})
+                                             extra_params={"stale": "false"})
             time.sleep(5)
             doc_names_view = ViewBaseTests._get_doc_names(self, results)
             if sorted(doc_names_view) != sorted(doc_names):
