@@ -1,4 +1,3 @@
-
 import unittest
 import datetime
 from TestInput import TestInputSingleton
@@ -10,9 +9,10 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+import os
 
 class WarmUpClusterTest(unittest.TestCase):
-
     input = None
     servers = None
     log = None
@@ -26,7 +26,7 @@ class WarmUpClusterTest(unittest.TestCase):
         self.master = TestInputSingleton.input.servers[0]
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
-        self.num_of_docs = self.input.param("num_of_docs",1000)
+        self.num_of_docs = self.input.param("num_of_docs", 1000)
 
         rest = RestConnection(self.master)
         for server in self.servers:
@@ -88,21 +88,21 @@ class WarmUpClusterTest(unittest.TestCase):
         self.log.info("inserted {0} items".format(howmany))
         self.onenodemc.close()
 
-    def do_warmup(self, howmany, wait_flag=False, timeout_in_seconds=500):
-        howmany=self.num_of_docs
+    def do_warmup(self):
+        howmany = self.num_of_docs
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
         self._insert_data(howmany)
 
-        RebalanceHelper.wait_for_stats_on_all(self.master,"default","ep_queue_size",0)
-        RebalanceHelper.wait_for_stats_on_all(self.master,"default","ep_flusher_todo",0)
+        RebalanceHelper.wait_for_stats_on_all(self.master, "default", "ep_queue_size", 0)
+        RebalanceHelper.wait_for_stats_on_all(self.master, "default", "ep_flusher_todo", 0)
         time.sleep(5)
         rest = RestConnection(self.master)
 
         map = {}
         #collect curr_items from all nodes
         for server in self.servers:
-            mc_conn = MemcachedClientHelper.direct_client(server,"default")
+            mc_conn = MemcachedClientHelper.direct_client(server, "default")
             map["{0}:{1}".format(server.ip, server.port)] = {}
             map["{0}:{1}".format(server.ip, server.port)]["curr_items_tot"] = mc_conn.stats("")["curr_items_tot"]
             map["{0}:{1}".format(server.ip, server.port)]["previous_uptime"] = mc_conn.stats("")["uptime"]
@@ -111,11 +111,20 @@ class WarmUpClusterTest(unittest.TestCase):
                 "memcached {0}:{1} has {2} items".format(server.ip, server.port, mc_conn.stats("")["curr_items_tot"]))
             mc_conn.close()
 
-        # Restarting Memcached
-        command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
-        memcached_restarted = rest.diag_eval(command)
-        self.log.info( "restarting memcached")
-        self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
+        # Killing Memcached
+        nodes = rest.node_statuses()
+
+        for node in nodes:
+            _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
+                     "password": self.servers[0].rest_password}
+            _mc = MemcachedClientHelper.direct_client(_node,"default")
+            pid = _mc.stats()["pid"]
+            node_rest = RestConnection(_node)
+            command = "os:cmd(\"kill -9 {0} \")".format(pid)
+            self.log.info(command)
+            killed = node_rest.diag_eval(command)
+            self.log.info("killed ??  {0} ".format(killed))
+            _mc.close()
 
         start = time.time()
 
@@ -145,27 +154,46 @@ class WarmUpClusterTest(unittest.TestCase):
             mc = MemcachedClientHelper.direct_client(server, "default")
             expected_curr_items_tot = map["{0}:{1}".format(server.ip, server.port)]["curr_items_tot"]
             now_items = 0
-            while time.time() - start < 1800:
-                stats = mc.stats()
-                try:
-                    warmup_time = int(stats["ep_warmup_time"])
-                    self.log.info("ep_warmup_time is {0}".format(warmup_time))
+            retry = 0
 
-                    if mc.stats()["curr_items_tot"] < expected_curr_items_tot:
-                        self.log.info("still warming up .... curr_items_tot : {0}".format(mc.stats()["curr_items_tot"]))
-                        while now_items == mc.stats()["curr_items_tot"]:
-                            if time.time() - start <= 180:
-                                self.log.info("still warming up .... curr_items_tot : {0}".format(mc.stats()["curr_items_tot"]))
-                            else:
-                                self.fail("Getting repetitive data, exiting from this server")
+            # Get the wamrup time for each server
+            try:
+                stats = mc.stats()
+                while retry < 5:
+                    if stats is None:
+                        stats = mc.stats()
+                        retry = retry + 1
                     else:
-                        self.log.info("warmup completed, awesome!!! Warmed up. {0} items ".format(mc.stats()["curr_items_tot"]))
+                        warmup_time = int(stats["ep_warmup_time"])
+                        self.log.info("ep_warmup_time is %s " % warmup_time)
+                        self.log.info("Awesome, got the stats {0}".format(stats["ep_warmup_time"]))
                         break
-                    now_items= mc.stats()["curr_items_tot"]
-                except Exception :
-                    self.fail("Could not get warmup_time stats")
+            except Exception as e:
+                self.fail("Could not get warmup_time stats, exception %s" % e)
+
+            if retry >= 5 and stats is None:
+                self.fail("Could not get warmup_time stats, exception")
+
+            # Verify the item count from each server, if you get repeated same count(< expected count) for over
+            # 3 minutes, then fail. Try to get the items from the server for 30 mins in total, else fail
+
+            while time.time() - start < 1800:
+                time.sleep(2)
+                if mc.stats()["curr_items_tot"] < expected_curr_items_tot:
+                    self.log.info("still warming up .... curr_items_tot : {0}".format(mc.stats()["curr_items_tot"]))
+                    while now_items == mc.stats()["curr_items_tot"]:
+                        if time.time() - start <= 180:
+                            self.log.info(
+                                "still warming up .... curr_items_tot : {0}".format(mc.stats()["curr_items_tot"]))
+                        else:
+                            self.fail("Getting repetitive data, exiting from this server")
+                else:
+                    self.log.info(
+                        "warmup completed, awesome!!! Warmed up. {0} items ".format(mc.stats()["curr_items_tot"]))
+                    break
+                now_items = mc.stats()["curr_items_tot"]
             mc.close()
 
 
     def test_warmUpCluster(self):
-        self.do_warmup(1000, True)
+        self.do_warmup()
