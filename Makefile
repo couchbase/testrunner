@@ -30,6 +30,14 @@ test-views:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view.conf
 test-viewquery:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-viewquery.conf
-	
+
 e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
+
+# specify number of nodes and testcase
+any-test:
+	scripts/start_cluster_and_run_tests.sh ${NODES} ${TEST}
+
+# specify number of nodes and test conf
+any-suite:
+	scripts/start_cluster_and_run_tests.sh ${NODES} ${SUITE}
