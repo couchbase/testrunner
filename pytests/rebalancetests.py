@@ -586,7 +586,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
                 RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                                                        [master],
                                                        [],
-                                                       [node], do_stop=self.do_stop)
+                                                       [node], do_stop=self.do_stop, monitor=True)
                 # wait for loading tasks to finish
                 RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
                 self.log.info("DONE LOAD AND REBALANCE")
@@ -853,82 +853,78 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
     def test_load(self):
         self._common_test_body()
 
-class RebalanceInOutWithFailover(unittest.TestCase):
 
+class RebalanceOutWithFailover(unittest.TestCase):
     def setUp(self):
         RebalanceBaseTest.common_setup(self)
 
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self)
 
-    #load data add one node , rebalance add another node rebalance
     def _common_test_body(self):
         master = self.servers[0]
         rest = RestConnection(master)
-
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
+
+        # add all servers
+        self.log.info("INTIAL REBALANCE ALL NODES")
+        RebalanceTaskHelper.add_rebalance_task(self.task_manager,
+            [master],
+            self.servers[1:],
+            [], monitor=True, do_stop=self.do_stop)
+
         self.log.info("INTIAL LOAD")
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
             bucket_data, self.load_ratio,
-            keys_count = self.keys_count)
+            keys_count=self.keys_count)
 
-        for server in self.servers[1:]:
+        nodes = rest.node_statuses()
 
-            self.log.info("PARALLEL LOAD")
-            RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
-                DELETE_RATIO = self.delete_ratio,
-                ACCESS_RATIO = self.access_ratio, EXPIRY_RATIO = self.expiry_ratio)
+        if len(nodes) > 2:
+            for node in nodes[1:]:
+                # Never pick master node
+                if node.ip == master.ip:
+                    continue
+                self.log.info("START PARALLEL LOAD")
+                RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
+                    DELETE_RATIO=self.delete_ratio,
+                    ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio)
 
-            self.log.info("INCREMENTAL REBALANCE IN")
-            # rebalance in a server
-            RebalanceTaskHelper.add_rebalance_task(self.task_manager,
-                [master],
-                [server],
-                [], do_stop=self.do_stop)
+                # Pick a Node to failover
+                self.log.info("FAILOVER and REBALANCE OUT")
+                toBeEjectedNode = RebalanceHelper.pick_node(master)
+                # rebalance Out
+                RebalanceTaskHelper.add_failover_task(self.task_manager,
+                    [master],
+                    [toBeEjectedNode], True)
 
-            nodes = rest.node_statuses()
-            # Do the failover-rebalance out, only for a cluser > 3
-            if len(nodes) < 3:
-                self.log.info("Will not failover on a cluster less than size 3")
-                continue
+                # rebalance Out
+                RebalanceTaskHelper.add_rebalance_task(self.task_manager,
+                    [master],
+                    [],
+                    [toBeEjectedNode], do_stop=self.do_stop, monitor=True)
 
-            # Do not rebalance out the mAster node
-            if server.ip == master.ip:
-                self.log.info("Cannot failover/rebalance out the master node")
-                continue
+                # wait for all tasks to finish
+                RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
+                self.log.info("DONE LOAD, REBALANCE-IN, FAILOVER AND REBALANCE-OUT")
 
-            # Pick a Node to failover
-            #pick a node that is not the master node
-            self.log.info("FAILOVER and REBALANCE OUT")
-            toBeEjectedNode = RebalanceHelper.pick_node(master)
-            # rebalance Out
-            RebalanceTaskHelper.add_failover_task(self.task_manager,
-                [master],
-                [toBeEjectedNode], True)
+                # verification step
+                if self.do_verify:
+                    self.log.info("VERIFICATION")
+                    RebalanceBaseTest.do_kv_and_replica_verification(master, self.task_manager,
+                        bucket_data, self.replica, self)
+                else:
+                    self.log.info("NO VERIFICATION")
+                    # at least 2 nodes required per loop to rebalance out and verify replication
+                if len(rest.node_statuses()) < 2:
+                    break
 
-            # rebalance Out
-            RebalanceTaskHelper.add_rebalance_task(self.task_manager,
-                [master],
-                [],
-                [toBeEjectedNode], do_stop=self.do_stop)
-
-            # wait for all tasks to finish
-            RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
-            self.log.info("DONE LOAD, REBALANCE-IN, FAILOVER AND REBALANCE-OUT")
-
-            # verification step
-            if self.do_verify:
-                self.log.info("VERIFICATION")
-                RebalanceBaseTest.do_kv_and_replica_verification(master,
-                    self.task_manager,
-                    bucket_data,
-                    self.replica,
-                    self)
-            else:
-                self.log.info("NO VERIFICATION")
+        self.log.info("DONE LOAD AND REBALANCE")
 
     def test_load(self):
         self._common_test_body()
+
+
 class RebalanceTaskHelper():
     @staticmethod
     def add_node_init_task(tm, server):
