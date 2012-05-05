@@ -1273,6 +1273,8 @@ class WarmUpMemcachedTest(unittest.TestCase):
         RebalanceHelper.wait_for_stats(self.master, "default", 'ep_queue_size', 0)
         RebalanceHelper.wait_for_stats(self.master, "default", 'ep_flusher_todo', 0)
         self.log.info(curr_items)
+        self.log.info("sleeping for 10 seconds")
+        time.sleep(10)
         rest = RestConnection(self.master)
         command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
         memcached_restarted = rest.diag_eval(command)
