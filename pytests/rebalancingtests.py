@@ -342,6 +342,8 @@ class RebalanceDataGenerator(object):
                 _value = value.encode("ascii", "ignore")
                 _json = json.loads(_value, encoding="utf-8")
                 _id = _json["_id"].encode("ascii", "ignore")
+                del _json["_id"]
+                _value = json.dumps(_json).encode("ascii", "ignore")
                 #                    _value = json.dumps(_json)
                 try:
                     RebalanceDataGenerator.do_mc(rest, smart, _id, _value,
