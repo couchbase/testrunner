@@ -101,7 +101,7 @@ class BucketCreateTask(Task):
         try:
             if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
                 self.set_result(True)
-                self.state == FINISHED
+                self.state = FINISHED
                 return
             else:
                 self.log.info("vbucket map not ready after try {0}".format(self.retries))
@@ -155,8 +155,8 @@ class RebalanceTask(Task):
         rest = RestConnection(master)
         for node in self.to_add:
             self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
-            added = rest.add_node(master.rest_username, master.rest_password,
-                                  node.ip, node.port)
+            rest.add_node(master.rest_username, master.rest_password,
+                          node.ip, node.port)
 
     def start_rebalance(self, task_manager):
         rest = RestConnection(self.servers[0])
