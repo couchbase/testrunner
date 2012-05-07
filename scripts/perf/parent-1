@@ -1,6 +1,6 @@
 #!/bin/sh
 
-echo testing ${product}: ${version_number}
+echo scripts/perf/parent: testing ${product}: ${version_number}
 
 git rev-parse HEAD
 git describe --always --long
