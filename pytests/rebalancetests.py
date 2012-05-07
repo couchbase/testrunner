@@ -563,7 +563,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
         RebalanceTaskHelper.add_rebalance_task(self.task_manager,
                                                [master],
                                                self.servers[1:],
-                                               [], monitor=True)
+                                               [])
         self.log.info("INTIAL LOAD")
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
             bucket_data, self.load_ratio,
@@ -947,7 +947,7 @@ class RebalanceTaskHelper():
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
     @staticmethod
-    def add_rebalance_task(tm, servers, to_add, to_remove, monitor=False,
+    def add_rebalance_task(tm, servers, to_add, to_remove, monitor=True,
                            do_stop=False, progress=30):
         _t = task.RebalanceTask(servers, to_add, to_remove, do_stop=do_stop,
                                 progress=progress)
