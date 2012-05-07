@@ -1,4 +1,5 @@
 import copy
+import socket
 from multiprocessing.process import Process
 from multiprocessing.queues import Queue
 import random
@@ -703,6 +704,7 @@ class VBucketAwareMemcached(object):
         self.memcacheds = {}
         self.vBucketMap = {}
         self.vBucketMapReplica = {}
+        self.rest = rest
         self.reset(rest)
 
     def reset(self, rest=None):
@@ -814,28 +816,54 @@ class VBucketAwareMemcached(object):
                 return self.memcacheds[server]
 
     def set(self, key, exp, flags, value):
-        return self._send_op(self.memcached(key).set, key, exp, flags, value)
+        vb_error = 0
+        while True:
+            try:
+                return self._send_op(self.memcached(key).set, key, exp, flags, value)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
 
     def get(self, key):
-        return self._send_op(self.memcached(key).get, key)
+        vb_error = 0
+        while True:
+            try:
+                return self._send_op(self.memcached(key).get, key)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
 
     def delete(self, key):
-        return self._send_op(self.memcached(key).delete, key)
+        vb_error = 0
+        while True:
+            try:
+                return self._send_op(self.memcached(key).delete, key)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
 
     def _send_op(self, func, *args):
         backoff = .001
-        while backoff < .5:
+        while True:
             try:
                 return func(*args)
             except MemcachedError as error:
-                if error.status == ERR_NOT_MY_VBUCKET:
-                    self.reset_vbucket(self.rest, key)
-                elif error.status == ERR_ETMPFAIL:
+                if error.status == ERR_ETMPFAIL and backoff < .5:
                     time.sleep(backoff)
                     backoff *= 2
                 else:
                     raise error
-        raise Exception("Operation recieved too many TMP_FAIL's")
+            except socket.error, EOFError:
+                raise MemcachedError(ERR_NOT_MY_VBUCKET, "Connection reset")
 
     def done(self):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
