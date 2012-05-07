@@ -691,7 +691,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             for version in node_upgrade_path:
                 previous_version = current_version
                 current_version = version
-                if version is not initial_version:
+                if version != initial_version:
                     log.info("Upgrading to version {0}".format(version))
                     self._stop_membase_servers(servers)
                     if previous_version.startswith("1.7") and current_version.startswith("1.8"):
