@@ -811,7 +811,6 @@ col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build,
 grid.table(testdf, h.even.alpha=1, h.odd.alpha=1,  v.even.alpha=0.5, v.odd.alpha=1,cols=c(col1, col2))
 makeFootnote(footnote)
 
-
 cat("generating ops/sec \n")
 p <- ggplot(ns_server_data, aes(row, ops, color=buildinfo.version , label= prettySize(ops))) + labs(x="----time (sec)--->", y="ops/sec")
 p <- p + geom_point()
@@ -819,15 +818,12 @@ p <- addopts(p,"ops/sec")
 print(p)
 makeFootnote(footnote)
 
-cat("generating disk write queue \n")
+cat("generating ep queue size \n")
 p <- ggplot(ns_server_data, aes(row, ep_queue_size, color=buildinfo.version , label= prettySize(ep_queue_size))) + labs(x="----time (sec)--->", y="ep_queue_size")
 p <- p + geom_point()
-p <- addopts(p,"disk write queue")
+p <- addopts(p,"ep queue size")
 print(p)
 makeFootnote(footnote)
-
-
-
 
 cat("generating ep_diskqueue_drain \n")
 p <- ggplot(ns_server_data, aes(row, ep_diskqueue_drain, color=buildinfo.version , label= prettySize(ep_diskqueue_drain))) + labs(x="----time (sec)--->", y="ep_diskqueue_drain")
@@ -835,7 +831,6 @@ p <- p + geom_point()
 p <- addopts(p,"ep_diskqueue_drain")
 print(p)
 makeFootnote(footnote)
-
 
 cat("generating ep_bg_fetched \n")
 p <- ggplot(ns_server_data, aes(row, ep_bg_fetched, color=buildinfo.version , label= prettySize(ep_bg_fetched))) + labs(x="----time (sec)--->", y="ep_bg_fetched")
@@ -865,8 +860,6 @@ p <- addopts(p,"vb_active_eject/sec")
 print(p)
 makeFootnote(footnote)
 
-
-
 cat("generating vb_replica_eject \n")
 p <- ggplot(ns_server_data, aes(row, vb_replica_eject, color=buildinfo.version , label= prettySize(vb_replica_eject))) + labs(x="----time (sec)--->", y="vb_replica_eject")
 p <- p + geom_point()
@@ -874,15 +867,12 @@ p <- addopts(p,"vb_replica_eject/sec")
 print(p)
 makeFootnote(footnote)
 
-
 cat("generating ep_tap_replica_queue_backoff \n")
 p <- ggplot(ns_server_data, aes(row, ep_tap_replica_queue_backoff, color=buildinfo.version , label= prettySize(ep_tap_replica_queue_backoff))) + labs(x="----time (sec)--->", y="ep_tap_replica_queue_backoff")
 p <- p + geom_point()
 p <- addopts(p,"ep_tap_replica_queue_backoff/sec")
 print(p)
 makeFootnote(footnote)
-
-
 
 cat("generating vb_active_resident_items_ratio \n")
 p <- ggplot(ns_server_data, aes(row, vb_active_resident_items_ratio, color=buildinfo.version , label= prettySize(vb_active_resident_items_ratio))) + labs(x="----time (sec)--->", y="vb_active_resident_items_ratio")
@@ -907,13 +897,11 @@ print(p)
 makeFootnote(footnote)
 
 cat("generating mem_used \n")
-p <- ggplot(ns_server_data, aes(row, mem_used, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="ops/sec")
+p <- ggplot(ns_server_data, aes(row, mem_used, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="bytes")
 p <- p + geom_point()
 p <- addopts(p,"mem_used")
 print(p)
 makeFootnote(footnote)
-
-
 
 cat("generating data disk size\n")
 p <- ggplot(disk_data, aes(row,size, color=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="size (MB)")
@@ -922,8 +910,6 @@ p <- addopts(p,"data disk size")
 print(p)
 makeFootnote(footnote)
 
-
-
 cat("generating cmd_set \n")
 p <- ggplot(ns_server_data, aes(row, cmd_set, color=buildinfo.version , label= cmd_set)) + labs(x="----time (sec)--->", y="ops/sec")
 p <- p + geom_point()
@@ -931,14 +917,12 @@ p <- addopts(p,"cmd_set ops/sec")
 print(p)
 makeFootnote(footnote)
 
-
 cat("generating cmd_get \n")
 p <- ggplot(ns_server_data, aes(row, cmd_get, color=buildinfo.version , label= cmd_get)) + labs(x="----time (sec)--->", y="ops/sec")
 p <- p + geom_point()
 p <- addopts(p,"cmd_get ops/sec")
 print(p)
 makeFootnote(footnote)
-
 
 cat("generating get misses \n")
 p <- ggplot(ns_server_data, aes(row, get_misses, color=buildinfo.version , label= get_misses)) + labs(x="----time (sec)--->", y="# of get misses")
@@ -953,7 +937,6 @@ p <- p + geom_point()
 p <- addopts(p,"# of get hits")
 print(p)
 makeFootnote(footnote)
-
 
 cat("generating cache_miss \n")
 p <- ggplot(ns_server_data, aes(row, cache_miss, color=buildinfo.version , label= cache_miss)) + labs(x="----time (sec)--->", y="cache_miss percentage")
