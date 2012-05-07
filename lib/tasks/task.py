@@ -164,7 +164,7 @@ class RebalanceTask(Task):
         ejectedNodes = []
         for server in self.to_remove:
             for node in nodes:
-                if server.ip == node.ip and server.port == node.port:
+                if server.ip == node.ip and int(server.port) == int(node.port):
                     ejectedNodes.append(node.id)
         rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
 
