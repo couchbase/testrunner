@@ -2,7 +2,8 @@
 
 echo testing ${product}: ${version_number}
 
-git describe
+git rev-parse HEAD
+git describe --always --long
 
 echo notes: ${notes}
 
