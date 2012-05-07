@@ -1,0 +1,21 @@
+#!/bin/sh
+
+echo scripts/perf/client: testing ${product}: ${version_number}
+
+git rev-parse HEAD
+git describe --always --long
+
+echo notes: ${notes}
+
+echo test_conf: ${test_conf}
+cat ${test_conf}
+
+echo ini_file: ${ini_file}
+cat ${ini_file}
+
+if [ -n "${hot_load_phase}" ] ; then
+  extra=",hot_load_phase=1"
+fi
+
+./testrunner -i ${ini_file} -c ${test_conf} -p prefix=0,num_clients=3,load_phase=${load_phase},index_phase=${index_phase},access_phase=${access_phase}${extra}
+
