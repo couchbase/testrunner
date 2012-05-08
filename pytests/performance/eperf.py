@@ -1520,3 +1520,33 @@ def join_queries(queries):
     queries = queries.replace(',', '%2C')
     return queries
 
+class ViewGen:
+    def __init__(self):
+        self.ddoc_names = ["A", "B", "C", "D", "E", "F", "G", "H"]
+
+        self.view_names = [
+            'city1',
+            'city2',
+            'realm1',
+            'experts1',
+            'experts2',
+            'realm2',
+            'realm3',
+            'category'
+        ]
+
+    def generate_ddocs(self, pattern=None):
+        """Generate dictionary with design documents and views"""
+        pass
+
+    def generate_quiries(self, use_all_docs=False):
+        """Generate string from permuted queries"""
+        pass
+
+    def _compute_queries(self, queries_by_kind, remaining, suffix=""):
+        """Return a list of permuted queries"""
+        pass
+
+    def _join_queries(self, queries):
+        """Join queries into string"""
+        pass
