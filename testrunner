@@ -209,7 +209,7 @@ if __name__ == "__main__":
         # reload hot items
         print "[load phase] Loading initial hot items"
         TestInputSingleton.input.test_params["items"] = TestInputSingleton.input.test_params["hot_init_items"]
-    print "Test input params:"
+    print "[Global Test input params]"
     print TestInputSingleton.input.test_params
     print
 
@@ -243,7 +243,10 @@ if __name__ == "__main__":
         print("  ./testrunner -i {0} {1} -t {2}".format(arg_i or "", arg_p or "", name))
         name = name.split(",")[0]
 
-        TestInputSingleton.input.test_params.update(params)
+        # Update the test params for each test
+        TestInputSingleton.input.test_params = params
+        TestInputSingleton.input.test_params.update(test_params)
+        print "[Test Input params] : %s" % TestInputSingleton.input.test_params
         suite = unittest.TestLoader().loadTestsFromName(name)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         time_taken = time.time() - start_time
