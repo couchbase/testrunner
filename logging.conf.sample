@@ -9,7 +9,7 @@ level=DEBUG
 keys=simple,complex
 
 [formatter_simple]
-format=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+format=[%(asctime)s] - [%(module)s:%(lineno)d] %(levelname)s - %(message)s
 
 [formatter_complex]
 format=[%(asctime)s] - [%(module)s] [%(thread)d] - %(levelname)s - %(message)s
