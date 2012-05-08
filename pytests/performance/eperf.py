@@ -996,6 +996,157 @@ function(doc) {
                           host = host)
         self.gated_finish(self.input.clients, notify)
 
+    def test_vperf2(self):
+        """1 design document, 8 views"""
+
+        self.spec("vperf2")
+
+        # Load phase
+        items = self.parami('items', 45000000)
+        notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami('num_nodes', 10), items)
+
+        # Index phase
+        ddocs = dict()
+
+        # Define names of design documents and views
+        ddocs_names = 'A'
+
+        view_names = [
+            'city1',
+            'city2',
+            'realm1',
+            'experts1',
+            'experts2',
+            'realm2',
+            'realm3',
+            'category'
+        ]
+
+        # Define map functions:
+        map_functions = [
+            """
+            function(doc) {
+                if (doc.city != null) {
+                    emit(doc.city, null);
+                }
+            }
+            """,
+            """
+            function(doc) {
+                if (doc.city != null) {
+                    emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
+                }
+            }
+            """,
+            """
+            function(doc) {
+                if (doc.realm != null) {
+                    emit(doc.realm, null);
+                }
+            }
+            """,
+            """
+            function(doc) {
+                if (doc.category == 2) {
+                    emit([doc.name, doc.coins], null);
+                }
+            }
+            """,
+            """
+            function(doc) {
+                emit([doc.category, doc.coins], null);
+            }
+            """,
+            """
+            function(doc) {
+                emit([doc.realm, doc.coins], null)
+            }
+            """,
+            """
+            function(doc) {
+                emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+            }
+            """,
+            """
+            function(doc) {
+                emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+            }
+            """
+        ]
+
+        index_of_map = 0
+        for ddoc_name in ddocs_names:
+            ddocs[ddoc_name] = { 'views': {} }
+            for view_name in view_names:
+                ddocs[ddoc_name]['views'][view_name] = {}
+                ddocs[ddoc_name]['views'][view_name]['map'] = map_functions[index_of_map]
+                index_of_map += 1
+
+        self.index_phase(ddocs)
+
+        # Access phase
+        limit = self.parami('limit', 10)
+
+        b = '/default/'
+
+        q = {}
+        q['city']        = b + '_design/A/_view/city1?limit=' + str(limit) + '&startkey="{city}"'
+        q['city2']       = b + '_design/A/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
+        q['realm']       = b + '_design/A/_view/realm1?limit=30&startkey="{realm}"'
+        q['experts']     = b + '_design/A/_view/experts1?limit=30&startkey="{name}"'
+        q['coins-beg']   = b + '_design/A/_view/experts2?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
+        q['coins-exp']   = b + '_design/A/_view/experts2?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
+        q['and0']        = b + '_design/A/_view/realm2?limit=30&startkey=["{realm}",{coins}]'
+        q['and1']        = b + '_design/A/_view/realm3?limit=30&startkey=["{realm}",{coins}]'
+        q['and2']        = b + '_design/A/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
+
+        queries_by_kind = [
+            [ # 45% / 5 = 9
+                q['city'],
+                q['city2'],
+                q['realm'],
+                q['experts']
+                ],
+            [ # 30% / 5 = 6
+                q['coins-beg'],
+                q['coins-exp']
+                ],
+            [ # 25% / 5 = 5
+                q['and0'],
+                q['and1'],
+                q['and2'],
+                ]
+            ]
+
+        remaining = [9, 6, 5]
+
+        queries = compute_queries(queries_by_kind, remaining,
+                                  self.param("query_suffix", ""))
+        queries = join_queries(queries)
+
+        self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
+        self.fg_max_ops = self.parami('fg_max_ops', 1000000)
+
+        # Rotate host so multiple clients don't hit the same HTTP/REST server.
+        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.3),
+                          ratio_misses = self.paramf('ratio_misses', 0.05),
+                          ratio_creates = self.paramf('ratio_creates', 0.33),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
+                          max_creates = self.parami("max_creates", 30000000),
+                          ratio_queries = self.paramf('ratio_queries', 0.3571),
+                          queries = queries,
+                          proto_prefix = "couchbase",
+                          host = host)
+        self.gated_finish(self.input.clients, notify)
+
     def test_ept_mixed_original(self):
         self.spec("EPT-MIXED-original")
         items = self.parami("items", 45000000)
