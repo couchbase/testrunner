@@ -66,7 +66,7 @@ class SpatialHelper:
                 self.servers, self.testcase)
 
 
-    def create_index_fun(self, name, prefix, fun=None):
+    def create_index_fun(self, name, prefix='', fun=None):
         if fun is None:
             fun = 'function (doc) {if(doc._id.indexOf("' + prefix + \
                 '") != -1) { emit(doc.geometry, doc);}}'
@@ -131,7 +131,8 @@ class SpatialHelper:
             try:
                 moxi.delete(key)
             except MemcachedError as e:
-                if e.args[0] == "Memcached error #1:  Not found":
+                # Don't care if we try to delete a document that doesn't exist
+                if e.args[0].startswith("Memcached error #1:  Not found"):
                     continue
                 else:
                     raise
@@ -142,11 +143,13 @@ class SpatialHelper:
         self.log.info("deleted {0} json documents".format(len(doc_names)))
         return doc_names
 
-
-    def get_results(self, spatial, limit=None, extra_params={}):
+    # If `num_expected` is passed in, the number of returned results will
+    # be checked. If it doesn't match try again to get the results
+    def get_results(self, spatial, limit=None, extra_params={},
+                    num_expected=None):
+        start = time.time()
         for i in range(0, 4):
             try:
-                start = time.time()
                 #full_set=true&connection_timeout=60000&limit=10&skip=0
                 params = {"connection_timeout": 60000}
                 params.update(extra_params)
@@ -157,6 +160,12 @@ class SpatialHelper:
                                                     params, limit)
                 delta = time.time() - start
                 if results:
+                    # Keep on trying until we have at least the number
+                    # of expected rows
+                    if (num_expected is not None) and \
+                            (len(results["rows"]) < num_expected):
+                        continue
+
                     self.log.info("spatial returned in {0} seconds"
                                   .format(delta))
                     self.log.info("was able to get spatial results after "
@@ -166,6 +175,10 @@ class SpatialHelper:
                 self.log.error("spatial_results not ready yet , try again "
                                "in 5 seconds... , error {0}".format(ex))
                 time.sleep(5)
+
+        # Can't get the correct result, fail the test
+        self.log.info("num_expected: {}".format(num_expected))
+        self.log.info("num results:  {}".format(len(results["rows"])))
         self.testcase.fail(
             "unable to get spatial_results for {0} after 4 tries"
             .format(spatial))
@@ -253,7 +266,7 @@ class SpatialHelper:
                                      wait_for_persistence=True):
         if wait_for_persistence:
             self.wait_for_persistence()
-        results = self.get_results(design_name)
+        results = self.get_results(design_name, num_expected=len(inserted))
         result_keys = self.get_keys(results)
 
         if not full_docs:

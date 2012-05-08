@@ -101,11 +101,13 @@ class SpatialViewTests(unittest.TestCase):
 
         inserted_keys = self._setup_index(design_name, num_docs, prefix)
 
-        # Delete documents and very that the documents got deleted
+        # Delete documents and verify that the documents got deleted
         deleted_keys = self.helper.delete_docs(num_deleted_docs, prefix)
-        results = self.helper.get_results(design_name, 2*num_docs)
+        num_expected = num_docs - len(deleted_keys)
+        results = self.helper.get_results(design_name, 2*num_docs,
+                                          num_expected=num_expected)
         result_keys = self.helper.get_keys(results)
-        self.assertEqual(len(result_keys), num_docs-len(deleted_keys))
+        self.assertEqual(len(result_keys), num_expected)
         self.helper.verify_result(inserted_keys, deleted_keys + result_keys)
 
 

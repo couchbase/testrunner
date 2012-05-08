@@ -95,7 +95,7 @@ class SpatialRebalanceTests(unittest.TestCase):
         # Make sure we are fully de-clustered
         ClusterOperationHelper.remove_and_rebalance(self.helper.servers)
 
-        self.helper.create_index_fun(design_name, prefix)
+        self.helper.create_index_fun(design_name)
         inserted_keys = self.helper.insert_docs(num_docs, prefix)
 
         # Add all servers to the master server one by one and start
