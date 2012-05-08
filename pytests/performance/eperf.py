@@ -1536,8 +1536,81 @@ class ViewGen:
         ]
 
     def generate_ddocs(self, pattern=None):
-        """Generate dictionary with design documents and views"""
-        pass
+        """Generate dictionary with design documents and views.
+        Pattern looks like:
+            [1] -- 1 ddoc (1 view)
+            [2, 2, 4] -- 3 ddocs (2 views, 2 views, 4 views)
+            [8] -- 1 ddoc (8 views)
+            [1, 1, 1, 1, 1, 1, 1, 1] -- 8 ddocs (1 view)
+        """
+
+        ddocs = dict()
+
+        map_functions = [
+            """
+            function(doc) {
+                if (doc.city != null) {
+                    emit(doc.city, null);
+                }
+            }
+            """,
+            """
+            function(doc) {
+                if (doc.city != null) {
+                    emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
+                }
+            }
+            """,
+            """
+            function(doc) {
+                if (doc.realm != null) {
+                    emit(doc.realm, null);
+                }
+            }
+            """,
+            """
+            function(doc) {
+                if (doc.category == 2) {
+                    emit([doc.name, doc.coins], null);
+                }
+            }
+            """,
+            """
+            function(doc) {
+                emit([doc.category, doc.coins], null);
+            }
+            """,
+            """
+            function(doc) {
+                emit([doc.realm, doc.coins], null)
+            }
+            """,
+            """
+            function(doc) {
+                emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+            }
+            """,
+            """
+            function(doc) {
+                emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+            }
+            """
+        ]
+
+        index_of_map = 0
+        index_of_ddoc = 0
+
+        for number_of_views in pattern:
+            ddoc_name = self.ddoc_names[index_of_ddoc]
+            ddocs[ddoc_name] = {'views': {}}
+            for index_of_view in range(number_of_views):
+                view_name = self.view_names[index_of_map]
+                ddocs[ddoc_name]['views'][view_name] = {}
+                ddocs[ddoc_name]['views'][view_name]['map'] = map_functions[index_of_map]
+                index_of_map += 1
+            index_of_ddoc += 1
+
+        return ddocs
 
     def generate_quiries(self, use_all_docs=False):
         """Generate string from permuted queries"""
