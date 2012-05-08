@@ -1616,10 +1616,26 @@ class ViewGen:
         """Generate string from permuted queries"""
         pass
 
-    def _compute_queries(self, queries_by_kind, remaining, suffix=""):
+    def compute_queries(self, queries_by_kind, remaining, suffix=""):
         """Return a list of permuted queries"""
-        pass
+        i = 0
+        queries = []
 
-    def _join_queries(self, queries):
+        while remaining.count(0) < len(remaining):
+            kind = i % len(remaining)
+            count = remaining[kind]
+            if count > 0:
+                remaining[kind] = count - 1
+                k = queries_by_kind[kind]
+                queries.append(k[count % len(k)] + suffix)
+            i = i + 1
+
+        return queries
+
+    def join_queries(self, queries):
         """Join queries into string"""
-        pass
+        queries = ';'.join(queries)
+        queries = queries.replace('[', '%5B')
+        queries = queries.replace(']', '%5D')
+        queries = queries.replace(',', '%2C')
+        return queries
