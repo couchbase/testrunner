@@ -493,7 +493,8 @@ class PerfBase(unittest.TestCase):
                 'doc-cache': doc_cache,
                 'prefix': prefix,
                 'queries': queries,
-                'report': report
+                'report': report,
+                'hot-shift': hot_shift
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
