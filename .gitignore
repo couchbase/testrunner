@@ -7,5 +7,5 @@
 *.log.*
 dist/
 logs/
-ns_server_data
+ns_server_data*
 tmp*
