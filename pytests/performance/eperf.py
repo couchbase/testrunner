@@ -1386,6 +1386,12 @@ class ViewGen:
             """
         ]
 
+        reduce_functions = [
+            "_count",
+            "_sum",
+            "_stats"
+        ]
+
         index_of_map = 0
         index_of_ddoc = 0
 
