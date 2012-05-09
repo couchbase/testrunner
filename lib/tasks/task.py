@@ -249,9 +249,8 @@ class RebalanceTask(Task):
         rest = RestConnection(master)
         try:
             for node in self.to_add:
-                print node
                 self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
-                added = rest.add_node(master.rest_username, master.rest_password,
+                rest.add_node(master.rest_username, master.rest_password,
                     node.ip, node.port)
             self.state = "start_rebalance"
             task_manager.schedule(self)
@@ -350,7 +349,7 @@ class FailOverTask(Task):
 
         for node in self.to_remove:
             ejectedNodes.append(node.id)
-            print "ejected node is : {0}".format(ejectedNodes[0])
+            self.log.info("ejected node is : %s" % ejectedNodes[0])
 
         progress = rest.fail_over(ejectedNodes[0])
         if not progress:

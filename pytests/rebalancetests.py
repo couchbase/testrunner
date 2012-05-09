@@ -112,11 +112,12 @@ class RebalanceBaseTest(unittest.TestCase):
                                                                               master=master,
                                                                               timeout_in_seconds=600)
                 if not replica_match:
-                    asserts.append("replication was completed but sum(curr_items) dont match the curr_items_total")
+                    asserts.append("replication was completed but sum(curr_items) dont match the curr_items_total %s" %
+                                   bucket.name)
                 if not failed_over:
                     stats = rest.get_bucket_stats(bucket=bucket.name)
                     RebalanceHelper.print_taps_from_all_nodes(rest, bucket.name)
-                    msg = "curr_items : {0} is not equal to actual # of keys inserted : {1}"
+                    msg = "curr_items : {0} is not equal to actual # of keys inserted : {1} : bucket: {2}"
 
                     if bucket_data[bucket.name]['kv_store'] is None:
                         items_inserted = bucket_data[bucket.name]["items_inserted_count"]
@@ -125,8 +126,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
                     active_items_match = stats["curr_items"] == items_inserted
                     if not active_items_match:
-                        test.log.error(msg.format(stats["curr_items"], items_inserted))
-                        asserts.append(msg.format(stats["curr_items"], items_inserted))
+                        asserts.append(msg.format(stats["curr_items"], items_inserted, bucket.name))
 
         if len(asserts) > 0:
             for msg in asserts:
