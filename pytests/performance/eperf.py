@@ -1419,8 +1419,14 @@ class ViewGen:
 
         return ddocs
 
-    def generate_queries(self, limit, query_suffix, ddocs, use_all_docs=False):
-        """Generate string from permuted queries"""
+    def generate_queries(self, limit, query_suffix, ddocs,
+                         use_all_docs=False, use_reduce=False):
+        """Generate string from permuted queries.
+
+        Optional arguments:
+        use_all_docs -- add query on primary index
+        use_reduce -- add query on view with reduce step
+        """
 
         ddoc_names = list()
         for ddoc_name, ddoc in sorted(ddocs.items()):
@@ -1458,12 +1464,17 @@ class ViewGen:
                 ]
             ]
 
+        remaining = [9, 6, 5]
+
         if use_all_docs:
             q['all_docs'] = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
             queries_by_kind = [[q['all_docs']]] + queries_by_kind
-            remaining = [5, 9, 6, 5]
-        else:
-            remaining = [9, 6, 5]
+            remaining = [5] + remaining
+
+        if use_reduce:
+            q['reduce'] = b + '_design/reduce/_view/reduce?limit=' + str(limit)
+            queries_by_kind = queries_by_kind + [[q['reduce']]]
+            remaining = remaining + [5]
 
         queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
         queries = self.join_queries(queries)
