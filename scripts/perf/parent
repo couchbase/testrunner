@@ -1,6 +1,6 @@
 #!/bin/sh
 
-echo scripts/perf/parent: testing ${product}: ${version_number}
+echo scripts/perf/parent: testing ${product}: ${version_number} num_nodes=${1}
 
 git rev-parse HEAD
 git describe --always --long
@@ -23,8 +23,16 @@ else
    echo "No Setup"
 fi
 
+if [ -z ${test} ] ; then
+    test=`grep performance. ${test_conf} | head -n 1`
+fi
+
+if [ -z ${mem_quota} ] ; then
+    mem_quota=`grep mem_quota ${test_conf} | head -n 1`
+fi
+
 if [ ${skip_run} != "1" ]; then
-   python pytests/performance/do_cluster.py -i ${ini_file} -p test=${test},load_phase=0,index_phase=0,access_phase=0,num_nodes=2,mem_quota=20000 setUp
+   python pytests/performance/do_cluster.py -i ${ini_file} -p test=${test},load_phase=0,index_phase=0,access_phase=0,num_nodes=${1},mem_quota=${mem_quota} setUp
 else
    echo "No Cluster setup run"
 fi
