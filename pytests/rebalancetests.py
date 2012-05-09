@@ -28,7 +28,7 @@ class RebalanceBaseTest(unittest.TestCase):
         # Cleanup previous state
         self.task_manager = None
         rest.stop_rebalance()
-        RebalanceBaseTest.common_tearDown(self)
+        RebalanceBaseTest.reset(self)
 
         # Initialize test params
         self.replica  = self.input.param("replica", 1)
@@ -48,6 +48,7 @@ class RebalanceBaseTest(unittest.TestCase):
         self.max_ops_per_second = self.input.param("max_ops_per_second", 500)
         self.min_item_size = self.input.param("min_item_size", 128)
         self.do_stop = self.input.param("do-stop", False)
+        self.skip_cleanup = self.input.param("skip-cleanup", False)
 
         self.log.info('picking server : {0} as the master'.format(master))
 
@@ -76,6 +77,11 @@ class RebalanceBaseTest(unittest.TestCase):
         if self.task_manager is not None:
             self.task_manager.cancel()
             self.task_manager.join()
+        if not self.skip_cleanup:
+            RebalanceBaseTest.reset(self)
+
+    @staticmethod
+    def reset(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
