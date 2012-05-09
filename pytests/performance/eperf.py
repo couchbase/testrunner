@@ -1003,123 +1003,14 @@ function(doc) {
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
-        ddocs = dict()
-
-        # Define names of design documents and views
-        ddocs_names = 'A'
-
-        view_names = [
-            'city1',
-            'city2',
-            'realm1',
-            'experts1',
-            'experts2',
-            'realm2',
-            'realm3',
-            'category'
-        ]
-
-        # Define map functions:
-        map_functions = [
-            """
-            function(doc) {
-                if (doc.city != null) {
-                    emit(doc.city, null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.city != null) {
-                    emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.realm != null) {
-                    emit(doc.realm, null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.category == 2) {
-                    emit([doc.name, doc.coins], null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.category, doc.coins], null);
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.realm, doc.coins], null)
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
-            }
-            """
-        ]
-
-        index_of_map = 0
-        for ddoc_name in ddocs_names:
-            ddocs[ddoc_name] = { 'views': {} }
-            for view_name in view_names:
-                ddocs[ddoc_name]['views'][view_name] = {}
-                ddocs[ddoc_name]['views'][view_name]['map'] = map_functions[index_of_map]
-                index_of_map += 1
-
+        view_gen = ViewGen()
+        ddocs = view_gen.generate_ddocs([8])
         self.index_phase(ddocs)
 
         # Access phase
         limit = self.parami('limit', 10)
-
-        b = '/default/'
-
-        q = {}
-        q['city']        = b + '_design/A/_view/city1?limit=' + str(limit) + '&startkey="{city}"'
-        q['city2']       = b + '_design/A/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
-        q['realm']       = b + '_design/A/_view/realm1?limit=30&startkey="{realm}"'
-        q['experts']     = b + '_design/A/_view/experts1?limit=30&startkey="{name}"'
-        q['coins-beg']   = b + '_design/A/_view/experts2?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
-        q['coins-exp']   = b + '_design/A/_view/experts2?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
-        q['and0']        = b + '_design/A/_view/realm2?limit=30&startkey=["{realm}",{coins}]'
-        q['and1']        = b + '_design/A/_view/realm3?limit=30&startkey=["{realm}",{coins}]'
-        q['and2']        = b + '_design/A/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
-
-        queries_by_kind = [
-            [ # 45% / 5 = 9
-                q['city'],
-                q['city2'],
-                q['realm'],
-                q['experts']
-                ],
-            [ # 30% / 5 = 6
-                q['coins-beg'],
-                q['coins-exp']
-                ],
-            [ # 25% / 5 = 5
-                q['and0'],
-                q['and1'],
-                q['and2'],
-                ]
-            ]
-
-        remaining = [9, 6, 5]
-
-        queries = compute_queries(queries_by_kind, remaining,
-                                  self.param("query_suffix", ""))
-        queries = join_queries(queries)
+        query_suffix = self.param("query_suffix", "")
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, use_all_docs=False)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
@@ -1154,123 +1045,14 @@ function(doc) {
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
-        ddocs = dict()
-
-        # Define names of design documents and views
-        ddocs_names = 'ABCDEFGH'
-
-        view_names = [
-            'city1',
-            'city2',
-            'realm1',
-            'experts1',
-            'experts2',
-            'realm2',
-            'realm3',
-            'category'
-        ]
-
-        # Define map functions:
-        map_functions = [
-            """
-            function(doc) {
-                if (doc.city != null) {
-                    emit(doc.city, null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.city != null) {
-                    emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.realm != null) {
-                    emit(doc.realm, null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.category == 2) {
-                    emit([doc.name, doc.coins], null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.category, doc.coins], null);
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.realm, doc.coins], null)
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
-            }
-            """
-        ]
-
-        index_of_map = 0
-        for ddoc_name in ddocs_names:
-            ddocs[ddoc_name] = { 'views': {} }
-            view_name = view_names[index_of_map]
-            ddocs[ddoc_name]['views'][view_name] = {}
-            ddocs[ddoc_name]['views'][view_name]['map'] = map_functions[index_of_map]
-            index_of_map += 1
-
+        view_gen = ViewGen()
+        ddocs = view_gen.generate_ddocs([1, 1, 1, 1, 1, 1, 1, 1])
         self.index_phase(ddocs)
 
         # Access phase
         limit = self.parami('limit', 10)
-
-        b = '/default/'
-
-        q = {}
-        q['city']        = b + '_design/A/_view/city1?limit=' + str(limit) + '&startkey="{city}"'
-        q['city2']       = b + '_design/B/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
-        q['realm']       = b + '_design/C/_view/realm1?limit=30&startkey="{realm}"'
-        q['experts']     = b + '_design/D/_view/experts1?limit=30&startkey="{name}"'
-        q['coins-beg']   = b + '_design/E/_view/experts2?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
-        q['coins-exp']   = b + '_design/E/_view/experts2?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
-        q['and0']        = b + '_design/F/_view/realm2?limit=30&startkey=["{realm}",{coins}]'
-        q['and1']        = b + '_design/G/_view/realm3?limit=30&startkey=["{realm}",{coins}]'
-        q['and2']        = b + '_design/H/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
-
-        queries_by_kind = [
-            [ # 45% / 5 = 9
-                q['city'],
-                q['city2'],
-                q['realm'],
-                q['experts']
-                ],
-            [ # 30% / 5 = 6
-                q['coins-beg'],
-                q['coins-exp']
-                ],
-            [ # 25% / 5 = 5
-                q['and0'],
-                q['and1'],
-                q['and2'],
-                ]
-            ]
-
-        remaining = [9, 6, 5]
-
-        queries = compute_queries(queries_by_kind, remaining,
-                                  self.param("query_suffix", ""))
-        queries = join_queries(queries)
+        query_suffix = self.param("query_suffix", "")
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, use_all_docs=False)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
