@@ -1376,6 +1376,13 @@ class ViewGen:
             function(doc) {
                 emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
             }
+            """,
+            """
+            function (doc) {
+                if (doc.achievements.length > 0) {
+                    emit(doc.category, doc.coins);
+                }
+            }
             """
         ]
 
