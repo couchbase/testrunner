@@ -561,7 +561,7 @@ for(build in levels(builds)) {
 	
 }
 
-
+footnote <- paste(builds_list$test_name, baseline_build, new_build, format(Sys.time(), "%d %b %Y"), sep=" / ")
 p <- combined[2:nrow(combined), ]
 p$value <- as.numeric(p$value)
 df <- fixupData(buildComparison(p , 'system', 'baseline'))
@@ -582,8 +582,6 @@ if (length(unique(df$system)) == 2) {
             size=4, colour="#999999") +
     coord_flip() +
     theme_bw()
-
-    footnote <- paste(builds_list$test_name, baseline_build, new_build, format(Sys.time(), "%d %b %Y"), sep=" / ")
 
     makeFootnote(footnote)
 }
