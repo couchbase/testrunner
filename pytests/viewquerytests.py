@@ -394,7 +394,8 @@ class QueryView:
         num_keys = 0
 
         for i in range(0,query.expected_num_groups):
-            num_keys += results["rows"][i]["value"]
+            if i < len(results["rows"]):
+                num_keys += results["rows"][i]["value"]
 
         return num_keys
 
