@@ -1317,13 +1317,15 @@ class ViewGen:
             'category'
         ]
 
-    def generate_ddocs(self, pattern=None):
+    def generate_ddocs(self, pattern=None, add_reduce=False):
         """Generate dictionary with design documents and views.
         Pattern looks like:
             [1] -- 1 ddoc (1 view)
             [2, 2, 4] -- 3 ddocs (2 views, 2 views, 4 views)
             [8] -- 1 ddoc (8 views)
             [1, 1, 1, 1, 1, 1, 1, 1] -- 8 ddocs (1 view)
+        If `add_reduce` argument is True, additional ddoc with single
+        map-reduce view is added
         """
 
         ddocs = dict()
@@ -1404,6 +1406,16 @@ class ViewGen:
                 ddocs[ddoc_name]['views'][view_name]['map'] = map_functions[index_of_map]
                 index_of_map += 1
             index_of_ddoc += 1
+
+        if add_reduce:
+            ddocs['reduce'] = {
+                'views': {
+                    'reduce': {
+                        'map': map_functions[-1],
+                        'reduce': reduce_functions[-1]
+                    }
+                }
+            }
 
         return ddocs
 
