@@ -402,11 +402,11 @@ class RebalanceBaseTest(unittest.TestCase):
 
         rest = RestConnection(master)
 
-        RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
-
         final_replication_state = RestHelper(rest).wait_for_replication(300)
         msg = "replication state after waiting for up to 5 minutes : {0}"
         self.log.info(msg.format(final_replication_state))
+
+        RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
 
         # run data integrity
         error_list = \
