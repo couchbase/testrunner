@@ -1612,9 +1612,56 @@ class ViewGen:
 
         return ddocs
 
-    def generate_quiries(self, use_all_docs=False):
+    def generate_queries(self, limit, query_suffix, ddocs, use_all_docs=False):
         """Generate string from permuted queries"""
-        pass
+
+        ddoc_names = list()
+        for ddoc_name, ddoc in sorted(ddocs.items()):
+            for view in ddoc["views"]:
+                ddoc_names.append(ddoc_name)
+
+        b = '/default/'
+
+        q = {}
+        q['city']        = b + '_design/' + ddoc_names[0] + '/_view/city1?limit=' + str(limit) + '&startkey="{city}"'
+        q['city2']       = b + '_design/' + ddoc_names[1] + '/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
+        q['realm']       = b + '_design/' + ddoc_names[2] + '/_view/realm1?limit=30&startkey="{realm}"'
+        q['experts']     = b + '_design/' + ddoc_names[3] + '/_view/experts1?limit=30&startkey="{name}"'
+        q['coins-beg']   = b + '_design/' + ddoc_names[4] + '/_view/experts2?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
+        q['coins-exp']   = b + '_design/' + ddoc_names[4] + '/_view/experts2?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
+        q['and0']        = b + '_design/' + ddoc_names[5] + '/_view/realm2?limit=30&startkey=["{realm}",{coins}]'
+        q['and1']        = b + '_design/' + ddoc_names[6] + '/_view/realm3?limit=30&startkey=["{realm}",{coins}]'
+        q['and2']        = b + '_design/' + ddoc_names[7] + '/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
+
+        queries_by_kind = [
+            [ # 45% / 5 = 9
+                q['city'],
+                q['city2'],
+                q['realm'],
+                q['experts']
+                ],
+            [ # 30% / 5 = 6
+                q['coins-beg'],
+                q['coins-exp']
+                ],
+            [ # 25% / 5 = 5
+                q['and0'],
+                q['and1'],
+                q['and2'],
+                ]
+            ]
+
+        if use_all_docs:
+            q['all_docs'] = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
+            queries_by_kind = [[q['all_docs']]] + queries_by_kind
+            remaining = [5, 9, 6, 5]
+        else:
+            remaining = [9, 6, 5]
+
+        queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
+        queries = self.join_queries(queries)
+
+        return queries
 
     def compute_queries(self, queries_by_kind, remaining, suffix=""):
         """Return a list of permuted queries"""
