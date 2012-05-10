@@ -276,7 +276,7 @@ class PerfBase(unittest.TestCase):
     def mk_stats(self, verbosity):
         return StatsCollector(verbosity)
 
-    def start_stats(self, test_name, servers=None,
+    def start_stats(self, stats_spec, servers=None,
                     process_names=['memcached', 'beam.smp', 'couchjs'],
                     test_params = None, client_id = '',
                     collect_server_stats = True):
@@ -285,21 +285,23 @@ class PerfBase(unittest.TestCase):
 
         servers = servers or self.input.servers
         sc = self.mk_stats(False)
-        sc.start(servers, "default", process_names, test_name, 10, client_id,
+        sc.start(servers, "default", process_names, stats_spec, 10, client_id,
                  collect_server_stats = collect_server_stats)
         self.test_params = test_params
         self.sc = sc
         return self.sc
 
-    def end_stats(self, sc, total_stats=None):
+    def end_stats(self, sc, total_stats=None, stats_spec=None):
         if sc is None:
             return
+        if stats_spec is None:
+            stats_spec = self.spec_reference
         if total_stats:
             sc.total_stats(total_stats)
         self.log.info("stopping stats collector")
         sc.stop()
         self.log.info("stats collector is stopped")
-        sc.export(self.spec_reference, self.test_params)
+        sc.export(stats_spec, self.test_params)
 
     def load(self, num_items, min_value_size=None,
              kind='binary',
@@ -347,10 +349,15 @@ class PerfBase(unittest.TestCase):
             cfg['max-items'] = cfg['max-creates']
 
 
+        # phase: 'load' or 'reload'
+        phase = "load"
+        if self.parami("hot_load_phase", 0) == 1:
+            phase = "reload"
+
         if is_eperf:
             collect_server_stats = self.parami("prefix", 0) == 0
             client_id = self.parami("prefix", 0)
-            sc = self.start_stats(self.spec_reference + ".load",
+            sc = self.start_stats("{0}.{1}".format(self.spec_reference, phase), # stats spec e.x: testname.load
                               test_params = cfg, client_id = client_id,
                               collect_server_stats = collect_server_stats)
 
@@ -385,7 +392,7 @@ class PerfBase(unittest.TestCase):
         if is_eperf:
             if self.parami("load_wait_until_drained", 1) == 1:
                 self.wait_until_drained()
-            self.end_stats(sc, ops)
+            self.end_stats(sc, ops, "{0}.{1}".format(self.spec_reference, phase))
 
         return ops, start_time, end_time
 
@@ -555,7 +562,7 @@ class PerfBase(unittest.TestCase):
             self.wait_until_drained()
 
         if self.parami("collect_stats", 1):
-            self.end_stats(sc, ops)
+            self.end_stats(sc, ops, self.spec_reference + ".loop")
 
         return ops, start_time, end_time
 
