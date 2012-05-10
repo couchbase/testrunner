@@ -4,7 +4,9 @@
 python pytests/performance/do_cluster.py -i ${ini_file} -p num_clients=3 tearDown
 
 # backup
-cp final.json.gz stats.gz
+rm -rf backup
+mkdir backup
+cp final.* backup/
 
 # decompress all json files
 gunzip final.*.json.gz
