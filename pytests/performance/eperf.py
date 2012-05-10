@@ -92,9 +92,22 @@ class EPerfMaster(perf.PerfBase):
 
         return output
 
-    def aggregate_all_stats(self, len_clients):
+    def aggregate_all_stats(self, len_clients, type="loop"):
         i = 0
-        file = gzip.open("{0}.loop.json.gz".format(i), 'rb')
+
+        # read [client #].[type].json.gz file until find one
+        file = None
+        while i < len_clients:
+            try:
+                file = gzip.open("{0}.{1}.json.gz".format(i, type), 'rb')
+                break
+            except IOError as e:
+                print "[stats aggregation error] cannot open file : {0}.{1}.json.gz".format(i, type)
+                i += 1
+
+        if file is None:
+            return
+
         final_json = file.read()
         file.close()
         final_json = json.loads(final_json)
@@ -105,7 +118,7 @@ class EPerfMaster(perf.PerfBase):
                  merge_keys.append(str(latency))
 
         for i in range(i, len_clients):
-             file  = gzip.open("{0}.loop.json.gz".format(i),'rb')
+             file  = gzip.open("{0}.{1}.json.gz".format(i, type),'rb')
              dict = file.read()
              file.close()
              dict = json.loads(dict)
@@ -116,7 +129,7 @@ class EPerfMaster(perf.PerfBase):
                          continue
                      final_json[key].extend(value)
 
-        file = gzip.open("{0}.json.gz".format('final'), 'wb')
+        file = gzip.open("{0}.{1}.json.gz".format('final', type), 'wb')
         file.write("{0}".format(json.dumps(final_json)))
         file.close()
 
