@@ -63,4 +63,6 @@ else:
     obj.setUpBase0() # This will call tearDown on our behalf.
     num_clients = obj.param("num_clients", 10)
     print num_clients
-    obj.aggregate_all_stats(int(num_clients))
+    obj.aggregate_all_stats(int(num_clients), "load")
+    obj.aggregate_all_stats(int(num_clients), "reload")
+    obj.aggregate_all_stats(int(num_clients), "loop")
