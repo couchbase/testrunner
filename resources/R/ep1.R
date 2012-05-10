@@ -992,6 +992,16 @@ if (nrow(latency_get) > 0) {
     print(p)
     makeFootnote(footnote)
 
+    cat("Latency-get 90th (0 - 10ms) \n")
+    temp <- latency_get[latency_get$client_id ==0,]
+    temp$percentile_90th_0_10 <- ifelse(temp$percentile_90th > 10, 10, temp$percentile_90th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-get 90th  percentile (0 - 10ms)")
+    print(p)
+    makeFootnote(footnote)
+
     cat("Latency-get 95th\n")
     temp <- latency_get[latency_get$client_id ==0,]
     p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
@@ -1000,10 +1010,30 @@ if (nrow(latency_get) > 0) {
     print(p)
     makeFootnote(footnote)
 
+    cat("Latency-get 95th (0 - 10ms) \n")
+    temp <- latency_get[latency_get$client_id ==0,]
+    temp$percentile_95th_0_10 <- ifelse(temp$percentile_95th > 10, 10, temp$percentile_95th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-get 95th  percentile (0 - 10ms)")
+    print(p)
+    makeFootnote(footnote)
+
     cat("Latency-get 99th\n")
     p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
     p <- p + geom_point()
     p <- addopts(p,"Latency-get 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-get 99th (0 - 10ms) \n")
+    temp <- latency_get[latency_get$client_id ==0,]
+    temp$percentile_99th_0_10 <- ifelse(temp$percentile_99th > 10, 10, temp$percentile_99th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-get 99th  percentile (0 - 10ms)")
     print(p)
     makeFootnote(footnote)
 }
@@ -1018,6 +1048,16 @@ if (nrow(latency_set) > 0) {
     print(p)
     makeFootnote(footnote)
 
+    cat("Latency-set 90th (0 - 10ms) \n")
+    temp <- latency_set[latency_set$client_id ==0,]
+    temp$percentile_90th_0_10 <- ifelse(temp$percentile_90th > 10, 10, temp$percentile_90th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-set 90th  percentile (0 - 10ms)")
+    print(p)
+    makeFootnote(footnote)
+
     cat("Latency-set 95th\n")
     p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
     p <- p + geom_point()
@@ -1025,10 +1065,30 @@ if (nrow(latency_set) > 0) {
     print(p)
     makeFootnote(footnote)
 
+    cat("Latency-set 95th (0 - 10ms) \n")
+    temp <- latency_set[latency_set$client_id ==0,]
+    temp$percentile_95th_0_10 <- ifelse(temp$percentile_95th > 10, 10, temp$percentile_95th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-set 95th  percentile (0 - 10ms)")
+    print(p)
+    makeFootnote(footnote)
+
     cat("Latency-set 99th\n")
     p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
     p <- p + geom_point()
     p <- addopts(p,"Latency-set 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-set 99th (0 - 10ms) \n")
+    temp <- latency_set[latency_set$client_id ==0,]
+    temp$percentile_99th_0_10 <- ifelse(temp$percentile_99th > 10, 10, temp$percentile_99th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-set 99th  percentile (0 - 10ms)")
     print(p)
     makeFootnote(footnote)
 }
@@ -1043,10 +1103,30 @@ if (nrow(latency_query) > 0) {
     print(p)
     makeFootnote(footnote)
 
+    cat("Latency-query 90th (0 - 10ms) \n")
+    temp <- latency_query[latency_query$client_id ==0,]
+    temp$percentile_90th_0_10 <- ifelse(temp$percentile_90th > 10, 10, temp$percentile_90th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-query 90th  percentile (0 - 10ms)")
+    print(p)
+    makeFootnote(footnote)
+
     cat("Latency-query 95th\n")
     p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
     p <- p + geom_point()
     p <- addopts(p,"Latency-query 95th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-query 95th (0 - 10ms) \n")
+    temp <- latency_query[latency_query$client_id ==0,]
+    temp$percentile_95th_0_10 <- ifelse(temp$percentile_95th > 10, 10, temp$percentile_95th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_95th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-query 95th  percentile (0 - 10ms)")
     print(p)
     makeFootnote(footnote)
 
@@ -1056,6 +1136,17 @@ if (nrow(latency_query) > 0) {
     p <- addopts(p,"Latency-query 99th  percentile")
     print(p)
     makeFootnote(footnote)
+
+    cat("Latency-query 99th (0 - 10ms) \n")
+    temp <- latency_query[latency_query$client_id ==0,]
+    temp$percentile_99th_0_10 <- ifelse(temp$percentile_99th > 10, 10, temp$percentile_99th)
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_99th_0_10, linetype=buildinfo.version))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-query 99th  percentile (0 - 10ms)")
+    print(p)
+    makeFootnote(footnote)
+
 }
 
 # cat("generating cpu_util \n")
