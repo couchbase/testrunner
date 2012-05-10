@@ -529,18 +529,27 @@ class RemoteMachineShellConnection:
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
-        initial_versions = ["1.7.2", "1.7.2r", "1.8.0", "1.8.0r"]
-        if version.startswith("1.8.1") and initial_version in initial_versions:
-            self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
-                                           architecture, windows_name, version, "modreg")
-            self.stop_schedule_tasks()
-            log.info('sleep for 5 seconds before running task schedule to modify 1.8.0r register')
-            time.sleep(5)
-            output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
-            self.log_command_output(output, error)
-            log.info('pause 30 seconds to execute modify register script')
-            time.sleep(30)
-            log.info('********* CONTINUE UPGRADE PROCCESS **********')
+        if initial_version.startswith("1.8"):
+            version_path = testconstants.WIN_CB_PATH
+        else:
+            version_path = testconstants.WIN_MB_PATH
+        if version.startswith("1.8"):
+            product = "cb"
+        else:
+            product = "mb"
+        build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
+        if version.startswith("1.8.1"):
+            if short_version.startswith("1.7.2") or short_version.startswith("1.8.0"):
+                self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
+                                               architecture, windows_name, version, "modreg")
+                self.stop_schedule_tasks()
+                log.info('sleep for 5 seconds before running task schedule to modify version')
+                time.sleep(5)
+                output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+                self.log_command_output(output, error)
+                log.info('pause 30 seconds to execute modify register script')
+                time.sleep(30)
+                log.info('********* CONTINUE UPGRADE PROCCESS **********')
         self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
                                         architecture, windows_name, version, task)
         self.stop_schedule_tasks()
@@ -549,7 +558,7 @@ class RemoteMachineShellConnection:
         # run task schedule to upgrade Membase server
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
-        if initial_version.startswith("1.8.0"):
+        if initial_version.startswith("1.8"):
             self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
             self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
         else:

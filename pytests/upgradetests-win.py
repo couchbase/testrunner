@@ -28,7 +28,7 @@ def _get_build(master, version, is_amazon=False):
     if re.search('1.8',version):
         product = 'couchbase-server-enterprise'
 
-    if result is None:
+    if result is None and not version.startswith("1.8.1"):
         appropriate_build = BuildQuery().find_membase_release_build(product,
                                                                     info.deliverable_type,
                                                                     info.architecture_type,
@@ -484,7 +484,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             for version in node_upgrade_path:
                 if version is not initial_version:
                     log.info("Upgrading to version {0}".format(version))
-                    self._stop_membase_servers(servers)
                     appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
                     self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
                     for server in servers:
@@ -493,7 +492,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                             abbr_product = "cb"
                         remote.download_binary_in_win(appropriate_build.url, abbr_product, version)
                         log.info("###### START UPGRADE. #########")
-                        remote.membase_upgrade_win(info.architecture_type, info.windows_name, version)
+                        remote.membase_upgrade_win(info.architecture_type, info.windows_name, version, initial_version)
                         RestHelper(RestConnection(server)).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
 
                         #verify admin_creds still set
