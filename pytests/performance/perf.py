@@ -348,6 +348,9 @@ class PerfBase(unittest.TestCase):
             cfg['max-creates'] = start_at + num_items
             cfg['max-items'] = cfg['max-creates']
 
+        cfg_params = cfg.copy()
+        cfg_params['test_time'] = time.time()
+        cfg_params['test_name'] = self.id()
 
         # phase: 'load' or 'reload'
         phase = "load"
@@ -358,7 +361,7 @@ class PerfBase(unittest.TestCase):
             collect_server_stats = self.parami("prefix", 0) == 0
             client_id = self.parami("prefix", 0)
             sc = self.start_stats("{0}.{1}".format(self.spec_reference, phase), # stats spec e.x: testname.load
-                              test_params = cfg, client_id = client_id,
+                              test_params = cfg_params, client_id = client_id,
                               collect_server_stats = collect_server_stats)
 
         # For Black box, multi node tests
