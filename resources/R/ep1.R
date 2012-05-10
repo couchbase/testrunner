@@ -982,51 +982,56 @@ if (nrow(latency_query_histo) > 0) {
     makeFootnote(footnote)
 }
 
-cat("Latency-get 90th\n")
-temp <- latency_get[latency_get$client_id ==0,]
-p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ms")
-#p  <-  p + stat_smooth(se = TRUE)
-p <- p + geom_point()
-p <- addopts(p,"Latency-get 99th  percentile")
-print(p)
-makeFootnote(footnote)
+if (nrow(latency_get) > 0) {
+    cat("Latency-get 90th\n")
+    temp <- latency_get[latency_get$client_id ==0,]
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_90th, linetype=buildinfo.version)) + labs(x="----time (sec)--->", y="ms")
+    #p  <-  p + stat_smooth(se = TRUE)
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-get 90th  percentile")
+    print(p)
+    makeFootnote(footnote)
 
-cat("Latency-get 95th\n")
-temp <- latency_get[latency_get$client_id ==0,]
-p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
-p <- p + geom_point()
-p <- addopts(p,"Latency-get 95th  percentile")
-print(p)
-makeFootnote(footnote)
+    cat("Latency-get 95th\n")
+    temp <- latency_get[latency_get$client_id ==0,]
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-get 95th  percentile")
+    print(p)
+    makeFootnote(footnote)
 
-cat("Latency-get 99th\n")
-p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
-p <- p + geom_point()
-p <- addopts(p,"Latency-get 99th  percentile")
-print(p)
-makeFootnote(footnote)
+    cat("Latency-get 99th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-get 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
+}
 
-cat("Latency-set 90th\n")
-temp <- latency_set[latency_set$client_id ==0,]
-p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
-p <- p + geom_point()
-p <- addopts(p,"Latency-set 90th  percentile")
-print(p)
-makeFootnote(footnote)
+if (nrow(latency_set) > 0) {
 
-cat("Latency-set 95th\n")
-p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
-p <- p + geom_point()
-p <- addopts(p,"Latency-set 95th  percentile")
-print(p)
-makeFootnote(footnote)
+    cat("Latency-set 90th\n")
+    temp <- latency_set[latency_set$client_id ==0,]
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-set 90th  percentile")
+    print(p)
+    makeFootnote(footnote)
 
-cat("Latency-set 99th\n")
-p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
-p <- p + geom_point()
-p <- addopts(p,"Latency-set 99th  percentile")
-print(p)
-makeFootnote(footnote)
+    cat("Latency-set 95th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-set 95th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-set 99th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-set 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
+}
 
 if (nrow(latency_query) > 0) {
 
