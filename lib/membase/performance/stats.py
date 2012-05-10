@@ -149,6 +149,8 @@ class StatsCollector(object):
             filename = str(self.client_id)+'.loop'
             if re.search('load$', self._task["name"]):
                 filename = str(self.client_id)+'.load'
+            if re.search('reload$', self._task["name"]):
+                filename = str(self.client_id)+'.reload'
             file = gzip.open("{0}.json.gz".format(filename), 'wb')
             file.write("{0}".format(json.dumps(obj)))
             file.close()
