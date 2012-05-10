@@ -1,6 +1,6 @@
 #!/bin/sh
 
-echo scripts/perf/client: testing ${product}: ${version_number} prefix=${1} num_clients=${2}
+echo scripts/perf/client: testing ${product}: ${version_number} prefix=${1} num_clients=${2} -- ${PARENT_BUILD_NUMBER} - ${BUILD_NUMBER}
 
 git rev-parse HEAD
 git describe --always --long
