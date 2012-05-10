@@ -567,22 +567,23 @@ p$value <- as.numeric(p$value)
 df <- fixupData(buildComparison(p , 'system', 'baseline'))
 
 if (length(unique(df$system)) == 2) {
-   ggplot(data=df[df$system != 'baseline',], aes(test, position, fill=color)) +
-    geom_hline(yintercept=0, lwd=1, col='#777777') +
-    geom_bar(stat='identity', position='dodge') +
-    scale_fill_manual('Result', values=colors) +
-    geom_hline(yintercept=.10, lty=3) +
-    geom_hline(yintercept=-.10, lty=3) +
-    scale_y_continuous(limits=c(-1 * (magnitude_limit - 1), magnitude_limit - 1),
-                     labels=function(n) sprintf("%.1fx", abs(n) + 1)) +
-    opts(title=paste(builds_list$test_name,':', baseline_build, ':', new_build )) +
-    labs(y='(righter is better)', x='') +
-    geom_text(aes(x=test, y=ifelse(abs(position) < .5, .5, sign(position) * -.5),
-                label=sprintf("%.02fx", abs(offpercent))),
-            size=4, colour="#999999") +
-    coord_flip() +
-    theme_bw()
+   p <- ggplot(data=df[df$system != 'baseline',], aes(test, position, fill=color)) +
+        geom_hline(yintercept=0, lwd=1, col='#777777') +
+        geom_bar(stat='identity', position='dodge') +
+        scale_fill_manual('Result', values=colors) +
+        geom_hline(yintercept=.10, lty=3) +
+        geom_hline(yintercept=-.10, lty=3) +
+        scale_y_continuous(limits=c(-1 * (magnitude_limit - 1), magnitude_limit - 1),
+                           labels=function(n) sprintf("%.1fx", abs(n) + 1)) +
+        opts(title=paste(builds_list$test_name,':', baseline_build, ':', new_build )) +
+        labs(y='(righter is better)', x='') +
+        geom_text(aes(x=test, y=ifelse(abs(position) < .5, .5, sign(position) * -.5),
+                  label=sprintf("%.02fx", abs(offpercent))),
+                  size=4, colour="#999999") +
+        coord_flip() +
+        theme_bw()
 
+    print(p)
     makeFootnote(footnote)
 }
 
