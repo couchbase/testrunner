@@ -564,8 +564,8 @@ class RemoteMachineShellConnection:
         else:
             self.wait_till_file_deleted(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
             self.wait_till_file_added(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
-        log.info('wait 30 seconds for server to start up completely')
-        time.sleep(30)
+        log.info('wait 60 seconds for server to start up completely')
+        time.sleep(60)
 
     def couchbase_single_install(self, build):
         is_couchbase_single = False
