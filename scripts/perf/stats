@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# hacky way of aggregating stats from clients
+python pytests/performance/do_cluster.py -i ${ini_file} -p num_clients=3 tearDown
+
+# backup
+cp final.json.gz stats.gz
+
+# decompress all json files
+gunzip final.*.json.gz
+easy_install couchdbkit
+
+# iterate json file for each phase(load/reload/access),\
+# post results to couchdb seperately
+FILES=final.*.json
+for f in $FILES
+do
+echo "posting $f to couchdb"
+python scripts/post-perf-data.py -n http://couchdb2.couchbaseqe.com:5984 -d eperf -i $f
+done
+rm -rf final.*.json
