@@ -118,7 +118,14 @@ class EPerfMaster(perf.PerfBase):
                  merge_keys.append(str(latency))
 
         for i in range(i, len_clients):
-             file  = gzip.open("{0}.{1}.json.gz".format(i, type),'rb')
+             try:
+                file  = gzip.open("{0}.{1}.json.gz".format(i, type),'rb')
+             except IOError as e:
+                # cannot find stats produced by this client, check stats collection.
+                # the results might be incomplete.
+                print "[stats aggregation error] cannot open file : {0}.{1}.json.gz".format(i, type)
+                continue
+
              dict = file.read()
              file.close()
              dict = json.loads(dict)
