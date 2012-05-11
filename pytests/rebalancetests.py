@@ -16,7 +16,6 @@ from memcached.helper.kvstore import ClientKeyValueStore
 
 
 class RebalanceBaseTest(unittest.TestCase):
-
     @staticmethod
     def common_setup(self):
         self.log = logger.Logger.get_logger()
@@ -31,7 +30,7 @@ class RebalanceBaseTest(unittest.TestCase):
         RebalanceBaseTest.reset(self)
 
         # Initialize test params
-        self.replica  = self.input.param("replica", 1)
+        self.replica = self.input.param("replica", 1)
 
         # By default we use keys-count for LoadTask
         # Use keys-count=-1 to use load-ratio
@@ -55,14 +54,14 @@ class RebalanceBaseTest(unittest.TestCase):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         info = rest.get_nodes_self()
         rest.init_cluster(username=master.rest_username,
-                          password=master.rest_password)
+            password=master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
         if self.do_ascii:
             BucketOperationHelper.create_multiple_buckets(master, self.replica, node_ram_ratio * (2.0 / 3.0),
-                                                          howmany=self.num_buckets, sasl=False)
+                howmany=self.num_buckets, sasl=False)
         else:
             BucketOperationHelper.create_multiple_buckets(master, self.replica, node_ram_ratio * (2.0 / 3.0),
-                                                          howmany=self.num_buckets, sasl=True)
+                howmany=self.num_buckets, sasl=True)
         buckets = rest.get_buckets()
         for bucket in buckets:
             ready = BucketOperationHelper.wait_for_memcached(master, bucket.name)
@@ -109,8 +108,8 @@ class RebalanceBaseTest(unittest.TestCase):
                 ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)
                 # windows need more than 15 minutes to get number matched
                 replica_match = RebalanceHelper.wait_till_total_numbers_match(bucket=bucket.name,
-                                                                              master=master,
-                                                                              timeout_in_seconds=600)
+                    master=master,
+                    timeout_in_seconds=600)
                 if not replica_match:
                     asserts.append("replication was completed but sum(curr_items) dont match the curr_items_total %s" %
                                    bucket.name)
@@ -152,12 +151,12 @@ class RebalanceBaseTest(unittest.TestCase):
         for bucket in buckets:
             inserted_count, rejected_count =\
             MemcachedClientHelper.load_bucket(name=bucket.name,
-                                              servers=rebalanced_servers,
-                                              ram_load_ratio=load_ratio,
-                                              value_size_distribution=distribution,
-                                              number_of_threads=1,
-                                              write_only=True,
-                                              moxi=True)
+                servers=rebalanced_servers,
+                ram_load_ratio=load_ratio,
+                value_size_distribution=distribution,
+                number_of_threads=1,
+                write_only=True,
+                moxi=True)
             test.log.info('inserted {0} keys'.format(inserted_count))
             bucket_data[bucket.name]["items_inserted_count"] += inserted_count
 
@@ -167,12 +166,12 @@ class RebalanceBaseTest(unittest.TestCase):
         buckets = rest.get_buckets()
         for bucket in buckets:
             threads = MemcachedClientHelper.create_threads(servers=rebalanced_servers,
-                                                           name=bucket.name,
-                                                           ram_load_ratio=load_ratio,
-                                                           value_size_distribution=distribution,
-                                                           number_of_threads=4,
-                                                           delete_ratio=delete_ratio,
-                                                           expiry_ratio=expiry_ratio)
+                name=bucket.name,
+                ram_load_ratio=load_ratio,
+                value_size_distribution=distribution,
+                number_of_threads=4,
+                delete_ratio=delete_ratio,
+                expiry_ratio=expiry_ratio)
             [t.start() for t in threads]
             bucket_data[bucket.name]["threads"] = threads
         return bucket_data
@@ -194,14 +193,14 @@ class RebalanceBaseTest(unittest.TestCase):
         log = logger.Logger.get_logger()
         inserted_keys, rejected_keys =\
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
-                                                              name=bucket,
-                                                              ram_load_ratio=load_ratio,
-                                                              number_of_items=keys_count,
-                                                              number_of_threads=2,
-                                                              write_only=True,
-                                                              delete_ratio=delete_ratio,
-                                                              expiry_ratio=expiry_ratio,
-                                                              moxi=True)
+            name=bucket,
+            ram_load_ratio=load_ratio,
+            number_of_items=keys_count,
+            number_of_threads=2,
+            write_only=True,
+            delete_ratio=delete_ratio,
+            expiry_ratio=expiry_ratio,
+            moxi=True)
         log.info("wait until data is completely persisted on the disk")
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, timeout_in_seconds=120)
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
@@ -218,24 +217,21 @@ class RebalanceBaseTest(unittest.TestCase):
         ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
         test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
         BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, bucket_name=bucket,
-                                                               test=test, concurrency=4)
+            test=test, concurrency=4)
 
     @staticmethod
     def tasks_for_buckets(rest, task_manager,
                           bucket_data,
-                          new_doc_seed = None,
-                          new_doc_count = -1,
-                          DELETE_RATIO = 0,
-                          ACCESS_RATIO = 0,
-                          EXPIRY_RATIO = 0,
-                          ttl = 5):
-
-
+                          new_doc_seed=None,
+                          new_doc_count=-1,
+                          DELETE_RATIO=0,
+                          ACCESS_RATIO=0,
+                          EXPIRY_RATIO=0,
+                          ttl=5):
         # TODO: assert no value greater than 1
         # TODO: assert sum of mutation ratios not greater than 1
 
         for bucket in bucket_data.keys():
-
             get_task = None
             del_task = None
             exp_task = None
@@ -258,40 +254,40 @@ class RebalanceBaseTest(unittest.TestCase):
 
             # delete ratio of current keys
             if len(keys_to_delete) > 0:
-                del_task =  \
-                    RebalanceTaskHelper.add_doc_del_task(task_manager, rest,
-                                                         keys_to_delete,
-                                                         bucket = bucket,
-                                                         kv_store = kv_store)
-            # expire ratio of current keys
+                del_task =\
+                RebalanceTaskHelper.add_doc_del_task(task_manager, rest,
+                    keys_to_delete,
+                    bucket=bucket,
+                    kv_store=kv_store)
+                # expire ratio of current keys
             if len(keys_to_expire) > 0:
-                exp_task =  \
-                    RebalanceTaskHelper.add_doc_exp_task(task_manager, rest,
-                                                         keys_to_expire,
-                                                         bucket = bucket,
-                                                         kv_store = kv_store)
+                exp_task =\
+                RebalanceTaskHelper.add_doc_exp_task(task_manager, rest,
+                    keys_to_expire,
+                    bucket=bucket,
+                    kv_store=kv_store)
 
             # get ratio of current keys
             if len(keys_to_get) > 0:
-                get_task =  \
-                    RebalanceTaskHelper.add_doc_get_task(task_manager, rest,
-                                                         keys_to_get,
-                                                         bucket = bucket)
-            # load more data
+                get_task =\
+                RebalanceTaskHelper.add_doc_get_task(task_manager, rest,
+                    keys_to_get,
+                    bucket=bucket)
+                # load more data
             if new_doc_count == -1:
                 new_doc_count = len(current_keys)
 
-            load_task = \
-                RebalanceTaskHelper.add_doc_gen_task(task_manager, rest,
-                                                     new_doc_count,
-                                                     bucket = bucket,
-                                                     seed = new_doc_seed,
-                                                     kv_store = kv_store)
+            load_task =\
+            RebalanceTaskHelper.add_doc_gen_task(task_manager, rest,
+                new_doc_count,
+                bucket=bucket,
+                seed=new_doc_seed,
+                kv_store=kv_store)
 
             # update the users bucket_kv_info object
-            bucket_data[bucket]['tasks'] = {'get_task' : get_task,
-                                            'del_task' : del_task,
-                                            'exp_task' : exp_task,
+            bucket_data[bucket]['tasks'] = {'get_task': get_task,
+                                            'del_task': del_task,
+                                            'exp_task': exp_task,
                                             'load_task': load_task}
 
 
@@ -303,15 +299,15 @@ class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
     def finish_bucket_task(bucket_name_info):
         log = logger.Logger().get_logger()
-        for k, _t  in bucket_name_info['tasks'].items():
+        for k, _t in bucket_name_info['tasks'].items():
             if _t is not None:
                 log.info("Waiting for {0} task".format(k))
                 _t.result()
 
     @staticmethod
     def load_all_buckets_task(rest, task_manager, bucket_data, ram_load_ratio,
-                              distribution = None, keys_count = -1, seed = None,
-                              monitor = True):
+                              distribution=None, keys_count=-1, seed=None,
+                              monitor=True):
         buckets = rest.get_buckets()
         tasks = None
 
@@ -321,32 +317,29 @@ class RebalanceBaseTest(unittest.TestCase):
                 kv_store = ClientKeyValueStore()
                 bucket_data[bucket.name]['kv_store'] = kv_store
             tasks = RebalanceBaseTest.load_bucket_task_helper(rest, task_manager,
-                                                              bucket.name, ram_load_ratio,
-                                                              kv_store = kv_store,
-                                                              keys_count = keys_count,
-                                                              seed = seed,
-                                                              monitor = monitor)
+                bucket.name, ram_load_ratio,
+                kv_store=kv_store,
+                keys_count=keys_count,
+                seed=seed,
+                monitor=monitor)
         return tasks
 
     @staticmethod
     def load_bucket_task_helper(rest, task_manager, bucket, ram_load_ratio,
-                                kv_store = None, distribution = None,
-                                keys_count = -1, seed = None, monitor = True):
-
+                                kv_store=None, distribution=None,
+                                keys_count=-1, seed=None, monitor=True):
         log = logger.Logger().get_logger()
         tasks = []
 
         if keys_count == -1:
             # create document generators based on value_size_distrobution
-            doc_gen_configs = \
-                DocumentGenerator.get_doc_generators_by_load_ratio(rest,
-                                                                   bucket,
-                                                                   ram_load_ratio,
-                                                                   distribution)
-
+            doc_gen_configs =\
+            DocumentGenerator.get_doc_generators_by_load_ratio(rest,
+                bucket,
+                ram_load_ratio,
+                distribution)
 
             for config in doc_gen_configs:
-
                 doc_gen = config['value']
                 how_many = config['how_many']
                 size = config['size']
@@ -357,23 +350,22 @@ class RebalanceBaseTest(unittest.TestCase):
                 log.info(msg.format(how_many, size))
 
                 task = RebalanceTaskHelper.add_doc_gen_task(task_manager, rest,
-                                                            how_many, bucket,
-                                                            kv_store = kv_store,
-                                                            doc_generators = [doc_gen],
-                                                            monitor = monitor)
-                tasks.append({'task' : task, 'seed' : seed})
+                    how_many, bucket,
+                    kv_store=kv_store,
+                    doc_generators=[doc_gen],
+                    monitor=monitor)
+                tasks.append({'task': task, 'seed': seed})
         else:
             msg = "start task to send {0} items to bucket {1}"
             log.info(msg.format(keys_count, bucket))
             task = RebalanceTaskHelper.add_doc_gen_task(task_manager,
-                                                        rest,
-                                                        keys_count,
-                                                        bucket,
-                                                        kv_store,
-                                                        seed = seed,
-                                                        monitor = monitor)
-            tasks.append({'task' : task, 'seed' : seed})
-
+                rest,
+                keys_count,
+                bucket,
+                kv_store,
+                seed=seed,
+                monitor=monitor)
+            tasks.append({'task': task, 'seed': seed})
 
         return tasks
 
@@ -383,15 +375,14 @@ class RebalanceBaseTest(unittest.TestCase):
         error_list = []
 
         for bucket in bucket_data:
-
             kv_store = bucket_data[bucket]['kv_store']
             if kv_store is not None:
                 log.info("verifying kv store integrity")
                 errors =\
-                    RebalanceTaskHelper.add_kv_integrity_helper(task_manager,
-                                                                rest,
-                                                                kv_store,
-                                                                bucket)
+                RebalanceTaskHelper.add_kv_integrity_helper(task_manager,
+                    rest,
+                    kv_store,
+                    bucket)
                 error_list.append(errors)
 
         log.info("verification errors: {0} ".format(error_list))
@@ -399,7 +390,6 @@ class RebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def do_kv_and_replica_verification(master, task_manager, bucket_data, replica, self):
-
         rest = RestConnection(master)
 
         final_replication_state = RestHelper(rest).wait_for_replication(300)
@@ -409,16 +399,15 @@ class RebalanceBaseTest(unittest.TestCase):
         RebalanceBaseTest.replication_verification(master, bucket_data, replica, self)
 
         # run data integrity
-        error_list = \
-            RebalanceBaseTest.do_kv_verification(task_manager,
-                                                 rest,
-                                                 bucket_data)
+        error_list =\
+        RebalanceBaseTest.do_kv_verification(task_manager,
+            rest,
+            bucket_data)
 
         [self.assertEqual(0, len(errors.items())) for errors in error_list]
 
 
 class IncrementalRebalanceInTests(unittest.TestCase):
-
     def setUp(self):
         RebalanceBaseTest.common_setup(self)
 
@@ -434,20 +423,20 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         self.log.info("INTIAL LOAD")
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
             bucket_data, self.load_ratio,
-            keys_count = self.keys_count)
+            keys_count=self.keys_count)
 
         for server in self.servers[1:]:
             self.log.info("PARALLEL LOAD")
             RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
-                DELETE_RATIO = self.delete_ratio,
-                ACCESS_RATIO = self.access_ratio, EXPIRY_RATIO = self.expiry_ratio)
+                DELETE_RATIO=self.delete_ratio,
+                ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio)
 
             self.log.info("INCREMENTAL REBALANCE IN")
             # rebalance in a server
             RebalanceTaskHelper.add_rebalance_task(self.task_manager,
-                                                   [master],
-                                                   [server],
-                                                   [], do_stop=self.do_stop)
+                [master],
+                [server],
+                [], do_stop=self.do_stop)
 
             # wait for loading tasks to finish
             RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
@@ -457,10 +446,10 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             if self.do_verify:
                 self.log.info("VERIFICATION")
                 RebalanceBaseTest.do_kv_and_replica_verification(master,
-                                                                 self.task_manager,
-                                                                 bucket_data,
-                                                                 self.replica,
-                                                                 self)
+                    self.task_manager,
+                    bucket_data,
+                    self.replica,
+                    self)
             else:
                 self.log.info("NO VERIFICATION")
 
@@ -469,7 +458,6 @@ class IncrementalRebalanceInTests(unittest.TestCase):
 
 
 class IncrementalRebalanceWithMcsoda(unittest.TestCase):
-
     def setUp(self):
         RebalanceBaseTest.common_setup(self)
 
@@ -495,7 +483,7 @@ class IncrementalRebalanceWithMcsoda(unittest.TestCase):
             loader["mcsoda"].cfg["min-value-size"] = self.min_item_size
             loader["mcsoda"].cfg["json"] = 0
             loader["mcsoda"].cfg["batch"] = 100
-            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
+            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_' + bucket.name)
             loader["thread"].daemon = True
             loaders.append(loader)
 
@@ -552,7 +540,6 @@ class IncrementalRebalanceWithMcsoda(unittest.TestCase):
 
 
 class IncrementalRebalanceOut(unittest.TestCase):
-
     def setUp(self):
         RebalanceBaseTest.common_setup(self)
 
@@ -567,13 +554,13 @@ class IncrementalRebalanceOut(unittest.TestCase):
         # add all servers
         self.log.info("INTIAL REBALANCE ALL NODES")
         RebalanceTaskHelper.add_rebalance_task(self.task_manager,
-                                               [master],
-                                               self.servers[1:],
-                                               [])
+            [master],
+            self.servers[1:],
+            [])
         self.log.info("INTIAL LOAD")
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
             bucket_data, self.load_ratio,
-            keys_count = self.keys_count)
+            keys_count=self.keys_count)
 
         nodes = rest.node_statuses()
 
@@ -584,15 +571,15 @@ class IncrementalRebalanceOut(unittest.TestCase):
                     continue
                 self.log.info("START PARALLEL LOAD")
                 RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
-                    DELETE_RATIO = self.delete_ratio,
-                    ACCESS_RATIO = self.access_ratio, EXPIRY_RATIO = self.expiry_ratio)
+                    DELETE_RATIO=self.delete_ratio,
+                    ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio)
 
                 self.log.info("INCREMENTAL REBALANCE OUT")
                 # rebalance out a server
                 RebalanceTaskHelper.add_rebalance_task(self.task_manager,
-                                                       [master],
-                                                       [],
-                                                       [node], do_stop=self.do_stop, monitor=True)
+                    [master],
+                    [],
+                    [node], do_stop=self.do_stop, monitor=True)
                 # wait for loading tasks to finish
                 RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
                 self.log.info("DONE LOAD AND REBALANCE")
@@ -604,7 +591,7 @@ class IncrementalRebalanceOut(unittest.TestCase):
                         bucket_data, self.replica, self)
                 else:
                     self.log.info("NO VERIFICATION")
-                # at least 3 nodes required per loop to rebalance out and verify replication
+                    # at least 3 nodes required per loop to rebalance out and verify replication
                 if len(rest.node_statuses()) < 3:
                     break
 
@@ -613,7 +600,6 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
 
 class StopRebalanceAfterFailoverTests(unittest.TestCase):
-
     def setUp(self):
         RebalanceBaseTest.common_setup(self)
 
@@ -632,7 +618,7 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
         ClusterHelper.add_all_nodes_or_assert(master, self.servers, creds, self)
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
         self.assertTrue(rest.monitorRebalance(),
-                        msg="rebalance operation failed after adding nodes")
+            msg="rebalance operation failed after adding nodes")
 
         nodes = rest.node_statuses()
 
@@ -648,7 +634,7 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
             self.log.info("failed over {0}".format(toBeEjectedNode.id))
             time.sleep(10)
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
-                           ejectedNodes=[toBeEjectedNode.id])
+                ejectedNodes=[toBeEjectedNode.id])
             expected_progress = 30
             reached = RestHelper(rest).rebalance_reached(expected_progress)
             self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
@@ -658,7 +644,7 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
             RebalanceBaseTest.replication_verification(master, bucket_data, self.replica, self)
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[toBeEjectedNode.id])
             self.assertTrue(rest.monitorRebalance(),
-                            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
+                msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
             time.sleep(20)
 
             RebalanceBaseTest.replication_verification(master, bucket_data, self.replica, self)
@@ -666,7 +652,6 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
 
 
 class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
-
     def setUp(self):
         RebalanceBaseTest.common_setup(self)
 
@@ -688,18 +673,18 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
             for name in bucket_data:
                 inserted_keys, rejected_keys =\
                 MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.servers[0]],
-                                                                      name=name,
-                                                                      ram_load_ratio=-1,
-                                                                      number_of_items=self.keys_count,
-                                                                      number_of_threads=1,
-                                                                      write_only=True)
+                    name=name,
+                    ram_load_ratio=-1,
+                    number_of_items=self.keys_count,
+                    number_of_threads=1,
+                    write_only=True)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
                 self.assertTrue(rest.monitorRebalance(),
-                                msg="rebalance operation failed after adding node {0}".format(server.ip))
+                    msg="rebalance operation failed after adding node {0}".format(server.ip))
                 self.log.info("completed rebalancing in server {0}".format(server))
                 IncrementalRebalanceWithParallelReadTests._reader_thread(self, inserted_keys, bucket_data, moxi=moxi)
                 self.assertTrue(rest.monitorRebalance(),
-                                msg="rebalance operation failed after adding node {0}".format(server.ip))
+                    msg="rebalance operation failed after adding node {0}".format(server.ip))
                 break
 
     @staticmethod
@@ -733,7 +718,6 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
 
 
 class FailoverRebalanceRepeatTests(unittest.TestCase):
-
     def setUp(self):
         RebalanceBaseTest.common_setup(self)
 
@@ -750,7 +734,7 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
 
         self.log.info("INTIAL LOAD")
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager, bucket_data, self.load_ratio,
-            keys_count = self.keys_count)
+            keys_count=self.keys_count)
 
         for name in bucket_data:
             for thread in bucket_data[name]["threads"]:
@@ -761,21 +745,22 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
             #do this 2 times , start rebalance , failover the node , remove the node and rebalance
             for i in range(0, self.num_rebalance):
                 distribution = RebalanceBaseTest.get_distribution(self.load_ratio)
-                RebalanceBaseTest.load_data_for_buckets(rest, self.load_ratio, distribution, [master], bucket_data, self)
+                RebalanceBaseTest.load_data_for_buckets(rest, self.load_ratio, distribution, [master], bucket_data,
+                    self)
                 self.log.info("adding node {0} and rebalance afterwards".format(server.ip))
                 otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
                 msg = "unable to add node {0} to the cluster {1}"
                 self.assertTrue(otpNode, msg.format(server.ip, master.ip))
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
                 self.assertTrue(rest.monitorRebalance(),
-                                msg="rebalance operation failed after adding node {0}".format(server.ip))
+                    msg="rebalance operation failed after adding node {0}".format(server.ip))
                 rebalanced_servers.append(server)
                 RebalanceBaseTest.replication_verification(master, bucket_data, self.replica, self, True)
                 rest.fail_over(otpNode.id)
                 self.log.info("failed over {0}".format(otpNode.id))
                 time.sleep(10)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
-                               ejectedNodes=[otpNode.id])
+                    ejectedNodes=[otpNode.id])
                 msg = "rebalance failed while removing failover nodes {0}".format(otpNode.id)
                 self.assertTrue(rest.monitorRebalance(), msg=msg)
                 #now verify the numbers again ?
@@ -788,11 +773,12 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
             msg = "unable to add node {0} to the cluster {1}"
             self.assertTrue(otpNode, msg.format(server.ip, master.ip))
             distribution = RebalanceBaseTest.get_distribution(self.load_ratio)
-            RebalanceBaseTest.load_data_for_buckets(rest, self.load_ratio, distribution, rebalanced_servers, bucket_data,
-                                                    self)
+            RebalanceBaseTest.load_data_for_buckets(rest, self.load_ratio, distribution, rebalanced_servers, bucket_data
+                ,
+                self)
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
-                            msg="rebalance operation failed after adding node {0}".format(server.ip))
+                msg="rebalance operation failed after adding node {0}".format(server.ip))
             rebalanced_servers.append(server)
             RebalanceBaseTest.replication_verification(master, bucket_data, self.replica, self, True)
 
@@ -800,10 +786,11 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
     def test_load(self):
         self._common_test_body()
 
-class RebalanceInOutWithParallelLoad(unittest.TestCase):
 
+class RebalanceInOutWithParallelLoad(unittest.TestCase):
     def setUp(self):
         RebalanceBaseTest.common_setup(self)
+
     def tearDown(self):
         RebalanceBaseTest.common_tearDown(self)
 
@@ -814,7 +801,7 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
 
         self.log.info("INTIAL LOAD")
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager, bucket_data, self.load_ratio,
-            keys_count = self.keys_count)
+            keys_count=self.keys_count)
 
         rebalance_out = False
         for server in self.servers[1:]:
@@ -830,8 +817,8 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
 
             self.log.info("START PARALLEL LOAD")
             RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
-                DELETE_RATIO = self.delete_ratio,
-                ACCESS_RATIO = self.access_ratio, EXPIRY_RATIO = self.expiry_ratio)
+                DELETE_RATIO=self.delete_ratio,
+                ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio)
 
             self.log.info("INCREMENTAL REBALANCE IN/OUT")
             # rebalance in/out a server
@@ -849,10 +836,10 @@ class RebalanceInOutWithParallelLoad(unittest.TestCase):
         if self.do_verify:
             self.log.info("VERIFICATION")
             RebalanceBaseTest.do_kv_and_replica_verification(master,
-                    self.task_manager,
-                    bucket_data,
-                    self.replica,
-                    self)
+                self.task_manager,
+                bucket_data,
+                self.replica,
+                self)
         else:
             self.log.info("NO VERIFICATION")
 
@@ -946,16 +933,16 @@ class RebalanceTaskHelper():
 
     @staticmethod
     def add_nodes_init_task(tm, servers):
-        return [RebalanceTaskHelper.add_node_init_task(tm, server) for server in servers ]
+        return [RebalanceTaskHelper.add_node_init_task(tm, server) for server in servers]
 
     @staticmethod
     def add_bucket_create_task(tm, server, bucket='default', replicas=1, port=11210, size=0,
-                           password=None, monitor = True):
+                               password=None, monitor=True):
         _t = task.BucketCreateTask(server, bucket, replicas, port, size, password)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
     @staticmethod
-    def add_bucket_delete_task(tm, server, bucket='default', monitor = True):
+    def add_bucket_delete_task(tm, server, bucket='default', monitor=True):
         _t = task.BucketDeleteTask(server, bucket)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
@@ -963,61 +950,61 @@ class RebalanceTaskHelper():
     def add_rebalance_task(tm, servers, to_add, to_remove, monitor=True,
                            do_stop=False, progress=30):
         _t = task.RebalanceTask(servers, to_add, to_remove, do_stop=do_stop,
-                                progress=progress)
+            progress=progress)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor=monitor)
 
     @staticmethod
-    def add_failover_task(tm, servers, to_remove, monitor = False):
+    def add_failover_task(tm, servers, to_remove, monitor=False):
         _t = task.FailOverTask(servers, to_remove)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
     @staticmethod
-    def incremental_rebalance_in_tasks(tm, servers, to_add, delay = 0):
-        return [ RebalanceTaskHelper.schedule_task_helper(tm, _t, True, delay) for _t in
-                    [ task.RebalanceTask(servers, [new_server], []) for new_server in to_add ]]
+    def incremental_rebalance_in_tasks(tm, servers, to_add, delay=0):
+        return [RebalanceTaskHelper.schedule_task_helper(tm, _t, True, delay) for _t in
+        [task.RebalanceTask(servers, [new_server], []) for new_server in to_add]]
 
     @staticmethod
     def incremental_rebalance_out_tasks(tm, servers, to_remove):
-        return [ RebalanceTaskHelper.schedule_task_helper(tm, _t, True) for _t in
-                    [ task.RebalanceTask(servers, [], [old_server]) for old_server in to_remove ]]
+        return [RebalanceTaskHelper.schedule_task_helper(tm, _t, True) for _t in
+        [task.RebalanceTask(servers, [], [old_server]) for old_server in to_remove]]
 
     @staticmethod
-    def add_doc_gen_task(tm, rest, count, bucket = "default", kv_store = None, store_enabled = True,
-                           kv_template = None, seed = None, sizes = None, expiration = None,
-                           loop = False, monitor = False, doc_generators = None):
+    def add_doc_gen_task(tm, rest, count, bucket="default", kv_store=None, store_enabled=True,
+                         kv_template=None, seed=None, sizes=None, expiration=None,
+                         loop=False, monitor=False, doc_generators=None):
         doc_generators = doc_generators or DocumentGenerator.get_doc_generators(count, kv_template, seed, sizes)
         _t = task.LoadDocGeneratorTask(rest, doc_generators, bucket=bucket, kv_store=kv_store,
             store_enabled=store_enabled, expiration=expiration, loop=loop)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
     @staticmethod
-    def add_doc_del_task(tm, rest, keys, bucket = "default", info = None,
-                         kv_store = None, store_enabled = True,
-                         monitor = False, delay = 0):
+    def add_doc_del_task(tm, rest, keys, bucket="default", info=None,
+                         kv_store=None, store_enabled=True,
+                         monitor=False, delay=0):
         _t = task.DocumentDeleteTask(rest, keys, bucket, info, kv_store, store_enabled)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor, delay)
 
     @staticmethod
-    def add_doc_exp_task(tm, rest, keys, bucket = "default", info = None,
-                         kv_store = None, store_enabled = True,
-                         monitor = False, delay = 0, expiration = 5):
+    def add_doc_exp_task(tm, rest, keys, bucket="default", info=None,
+                         kv_store=None, store_enabled=True,
+                         monitor=False, delay=0, expiration=5):
         _t = task.DocumentExpireTask(rest, keys, bucket, info, kv_store,
-                                     store_enabled, expiration = expiration)
+            store_enabled, expiration=expiration)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor, delay)
 
     @staticmethod
-    def add_doc_get_task(tm, rest, keys, bucket = "default", info = None,
-                         loop = False, monitor = False, delay = 0):
+    def add_doc_get_task(tm, rest, keys, bucket="default", info=None,
+                         loop=False, monitor=False, delay=0):
         _t = task.DocumentAccessTask(rest, keys, bucket=bucket, info=info, loop=loop)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor, delay)
 
     @staticmethod
-    def add_kv_integrity_helper(tm, rest, kv_store, bucket = "default", monitor = True):
+    def add_kv_integrity_helper(tm, rest, kv_store, bucket="default", monitor=True):
         _t = task.KVStoreIntegrityTask(rest, kv_store, bucket)
         return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
 
     @staticmethod
-    def schedule_task_helper(tm, task, monitor = False, delay = 0):
+    def schedule_task_helper(tm, task, monitor=False, delay=0):
         tm.schedule(task, delay)
         if monitor:
             return task.result()
