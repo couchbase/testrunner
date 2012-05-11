@@ -408,13 +408,13 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                              upgrade_path=[]):
         node_upgrade_path = []
         node_upgrade_path.extend(upgrade_path)
-        input_version = input.test_params['version']
         #then start them in whatever order you want
         inserted_keys = []
         log = logger.Logger.get_logger()
         if roll_upgrade:
             log.info("performing a rolling upgrade")
         input = TestInputSingleton.input
+        input_version = input.test_params['version']
         rest_settings = input.membase_settings
         servers = input.servers
         save_upgrade_config = False
