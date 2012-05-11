@@ -181,7 +181,8 @@ class EPerfMaster(perf.PerfBase):
             self.load(items,
                       self.param('size', self.min_value_size()),
                       kind=self.param('kind', 'json'),
-                      protocol=self.mk_protocol(self.input.servers[0].ip),
+                      protocol=self.mk_protocol(host=self.input.servers[0].ip,
+                                                port=self.input.servers[0].port),
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
                       prefix="",
@@ -223,13 +224,14 @@ class EPerfMaster(perf.PerfBase):
             self.is_multi_node = False
             if host is None:
                 host = self.input.servers[0].ip
+            port = self.input.servers[0].port
             self.loop(num_ops        = 0,
                       num_items      = items,
                       max_items      = items + max_creates + 1,
                       max_creates    = max_creates,
                       min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),
-                      protocol       = self.mk_protocol(host, proto_prefix),
+                      protocol       = self.mk_protocol(host, port, proto_prefix),
                       clients        = self.parami('clients', 1),
                       ratio_sets     = ratio_sets,
                       ratio_misses   = ratio_misses,

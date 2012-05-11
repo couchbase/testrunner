@@ -379,12 +379,14 @@ class StatsCollector(object):
             time.sleep(frequency)
             print "Collecting ns_server_stats"
             for node in nodes:
-                os.system("curl -X GET http://Administrator:password@{1}:8091/pools/{0}/buckets/{0}/stats?zoom=minute -o  ns_server_data".format(bucket, node.ip))
+                for port in ["8091", "9000"]:
+                    os.system("curl -X GET http://Administrator:password@{1}:{2}/pools/{0}/buckets/{0}/stats?zoom=minute -o  ns_server_data".format(bucket, node.ip, port))
                 #f.close()
                 dict  = open("./ns_server_data","r").read()
                 data_json = json.loads(dict)
                 d[node]["snapshots"].append(data_json)
-                os.system("curl -X GET http://Administrator:password@{1}:8091/pools/{0} -o  ns_server_data_system_stats".format(bucket, node.ip))
+                for port in ["8091", "9000"]:
+                    os.system("curl -X GET http://Administrator:password@{1}:{2}/pools/{0} -o  ns_server_data_system_stats".format(bucket, node.ip, port))
                 #f.close()
                 dict  = open("./ns_server_data_system_stats","r").read()
                 data_json = json.loads(dict)

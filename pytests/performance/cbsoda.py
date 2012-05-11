@@ -70,10 +70,14 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
         mcsoda.StoreMembaseBinary.connect_host_port(self, host, port, user, pswd, bucket=bucket)
 
-        self.capi_host_port = (host, 8092)
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.capi_skt.connect(self.capi_host_port)
+        try:
+            self.capi_host_port = (host, 8092)
+            self.capi_skt.connect(self.capi_host_port)
+        except:
+            self.capi_host_port = (host, 9500)
+            self.capi_skt.connect(self.capi_host_port)
         self.init_reader(self.capi_skt)
 
     def init_reader(self, skt):

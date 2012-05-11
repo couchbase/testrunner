@@ -178,7 +178,7 @@ class PerfBase(unittest.TestCase):
                 protocol = \
                     '-'.join(((["membase"] + \
                                    protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
-            host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1] + ":8091"
+            host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1]
             user, pswd = (('@' + protocol_in.split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
         else:
             protocol = 'memcached-' + protocol_in
@@ -187,9 +187,9 @@ class PerfBase(unittest.TestCase):
             pswd = self.param("rest_password", "password")
         return protocol, host_port, user, pswd
 
-    def mk_protocol(self, host, prefix='membase-binary'):
+    def mk_protocol(self, host, port='8091', prefix='membase-binary'):
         return self.param('protocol',
-                          prefix+'://' + self.input.servers[0].ip + ":8091")
+                          prefix + '://' + host + ':' + port)
 
     def restartProxy(self, bucket=None):
         self.tearDownProxy()
@@ -367,7 +367,8 @@ class PerfBase(unittest.TestCase):
         # For Black box, multi node tests
         # always use membase-binary
         if self.is_multi_node:
-            protocol=self.mk_protocol(self.input.servers[0].ip)
+            protocol = self.mk_protocol(host=self.input.servers[0].ip,
+                                        port=self.input.servers[0].port)
 
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
 
@@ -535,7 +536,8 @@ class PerfBase(unittest.TestCase):
         # For Black box, multi node tests
         # always use membase-binary
         if self.is_multi_node:
-            protocol = self.mk_protocol(self.input.servers[0].ip)
+            protocol = self.mk_protocol(host=self.input.servers[0].ip,
+                                        port=self.input.servers[0].port)
 
         self.log.info("mcsoda - protocol %s" % protocol)
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
