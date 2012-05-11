@@ -73,6 +73,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                              insert_data=False):
         log = logger.Logger.get_logger()
         input = TestInputSingleton.input
+        version = input.test_params['version']
         rest_settings = input.membase_settings
         servers = input.servers
         server = servers[0]
@@ -108,7 +109,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 if create_buckets:
                     _create_load_multiple_bucket(self, server, bucket_data, howmany=2)
-            version = input.test_params['version']
             if version.startswith("1.8"):
                 abbr_product = "cb"
             appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
@@ -408,6 +408,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                              upgrade_path=[]):
         node_upgrade_path = []
         node_upgrade_path.extend(upgrade_path)
+        input_version = input.test_params['version']
         #then start them in whatever order you want
         inserted_keys = []
         log = logger.Logger.get_logger()
@@ -478,7 +479,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         #if initial_version == "1.7.0" or initial_version == "1.7.1":
          #   self._save_config(rest_settings, master)
 
-        input_version = input.test_params['version']
         node_upgrade_path.append(input_version)
         #if we dont want to do roll_upgrade ?
         log.info("Upgrade path: {0} -> {1}".format(initial_version, node_upgrade_path))
