@@ -999,7 +999,8 @@ class RestConnection(object):
                       saslPassword='',
                       replicaNumber=1,
                       proxyPort=11211,
-                      bucketType='membase'):
+                      bucketType='membase',
+                      replica_index=0):
         api = '{0}{1}'.format(self.baseUrl, '/pools/default/buckets')
         params = urllib.urlencode({})
         #this only works for default bucket ?
@@ -1010,7 +1011,8 @@ class RestConnection(object):
                                        'ramQuotaMB': ramQuotaMB,
                                        'replicaNumber': replicaNumber,
                                        'proxyPort': proxyPort,
-                                       'bucketType': bucketType})
+                                       'bucketType': bucketType,
+                                       'replicaIndex': replica_index})
 
         elif authType == 'none':
             params = urllib.urlencode({'name': bucket,
@@ -1018,7 +1020,8 @@ class RestConnection(object):
                                        'authType': authType,
                                        'replicaNumber': replicaNumber,
                                        'proxyPort': proxyPort,
-                                       'bucketType': bucketType})
+                                       'bucketType': bucketType,
+                                       'replicaIndex': replica_index})
 
         elif authType == 'sasl':
             params = urllib.urlencode({'name': bucket,
@@ -1027,7 +1030,8 @@ class RestConnection(object):
                                        'saslPassword': saslPassword,
                                        'replicaNumber': replicaNumber,
                                        'proxyPort': self.get_nodes_self().moxi,
-                                       'bucketType': bucketType})
+                                       'bucketType': bucketType,
+                                       'replicaIndex': replica_index})
 
 
 
