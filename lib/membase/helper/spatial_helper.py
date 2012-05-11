@@ -177,8 +177,8 @@ class SpatialHelper:
                 time.sleep(5)
 
         # Can't get the correct result, fail the test
-        self.log.info("num_expected: {}".format(num_expected))
-        self.log.info("num results:  {}".format(len(results["rows"])))
+        self.log.info("num_expected: {0}".format(num_expected))
+        self.log.info("num results:  {0}".format(len(results["rows"])))
         self.testcase.fail(
             "unable to get spatial_results for {0} after 4 tries"
             .format(spatial))
