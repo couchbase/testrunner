@@ -873,59 +873,66 @@ class RebalanceOutWithFailover(unittest.TestCase):
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
         # add all servers
-        self.log.info("INTIAL REBALANCE ALL NODES")
+        self.log.info("Initially rebalancing in the nodes")
         RebalanceTaskHelper.add_rebalance_task(self.task_manager,
             [master],
             self.servers[1:],
             [], monitor=True, do_stop=self.do_stop)
 
-        self.log.info("INTIAL LOAD")
+        self.log.info("Initial loading of data")
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
             bucket_data, self.load_ratio,
             keys_count=self.keys_count)
 
         nodes = rest.node_statuses()
 
-        if len(nodes) > 2:
-            for node in nodes[1:]:
+        for node in nodes[1:]:
+            # Get the current cluster size, we will continnue fail-over till current_cluster_size= replica+1
+            current_cluster_len = len(rest.node_statuses())
+            if current_cluster_len < (self.replica + 1):
+                self.log.info(
+                    "Replica count {0} is greater than the current cluster-size{1}, stopping failover test.".format(
+                        self.replica, current_cluster_len))
+
+            else:
                 # Never pick master node
-                if node.ip == master.ip:
-                    continue
-                self.log.info("START PARALLEL LOAD")
-                RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
-                    DELETE_RATIO=self.delete_ratio,
-                    ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio)
+                if node.ip != master.ip:
+                    self.log.info("Starting Parallel Load ..")
+                    RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
+                        DELETE_RATIO=self.delete_ratio,
+                        ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio)
 
-                # Pick a Node to failover
-                self.log.info("FAILOVER and REBALANCE OUT")
-                toBeEjectedNode = RebalanceHelper.pick_node(master)
-                # rebalance Out
-                RebalanceTaskHelper.add_failover_task(self.task_manager,
-                    [master],
-                    [toBeEjectedNode], True)
+                    # Pick a Node to failover
+                    toBeEjectedNode = RebalanceHelper.pick_node(master)
+                    self.log.info("Starting Failover and Rebalance Out  for node {0}:{1}".format(toBeEjectedNode.ip,
+                        toBeEjectedNode.port))
 
-                # rebalance Out
-                RebalanceTaskHelper.add_rebalance_task(self.task_manager,
-                    [master],
-                    [],
-                    [toBeEjectedNode], do_stop=self.do_stop, monitor=True)
+                    # rebalance Out
+                    RebalanceTaskHelper.add_failover_task(self.task_manager,
+                        [master],
+                        [toBeEjectedNode], True)
 
-                # wait for all tasks to finish
-                RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
-                self.log.info("DONE LOAD, REBALANCE-IN, FAILOVER AND REBALANCE-OUT")
+                    self.log.info(
+                        "Completed Failover for node {0}:{1}".format(toBeEjectedNode.ip, toBeEjectedNode.port))
+                    # rebalance Out
+                    RebalanceTaskHelper.add_rebalance_task(self.task_manager,
+                        [master],
+                        [],
+                        [toBeEjectedNode], do_stop=self.do_stop, monitor=True)
 
-                # verification step
-                if self.do_verify:
-                    self.log.info("VERIFICATION")
-                    RebalanceBaseTest.do_kv_and_replica_verification(master, self.task_manager,
-                        bucket_data, self.replica, self)
-                else:
-                    self.log.info("NO VERIFICATION")
-                    # at least 2 nodes required per loop to rebalance out and verify replication
-                if len(rest.node_statuses()) < 2:
-                    break
+                    # wait for all tasks to finish
+                    RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
+                    self.log.info("Completed Load, Failover and Rebalance Out. ")
 
-        self.log.info("DONE LOAD AND REBALANCE")
+                    # verification step
+                    if self.do_verify:
+                        self.log.info("Verifying with KV-store")
+                        RebalanceBaseTest.do_kv_and_replica_verification(master, self.task_manager,
+                            bucket_data, self.replica, self)
+                    else:
+                        self.log.info("No verification with KV-store specified")
+                        # at least 2 nodes required per loop to rebalance out and verify replication
+            self.log.info("Completed Load and Rebalance-Out")
 
     def test_load(self):
         self._common_test_body()
