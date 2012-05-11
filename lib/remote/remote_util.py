@@ -1581,3 +1581,19 @@ class RemoteUtilHelper(object):
             shell.unpause_beam()
             shell.disconnect()
         time.sleep(10)
+
+    def remove_win_backup_dir(self, servers):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            win_paths = [testconstants.WIN_CB_PATH, testconstants.WIN_MB_PATH]
+            backup_files = []
+            for each_path in win_paths:
+                files = shell.list_files(each_path)
+                for f in files:
+                    if f["file"].startswith("backup-"):
+                        backup_files.append(f)
+                # keep the last one
+                if len(backup_files) > 5:
+                    log.info("start remove {0} backup directory in {1}".format(count, each_path))
+                    for f in backup_files[:-1]:
+                        shell.execute_command("rm -rf '{0}{1}'".format(each_path, f))
