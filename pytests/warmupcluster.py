@@ -117,7 +117,7 @@ class WarmUpClusterTest(unittest.TestCase):
         for node in nodes:
             _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
                      "password": self.servers[0].rest_password}
-            _mc = MemcachedClientHelper.direct_client(_node,"default")
+            _mc = MemcachedClientHelper.direct_client(_node, "default")
             pid = _mc.stats()["pid"]
             node_rest = RestConnection(_node)
             command = "os:cmd(\"kill -9 {0} \")".format(pid)
@@ -149,34 +149,46 @@ class WarmUpClusterTest(unittest.TestCase):
             if not memcached_restarted:
                 self.fail("memcached did not start {0}:{1}".format(server.ip, server.port))
 
-        start = time.time()
         for server in self.servers:
             mc = MemcachedClientHelper.direct_client(server, "default")
             expected_curr_items_tot = map["{0}:{1}".format(server.ip, server.port)]["curr_items_tot"]
             now_items = 0
             retry = 0
 
-            # Get the wamrup time for each server
-            try:
-                stats = mc.stats()
-                while retry < 5:
-                    if stats is None:
-                        stats = mc.stats()
-                        retry = retry + 1
-                    else:
+            start = time.time()
+
+            if server == self.servers[0]:
+                wait_time = 600
+            else:
+                wait_time = 60
+                # Try to get the stats for 10 minutes, else hit out.
+            while time.time() - start < wait_time:
+                # Get the wamrup time for each server
+                try:
+                    stats = mc.stats()
+                    if stats is not None:
                         warmup_time = int(stats["ep_warmup_time"])
                         self.log.info("ep_warmup_time is %s " % warmup_time)
-                        self.log.info("Awesome, got the stats {0}".format(stats["ep_warmup_time"]))
+                        self.log.info(
+                            "Collected the stats {0} for server {1}:{2}".format(stats["ep_warmup_time"], server.ip,
+                                server.port))
                         break
-            except Exception as e:
-                self.fail("Could not get warmup_time stats, exception %s" % e)
+                    else:
+                        self.log.info(" Did not get the stats from the server yet, trying again.....")
+                        time.sleep(2)
+                except Exception as e:
+                    self.log.error(
+                        "Could not get warmup_time stats from server {0}:{1}, exception {2}".format(server.ip,
+                            server.port, e))
 
-            if retry >= 5 and stats is None:
-                self.fail("Could not get warmup_time stats, exception")
+            else:
+                self.fail(
+                    "Fail! Unable to get the warmup-stats from server {0}:{1} after trying for {2} seconds.".format(
+                        server.ip, server.port, wait_time))
 
             # Verify the item count from each server, if you get repeated same count(< expected count) for over
             # 3 minutes, then fail. Try to get the items from the server for 30 mins in total, else fail
-
+            start = time.time()
             while time.time() - start < 1800:
                 time.sleep(2)
                 if mc.stats()["curr_items_tot"] < expected_curr_items_tot:
