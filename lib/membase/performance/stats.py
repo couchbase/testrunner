@@ -8,6 +8,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import testconstants
 import gzip
+import urllib
 
 # The histo dict is returned by add_timing_sample().
 # The percentiles must be sorted, ascending, like [0.90, 0.99].
@@ -369,6 +370,18 @@ class StatsCollector(object):
 
     def ns_server_stats(self, nodes, bucket, frequency, verbose=False):
 
+        def fetch_stats(host, port, stats, user='Administrator', pswd='password'):
+            """Fetch ns_server stats via RESTful API"""
+
+            url_base = 'http://{0}:{1}@{2}:{3}'.format(user, pswd, host, port)
+            if stats == 'bucket':
+                url_path = '/pools/{0}/buckets/{0}/stats?zoom=minute'.format(bucket)
+            elif stats == 'system':
+                url_path = '/pools/default/'
+
+            response = urllib.urlopen(url_base + url_path)
+            return json.loads(response.read())
+
         self._task["ns_server_stats"] = []
         self._task["ns_server_stats_system"] = []
         d = {}
@@ -379,17 +392,10 @@ class StatsCollector(object):
             time.sleep(frequency)
             print "Collecting ns_server_stats"
             for node in nodes:
-                for port in ["8091", "9000"]:
-                    os.system("curl -X GET http://Administrator:password@{1}:{2}/pools/{0}/buckets/{0}/stats?zoom=minute -o  ns_server_data".format(bucket, node.ip, port))
-                #f.close()
-                dict  = open("./ns_server_data","r").read()
-                data_json = json.loads(dict)
+                data_json = fetch_stats(host=node.ip, port=node.port, stats='bucket')
                 d[node]["snapshots"].append(data_json)
-                for port in ["8091", "9000"]:
-                    os.system("curl -X GET http://Administrator:password@{1}:{2}/pools/{0} -o  ns_server_data_system_stats".format(bucket, node.ip, port))
-                #f.close()
-                dict  = open("./ns_server_data_system_stats","r").read()
-                data_json = json.loads(dict)
+
+                data_json = fetch_stats(host=node.ip, port=node.port, stats='system')
                 d[node]["system_snapshots"].append(data_json)
 
         for node in nodes:
