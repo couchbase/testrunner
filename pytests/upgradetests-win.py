@@ -283,6 +283,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_m6_1_7_2(self):
         self._install_and_upgrade('1.7.2', True, True, True, 10)
 
+    def test_m6_1_8_0(self):
+        self._install_and_upgrade('1.8.0', True, True, True, 10)
+
     # Rolling Upgrades
     def test_multiple_node_rolling_upgrade_1_7_0(self):
         self._install_and_upgrade('1.7.0', True, True, False, -1, True)
