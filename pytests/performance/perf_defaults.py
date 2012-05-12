@@ -31,6 +31,7 @@ class PerfDefaults:
     rebalance_after     =    200000
 
     # control
+    db_compaction           =   2        # db fragmentation percentage triggers compaction
     load_wait_until_drained =   1        # wait to be drained on the load phase, 1: enabled, 0: disabled
     loop_wait_until_drained =   0        # wait to be drained on the access phase, 1: enabled, 0: disabled
     mcsoda_heartbeat        =   0        # health check heartbeat message for mcsoda. 0: no heartbeat, ~: in sec
@@ -40,3 +41,4 @@ class PerfDefaults:
     tear_down_bucket        =   0        # (prerequsite: tear_down = 1) tear down bucket,  1: enabled, 0: disabled
     tear_down_cluster       =   1        # (prerequsite: tear_down = 1) tear down server cluster, 1: enabled, 0: disabled
     tear_down_on_setup      =   0        # teardown routine to clean up resources during startup. 1: enabled, 0: disabled
+    view_compaction         =   10       # view fragmentation percentage triggers compaction

@@ -95,8 +95,8 @@ class PerfBase(unittest.TestCase):
                         msg="unable to create {0} bucket".format(bucket))
 
         try:
-            db_compaction  = self.parami("db_compaction", 80)
-            view_compaction  = self.parami("view_compaction", 80)
+            db_compaction  = self.parami("db_compaction", PerfDefaults.db_compaction)
+            view_compaction  = self.parami("view_compaction", PerfDefaults.view_compaction)
             self.rest.reset_auto_compaction(dbFragmentThreshold = db_compaction,
                               viewFragmntThreshold = view_compaction)
         except:
