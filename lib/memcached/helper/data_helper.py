@@ -13,7 +13,7 @@ import hashlib
 import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
-from memcached.helper.kvstore import ClientKeyValueStore
+from memcached.helper.old_kvstore import ClientKeyValueStore
 from membase.api.rest_client import RestConnection, RestHelper
 import json
 import sys

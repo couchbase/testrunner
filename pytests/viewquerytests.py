@@ -9,8 +9,8 @@ from couchbase.document import View
 from membase.api.rest_client import RestConnection
 from viewtests import ViewBaseTests
 from memcached.helper.data_helper import VBucketAwareMemcached, DocumentGenerator, KVStoreAwareSmartClient
-from tasks import task, taskmanager
-from memcached.helper.kvstore import ClientKeyValueStore
+from old_tasks import task, taskmanager
+from memcached.helper.old_kvstore import ClientKeyValueStore
 
 class ViewQueryTests(unittest.TestCase):
 

@@ -10,9 +10,9 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached, LoadWithMcsoda
 from threading import Thread
 
-from tasks import task, taskmanager
+from old_tasks import task, taskmanager
 from memcached.helper.data_helper import DocumentGenerator
-from memcached.helper.kvstore import ClientKeyValueStore
+from memcached.helper.old_kvstore import ClientKeyValueStore
 
 
 class RebalanceBaseTest(unittest.TestCase):
