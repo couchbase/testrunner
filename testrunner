@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import base64
+import gzip
 from httplib import BadStatusLine
 import os
 import urllib2
@@ -182,14 +183,20 @@ def get_server_logs(input, path):
                         break
                     output.write(buffer)
                     os.write(1, ".")
+            file_input = open('{0}'.format(filename), 'rb')
+            zipped = gzip.open("{0}.gz".format(filename), 'wb')
+            zipped.writelines(file_input)
+            file_input.close()
+            zipped.close()
 
+            os.remove(filename)
             print "downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename))
         except urllib2.URLError:
-            print "unable to obtain diags from {0}".format(diag_url)
+            print "unable to obtain diags from %s" % diag_url
         except BadStatusLine:
-            print "unable to obtain diags from {0}".format(diag_url)
-        except Exception:
-            print "unable to obtain diags from {0}".format(diag_url)
+            print "unable to obtain diags from %s" % diag_url
+        except Exception as e:
+            print "unable to obtain diags from %s %s" % (diag_url, e)
 
 if __name__ == "__main__":
     str_time = time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())
