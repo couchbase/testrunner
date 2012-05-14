@@ -30,7 +30,7 @@ class PerfBase(unittest.TestCase):
     def setUpBase0(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
-        self.vbucket_count = 0
+        self.vbucket_count = PerfDefaults.vbuckets
         self.sc = None
         if self.parami("tear_down_on_setup", PerfDefaults.tear_down_on_setup) == 1:
             self.tearDown() # Tear down in case previous run had unclean death.

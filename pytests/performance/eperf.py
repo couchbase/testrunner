@@ -284,6 +284,7 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_read")
         items = self.parami("items", PerfDefaults.items)
+        self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         if self.parami("access_phase", 1) == 1:
             self.access_phase(items,
@@ -303,6 +304,7 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_write")
         items = self.parami("items", PerfDefaults.items)
+        self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         if self.parami("access_phase", 1) == 1:
             self.access_phase(items,
