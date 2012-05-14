@@ -244,11 +244,12 @@ if __name__ == "__main__":
                         attachments[latency].append(lr)
                     else:
                     #create a new dict
-                        lr = {"percentile_90th":row[0],
-                              "percentile_95th":row[1],
-                              "percentile_99th":row[2],
-                              "client_id":row[3],
-                              "mystery":row[4]}
+                        lr = {"percentile_80th":row[0],
+                              "percentile_90th":row[1],
+                              "percentile_95th":row[2],
+                              "percentile_99th":row[3],
+                              "client_id":row[4],
+                              "mystery":row[5]}
                         lr.update(z)
                         lr.update({"row":index})
                         index = index + 1
