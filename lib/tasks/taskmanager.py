@@ -35,23 +35,13 @@ class TaskManager(Thread):
                 else:
                     self.sleepq.put(s_task)
 
-
-    def cancel(self):
-
-        # stop queue processing
-        self._Thread__stop()
-        self.join()
-
-        # empty task queue and cancel all tasks
-        self._emptyq_and_cancel(self.readyq)
-        self._emptyq_and_cancel(self.sleepq)
-
-        self.stop()
-
-    def _emptyq_and_cancel(self, queue):
-        while not queue.empty():
-            _t = queue.get()
-            _t['task'].cancel()
-
-    def stop(self):
+    def shutdown(self, force = False):
         self.running = False
+        if force:
+            while not self.sleepq.empty():
+                task = self.sleepq.pop()['task']
+                task.cancel()
+                self.readyq.put(task['task'])
+            while not self.readyq.empty():
+                task = self.readyq.pop()
+                task.cancel()
