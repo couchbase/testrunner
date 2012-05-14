@@ -22,11 +22,12 @@ class BucketOperationHelper():
     def base_bucket_ratio(servers):
         ratio = 1.0
         #check if ip is same for all servers
-        ip = servers[0]
+        ip = servers[0].ip
         dev_environment = True
         for server in servers:
             if server.ip != ip:
                 dev_environment = False
+                break
         if dev_environment:
             ratio = 2.0 / 3.0 * 1 / len(servers)
         else:

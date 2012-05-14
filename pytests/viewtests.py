@@ -129,6 +129,8 @@ class ViewBaseTests(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
+            if( available_ram < 256):
+                available_ram = 256
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
             ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
