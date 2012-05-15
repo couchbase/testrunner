@@ -449,16 +449,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
 
         bucket_data = {}
         master = servers[0]
-        if create_buckets:
-            #let's create buckets
-            #wait for the bucket
-            #bucket port should also be configurable , pass it as the
-            #parameter to this test ? later
-
-            self._create_default_bucket(master)
-            inserted_keys = self._load_data(master, load_ratio)
-            _create_load_multiple_bucket(self, master, bucket_data, howmany=2)
-
         # cluster all the nodes together
         ClusterOperationHelper.add_all_nodes_or_assert(master,
                                                        servers,
@@ -476,6 +466,16 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self.assertTrue(rebalanceSucceeded,
                         "rebalance operation for nodes: {0} was not successful".format(otpNodeIds))
 
+        if create_buckets:
+            #let's create buckets
+            #wait for the bucket
+            #bucket port should also be configurable , pass it as the
+            #parameter to this test ? later
+
+            self._create_default_bucket(master)
+            inserted_keys = self._load_data(master, load_ratio)
+            _create_load_multiple_bucket(self, master, bucket_data, howmany=2)
+
         #if initial_version == "1.7.0" or initial_version == "1.7.1":
          #   self._save_config(rest_settings, master)
 
@@ -486,6 +486,11 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         if not roll_upgrade:
             for version in node_upgrade_path:
                 if version is not initial_version:
+                    log.info("SHUTDOWN ALL CB OR MB SERVERS IN CLUSTER BEFORE DOING UPGRADE")
+                    for server in servers:
+                        shell = RemoteMachineShellConnection(server)
+                        shell.stop_membase()
+                        shell.disconnect()
                     log.info("Upgrading to version {0}".format(version))
                     appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
                     self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
@@ -502,10 +507,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                         pools_info = RestConnection(server).get_pools_info()
                         self.assertTrue(pools_info['implementationVersion'], appropriate_build.product_version)
 
-                        if start_upgraded_first:
-                            log.info("Starting server {0} post upgrade".format(server))
-                            remote.start_membase()
-                        else:
+                        if not start_upgraded_first:
                             remote.stop_membase()
 
                         remote.disconnect()
