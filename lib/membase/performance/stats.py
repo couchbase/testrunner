@@ -220,6 +220,7 @@ class StatsCollector(object):
         ops_stat["time"] = time.time()
         self._task["ops-temp"].append(ops_stat)
         if len(self._task["ops-temp"]) >= 100:
+            print "Merging ops stats..."
             merged = self._merge()
             self._task["ops"].append(merged)
             self._task["ops-temp"] = []
@@ -238,6 +239,7 @@ class StatsCollector(object):
         merged = {"startTime":first["start-time"]}
         totalgets = 0
         totalsets = 0
+        totalqueries = 0
         delta = 0
         i = 0
         for i in range(len(self._task["ops-temp"])-1):
@@ -245,10 +247,14 @@ class StatsCollector(object):
             next = self._task["ops-temp"][i+1]
             totalgets += current["tot-gets"]
             totalsets += current["tot-sets"]
+            totalqueries += current["tot-queries"]
             delta += (next["start-time"] - current["start-time"])
         merged["endTime"] = merged["startTime"] + delta
         merged["totalSets"] = totalsets
         merged["totalGets"] = totalgets
+        merged["totalQueries"] = totalqueries
+        qps = totalqueries / float(delta)
+        merged["queriesPerSec"] = qps
         return merged
 
     def total_stats(self, ops_stat):

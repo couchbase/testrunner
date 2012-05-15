@@ -256,14 +256,6 @@ if __name__ == "__main__":
                         attachments[latency].append(lr)
                 del input_json[latency]
 
-        # Attach average QPS (queries per second) value
-        print "flattening queries"
-        total_queries = input_json['totalops'][0]['tot-gets']
-        end_time = input_json['totalops'][0]['end-time']
-        start_time = input_json['totalops'][0]['start-time']
-        avg_qps = total_queries / (end_time - start_time)
-        attachments['queries'] = {'avg_qps': avg_qps}
-
         log.info("attachments has {0} objects".format(len(attachments)))
         res = db.save_doc(input_json,force_update=True)
         doc_id = res["id"]
