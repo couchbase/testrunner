@@ -344,6 +344,7 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_rebalance")
         items = self.parami("items", PerfDefaults.items)
+        notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", PerfDefaults.rebalance_after)
