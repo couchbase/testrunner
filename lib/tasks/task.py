@@ -197,10 +197,14 @@ class StatsWaitTask(Task):
     GREATER_THAN='>'
     GREATER_THAN_EQ='>='
 
-    def __init__(self, stats, bucket):
+    def __init__(self, servers, bucket, param, stat, comparison, value):
         Task.__init__(self, "stats_wait_task")
+        self.servers = servers
         self.bucket = bucket
-        self.stats = stats
+        self.param = param
+        self.stat = stat
+        self.comparison = comparison
+        self.value = value
         self.conns = {}
 
     def execute(self, task_manager):
@@ -208,22 +212,34 @@ class StatsWaitTask(Task):
         task_manager.schedule(self)
 
     def check(self, task_manager):
-        for node in self.stats:
-            client = self._get_connection(node['server'])
-            for param, stats_list in node['stats'].items():
-                stats = client.stats(param)
-                for k, v in stats_list.items():
-                    if not stats.has_key(k):
-                        self.state = FINISHED
-                        self.set_exception(Exception("Stat {0} not found".format(k)))
-                        return
-                    if not self._compare(v['compare'], stats[k], v['value']):
-                        task_manager.schedule(self, 5)
-                        return
+        stat_result = 0
+        for server in self.servers:
+            client = self._get_connection(server)
+            stats = client.stats(self.param)
+            if not stats.has_key(self.stat):
+                self.state = FINISHED
+                self.set_exception(Exception("Stat {0} not found".format(self.stat)))
+                return
+            if stats[self.stat].isdigit():
+                stat_result += long(stats[self.stat])
+            else:
+                stat_result = stats[self.stat]
+
+        if not self._compare(self.comparison, str(stat_result), self.value):
+            self.log.info("Not Ready: %s %s %s %s expected on %s" % (self.stat, stat_result,
+                      self.comparison, self.value, self._stringify_servers()))
+            task_manager.schedule(self, 5)
+            return
+        self.log.info("Saw %s %s %s %s expected on %s" % (self.stat, stat_result,
+                      self.comparison, self.value, self._stringify_servers()))
+
         for server, conn in self.conns.items():
             conn.close()
         self.state = FINISHED
         self.set_result(True)
+
+    def _stringify_servers(self):
+        return ''.join([`server.ip` for server in self.servers])
 
     def _get_connection(self, server):
         if not self.conns.has_key(server):
@@ -232,7 +248,7 @@ class StatsWaitTask(Task):
 
     def _compare(self, cmp_type, a, b):
         if isinstance(b, (int, long)) and a.isdigit():
-            a = int(a)
+            a = long(a)
         elif isinstance(b, (int, long)) and not a.isdigit():
                 return False
         if (cmp_type == StatsWaitTask.EQUAL and a == b) or\

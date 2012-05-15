@@ -121,7 +121,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_wait_for_stats(self, stats, bucket):
+    def async_wait_for_stats(self, servers, bucket, param, stat, comparison, value):
         """Asynchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
@@ -129,12 +129,18 @@ class Cluster(object):
         the stats structure and how it can be built.
 
         Parameters:
-            stats - The stats structure that contains the state to look for. (See above)
+            servers - The servers to get stats from. Specifying multiple servers will
+                cause the result from each server to be added together before
+                comparing. ([TestInputServer])
             bucket - The name of the bucket (String)
+            param - The stats parameter to use. (String)
+            stat - The stat that we want to get the value from. (String)
+            comparison - How to compare the stat result to the value specified.
+            value - The value to compare to.
 
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
-        _task = StatsWaitTask(stats, bucket)
+        _task = StatsWaitTask(servers, bucket, param, stat, comparison, value)
         self.task_manager.schedule(_task)
         return _task
 
@@ -234,7 +240,7 @@ class Cluster(object):
         _task = self.async_verify_data(server, bucket, kv_store)
         return _task.result()
 
-    def wait_for_stats(self, stats, bucket):
+    def wait_for_stats(self, servers, bucket, param, stat, comparison, value):
         """Synchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
@@ -242,12 +248,18 @@ class Cluster(object):
         the stats structure and how it can be built.
 
         Parameters:
-            stats - The stats structure that contains the state to look for. (See above)
+            servers - The servers to get stats from. Specifying multiple servers will
+                cause the result from each server to be added together before
+                comparing. ([TestInputServer])
             bucket - The name of the bucket (String)
+            param - The stats parameter to use. (String)
+            stat - The stat that we want to get the value from. (String)
+            comparison - How to compare the stat result to the value specified.
+            value - The value to compare to.
 
         Returns:
             boolean - Whether or not the correct stats state was seen"""
-        _task = self.async_wait_for_stats(stats, bucket)
+        _task = self.async_wait_for_stats(servers, bucket, param, stat, comparison, value)
         return _task.result()
 
     def shutdown(self, force=False):

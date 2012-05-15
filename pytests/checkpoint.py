@@ -66,18 +66,19 @@ class CheckpointTests(unittest.TestCase):
         master = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, ACTIVE)
         self._set_checkpoint_size(self.servers[:self.num_servers], self.bucket, '5000')
         chk_stats = StatsCommon.get_stats(self.servers[:self.num_servers], self.bucket,
-                                           param, stat_key)
+                                          param, stat_key)
         load_thread = self.generate_load(master, self.bucket, num_items)
         load_thread.join()
-        stats = []
+        tasks = []
         for server, value in chk_stats.items():
-            StatsCommon.build_stat_check(server, param, stat_key, '>', value, stats)
-        task = self.cluster.async_wait_for_stats(stats, self.bucket)
-        try:
-            timeout = 30 if (num_items * .001) < 30 else num_items * .001
-            task.result(timeout)
-        except TimeoutError:
-            self.fail("New checkpoint not created")
+            tasks.append(self.cluster.async_wait_for_stats([server], self.bucket, param,
+                                                           stat_key, '>', value))
+        for task in tasks:
+            try:
+                timeout = 30 if (num_items * .001) < 30 else num_items * .001
+                task.result(timeout)
+            except TimeoutError:
+                self.fail("New checkpoint not created")
 
     def checkpoint_create_time(self):
         param = 'checkpoint'
@@ -88,18 +89,19 @@ class CheckpointTests(unittest.TestCase):
         self._set_checkpoint_timeout(self.servers[:self.num_servers], self.bucket, str(timeout))
         chk_stats = StatsCommon.get_stats(self.servers[:self.num_servers], self.bucket,
                                           param, stat_key)
-        stats = []
-        for server, value in chk_stats.items():
-            StatsCommon.build_stat_check(server, param, stat_key, '>', value, stats)
         load_thread = self.generate_load(master, self.bucket, 1)
         load_thread.join()
         log.info("Sleeping for {0} seconds)".format(timeout))
         time.sleep(timeout)
-        task = self.cluster.async_wait_for_stats(stats, self.bucket)
-        try:
-            task.result(60)
-        except TimeoutError:
-            self.fail("New checkpoint not created")
+        tasks = []
+        for server, value in chk_stats.items():
+            tasks.append(self.cluster.async_wait_for_stats([server], self.bucket, param,
+                                                           stat_key, '>', value))
+        for task in tasks:
+            try:
+                task.result(60)
+            except TimeoutError:
+                self.fail("New checkpoint not created")
         self._set_checkpoint_timeout(self.servers[:self.num_servers], self.bucket, str(600))
 
     def checkpoint_collapse(self):
@@ -118,28 +120,33 @@ class CheckpointTests(unittest.TestCase):
         load_thread = self.generate_load(master, self.bucket, num_items)
         load_thread.join()
 
-        stats = []
+        tasks = []
         chk_pnt = str(int(m_stats[m_stats.keys()[0]]) + (num_items / chk_size))
         chk_items = num_items - (chk_size * 2)
-        StatsCommon.build_stat_check(master, param, stat_key, '==', chk_pnt, stats)
-        StatsCommon.build_stat_check(slave1, param, stat_key, '==', chk_pnt, stats)
-        StatsCommon.build_stat_check(slave1, param, stat_chk_itms, '>=', str(num_items), stats)
-        task = self.cluster.async_wait_for_stats(stats, self.bucket)
-        try:
-            task.result(60)
-        except TimeoutError:
-            self.fail("Checkpoint not collapsed")
+        tasks.append(self.cluster.async_wait_for_stats([master], self.bucket, param, stat_key,
+                                                       '==', chk_pnt))
+        tasks.append(self.cluster.async_wait_for_stats([slave1], self.bucket, param, stat_key,
+                                                       '==', chk_pnt))
+        tasks.append(self.cluster.async_wait_for_stats([slave1], self.bucket, param,
+                                                       stat_chk_itms, '>=', str(num_items)))
+        for task in tasks:
+            try:
+                task.result(60)
+            except TimeoutError:
+                self.fail("Checkpoint not collapsed")
 
-        stats = []
+        tasks = []
         self._start_replication(slave2, self.bucket)
         chk_pnt = str(int(m_stats[m_stats.keys()[0]]) + (num_items / chk_size))
-        StatsCommon.build_stat_check(slave2, param, stat_key, '==', chk_pnt, stats)
-        StatsCommon.build_stat_check(slave1, param, stat_chk_itms, '<', num_items, stats)
-        task = self.cluster.async_wait_for_stats(stats, self.bucket)
-        try:
-            task.result(60)
-        except TimeoutError:
-            self.fail("Checkpoints not replicated to secondary slave")
+        tasks.append(self.cluster.async_wait_for_stats([slave2], self.bucket, param, stat_key,
+                                                       '==', chk_pnt))
+        tasks.append(self.cluster.async_wait_for_stats([slave1], self.bucket, param,
+                                                       stat_chk_itms, '<', num_items))
+        for task in tasks:
+            try:
+                task.result(60)
+            except TimeoutError:
+                self.fail("Checkpoints not replicated to secondary slave")
 
     def checkpoint_deduplication(self):
         param = 'checkpoint'
@@ -155,14 +162,16 @@ class CheckpointTests(unittest.TestCase):
         load_thread.join()
         self._start_replication(slave1, self.bucket)
 
-        stats = []
-        StatsCommon.build_stat_check(master, param, stat_key, '==', 4501, stats)
-        StatsCommon.build_stat_check(slave1, param, stat_key, '==', 4501, stats)
-        task = self.cluster.async_wait_for_stats(stats, self.bucket)
-        try:
-            task.result(60)
-        except TimeoutError:
-            self.fail("Items weren't deduplicated")
+        tasks = []
+        tasks.append(self.cluster.async_wait_for_stats([master], self.bucket, param,
+                                                       stat_key, '==', 4501))
+        tasks.append(self.cluster.async_wait_for_stats([slave1], self.bucket, param,
+                                                       stat_key, '==', 4501))
+        for task in tasks:
+            try:
+                task.result(60)
+            except TimeoutError:
+                self.fail("Items weren't deduplicated")
 
     def _set_checkpoint_size(self, servers, bucket, size):
         for server in servers:

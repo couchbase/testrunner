@@ -30,12 +30,9 @@ class NewRebalanceTests(BaseTestCase):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [self.servers[i]], [])
             self._load_all_buckets(self.servers[0], gen, "update", 0)
             rebalance.result()
-            stats = []
-            for j in range(self.num_servers)[:i]:
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_queue_size', '==', 0, stats)
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_flusher_todo', '==', 0, stats)
-            self._wait_for_stats_all_buckets(stats)
+            self._wait_for_stats_all_buckets(self.servers[:i+1])
             self._verify_all_buckets(self.servers[0])
+            self._verify_stats_all_buckets(self.servers[:i+1])
 
     """Rebalances nodes into a cluster while doing mutations and deletions.
 
@@ -54,16 +51,13 @@ class NewRebalanceTests(BaseTestCase):
 
         for i in range(self.num_servers)[1:]:
             rebalance = self.cluster.async_rebalance(self.servers[:i], [self.servers[i]], [])
-            self._load_all_buckets(self.servers[0], gen_1, "update", 1)
+            self._load_all_buckets(self.servers[0], gen_1, "update", 0)
             self._load_all_buckets(self.servers[0], gen_2, "delete", 0)
             rebalance.result()
             self._load_all_buckets(self.servers[0], gen_2, "create", 0)
-            stats = []
-            for j in range(self.num_servers)[:i]:
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_queue_size', '==', 0, stats)
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_flusher_todo', '==', 0, stats)
-            self._wait_for_stats_all_buckets(stats)
+            self._wait_for_stats_all_buckets(self.servers[:i+1])
             self._verify_all_buckets(self.servers[0])
+            self._verify_stats_all_buckets(self.servers[:i+1])
 
     """Rebalances nodes into a cluster while doing mutations and expirations.
 
@@ -88,12 +82,9 @@ class NewRebalanceTests(BaseTestCase):
             time.sleep(5)
             rebalance.result()
             self._load_all_buckets(self.servers[0], gen_2, "create", 0)
-            stats = []
-            for j in range(self.num_servers)[:i]:
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_queue_size', '==', 0, stats)
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_flusher_todo', '==', 0, stats)
-            self._wait_for_stats_all_buckets(stats)
+            self._wait_for_stats_all_buckets(self.servers[:i+1])
             self._verify_all_buckets(self.servers[0])
+            self._verify_stats_all_buckets(self.servers[:i+1])
 
     """Rebalances nodes out of a cluster while doing mutations.
 
@@ -104,7 +95,8 @@ class NewRebalanceTests(BaseTestCase):
     to drain and then verifies that there has been no data loss. Once all nodes have
     been rebalanced out of the cluster the test finishes."""
     def incremental_rebalance_out_with_mutation(self):
-        self.cluster.rebalance(self.servers, self.servers[1:], [])
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.servers[0], gen, "create", 0)
 
@@ -112,12 +104,9 @@ class NewRebalanceTests(BaseTestCase):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
             self._load_all_buckets(self.servers[0], gen, "update", 0)
             rebalance.result()
-            stats = []
-            for j in range(self.num_servers)[:i]:
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_queue_size', '==', 0, stats)
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_flusher_todo', '==', 0, stats)
-            self._wait_for_stats_all_buckets(stats)
+            self._wait_for_stats_all_buckets(self.servers[:i])
             self._verify_all_buckets(self.servers[0])
+            self._verify_stats_all_buckets(self.servers[:i])
 
     """Rebalances nodes out of a cluster while doing mutations and deletions.
 
@@ -129,7 +118,8 @@ class NewRebalanceTests(BaseTestCase):
     verifies that there has been no data loss. Once all nodes have been rebalanced out
     of the cluster the test finishes."""
     def incremental_rebalance_out_with_mutation_and_deletion(self):
-        self.cluster.rebalance(self.servers, self.servers[1:], [])
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         gen_1 = BlobGenerator('mike', 'mike-', self.value_size, end=(self.num_items / 2 - 1))
         gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
@@ -142,12 +132,9 @@ class NewRebalanceTests(BaseTestCase):
             self._load_all_buckets(self.servers[0], gen_2, "delete", 0)
             rebalance.result()
             self._load_all_buckets(self.servers[0], gen_2, "create", 0)
-            stats = []
-            for j in range(self.num_servers)[:i]:
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_queue_size', '==', 0, stats)
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_flusher_todo', '==', 0, stats)
-            self._wait_for_stats_all_buckets(stats)
+            self._wait_for_stats_all_buckets(self.servers[:i])
             self._verify_all_buckets(self.servers[0])
+            self._verify_stats_all_buckets(self.servers[:i])
 
     """Rebalances nodes out of a cluster while doing mutations and expirations.
 
@@ -159,7 +146,8 @@ class NewRebalanceTests(BaseTestCase):
     verifies that there has been no data loss. Once all nodes have been rebalanced out of
     the cluster the test finishes."""
     def incremental_rebalance_out_with_mutation_and_expiration(self):
-        self.cluster.rebalance(self.servers, self.servers[1:], [])
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         gen_1 = BlobGenerator('mike', 'mike-', self.value_size, end=(self.num_items / 2 - 1))
         gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
@@ -173,12 +161,9 @@ class NewRebalanceTests(BaseTestCase):
             rebalance.result()
             time.sleep(5)
             self._load_all_buckets(self.servers[0], gen_2, "create", 0)
-            stats = []
-            for j in range(self.num_servers)[:i]:
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_queue_size', '==', 0, stats)
-                StatsCommon.build_stat_check(self.servers[j], '', 'ep_flusher_todo', '==', 0, stats)
-            self._wait_for_stats_all_buckets(stats)
+            self._wait_for_stats_all_buckets(self.servers[:i])
             self._verify_all_buckets(self.servers[0])
+            self._verify_stats_all_buckets(self.servers[:i])
 
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1):
         load_tasks = []
@@ -190,10 +175,14 @@ class NewRebalanceTests(BaseTestCase):
         for task in load_tasks:
             task.result()
 
-    def _wait_for_stats_all_buckets(self, stats):
+    def _wait_for_stats_all_buckets(self, servers):
         stats_tasks = []
-        for bucket in self.buckets:
-            stats_tasks.append(self.cluster.async_wait_for_stats(stats, bucket))
+        for server in servers:
+            for bucket in self.buckets:
+                stats_tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
+                                   'ep_queue_size', '==', 0))
+                stats_tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
+                                   'ep_flusher_todo', '==', 0))
         for task in stats_tasks:
             task.result()
 

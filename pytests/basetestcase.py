@@ -74,3 +74,24 @@ class BaseTestCase(unittest.TestCase):
             self.buckets[name] = {1 : KVStore()}
         for task in bucket_tasks:
             task.result()
+
+    def _verify_stats_all_buckets(self, servers):
+        stats_tasks = []
+        for bucket, kv_stores in self.buckets.items():
+            items = sum([len(kv_store) for kv_store in kv_stores.values()])
+            stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                               'curr_items', '==', items))
+            stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                               'vb_active_curr_items', '==', items))
+            if len(servers) > 1:
+                stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                                   'vb_replica_curr_items', '==', items * self.num_replicas))
+                stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                                   'curr_items_tot', '==', items * (self.num_replicas + 1)))
+            else:
+                stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                                   'vb_replica_curr_items', '==', 0))
+                stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                                   'curr_items_tot', '==', items))
+        for task in stats_tasks:
+            task.result(60)
