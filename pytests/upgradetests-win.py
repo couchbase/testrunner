@@ -441,7 +441,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             remote.download_binary_in_win(older_build.url, abbr_product, initial_version)
             #now let's install ?
             remote.membase_install_win(older_build, initial_version)
-            #remote.membase_install(older_build)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
             rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
