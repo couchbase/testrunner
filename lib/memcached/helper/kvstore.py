@@ -50,6 +50,9 @@ class KVStore(object):
             self.cache[itr]["lock"].release()
         return valid_keys, deleted_keys
 
+    def __len__(self):
+        return sum([len(self.cache[itr]["partition"]) for itr in range(self.num_locks)])
+
     def _hash(self, key):
         return zlib.crc32(key) % self.num_locks
 
