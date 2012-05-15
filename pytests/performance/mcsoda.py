@@ -311,22 +311,55 @@ def next_cmd(cfg, cur, store):
 
 def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
                    num_ops, base, random_key, cur):
-    hit_hot_range = (ratio_hot_choice * 100) > (num_ops % 100)
-    if hit_hot_range:
-        range = math.floor(ratio_hot * num_items)
-    else:
-        base  = base + math.floor(ratio_hot * num_items)
-        range = math.floor((1.0 - ratio_hot) * num_items)
+    """
+    Choose a random or deterministic number in order to generate the MD5 hash.
 
+    The deterministic algorithm always favors new items.
+    i.e:
+        If many items have been created (num_creates > num_hot_items), \
+        hot items are chosen from the newest guys.
+    """
+    num_creates = cur.get('cur-creates', 0)
+    if num_items < 0 or num_items < num_creates \
+        or ratio_hot < 0 or ratio_hot > 1:
+        print "[mcsoda choose_key_num error] num_items: {0}, num_creates:{1}, ratio_hot: {2}"\
+            .format(num_items, num_creates, ratio_hot)
+        return 1
+
+    # get a random or deterministic key
     if random_key == 1:
-       x = int(random.random() * num_items)
+        x = int(random.random() * num_items)
     else:
-       pos = cur.get('pos', 0)
-       pos = (pos + LARGE_PRIME) % positive(num_items)
-       cur['pos'] = pos
-       x = pos
+        pos = cur.get('pos', 0)
+        pos = (pos + LARGE_PRIME) % positive(num_items)
+        cur['pos'] = pos
+        x = pos
 
-    return int((base + (x % positive(range))) % num_items)
+    hit_hot_range = (ratio_hot_choice * 100) > (num_ops % 100)
+    num_hot_items = positive(math.floor(ratio_hot * num_items))
+    num_cold_items = positive(num_items - num_hot_items)
+    num_init_items = positive(num_items - num_creates)
+    base = base % num_init_items
+
+    # calculate offset and apply it to the base
+    if hit_hot_range:
+        offset = x % num_hot_items
+        if offset > num_creates:                          # choose from the left hot set
+            retval = (base + offset - num_creates) % num_init_items
+        else:
+            retval = num_items - offset                   # choose from the right hot set
+    else:
+        offset = x % num_cold_items
+        if num_creates > num_hot_items:
+            retval = offset
+        elif base > num_cold_items:                         # no split-up on the cold set
+            retval = (base + num_hot_items - num_creates + offset) % num_init_items
+        elif offset < base:                                 # choose from the left cold set
+            retval = offset
+        else:
+            retval = offset + num_hot_items - num_creates   # choose from the right cold set
+
+    return int(retval) % num_items
 
 def positive(x):
     if x > 0:
