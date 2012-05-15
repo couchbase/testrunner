@@ -360,6 +360,9 @@ if (nrow(latency_query) > 0) {
     latency_query$percentile_99th <- as.numeric(latency_query$percentile_99th) * 1000
     latency_query$percentile_95th <- as.numeric(latency_query$percentile_95th) * 1000
     latency_query$percentile_90th <- as.numeric(latency_query$percentile_90th) * 1000
+    if (length(latency_query$percentile_80th)) {
+        latency_query$percentile_80th <- as.numeric(latency_query$percentile_80th) * 1000
+    }
 
     all_builds = factor(latency_query$buildinfo.version)
     result <- data.frame()
@@ -718,6 +721,21 @@ for(build in levels(builds)) {
 for(build in levels(builds)) {
 
 	fi <-latency_query[latency_query$buildinfo.version==build & latency_query$client_id ==0, ]
+	d <- mean(fi$percentile_80th)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "latency-query (80th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-query (80th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+}
+
+for(build in levels(builds)) {
+
+	fi <-latency_query[latency_query$buildinfo.version==build & latency_query$client_id ==0, ]
 	d <- mean(fi$percentile_90th)
 	print(d)
 	if(build == baseline){
@@ -786,6 +804,7 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[13])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[14])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[15])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[16])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[17])))
 
 CB <- c()
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[1]/3600)))
@@ -804,10 +823,11 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[13])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[14])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[15])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[16])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[17])))
 
 
 testdf <- data.frame(MB,CB)
-rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)" )
+rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)" )
 plot.new()
 col1 <- paste(unlist(strsplit(baseline_build, "-"))[1],"-",unlist(strsplit(baseline_build, "-"))[2])
 col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2]) 
@@ -1095,6 +1115,26 @@ if (nrow(latency_set) > 0) {
 }
 
 if (nrow(latency_query) > 0) {
+
+    if (length(latency_query$percentile_80th)) {
+        cat("Latency-query 80th\n")
+        temp <- latency_query[latency_query$client_id ==0,]
+        p <- ggplot(temp, aes(temp$row, temp$percentile_80th, color=buildinfo.version, label=temp$percentile_80th)) + labs(x="----time (sec)--->", y="ms")
+        p <- p + geom_point()
+        p <- addopts(p,"Latency-query 80th  percentile")
+        print(p)
+        makeFootnote(footnote)
+
+        cat("Latency-query 80th (0 - 10ms) \n")
+        temp <- latency_query[latency_query$client_id ==0,]
+        temp$percentile_80th_0_10 <- ifelse(temp$percentile_80th > 10, 10, temp$percentile_80th)
+        p <- ggplot(temp, aes(temp$row, temp$percentile_80th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_80th_0_10, linetype=buildinfo.version))
+        p <- p + labs(x="----time (sec)--->", y="ms")
+        p <- p + geom_point()
+        p <- addopts(p,"Latency-query 80th  percentile (0 - 10ms)")
+        print(p)
+        makeFootnote(footnote)
+    }
 
     cat("Latency-query 90th\n")
     temp <- latency_query[latency_query$client_id ==0,]
