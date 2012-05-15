@@ -445,7 +445,7 @@ for(index in 1:nrow(builds_list)) {
 disk_data <- result
 disk_data$row <- as.numeric(disk_data$row)
 disk_data$size <- as.numeric(disk_data$size)
-disk_data$row <- as.numeric(factor(disk_data$row))
+disk_data$row <- as.numeric(factor(disk_data$row)) * 10
 
 
 builds_list$runtime = as.numeric(builds_list$runtime)
