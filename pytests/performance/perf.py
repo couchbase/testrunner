@@ -485,6 +485,7 @@ class PerfBase(unittest.TestCase):
 
         cfg = { 'max-items': max_items or num_items,
                 'max-creates': max_creates or 0,
+                'max-ops-per-sec': self.parami("mcsoda_max_ops_sec", PerfDefaults.mcsoda_max_ops_sec),
                 'min-value-size': min_value_size or self.parami("min_value_size", 1024),
                 'exit-after-creates': exit_after_creates,
                 'ratio-sets': ratio_sets,
