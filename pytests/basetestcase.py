@@ -24,7 +24,7 @@ class BaseTestCase(unittest.TestCase):
         self.num_replicas = self.input.param("replicas", 1)
         self.num_items = self.input.param("items", 1000)
 
-        if self.input.param("skip_cleanup", False):
+        if not self.input.param("skip_cleanup", False):
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
             for server in self.servers:
                 ClusterOperationHelper.cleanup_cluster([server])
