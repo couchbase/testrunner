@@ -602,7 +602,7 @@ class EmployeeDataSet:
         vfn4 = 'function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] ); }'
 
         full_index_size = self.calc_total_doc_count()
-        partial_index_size = self.calc_total_doc_count()/3
+        partial_index_size = full_index_size/3
 
         return [QueryView(rest, full_index_size,    fn_str = vfn4),
                 QueryView(rest, partial_index_size, fn_str = vfn1),

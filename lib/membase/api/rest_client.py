@@ -679,22 +679,8 @@ class RestConnection(object):
 
 
     def rebalance(self, otpNodes, ejectedNodes):
-        knownNodes = ''
-        index = 0
-        for node in otpNodes:
-            if not index:
-                knownNodes += node
-            else:
-                knownNodes += ',' + node
-            index += 1
-        ejectedNodesString = ''
-        index = 0
-        for node in ejectedNodes:
-            if not index:
-                ejectedNodesString += node
-            else:
-                ejectedNodesString += ',' + node
-            index += 1
+        knownNodes = ','.join(otpNodes)
+        ejectedNodesString = ','.join(ejectedNodes)
 
         params = urllib.urlencode({'knownNodes': knownNodes,
                                    'ejectedNodes': ejectedNodesString,
@@ -811,9 +797,8 @@ class RestConnection(object):
 
         status, content = self._http_request(api, timeout=timeout)
 
-        json_parsed = json.loads(content)
-
         if status == True:
+            json_parsed = json.loads(content)
             node = RestParser().parse_get_nodes_response(json_parsed)
 
         return node
@@ -849,10 +834,8 @@ class RestConnection(object):
 
         status, content = self._http_request(api)
 
-        json_parsed = json.loads(content)
-
         if status == True:
-            parsed = json_parsed
+            parsed = json.loads(content)
 
         return parsed
 

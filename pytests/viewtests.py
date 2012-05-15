@@ -22,9 +22,9 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def common_setUp(self):
         self.log = logger.Logger.get_logger()
-        self.servers = TestInputSingleton.input.servers
         self.input = TestInputSingleton.input
         self.created_views = {}
+        self.servers = self.input.servers
         self.replica  = self.input.param("replica", 1)
         self.failover_factor = self.input.param("failover-factor", 1)
         self.num_docs = self.input.param("num-docs", 10000)
