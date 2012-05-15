@@ -233,6 +233,8 @@ class SpatialHelper:
                 self.servers)
             info = self.rest.get_nodes_self()
             available_ram = int(info.memoryQuota * node_ram_ratio)
+            if available_ram < 256:
+                available_ram = 256
             self.rest.create_bucket(bucket=self.bucket,
                                     ramQuotaMB=available_ram)
             ready = BucketOperationHelper.wait_for_memcached(self.master,
