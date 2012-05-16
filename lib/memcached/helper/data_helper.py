@@ -279,15 +279,15 @@ class MemcachedClientHelper(object):
 
         if isinstance(server, dict):
             log.info("dict:{0}".format(server))
-            log.info("creating direct client {0}:{1} {2}".format(server["ip"], node.moxi, bucket))
+            log.info("creating direct client {0}:{1} {2}".format(server["ip"], node.memcached, bucket))
         else:
-            log.info("creating direct client {0}:{1} {2}".format(server.ip, node.moxi, bucket))
+            log.info("creating direct client {0}:{1} {2}".format(server.ip, node.memcached, bucket))
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vBuckets = RestConnection(server).get_vbuckets(bucket)
         if isinstance(server, dict):
-            client = MemcachedClient(server["ip"], node.moxi, timeout=timeout)
+            client = MemcachedClient(server["ip"], node.memcached, timeout=timeout)
         else:
-            client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
+            client = MemcachedClient(server.ip, node.memcached, timeout=timeout)
         client.vbucket_count = len(vBuckets)
         bucket_info = rest.get_bucket(bucket)
         #todo raise exception for not bucket_info
