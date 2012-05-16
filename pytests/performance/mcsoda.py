@@ -586,9 +586,8 @@ class StoreMemcachedBinary(Store):
         random.seed(self.create_seed())
         random.shuffle(self.queue)
 
-        i = 1 # Start a 1, not 0, due to the single latency measurement request.
-        n = len(self.queue)
-        while i < n:
+        # Start a 1, not 0, due to the single latency measurement request.
+        for i in range(1, len(self.queue)):
             cmd, key_num, key_str, data, expiration = self.queue[i]
             delta_gets, delta_sets, delta_deletes, delta_arpas, delta_queries = \
                 self.cmd_append(cmd, key_num, key_str, data, expiration, next_grp)
@@ -598,7 +597,6 @@ class StoreMemcachedBinary(Store):
             next_inflight_num_deletes += delta_deletes
             next_inflight_num_arpas += delta_arpas
             next_inflight_num_queries += delta_queries
-            i = i + 1
 
         next_msg = self.inflight_complete(next_grp)
 
