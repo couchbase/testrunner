@@ -25,10 +25,11 @@ class PerfDefaults:
     ratio_hot_gets      =    0.995
     ratio_hot_sets      =    0.995
     ratio_expirations   =    0.025
-    max_creates         =    30000000    #30 million
+    max_creates         =    30000000    # 30 million
 
     # rebalance
     rebalance_after     =    200000
+    num_nodes_after     =    7           # num of nodes after rebalance.
 
     # control
     db_compaction           =   2        # db fragmentation percentage triggers compaction

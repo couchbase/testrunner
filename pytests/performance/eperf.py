@@ -274,7 +274,7 @@ class EPerfMaster(perf.PerfBase):
     def latched_rebalance(self, cur):
         if not self.latched_rebalance_done:
             self.latched_rebalance_done = True
-            self.delayed_rebalance(self.parami("num_nodes_after", 15), 0.01)
+            self.delayed_rebalance(self.parami("num_nodes_after", PerfDefaults.num_nodes_after), 0.01)
 
     # ---------------------------------------------
 
