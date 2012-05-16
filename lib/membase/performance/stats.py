@@ -350,6 +350,10 @@ class StatsCollector(object):
                 d[mc.host]["timings"].append(timings)
                 dispatcher = mc.stats('dispatcher')
                 d[mc.host]["dispatcher"].append(dispatcher)
+            print "\nDumping disk timing stats: {0}".format(time.strftime('%X %x %Z'))
+            for key, value in sorted(timings.iteritems()):
+                if key.startswith("disk"):
+                    print "{0:50s}:     {1}".format(key, value)
 
         start_time = str(self._task["time"])
         for mc in mcs:
