@@ -16,7 +16,7 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached
 from threading import Thread
 from memcached.helper.data_helper import DocumentGenerator
-from memcached.helper.kvstore import ClientKeyValueStore
+from memcached.helper.old_kvstore import ClientKeyValueStore
 import traceback
 
 

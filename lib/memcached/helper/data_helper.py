@@ -1,4 +1,5 @@
 import copy
+import socket
 from multiprocessing.process import Process
 from multiprocessing.queues import Queue
 import random
@@ -13,8 +14,9 @@ import hashlib
 import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
-from memcached.helper.kvstore import ClientKeyValueStore
+from memcached.helper.old_kvstore import ClientKeyValueStore
 from membase.api.rest_client import RestConnection, RestHelper
+from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL
 import json
 import sys
 sys.path.append('./pytests/performance/')
@@ -703,6 +705,7 @@ class VBucketAwareMemcached(object):
         self.memcacheds = {}
         self.vBucketMap = {}
         self.vBucketMapReplica = {}
+        self.rest = rest
         self.reset(rest)
 
     def reset(self, rest=None):
@@ -813,6 +816,56 @@ class VBucketAwareMemcached(object):
         for server in self.memcacheds:
             if server != which_mc:
                 return self.memcacheds[server]
+
+    def set(self, key, exp, flags, value):
+        vb_error = 0
+        while True:
+            try:
+                return self._send_op(self.memcached(key).set, key, exp, flags, value)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
+
+    def get(self, key):
+        vb_error = 0
+        while True:
+            try:
+                return self._send_op(self.memcached(key).get, key)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
+
+    def delete(self, key):
+        vb_error = 0
+        while True:
+            try:
+                return self._send_op(self.memcached(key).delete, key)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
+
+    def _send_op(self, func, *args):
+        backoff = .001
+        while True:
+            try:
+                return func(*args)
+            except MemcachedError as error:
+                if error.status == ERR_ETMPFAIL and backoff < .5:
+                    time.sleep(backoff)
+                    backoff *= 2
+                else:
+                    raise error
+            except socket.error, EOFError:
+                raise MemcachedError(ERR_NOT_MY_VBUCKET, "Connection reset")
 
     def done(self):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
@@ -1022,15 +1075,6 @@ class KVStoreSmartClientHelper(object):
         status = False
         msg = ""
 
-        if(expired_kv_item is not None and mc_item is None):
-            status = True
-        elif(expired_kv_item is None):
-            msg = "exp. status not set in kv_store"
-        elif(mc_item is not None):
-            msg = "key still exists in memcached"
-
-        return msg, status
-
 def start_reader_process(info, keyset, queue):
     ReaderThread(info, keyset, queue).start()
 
@@ -1052,6 +1096,12 @@ class GeneratedDocuments(object):
 
     def __len__(self):
         return self._items
+
+    def reset(self):
+        self._pointer = 0
+
+    def has_next(self):
+        return self._pointer != self._items
 
     # Returns the next value of the iterator
     def next(self):

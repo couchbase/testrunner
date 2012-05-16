@@ -144,5 +144,3 @@ Testrunner prints out a human readable pass/fail of the tests . Please refer to 
 This make target will start four ns_server(s) using "cluster_run -n4" and runs all the test cases listed in conf/py-view.conf,
 The test runtime can vary between 30-45 minutes. py-view.conf contains basic test cases which validates clustering operations such as rebalancing.Each test is also parametrized so you can easily modify this run list and change the number of docs or the load_duration.
 For instance "test_get_view_during_x_min_load_y_working_set,num-docs=10000,load-time=1,run-view-time=1" test will create a view, inserts 1000 documents, mutate those documents for 1 minute and run view queries in parallel to the load for 1 min. You can easily change the parameters there to insert 1M items and keep the load running for 10 mins for example.
-
-

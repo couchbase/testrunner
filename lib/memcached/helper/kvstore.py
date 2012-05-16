@@ -1,59 +1,135 @@
 import threading
+import random
+import zlib
 import time
-import copy
-class ClientKeyValueStore(object):
 
-    def __init__(self):
-        self._rlock = threading.Lock()
-        self._wlock = threading.Lock()
-        self._cache = {}
+class KVStore(object):
+    def __init__(self, num_locks=16):
+        self.num_locks = num_locks
+        self.reset()
 
-        #dict : {"key","value","status"} status could be deleted , expired
+    def reset(self):
+        self.cache = {}
+        for itr in range(self.num_locks):
+            self.cache[itr] = {"lock"   : threading.Lock(),
+                               "partition"  : Partition()}
 
-    def write(self, key, value, ttl= -1):
-        self._rlock.acquire()
-        self._wlock.acquire()
-        if ttl >= 0:
-            self._cache[key] = {"key":key, "value":value, "ttl":(time.time() + ttl), "status":"valid"}
+    def acquire_partition(self, key):
+        partition = self.cache[self._hash(key)]
+        partition["lock"].acquire()
+        return partition["partition"]
+
+    def release_partition(self, key):
+        if isinstance(key, str):
+            self.cache[self._hash(key)]["lock"].release()
+        elif isinstance(key, int):
+            self.cache[key]["lock"].release()
         else:
-            self._cache[key] = {"key":key, "value":value, "ttl":-1, "status":"valid"}
-        self._rlock.release()
-        self._wlock.release()
+            raise(Exception("Bad key"))
+
+    def acquire_random_partition(self, has_valid = True):
+        seed = random.choice(range(self.num_locks))
+        for itr in range(self.num_locks):
+            part_num = (seed + itr) % self.num_locks
+            self.cache[part_num]["lock"].acquire()
+            if has_valid and self.cache[part_num]["partition"].has_valid_keys():
+                return self.cache[part_num]["partition"], part_num
+            if not has_valid and self.cache[part_num]["partition"].has_deleted_keys():
+                return self.cache[part_num]["partition"], part_num
+            self.cache[part_num]["lock"].release()
+        return None, None
+
+    def key_set(self):
+        valid_keys = []
+        deleted_keys = []
+        for itr in range(self.num_locks):
+            self.cache[itr]["lock"].acquire()
+            partition = self.cache[itr]["partition"]
+            valid_keys.extend(partition.valid_key_set())
+            deleted_keys.extend(partition.deleted_key_set())
+            self.cache[itr]["lock"].release()
+        return valid_keys, deleted_keys
+
+    def _hash(self, key):
+        return zlib.crc32(key) % self.num_locks
+
+class Partition(object):
+    def __init__(self):
+        self.valid = {}
+        self.deleted = {}
+
+    def set(self, key, value, exp=0):
+        if key in self.deleted:
+            del self.deleted[key]
+        if exp != 0:
+            exp = (time.time() + exp)
+        self.valid[key] = {"value"   : value,
+                           "expires" : exp}
 
     def delete(self, key):
-        self._rlock.acquire()
-        self._wlock.acquire()
-        if key in self._cache:
-            self._cache[key]["status"] = "deleted"
-        else:
-            self._cache[key] = {"key":key, "value":"N/A", "ttl":-1, "status":"delete"}
-        self._rlock.release()
-        self._wlock.release()
+        if key in self.valid:
+            self.deleted[key] = self.valid[key]["value"]
+            del self.valid[key]
 
-    def read(self, key):
-        item = {}
-        self._rlock.acquire()
-        if key in self._cache:
-            item = self._cache[key]
-        self._rlock.release()
-        if item["ttl"] >= 0 and item["ttl"] < time.time():
-            item["status"] = "expired"
-        return item
+    def get_valid(self, key):
+        if key in self.valid:
+            if not self._expired(key):
+                return self.valid[key]["value"]
+        return None
 
+    def get_deleted(self, key):
+        if key in self.deleted:
+            return self.deleted[key]
+        if self._expired(key):
+            return self.deleted[key]
+        return None
 
-    def keys(self):
-        #dump all the keys
-        keys = []
-        self._rlock.acquire()
-        keys =  copy.deepcopy(self._cache.keys())
-        self._rlock.release()
-        return keys
+    def get_random_valid_key(self):
+        try:
+            while True:
+                key = random.choice(self.valid.keys())
+                if not self._expired(key):
+                    return key
+        except IndexError:
+            return None
 
-    def valid_items(self):
-        keys = self.keys()
-        valid_keys = []
-        for k in keys:
-            item = self.read(k)
-            if item["status"] == "valid":
-                valid_keys.append(k)
-        return valid_keys
+    def get_random_deleted_key(self):
+        try:
+            return random.choice(self.deleted.keys())
+        except IndexError:
+            return None
+
+    def valid_key_set(self):
+        key_set = []
+        for key in self.valid:
+            key_set.append(key)
+        return key_set
+
+    def deleted_key_set(self):
+        key_set = []
+        for key in self.deleted:
+            key_set.append(key)
+        return key_set
+
+    def has_valid_keys(self):
+        if len(self.valid) > 0:
+            return True
+        return False
+
+    def has_deleted_keys(self):
+        if len(self.deleted) > 0:
+            return True
+        return False
+
+    def _expired(self, key):
+        if key in self.valid:
+            if self.valid[key]["expires"] == 0:
+                return False
+            if self.valid[key]["expires"] < time.time():
+                self.deleted[key] = self.valid[key]["value"]
+                del self.valid[key]
+                return True
+        return False
+
+    def __len__(self):
+        return len(self.valid.keys())

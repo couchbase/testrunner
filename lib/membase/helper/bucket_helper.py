@@ -199,7 +199,7 @@ class BucketOperationHelper():
                 except mc_bin_client.MemcachedError as e:
                     log.error(e)
                     break
-                if c.find("\x01") > 0:
+                if c.find("\x01") > 0 or c.find("\x02") > 0:
                     ready_vbuckets[i] = True
                 elif i in ready_vbuckets:
                     log.warning("vbucket state changed from active to {0}".format(c))

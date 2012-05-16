@@ -1,5 +1,5 @@
 
-from tasks.task import NodeInitializeTask, BucketCreateTask
+from old_tasks.task import NodeInitializeTask, BucketCreateTask
 
 class TaskHelper():
     @staticmethod

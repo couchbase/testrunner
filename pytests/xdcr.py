@@ -16,7 +16,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from couchdb import client
 from rebalancingtests import RebalanceDataGenerator
-from memcached.helper.kvstore import ClientKeyValueStore
+from memcached.helper.old_kvstore import ClientKeyValueStore
 
 class XDCRBaseTest(unittest.TestCase):
 

@@ -1,13 +1,14 @@
-import time
 import logger
+import random
+import string
 from threading import Thread
-from exception import TimeoutException
+from memcacheConstants import ERR_NOT_FOUND
 from membase.api.rest_client import RestConnection
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import KVStoreAwareSmartClient, KVStoreSmartClientHelper
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from mc_bin_client import MemcachedError
-import copy
+from tasks.future import Future
 import json
 import uuid
 from mc_bin_client import MemcachedClient
@@ -19,77 +20,64 @@ from memcached.helper.data_helper import MemcachedClientHelper
 #stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
 
 
-class Task():
+PENDING='PENDING'
+EXECUTING='EXECUTING'
+CHECKING='CHECKING'
+FINISHED='FINISHED'
+
+class Task(Future):
     def __init__(self, name):
+        Future.__init__(self)
         self.log = logger.Logger.get_logger()
+        self.state = PENDING
         self.name = name
         self.cancelled = False
         self.retries = 0
         self.res = None
 
-    def cancel(self):
-        self.cancelled = True
+    def step(self, task_manager):
+        if not self.done():
+            if self.state == PENDING:
+                self.state = EXECUTING
+                task_manager.schedule(self)
+            elif self.state == EXECUTING:
+                self.execute(task_manager)
+            elif self.state == CHECKING:
+                self.check(task_manager)
+            elif self.state != FINISHED:
+                raise Exception("Bad State in {0}: {1}".format(self.name, self.state))
 
-    def is_timed_out(self):
-        if self.res is not None and self.res['status'] == 'timed_out':
-            return True
-        return False
+    def execute(self, task_manager):
+        raise NotImplementedError
 
-    def set_result(self, result):
-        self.res = result
-
-    def result(self, retries=0):
-        while self.res is None:
-            if retries == 0 or self.retries < retries:
-                time.sleep(1)
-            else:
-                self.res = {"status": "timed_out", "value": None}
-        if self.res['status'] == 'error':
-            raise Exception(self.res['value'])
-        if self.res['status'] == 'timed_out':
-            raise TimeoutException("task {0} timed out, tried {1} times".format(self.name,
-                self.retries))
-        return self.res['value']
-
+    def check(self, task_manager):
+        raise NotImplementedError
 
 class NodeInitializeTask(Task):
     def __init__(self, server):
         Task.__init__(self, "node_init_task")
-        self.state = "initializing"
         self.server = server
+        self.quota = 0
 
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "node init"
-            task_manager.schedule(self)
-        elif self.state == "node init":
-            self.init_node()
-            self.state = "cluster init"
-            task_manager.schedule(self)
-        elif self.state == "cluster init":
-            self.init_node_memory()
-        else:
-            raise Exception("Bad State in NodeInitializationTask")
-
-    def init_node(self):
+    def execute(self, task_manager):
         rest = RestConnection(self.server)
-        rest.init_cluster(self.server.rest_username, self.server.rest_password)
-
-    def init_node_memory(self):
-        rest = RestConnection(self.server)
+        username = self.server.rest_username
+        password = self.server.rest_password
+        rest.init_cluster(username, password)
         info = rest.get_nodes_self()
-        quota = int(info.mcdMemoryReserved * 2 / 3)
-        rest.init_cluster_memoryQuota(self.server.rest_username, self.server.rest_password, quota)
-        self.state = "finished"
-        self.set_result({"status": "success", "value": quota})
+        self.quota = int(info.mcdMemoryReserved * 2 / 3)
+        rest.init_cluster_memoryQuota(username, password, self.quota)
+        self.state = CHECKING
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result(self.quota)
 
 
 class BucketCreateTask(Task):
-    def __init__(self, server, bucket='default', replicas=1, port=11210, size=0, password=None):
+    def __init__(self, server, bucket='default', replicas=1, size=0, port=11211,
+                 password=None):
         Task.__init__(self, "bucket_create_task")
         self.server = server
         self.bucket = bucket
@@ -97,54 +85,37 @@ class BucketCreateTask(Task):
         self.port = port
         self.size = size
         self.password = password
-        self.state = "initializing"
 
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "creating"
-            task_manager.schedule(self)
-        elif self.state == "creating":
-            self.create_bucket(task_manager)
-        elif self.state == "checking":
-            self.check_bucket_ready(task_manager)
-        else:
-            raise Exception("Bad State in BucketCreateTask")
-
-    def create_bucket(self, task_manager):
+    def execute(self, task_manager):
         rest = RestConnection(self.server)
         if self.size <= 0:
             info = rest.get_nodes_self()
-            size = info.memoryQuota * 2 / 3
+            self.size = info.memoryQuota * 2 / 3
 
         authType = 'none' if self.password is None else 'sasl'
 
         try:
             rest.create_bucket(bucket=self.bucket,
-                ramQuotaMB=self.size,
-                replicaNumber=self.replicas,
-                proxyPort=self.port,
-                authType=authType,
-                saslPassword=self.password)
-            self.state = "checking"
+                               ramQuotaMB=self.size,
+                               replicaNumber=self.replicas,
+                               proxyPort=self.port,
+                               authType=authType,
+                               saslPassword=self.password)
+            self.state = CHECKING
             task_manager.schedule(self)
-        except BucketCreationException:
-            self.state = "finished"
-            self.set_result({"status": "error",
-                             "value": "Failed to create bucket {0}".format(self.bucket)})
+        except BucketCreationException as e:
+            self.state = FINISHED
+            self.set_exception(e)
 
-    def check_bucket_ready(self, task_manager):
+    def check(self, task_manager):
         try:
             if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
-                self.set_result({"status": "success", "value": None})
-                self.state == "finished"
+                self.set_result(True)
+                self.state = FINISHED
                 return
             else:
                 self.log.info("vbucket map not ready after try {0}".format(self.retries))
-        except Exception as e:
+        except Exception:
             self.log.info("vbucket map not ready after try {0}".format(self.retries))
         self.retries = self.retries + 1
         task_manager.schedule(self)
@@ -155,46 +126,23 @@ class BucketDeleteTask(Task):
         Task.__init__(self, "bucket_delete_task")
         self.server = server
         self.bucket = bucket
-        self.state = "initializing"
 
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "creating"
-            task_manager.schedule(self)
-        elif self.state == "creating":
-            self.delete_bucket(task_manager)
-        elif self.state == "checking":
-            self.check_bucket_deleted()
-        else:
-            raise Exception("Bad State in BucketDeleteTask")
-
-    def delete_bucket(self, task_manager):
+    def execute(self, task_manager):
         rest = RestConnection(self.server)
-        if self.bucket in [bucket.name for bucket in rest.get_buckets()]:
-            if rest.delete_bucket(self.bucket):
-                self.state = "checking"
-                task_manager.schedule(self)
-            else:
-                self.state = "finished"
-                self.set_result({"status": "error",
-                                 "value": "Failed to delete bucket {0}".format(self.bucket)})
+        if rest.delete_bucket(self.bucket):
+            self.state = CHECKING
+            task_manager.schedule(self)
         else:
-            # bucket already deleted
-            self.state = "finished"
-            self.set_result({"status": "success", "value": None})
+            self.state = FINISHED
+            self.set_result(False)
 
-    def check_bucket_deleted(self):
+    def check(self, task_manager):
         rest = RestConnection(self.server)
         if BucketOperationHelper.wait_for_bucket_deletion(self.bucket, rest, 200):
-            self.set_result({"status": "success", "value": None})
+            self.set_result(True)
         else:
-            self.set_result({"status": "error",
-                             "value": "{0} bucket took too long to delete".format(self.bucket)})
-        self.state = "finished"
+            self.set_result(False)
+        self.state = FINISHED
 
 
 class RebalanceTask(Task):
@@ -203,353 +151,346 @@ class RebalanceTask(Task):
         self.servers = servers
         self.to_add = to_add
         self.to_remove = to_remove
-        self.do_stop = do_stop
-        self.progress = progress
-        self.state = "initializing"
-        self.log.info("tcmalloc fragmentation stats before Rebalance ")
-        self.getStats(self.servers[0])
 
-    def getStats(self, servers):
-        rest = RestConnection(self.servers[0])
-        nodes = rest.node_statuses()
-        buckets = rest.get_buckets()
-
-        for node in nodes:
-            for bucket in buckets:
-                bucket = bucket.name
-                _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
-                         "password": self.servers[0].rest_password}
-                try:
-                    mc = MemcachedClientHelper.direct_client(_node, bucket)
-                    self.log.info("Bucket :{0} ip {1} : Stats {2} \n".format(bucket, node.ip, mc.stats("memory")))
-                except Exception:
-                    self.log.info("Server {0} not yet part of the cluster".format(node.ip))
-
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "add_nodes"
-            task_manager.schedule(self)
-        elif self.state == "add_nodes":
+    def execute(self, task_manager):
+        try:
             self.add_nodes(task_manager)
-        elif self.state == "start_rebalance":
             self.start_rebalance(task_manager)
-        elif self.state == "stop_rebalance":
-            self.stop_rebalance(task_manager)
-        elif self.state == "rebalancing":
-            self.rebalancing(task_manager)
-        else:
-            raise Exception("Bad State in RebalanceTask: {0}".format(self.state))
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except Exception as e:
+            self.state = FINISHED
+            self.set_exception(e)
 
     def add_nodes(self, task_manager):
         master = self.servers[0]
         rest = RestConnection(master)
-        try:
-            for node in self.to_add:
-                self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
-                rest.add_node(master.rest_username, master.rest_password,
-                    node.ip, node.port)
-            self.state = "start_rebalance"
-            task_manager.schedule(self)
-        except Exception as e:
-            self.state = "finished"
-            self.set_result({"status": "error", "value": e})
+        for node in self.to_add:
+            self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
+            rest.add_node(master.rest_username, master.rest_password,
+                          node.ip, node.port)
 
     def start_rebalance(self, task_manager):
         rest = RestConnection(self.servers[0])
         nodes = rest.node_statuses()
         ejectedNodes = []
-        for node in self.to_remove:
-            ejectedNodes.append(node.id)
-        try:
-            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
-            self.state = "rebalancing"
-            task_manager.schedule(self)
-        except Exception as e:
-            self.state = "finishing"
-            self.set_result({"status": "error", "value": e})
+        for server in self.to_remove:
+            for node in nodes:
+                if server.ip == node.ip and int(server.port) == int(node.port):
+                    ejectedNodes.append(node.id)
+        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
 
-    def stop_rebalance(self, task_manager):
+    def check(self, task_manager):
         rest = RestConnection(self.servers[0])
-        try:
-            rest.stop_rebalance()
-            # We don't want to start rebalance immediately
-            self.log.info("Rebalance Stopped, sleep for 20 secs")
-            time.sleep(20)
-            self.do_stop = False
-            self.state = "start_rebalance"
-            task_manager.schedule(self)
-        except Exception as e:
-            self.state = "finishing"
-            self.set_result({"status": "error", "value": e})
-
-    def rebalancing(self, task_manager):
-        rest = RestConnection(self.servers[0])
-        try:
-            progress = rest._rebalance_progress()
-            if progress is not -1 and progress is not 100:
-                if self.do_stop and progress >= self.progress:
-                    self.state = "stop_rebalance"
-                    task_manager.schedule(self, 1)
-                else:
-                    task_manager.schedule(self, 1)
-            else:
-                self.state = "finishing"
-                self.set_result({"status": "success", "value": None})
-                self.log.info("tcmalloc fragmentation stats after Rebalance ")
-                self.getStats(self.servers[0])
-        except Exception as e:
-            self.state = "finishing"
-            self.set_result({"status": "error", "value": e})
-
-
-class FailOverTask(Task):
-    def __init__(self, servers, to_remove=[]):
-        Task.__init__(self, "failover_task")
-        self.servers = servers
-        self.to_remove = to_remove
-        self.state = "initializing"
-
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled", "value": None})
-        elif self.is_timed_out():
-            return
-        elif self.state == "initializing":
-            self.state = "start_failover"
-            task_manager.schedule(self)
-        elif self.state == "start_failover":
-            self.start_failover(task_manager)
-        elif self.state == "failing over":
-            self.failingOver(task_manager)
+        progress = rest._rebalance_progress()
+        if progress != -1 and progress != 100:
+            task_manager.schedule(self, 10)
         else:
-            raise Exception("Bad State in Failover: {0}".format(self.state))
+            self.state = FINISHED
+            self.set_result(True)
 
-    def start_failover(self, task_manager):
-        rest = RestConnection(self.servers[0])
-        nodes = rest.node_statuses()
-        ejectedNodes = []
-        for node in self.to_remove:
-            ejectedNodes.append(node.id)
-        try:
-            rest.fail_over(self.to_remove[0])
-            self.state = "failing over"
-            task_manager.schedule(self)
-        except Exception as e:
-            self.state = "finishing"
-            self.set_result({"status": "error", "value": e})
+class StatsWaitTask(Task):
+    EQUAL='=='
+    NOT_EQUAL='!='
+    LESS_THAN='<'
+    LESS_THAN_EQ='<='
+    GREATER_THAN='>'
+    GREATER_THAN_EQ='>='
 
-    def failingOver(self, task_manager):
-        rest = RestConnection(self.servers[0])
-        nodes = rest.node_statuses()
-        ejectedNodes = []
-
-        for node in self.to_remove:
-            ejectedNodes.append(node.id)
-            self.log.info("ejected node is : %s" % ejectedNodes[0])
-
-        progress = rest.fail_over(ejectedNodes[0])
-        if not progress:
-            self.state = "finishing"
-            self.log.info("Error! Missing Parameter ... No node to fail over")
-            self.set_result({"status": "error", "value": None})
-        else:
-            self.state = "finishing"
-            self.log.info("Success! FailedOver node {0}".format([ejectedNodes]))
-            self.set_result({"status": "success", "value": None})
-
-
-#OperationGeneratorTask
-#OperationGenerating
-class GenericLoadingTask(Thread, Task):
-    def __init__(self, rest, bucket, kv_store=None, store_enabled=True, info=None):
-        Thread.__init__(self)
-        Task.__init__(self, "gen_task")
-        self.rest = rest
+    def __init__(self, stats, bucket):
+        Task.__init__(self, "stats_wait_task")
         self.bucket = bucket
-        self.client = KVStoreAwareSmartClient(rest, bucket, kv_store, info, store_enabled)
-        self.state = "initializing"
-        self.doc_op_count = 0
+        self.stats = stats
+        self.conns = {}
 
-    def cancel(self):
-        self._Thread__stop()
-        self.join()
-        self.log.info("cancelling task: {0}".format(self.name))
-        self.cancelled = True
+    def execute(self, task_manager):
+        self.state = CHECKING
+        task_manager.schedule(self)
 
-
-    def step(self, task_manager):
-        if self.cancelled:
-            self.result = self.set_result({"status": "cancelled",
-                                           "value": self.doc_op_count})
-        if self.state == "initializing":
-            self.state = "running"
-            self.start()
-            task_manager.schedule(self, 2)
-        elif self.state == "running":
-            self.log.info("{0}: {1} ops completed".format(self.name, self.doc_op_count))
-            if self.is_alive():
-                task_manager.schedule(self, 5)
-            else:
-                self.join()
-                self.state = "finished"
-                self.set_result({"status": "success", "value": self.doc_op_count})
-        elif self.state != "finished":
-            raise Exception("Bad State in DocumentGeneratorTask")
-
-    def do_ops(self):
-        noop = "override"
-
-    def do_task_op(self, op, key, value=None, expiration=None):
-        retry_count = 0
-        ok = False
-        if value is not None:
-            value = value.replace(" ", "")
-
-        while retry_count < 5 and not ok:
-            try:
-                if op == "set":
-                    if expiration is None:
-                        self.client.set(key, value)
-                    else:
-                        self.client.set(key, value, expiration)
-                if op == "get":
-                    value = self.client.mc_get(key)
-                if op == "delete":
-                    self.client.delete(key)
-                ok = True
-            except Exception as e:
-                retry_count += 1
-                self.client.reset_vbucket(self.rest, key)
-        return value
-
-
-class LoadDocGeneratorTask(GenericLoadingTask):
-    def __init__(self, rest, doc_generators, bucket="default", kv_store=None,
-                 store_enabled=True, expiration=None, loop=False):
-        GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
-
-        self.doc_generators = doc_generators
-        self.expiration = None
-        self.loop = loop
-        self.name = "doc-load-task{0}".format(str(uuid.uuid4())[:7])
-
-    def run(self):
-        while True:
-            dg = copy.deepcopy(self.doc_generators)
-            for doc_generator in dg:
-                for value in doc_generator:
-                    _value = value.encode("ascii", "ignore")
-                    _json = json.loads(_value, encoding="utf-8")
-                    _id = _json["_id"].encode("ascii", "ignore")
-                    try:
-                        self.do_task_op("set", _id, _value, self.expiration)
-                        self.doc_op_count += 1
-                    except Exception as e:
-                        self.state = "finished"
-                        self.set_result({"status": "error", "value": e})
+    def check(self, task_manager):
+        for node in self.stats:
+            client = self._get_connection(node['server'])
+            for param, stats_list in node['stats'].items():
+                stats = client.stats(param)
+                for k, v in stats_list.items():
+                    if not stats.has_key(k):
+                        self.state = FINISHED
+                        self.set_exception(Exception("Stat {0} not found".format(k)))
                         return
-                    except:
+                    if not self._compare(v['compare'], stats[k], v['value']):
+                        task_manager.schedule(self, 5)
                         return
-            if not self.loop:
-                self.set_result({"status": "success", "value": self.doc_op_count})
-                return
+        for server, conn in self.conns.items():
+            conn.close()
+        self.state = FINISHED
+        self.set_result(True)
 
+    def _get_connection(self, server):
+        if not self.conns.has_key(server):
+            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+        return self.conns[server]
 
-class DocumentAccessTask(GenericLoadingTask):
-    def __init__(self, rest, doc_ids, bucket="default",
-                 info=None, loop=False):
-        GenericLoadingTask.__init__(self, rest, bucket, info=info)
-        self.doc_ids = doc_ids
-        self.name = "doc-get-task{0}".format(str(uuid.uuid4())[:7])
-        self.loop = loop
+    def _compare(self, cmp_type, a, b):
+        if isinstance(b, (int, long)) and a.isdigit():
+            a = int(a)
+        elif isinstance(b, (int, long)) and not a.isdigit():
+                return False
+        if (cmp_type == StatsWaitTask.EQUAL and a == b) or\
+            (cmp_type == StatsWaitTask.NOT_EQUAL and a != b) or\
+            (cmp_type == StatsWaitTask.LESS_THAN_EQ and a <= b) or\
+            (cmp_type == StatsWaitTask.GREATER_THAN_EQ and a >= b) or\
+            (cmp_type == StatsWaitTask.LESS_THAN and a < b) or\
+            (cmp_type == StatsWaitTask.GREATER_THAN and a > b):
+            return True
+        return False
 
-    def run(self):
-        while True:
-            for _id in self.doc_ids:
-                try:
-                    self.do_task_op("get", _id)
-                    self.doc_op_count = self.doc_op_count + 1
-                except Exception as e:
-                    self.set_result({"status": "error",
-                                     "value": "get failed {0}".format(e)})
-            if not self.loop:
-                self.set_result({"status": "success", "value": self.doc_op_count})
-                return
-
-
-class DocumentExpireTask(GenericLoadingTask):
-    def __init__(self, rest, doc_ids, bucket="default", info=None,
-                 kv_store=None, store_enabled=True, expiration=5):
-        GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
-        self.doc_ids = doc_ids
-        self.name = "doc-expire-task{0}".format(str(uuid.uuid4())[:7])
-        self.expiration = expiration
-
-    def run(self):
-        for _id in self.doc_ids:
-            try:
-                item = self.do_task_op("get", _id)
-                if item:
-                    val = item['value']
-                    self.do_task_op("set", _id, val, self.expiration)
-                    self.doc_op_count = self.doc_op_count + 1
-                else:
-                    self.set_result({"status": "error",
-                                     "value": "failed get key to expire {0}".format(_id)})
-            except Exception as e:
-                self.set_result({"status": "error",
-                                 "value": "expiration failed {0}".format(e)})
-
-        # wait till docs are 'expected' to be expired before returning success
-        time.sleep(self.expiration)
-        self.set_result({"status": "success", "value": self.doc_op_count})
-
-
-class DocumentDeleteTask(GenericLoadingTask):
-    def __init__(self, rest, doc_ids, bucket="default", info=None,
-                 kv_store=None, store_enabled=True):
-        GenericLoadingTask.__init__(self, rest, bucket, kv_store, store_enabled)
-        self.doc_ids = doc_ids
-        self.name = "doc-delete-task{0}".format(str(uuid.uuid4())[:7])
-
-    def run(self):
-        for _id in self.doc_ids:
-            try:
-                self.do_task_op("delete", _id)
-                self.doc_op_count = self.doc_op_count + 1
-            except Exception as e:
-                self.set_result({"status": "error",
-                                 "value": "deletes failed {0}".format(e)})
-        self.set_result({"status": "success", "value": self.doc_op_count})
-
-
-class KVStoreIntegrityTask(Task, Thread):
-    def __init__(self, rest, kv_store, bucket="default"):
-        self.state = "initializing"
-        self.res = None
+class GenericLoadingTask(Thread, Task):
+    def __init__(self, server, bucket, kv_store):
         Thread.__init__(self)
+        Task.__init__(self, "load_gen_task")
+        self.kv_store = kv_store
+        self.client = VBucketAwareMemcached(RestConnection(server), bucket)
 
-        self.client = KVStoreAwareSmartClient(rest, bucket, kv_store)
-        self.kv_helper = KVStoreSmartClientHelper()
+    def execute(self, task_manager):
+        self.start()
+        self.state = EXECUTING
 
-    def step(self, task_manager):
-        if self.state == "initializing":
-            self.state = "running"
-            self.start()
-            task_manager.schedule(self)
-        elif self.state == "running":
-            if self.res is not None:
-                self.state = "complete"
-            else:
-                task_manager.schedule(self, 5)
-        else:
-            raise Exception("Bad State in KVStoreIntegrityTask")
+    def check(self, task_manager):
+        pass
 
     def run(self):
-        validation_failures = KVStoreSmartClientHelper.do_verification(self.client)
-        self.set_result({"status": "success", "value": validation_failures})
+        while self.has_next() and not self.done():
+            self.next()
+        self.state = FINISHED
+        self.set_result(True)
 
+    def has_next(self):
+        raise NotImplementedError
+
+    def next(self):
+        raise NotImplementedError
+
+    def _unlocked_create(self, partition, key, value):
+        try:
+            value_json = json.loads(value)
+            value_json['mutated'] = 0
+            value = json.dumps(value_json)
+        except ValueError:
+            index = random.choice(range(len(value)))
+            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index+1:]
+
+        try:
+            self.client.set(key, self.exp, 0, value)
+            partition.set(key, value, self.exp)
+        except MemcachedError as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+    def _unlocked_read(self, partition, key):
+        try:
+            o, c, d = self.client.get(key)
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+
+    def _unlocked_update(self, partition, key):
+        value = partition.get_valid(key)
+        if value is None:
+            return
+        try:
+            value_json = json.loads(value)
+            value_json['mutated'] += 1
+            value = json.dumps(value_json)
+        except ValueError:
+            index = random.choice(range(len(value)))
+            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index+1:]
+
+        try:
+            self.client.set(key, self.exp, 0, value)
+            partition.set(key, value, self.exp)
+        except MemcachedError as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+    def _unlocked_delete(self, partition, key):
+        try:
+            self.client.delete(key)
+            partition.delete(key)
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+
+class LoadDocumentsTask(GenericLoadingTask):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store)
+        self.generator = generator
+        self.op_type = op_type
+        self.exp = exp
+
+    def has_next(self):
+        return self.generator.has_next()
+
+    def next(self):
+        key, value = self.generator.next()
+        partition = self.kv_store.acquire_partition(key)
+        if self.op_type == 'create':
+            self._unlocked_create(partition, key, value)
+        elif self.op_type == 'read':
+            self._unlocked_read(partition, key)
+        elif self.op_type == 'update':
+            self._unlocked_update(partition, key)
+        elif self.op_type == 'delete':
+            self._unlocked_delete(partition, key)
+        else:
+            self.state = FINISHED
+            self.set_exception(Exception("Bad operation type: %s" % self.op_type))
+        self.kv_store.release_partition(key)
+
+class WorkloadTask(GenericLoadingTask):
+    def __init__(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store)
+        self.itr = 0
+        self.num_ops = num_ops
+        self.create = create
+        self.read = create + read
+        self.update = create + read + update
+        self.delete = create + read + update + delete
+        self.exp = exp
+
+    def has_next(self):
+        if self.num_ops == 0 or self.itr < self.num_ops:
+            return True
+        return False
+
+    def next(self):
+        self.itr += 1
+        rand = random.randint(1,  self.delete)
+        if rand > 0 and rand <= self.create:
+            self._create_random_key()
+        elif rand > self.create and rand <= self.read:
+            self._get_random_key()
+        elif rand > self.read and rand <= self.update:
+            self._update_random_key()
+        elif rand > self.update and rand <= self.delete:
+            self._delete_random_key()
+
+    def _get_random_key(self):
+        partition, part_num = self.kv_store.acquire_random_partition()
+        if partition is None:
+            return
+
+        key = partition.get_random_valid_key()
+        if key is None:
+            self.kv_store.release_partition(part_num)
+            return
+
+        self._unlocked_read(partition, key)
+        self.kv_store.release_partition(part_num)
+
+    def _create_random_key(self):
+        partition, part_num = self.kv_store.acquire_random_partition(False)
+        if partition is None:
+            return
+
+        key = partition.get_random_deleted_key()
+        if key is None:
+            self.kv_store.release_partition(part_num)
+            return
+
+        value = partition.get_deleted(key)
+        if value is None:
+            self.kv_store.release_partition(part_num)
+            return
+
+        self._unlocked_create(partition, key, value)
+        self.kv_store.release_partition(part_num)
+
+    def _update_random_key(self):
+        partition, part_num = self.kv_store.acquire_random_partition()
+        if partition is None:
+            return
+
+        key = partition.get_random_valid_key()
+        if key is None:
+            self.kv_store.release_partition(part_num)
+            return
+
+        self._unlocked_update(partition, key)
+        self.kv_store.release_partition(part_num)
+
+    def _delete_random_key(self):
+        partition, part_num = self.kv_store.acquire_random_partition()
+        if partition is None:
+            return
+
+        key = partition.get_random_valid_key()
+        if key is None:
+            self.kv_store.release_partition(part_num)
+            return
+
+        self._unlocked_delete(partition, key)
+        self.kv_store.release_partition(part_num)
+
+class ValidateDataTask(GenericLoadingTask):
+    def __init__(self, server, bucket, kv_store):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store)
+        self.valid_keys, self.deleted_keys = kv_store.key_set()
+        self.num_valid_keys = len(self.valid_keys)
+        self.num_deleted_keys = len(self.deleted_keys)
+        self.itr = 0
+
+    def has_next(self):
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys):
+            return True
+        return False
+
+    def next(self):
+        if self.itr < self.num_valid_keys:
+            self._check_valid_key(self.valid_keys[self.itr])
+        else:
+            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys])
+        self.itr += 1
+
+    def _check_valid_key(self, key):
+        partition = self.kv_store.acquire_partition(key)
+
+        value = partition.get_valid(key)
+        if value is None:
+            self.kv_store.release_partition(key)
+            return
+        value = json.dumps(value)
+
+        try:
+            o, c, d = self.client.get(key)
+            if d != json.loads(value):
+                self.state = FINISHED
+                self.set_exception(Exception('Bad result: %s != %s' % (json.dumps(d), value)))
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+        self.kv_store.release_partition(key)
+
+    def _check_deleted_key(self, key):
+        partition = self.kv_store.acquire_partition(key)
+
+        try:
+            o, c, d = self.client.delete(key)
+            if partition.get_valid(key) is not None:
+                self.state = FINISHED
+                self.set_exception(Exception('Not Deletes: %s' % (key)))
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+        self.kv_store.release_partition(key)
