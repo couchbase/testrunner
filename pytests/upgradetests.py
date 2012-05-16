@@ -755,13 +755,16 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 removed = helper.remove_nodes(knownNodes=allNodes, ejectedNodes=toBeEjectedNodes)
                 self.assertTrue(removed, msg="Unable to remove nodes {0}".format(toBeEjectedNodes))
                 remote = RemoteMachineShellConnection(server)
+                remote.download_build(appropriate_build)
                 # if initial version is 180
                 # Don't uninstall the server
                 if not initial_version.startswith('1.8.0'):
                     remote.membase_uninstall()
                     remote.couchbase_uninstall()
-                remote.download_build(appropriate_build)
-                remote.membase_install(appropriate_build)
+                    remote.membase_install(appropriate_build)
+                else:
+                    remote.membase_upgrade(appropriate_build)
+
                 RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
                 log.info("sleep for 10 seconds to wait for membase-server to start...")
                 time.sleep(TIMEOUT_SECS)
