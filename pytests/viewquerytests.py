@@ -6,9 +6,11 @@ import json
 import sys
 from threading import Thread
 from couchbase.document import View
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from viewtests import ViewBaseTests
 from memcached.helper.data_helper import VBucketAwareMemcached, DocumentGenerator, KVStoreAwareSmartClient
+from membase.helper.failover_helper import FailoverHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 from tasks import task, taskmanager
 from memcached.helper.kvstore import ClientKeyValueStore
 
@@ -71,6 +73,73 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._begin_rebalance_in(self)
         self._query_all_views(data_set.views)
         ViewBaseTests._end_rebalance(self)
+
+    def test_employee_dataset_alldocs_failover_queries(self):
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
+        docs_per_day = self.input.param('docs-per-day', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+        data_set.add_all_docs_queries()
+        self._query_test_init(data_set, False)
+
+        master = self.servers[0]
+        RebalanceHelper.wait_for_persistence(master, "default")
+
+        # failover and verify loaded data
+        failover_helper = FailoverHelper(self.servers, self)
+        failover_nodes = failover_helper.failover(self.failover_factor)
+        self.log.info("10 seconds sleep after failover before invoking rebalance...")
+        time.sleep(10)
+
+        rest=RestConnection(self.servers[0])
+        nodes = rest.node_statuses()
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=[node.id for node in failover_nodes])
+
+        self._query_all_views(data_set.views)
+
+        msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
+        self.assertTrue(rest.monitorRebalance(), msg=msg)
+
+    def test_employee_dataset_alldocs_incremental_failover_queries(self):
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
+        docs_per_day = self.input.param('docs-per-day', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+        data_set.add_all_docs_queries()
+        self._query_test_init(data_set, False)
+
+        servers=self.servers;
+
+        # incrementaly failover nodes and verify loaded data
+        for i in range(self.failover_factor):
+            failover_helper = FailoverHelper(servers, self)
+            failover_nodes = failover_helper.failover(1)
+            self.log.info("10 seconds sleep after failover before invoking rebalance...")
+            time.sleep(10)
+
+            rest=RestConnection(self.servers[0])
+            nodes = rest.node_statuses()
+            rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=[node.id for node in failover_nodes])
+
+            self._query_all_views(data_set.views)
+
+            temp=[]
+            for server in servers:
+                rest = RestConnection(server)
+                if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=1):
+                    continue
+                temp.append(server)
+            servers=temp
+
+            msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
+            self.assertTrue(RestConnection(self.servers[0]).monitorRebalance(), msg=msg)
+
 
     def test_employee_dataset_startkey_endkey_docid_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
@@ -305,13 +374,13 @@ class QueryView:
                     if self.reduce_fn is '_count':
                         num_keys = self._verify_count_reduce_helper(query, results)
                         self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
-                            .format(view_name, attempt, query.expected_num_groups,
+                            .format(view_name, attempt + 1, query.expected_num_groups,
                                     num_keys, expected_num_docs))
                     else:
 
                         num_keys = len(ViewBaseTests._get_keys(self, results))
                         self.log.info("{0}: attempt {1} retrieved value {2} expected: {3}" \
-                            .format(view_name, attempt, num_keys, expected_num_docs))
+                            .format(view_name, attempt + 1, num_keys, expected_num_docs))
 
                     attempt += 1
                     if num_keys not in result_count_stats:

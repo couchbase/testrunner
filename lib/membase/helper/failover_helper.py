@@ -27,10 +27,8 @@ class FailoverHelper(object):
             self.test.fail(num_nodes_mismatch.format(len(nodes), howmany))
         master_node = rest.get_nodes_self()
         #when selecting make sure we dont pick the master node
-        selection = []
-        for n in nodes:
-            if n.id != master_node.id:
-                selection.append(n)
+        selection=[n for n in nodes if n.id!=master_node.id]
+
         shuffle(selection)
         failed = selection[0:howmany]
         for f in failed:
