@@ -312,7 +312,8 @@ class QueryView:
                  fn_str = None,
                  reduce_fn = None,
                  queries = None,
-                 create_on_init = True):
+                 create_on_init = True,
+                 type_filter = None):
 
         self.index_size = index_size
 
@@ -327,6 +328,7 @@ class QueryView:
         self.fn_str = (fn_str, default_fn_str)[fn_str is None]
         self.reduce_fn = reduce_fn
         self.results = unittest.TestResult()
+        self.type_filter = type_filter or None
 
         # queries defined for this view
         self.queries = (queries, list())[queries is None]
@@ -488,6 +490,7 @@ class EmployeeDataSet:
         self.rest = rest
         self.name = "employee_dataset"
         self.kv_store = None
+        self.doc_id_map = {}
 
     def calc_total_doc_count(self):
         return self.years * self.months * self.days * self.docs_per_day * len(self.get_data_sets())
@@ -674,9 +677,9 @@ class EmployeeDataSet:
         partial_index_size = full_index_size/3
 
         return [QueryView(rest, full_index_size,    fn_str = vfn4),
-                QueryView(rest, partial_index_size, fn_str = vfn1),
-                QueryView(rest, partial_index_size, fn_str = vfn2),
-                QueryView(rest, partial_index_size, fn_str = vfn3),
+                QueryView(rest, partial_index_size, fn_str = vfn1, type_filter = "ui"),
+                QueryView(rest, partial_index_size, fn_str = vfn2, type_filter = "admin"),
+                QueryView(rest, partial_index_size, fn_str = vfn3, type_filter = "arch"),
                 QueryView(rest, full_index_size,    fn_str = vfn4, reduce_fn="_count")]
 
     def get_data_sets(self):
@@ -685,6 +688,8 @@ class EmployeeDataSet:
     def load(self, tc, view, verify_docs_loaded = True):
         data_threads = []
         for info in self.get_data_sets():
+
+            self.doc_id_map.update({info['type'] : {"years" : self._doc_map_array()}})
             t = Thread(target=self._iterative_load,
                        name="iterative_load",
                        args=(info, tc, view, self.docs_per_day, verify_docs_loaded))
@@ -694,15 +699,37 @@ class EmployeeDataSet:
         for t  in data_threads:
             t.join()
 
+        # set expected_keys for all queries
+        self.preload_matching_query_keys()
+
+
+    # create new array with a None item at index 0 for
+    # doc_map_id which is used for '1' based lookups
+    def _doc_map_array(self):
+        array_ = []
+        array_.append(None)
+        return array_
+
+
     def _iterative_load(self, info, tc, view, loads_per_iteration, verify_docs_loaded):
         loaded_docs = []
 
         try:
             smart = VBucketAwareMemcached(self.rest, self.bucket)
             for i in range(1,self.years + 1):
+                self.doc_id_map[info['type']]['years'].append(i)
+                self.doc_id_map[info['type']]['years'][i] =\
+                    { "months" : self._doc_map_array()}
                 for j in range(1, self.months + 1):
+                    self.doc_id_map[info['type']]['years'][i]['months'].append(j)
+                    self.doc_id_map[info['type']]['years'][i]['months'][j] =\
+                        {"days" : self._doc_map_array()}
                     doc_sets = []
                     for k in range(1, self.days + 1):
+                        self.doc_id_map[info['type']]['years'][i]['months'][j]['days'].append(k)
+                        self.doc_id_map[info['type']]['years'][i]['months'][j]['days'][k]=\
+                            {"docs" : []}
+
                         kv_template = {"name": "employee-${prefix}-${seed}",
                                        "join_yr" : 2007+i, "join_mo" : j, "join_day" : k,
                                        "email": "${prefix}@couchbase.com",
@@ -712,26 +739,172 @@ class EmployeeDataSet:
                         options = {"size": 256, "seed":  str(uuid.uuid4())[:7]}
                         docs = DocumentGenerator.make_docs(loads_per_iteration, kv_template, options)
                         doc_sets.append(docs)
-                    #load docs
-                    self._load_chunk(smart, doc_sets)
+                    # load docs
+                    doc_ids = self._load_chunk(smart, doc_sets)
+
         except Exception as ex:
             view.results.addError(tc, sys.exc_info())
             raise ex
 
     def _load_chunk(self, smart, doc_sets):
+
+        doc_ids = []
         for docs in doc_sets:
             idx = 0
             for value in docs:
                 value = value.encode("utf-8", "ignore")
                 json_map = json.loads(value, encoding="utf-8")
-                doc_id = "{0}{1}-{2}_{3}_{4}".format(json_map["type"],
+                type_ = json_map["type"]
+                year = json_map["join_yr"]
+                month = json_map["join_mo"]
+                day = json_map["join_day"]
+
+                doc_id = "{0}{1}-{2}_{3}_{4}".format(type_,
                                                      str(idx).zfill(4),
-                                                     json_map["join_yr"],
-                                                     json_map["join_mo"],
-                                                     json_map["join_day"])
+                                                     year,
+                                                     month,
+                                                     day)
                 del json_map["_id"]
                 smart.memcached(doc_id).set(doc_id, 0, 0, json.dumps(json_map))
+                doc_ids.append(doc_id)
+
+                # update doc_id map
+                self.doc_id_map[type_]['years'][year-2007]\
+                    ['months'][month]['days'][day]['docs'].append(doc_id)
+
                 idx += 1
+
+        return doc_ids
+
+    def preload_matching_query_keys(self):
+        # get all queries defined in this data_set
+        for v in self.views:
+            for q in v.queries:
+                self._preload_matching_query_keys(q, v.type_filter)
+
+    def _preload_matching_query_keys(self, query, type_filter = None):
+        start_key_set = False
+        end_key_set = False
+        inclusive_end = True
+        descending = False
+
+        q_start_yr  = 1
+        q_start_mo  = 1
+        q_start_day = 1
+
+        q_end_yr  = self.years
+        q_end_mo  = self.months
+        q_end_day = self.days
+
+
+        if 'start_key' in query.params:
+            start_key_set = True
+            params = json.loads(query.params['start_key'])
+            if params[0] and not None:
+                q_start_yr = params[0] - 2007
+            if params[1] and not None:
+                q_start_mo = params[1]
+            if params[2] and not None:
+                q_start_day = params[2]
+
+        if 'end_key' in query.params:
+            end_key_set = True
+            params = json.loads(query.params['end_key'])
+            if params[0] and not None:
+                q_end_yr = params[0] - 2007
+            if params[1] and not None:
+                q_end_mo = params[1]
+            if params[2] and not None:
+                q_end_day = params[2]
+
+        if 'descending' in query.params:
+            descending = json.loads(query.params['descending'])
+            if descending == True:
+                q_start_yr, q_end_yr = q_end_yr, q_start_yr
+                q_start_mo, q_end_mo = q_end_mo, q_start_mo
+                q_start_day, q_end_day = q_end_day, q_start_day
+
+        # note: inclusive end check must occur after descending
+        if 'inclusive_end' in query.params:
+            inclusive_end = json.loads(query.params['inclusive_end'])
+            if inclusive_end == False and 'endkey_docid' not in query.params:
+               q_end_day -= 1
+
+
+        if type_filter is None:
+            types = [type_ for type_ in self.doc_id_map]
+        else:
+            types = [type_filter]
+
+        type_idx = 0
+        for doc_type in types:
+            for years in self.doc_id_map[doc_type]['years'][q_start_yr:q_end_yr + 1]:
+                mo_idx = 1
+                days_skipped_offset = 0
+                for months in years['months'][q_start_mo:q_end_mo + 1]:
+
+                    # at end month only include up to N days
+                    if (mo_idx + q_start_mo - 1) == q_end_mo:
+                        mo_days = months['days'][1:q_end_day + 1]
+                    else:
+                        if mo_idx == 1:
+                            # at beginning of month skip first N docs
+                            mo_days = months['days'][q_start_day:]
+
+                            if q_start_day > 1:
+                                days_skipped_offset = (q_start_day)*self.docs_per_day*(type_idx + 1) \
+                                    - 2*self.docs_per_day
+                        else:
+                            mo_days = months['days'][1:]
+
+                    day_idx = 0
+                    for days in mo_days:
+
+                        # insert expected keys for query
+                        doc_idx = 0
+                        for id in days['docs']:
+
+                            # order insertion according to view collation algorithm
+                            # so that we can do easy comparison and docid matches later
+                            # TODO: require pyicu package in testrunner and sort
+                            if type_idx > 0:
+                                day_offset = (type_idx)*self.docs_per_day
+                                month_offset = 0
+                                if day_idx > 0:
+                                    day_offset = day_offset*(day_idx + 1) + self.docs_per_day*(day_idx)
+                                day_offset += doc_idx
+                                if mo_idx > 1:
+                                    month_offset = 2*(mo_idx - 1)*self.docs_per_day*self.days\
+                                        + self.docs_per_day*self.days*(type_idx - 1)*(mo_idx - 1)\
+                                        - days_skipped_offset
+
+                                ins_pos = day_offset + month_offset
+
+                                # add record to expected output
+                                query.expected_keys.insert(ins_pos, id)
+                            else:
+                                query.expected_keys.append(id)
+                            doc_idx += 1
+                        day_idx += 1
+                    mo_idx += 1
+            type_idx += 1
+
+        if descending == True:
+            query.expected_keys.reverse()
+
+        if 'startkey_docid' in query.params:
+            startkey_docid = query.params['startkey_docid']
+            start_idx = query.expected_keys.index(startkey_docid)
+            query.expected_keys = query.expected_keys[start_idx:]
+
+        if 'endkey_docid' in query.params:
+            endkey_docid = query.params['endkey_docid']
+            end_idx = query.expected_keys.index(endkey_docid)
+            query.expected_keys = query.expected_keys[:end_idx + 1]
+            if inclusive_end == False:
+                query.expected_keys = query.expected_keys[:-1]
+
+
 
 class SimpleDataSet:
     def __init__(self, rest, num_docs):
@@ -842,4 +1015,4 @@ class QueryHelper:
         self.expected_num_docs = expected_num_docs
         self.expected_num_groups = expected_num_groups
         self.type_ = type_   # "view" or "all_docs"
-
+        self.expected_keys = []
