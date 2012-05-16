@@ -556,6 +556,22 @@ class StoreMemcachedBinary(Store):
                            len(key), len(extra), dtype, vbucketId,
                            len(key) + len(extra) + len(val), opaque, cas), vbucketId
 
+    def create_seed(self):
+        """Return a seed (hashable tuple or int value) based on current stats.
+        This seed ensures reproducible randomness for the same test
+        configurations.
+
+        """
+
+        if self.why == 'loop-fg':
+            return self.cur.get('cur-queries', 0)
+        else:
+            return (self.cur.get('cur-gets', 0),
+                    self.cur.get('cur-sets', 0),
+                    self.cur.get('cur-deletes', 0),
+                    self.cur.get('cur-creates', 0),
+                    self.cur.get('cur-arpas', 0))
+
     def flush(self):
         next_inflight = 0
         next_inflight_num_gets = 0
@@ -565,6 +581,10 @@ class StoreMemcachedBinary(Store):
         next_inflight_num_queries = 0
 
         next_grp = self.inflight_start()
+
+        # Permutation of requests
+        random.seed(self.create_seed())
+        random.shuffle(self.queue)
 
         i = 1 # Start a 1, not 0, due to the single latency measurement request.
         n = len(self.queue)
