@@ -38,23 +38,6 @@ class FailoverBaseTest(unittest.TestCase):
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
 
     @staticmethod
-    def choose_nodes(master, nodes, howmany):
-        selected = []
-        for node in nodes:
-            if not FailoverBaseTest.contains(node.ip, master.ip) and\
-               not FailoverBaseTest.contains(node.ip, '127.0.0.1'):
-                selected.append(node)
-                if len(selected) == howmany:
-                    break
-        return selected
-
-    @staticmethod
-    def contains(string1, string2):
-        if string1 and string2:
-            return string1.find(string2) != -1
-        return False
-
-    @staticmethod
     def replication_verification(master, bucket, replica, inserted_count, test):
         rest = RestConnection(master)
         nodes = rest.node_statuses()
@@ -132,6 +115,7 @@ class FailoverBaseTest(unittest.TestCase):
 class FailoverTests(unittest.TestCase):
     def setUp(self):
         self._input = TestInputSingleton.input
+        self.bidirectional  = self._input.param("bidirectional", False)
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
         FailoverBaseTest.common_setup(self._input, self)
@@ -185,11 +169,11 @@ class FailoverTests(unittest.TestCase):
         log.info('inserted {0} keys'.format(inserted_count))
 
         nodes = rest.node_statuses()
-        while (len(nodes) - replica) >= 1:
+        while (len(nodes) - replica) > 1:
             final_replication_state = RestHelper(rest).wait_for_replication(900)
             msg = "replication state after waiting for up to 15 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
-            chosen = FailoverBaseTest.choose_nodes(info, nodes, replica)
+            chosen = RebalanceHelper.pick_nodes(master, howmany=replica)
             for node in chosen:
                 #let's do op
                 if failover_reason == 'stop_server':
@@ -199,7 +183,7 @@ class FailoverTests(unittest.TestCase):
                     self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
                 elif failover_reason == "firewall":
-                    RemoteUtilHelper.enable_firewall(self._servers,node)
+                    RemoteUtilHelper.enable_firewall(self._servers, node, bidirectional=self.bidirectional)
                     self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
 
