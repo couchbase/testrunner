@@ -351,6 +351,13 @@ class SwapRebalanceBase(unittest.TestCase):
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.failover_factor)
         optNodesIds = [node.id for node in toBeEjectedNodes]
 
+        # List of servers that will not be failed over
+        not_failed_over = []
+        for server in self.servers:
+            if server.ip not in [node.ip for node in toBeEjectedNodes]:
+                not_failed_over.append(server)
+                self.log.info("Node %s not failed over" % server.ip)
+
         if self.fail_orchestrator:
             status, content = ClusterHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
@@ -360,7 +367,7 @@ class SwapRebalanceBase(unittest.TestCase):
                 optNodesIds.append(content)
             else:
                 optNodesIds[0] = content
-            master = self.servers[-1]
+            master = not_failed_over[-1]
 
         self.log.info("DATA ACCESS PHASE")
         loaders = SwapRebalanceBase.start_access_phase(self, master)
@@ -382,8 +389,9 @@ class SwapRebalanceBase(unittest.TestCase):
         #TODO: cluster_run?
         if do_node_cleanup:
             pass
+
         # Make rest connection with node part of cluster
-        rest = RestConnection(self.servers[-1])
+        rest = RestConnection(master)
 
         # Given the optNode, find ip
         add_back_servers = []
