@@ -130,6 +130,7 @@ MIN_VALUE_SIZE = [10]
 def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     i = 0
     t_last_flush = time.time()
+    t_last_cycle = time.time()
     o_last_flush = store.num_ops(cur)
     t_last = time.time()
     o_last = store.num_ops(cur)
@@ -140,7 +141,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
 
     report = cfg.get('report', 0)
     hot_shift = cfg.get('hot-shift', 0)
-    max_ops_per_sec = cfg.get('max-ops-per-sec', 0)
+    max_ops_per_sec = float(cfg.get('max-ops-per-sec', 0))
 
     if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
         cur['batch'] = 10
@@ -202,23 +203,37 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             xfer_recv_last = xfer_recv_curr
 
         if flushed:
-            t_curr_flush = time.time()
-            o_curr_flush = store.num_ops(cur)
+            """Code below is responsible for speed limitation.
+            Stream looks like ^_^_^_^_^_^_^
 
-            d = t_curr_flush - t_last_flush
+            delta1 = flush time + previous sleep time (^_)
+            delta2 = flush time (^)
+
+            TODO: dynamic correction factor. We have to measure actual average
+            throughput - let's say - every minute. Thus we can adjust request
+            rate. For now it's empiric, because we always oversleep.
+            """
+            CORRECTION_FACTOR = 0.975
+
+            delta1 = time.time() - t_last_cycle
+            delta2 = time.time() - t_last_flush
+            t_last_cycle += delta1
+
+            ops_done = float(store.num_ops(cur) - o_last_flush)
+            o_last_flush += ops_done
+
+            if max_ops_per_sec:
+                # Actual throughput
+                ops_per_sec = ops_done / delta2
+                # Sleep if too fast. It must be too fast.
+                if ops_per_sec > max_ops_per_sec:
+                    sleep_time = CORRECTION_FACTOR * ops_done / max_ops_per_sec - delta2
+                    time.sleep(sleep_time)
 
             if hot_shift > 0:
-                cur['cur-base'] = cur.get('cur-base', 0) + (hot_shift * d)
+                cur['cur-base'] = cur.get('cur-base', 0) + (hot_shift * delta1)
 
-            if max_ops_per_sec > 0:
-                ops = o_curr_flush - o_last_flush
-                ops_per_sec = float(ops) / d
-                if ops_per_sec > max_ops_per_sec:
-                    s = (float(ops) / float(max_ops_per_sec)) - d
-                    time.sleep(s)
-
-            t_last_flush = t_curr_flush
-            o_last_flush = o_curr_flush
+            t_last_flush = time.time()
 
     store.flush()
 
