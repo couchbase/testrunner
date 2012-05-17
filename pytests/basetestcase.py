@@ -20,7 +20,7 @@ class BaseTestCase(unittest.TestCase):
         self.standard_buckets = self.input.param("standard_buckets", 0)
         self.sasl_buckets = self.input.param("sasl_buckets", 0)
         self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets
-        self.num_servers = self.input.param("servers", 2)
+        self.num_servers = self.input.param("servers", len(self.servers))
         self.num_replicas = self.input.param("replicas", 1)
         self.num_items = self.input.param("items", 1000)
 
