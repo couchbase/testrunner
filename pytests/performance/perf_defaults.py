@@ -28,6 +28,8 @@ class PerfDefaults:
     max_creates         =    30000000    # 30 million
 
     # rebalance
+    cb_stats_exc        =    "/opt/couchbase/bin/cbstats"
+    cb_stats_freq       =    1200        # collect cbstats every 20 minutes
     rebalance_after     =    200000
     num_nodes_after     =    7           # num of nodes after rebalance.
 

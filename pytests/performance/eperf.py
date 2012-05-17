@@ -24,7 +24,9 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 # testrunner imports
 from TestInput import TestInputSingleton
 from perf_defaults import PerfDefaults
-import perf
+from performance import perf
+
+from scripts.perf.rel_cri_stats import CBStatsCollector
 
 class EPerfMaster(perf.PerfBase):
     specURL = "http://hub.internal.couchbase.org/confluence/pages/viewpage.action?pageId=1901816"
@@ -425,6 +427,12 @@ class EPerfMaster(perf.PerfBase):
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                 getattr(self, "latched_rebalance"))]
         if self.parami("access_phase", 1) == 1:
+            # starts cbstats collection
+            cbStatsCollector = CBStatsCollector()
+            cbStatsCollector.collect_cb_stats(servers=self.input.servers,
+                cb_exc=self.param("cb_stats_exc", PerfDefaults.cb_stats_exc),
+                frequency=self.parami("cb_stats_freq", PerfDefaults.cb_stats_freq))
+
             self.access_phase(items,
                               ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
                               ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
@@ -435,8 +443,9 @@ class EPerfMaster(perf.PerfBase):
                               ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
                               ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
                               max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+            cbStatsCollector.stop()
 
-    # -- read, write and rebalance tests below this line need to be replaced by conf files ---
+# -- read, write and rebalance tests below this line need to be replaced by conf files ---
 
     def test_ept_read_1(self):
         self.spec("EPT-READ.1")
