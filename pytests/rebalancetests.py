@@ -49,6 +49,10 @@ class RebalanceBaseTest(unittest.TestCase):
         self.do_stop = self.input.param("do-stop", False)
         self.skip_cleanup = self.input.param("skip-cleanup", False)
 
+        self.checkResidentRatio = self.input.param("checkResidentRatio", False)
+        self.activeRatio = self.input.param("activeRatio", 50)
+        self.replicaRatio = self.input.param("replicaRatio", 50)
+
         self.log.info('picking server : {0} as the master'.format(master))
 
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
@@ -402,6 +406,57 @@ class RebalanceBaseTest(unittest.TestCase):
 
         [self.assertEqual(0, len(errors.items())) for errors in error_list]
 
+    @staticmethod
+    def check_resident_ratio(self, master):
+        """Check the memory stats- resident ratio from all the servers; expected range is either specified by the
+        user or default to 50% for both active and replica items.
+
+        Args:
+          self - self
+          master: master node.
+
+        Returns:
+          None.
+
+        Raises:
+          Error/Fail: If the resident ratio is below expected value ( default is 50)
+        """
+
+        rest = RestConnection(master)
+
+        nodes = rest.node_statuses()
+        buckets = rest.get_buckets()
+        rebalance_stats = {}
+
+        for node in nodes:
+            for bucket in buckets:
+                _node = {"ip": node.ip, "port": node.port, "username": master.rest_username,
+                         "password": master.rest_password}
+                mc_conn = MemcachedClientHelper.direct_client(_node, bucket.name)
+                stats = mc_conn.stats()
+                self.log.info(
+                    "Bucket {0} node{1}:{2} \n high watermark : {0} , low watermark : {1}".format(bucket.name, node.ip,
+                        node.port,
+                        stats["ep_mem_high_wat"], stats["ep_mem_low_wat"]))
+
+                key = "{0}:{1}".format(node.ip, node.port)
+                rebalance_stats[key] = {}
+                rebalance_stats[key] = stats
+
+                active_items_ratio = int(rebalance_stats[key]["vb_active_perc_mem_resident"])
+                replica_items_ratio = int(rebalance_stats[key]["vb_replica_perc_mem_resident"])
+                self.log.info("active resident ratio is {0}".format(
+                    active_items_ratio))
+                self.log.info("replica resident ratio is {0}".format(
+                    replica_items_ratio))
+                if active_items_ratio < self.activeRatio:
+                    self.fail(
+                        "Very poor active resident ratio {0} for node {1}:{2} ".format(active_items_ratio, node.ip,
+                            node.port))
+                if replica_items_ratio < self.replicaRatio:
+                    self.fail(
+                        "Very poor replica resident ratio {0}".format(replica_items_ratio, node.ip, node.port))
+                mc_conn.close()
 
 class IncrementalRebalanceInTests(unittest.TestCase):
     def setUp(self):
@@ -544,52 +599,66 @@ class IncrementalRebalanceOut(unittest.TestCase):
 
     def _common_test_body(self):
         master = self.servers[0]
+
         rest = RestConnection(master)
+        master_node = rest.node_statuses()
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
+        cluster_size = self.input.param("cluster_size", len(self.servers))
+        howMany = self.input.param("howMany", cluster_size - 1)
+
+        if howMany >= cluster_size:
+            self.fail(
+                "Input error! howMany {0} rebalance-outs should be lesser than cluster_size {1}".format(howMany,\
+                    cluster_size))
+
+
         # add all servers
-        self.log.info("INTIAL REBALANCE ALL NODES")
+        self.log.info("Rebalancing In with cluster size {0}".format(cluster_size))
         RebalanceTaskHelper.add_rebalance_task(self.task_manager,
             [master],
-            self.servers[1:],
+            self.servers[1:cluster_size],
             [])
-        self.log.info("INTIAL LOAD")
+        self.log.info("Initial Load with key-count {0}".format(self.keys_count))
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
-            bucket_data, self.load_ratio,
+            bucket_data, ram_load_ratio=self.load_ratio,
             keys_count=self.keys_count)
 
         nodes = rest.node_statuses()
 
-        if len(nodes) > 2:
-            for node in nodes[1:]:
-                # Never pick master node
-                if node.ip == master.ip:
-                    continue
-                self.log.info("START PARALLEL LOAD")
-                RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
-                    DELETE_RATIO=self.delete_ratio,
-                    ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio)
+        while howMany > 0:
+            if len(rest.node_statuses()) < 2:
+                break
+            if self.checkResidentRatio:
+                self.log.info("Getting the resident ratio stats before failover/rebalancing out the nodes")
+                RebalanceBaseTest.check_resident_ratio(self, master)
 
-                self.log.info("INCREMENTAL REBALANCE OUT")
-                # rebalance out a server
-                RebalanceTaskHelper.add_rebalance_task(self.task_manager,
-                    [master],
-                    [],
-                    [node], do_stop=self.do_stop, monitor=True)
-                # wait for loading tasks to finish
-                RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
-                self.log.info("DONE LOAD AND REBALANCE")
+            # Never pick master node - The modified function takes care of this one.
+            rebalanceOutNode = RebalanceHelper.pick_node(master)
 
-                # verification step
-                if self.do_verify:
-                    self.log.info("VERIFICATION")
-                    RebalanceBaseTest.do_kv_and_replica_verification(master, self.task_manager,
-                        bucket_data, self.replica, self)
-                else:
-                    self.log.info("NO VERIFICATION")
-                    # at least 3 nodes required per loop to rebalance out and verify replication
-                if len(rest.node_statuses()) < 3:
-                    break
+            self.log.info(
+                "Incrementally rebalancing out node {0}:{1}".format(rebalanceOutNode.ip, rebalanceOutNode.port))
+            # rebalance out a server
+            RebalanceTaskHelper.add_rebalance_task(self.task_manager,
+                [master],
+                [],
+                [rebalanceOutNode], do_stop=self.do_stop)
+            # wait for loading tasks to finish
+            RebalanceBaseTest.finish_all_bucket_tasks(rest, bucket_data)
+            self.log.info("Completed Loading and Rebalacing out")
+
+            if self.checkResidentRatio:
+                self.log.info("Getting the resident ratio stats after rebalancing out the nodes")
+                RebalanceBaseTest.check_resident_ratio(self, master)
+
+            # verification step
+            if self.do_verify:
+                self.log.info("Verifying with KV store")
+                RebalanceBaseTest.do_kv_and_replica_verification(master, self.task_manager,
+                    bucket_data, self.replica, self)
+            else:
+                self.log.info("No Verification with KV store")
+            howMany = howMany - 1
 
     def test_load(self):
         self._common_test_body()

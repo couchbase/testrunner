@@ -533,12 +533,33 @@ class RebalanceHelper():
     def pick_node(master):
         rest = RestConnection(master)
         nodes = rest.node_statuses()
-        picked = None
-        for node_for_stat in nodes:
-            if node_for_stat.id.find('127.0.0.1') == -1 and node_for_stat.id.find(master.ip) == -1:
-                picked = node_for_stat
+        node_picked = None
+        nodes_on_same_ip = True
+
+        firstIp = nodes[0].ip
+        for node in nodes:
+            if node.ip != firstIp:
+                nodes_on_same_ip = False
                 break
-        return picked
+
+        for node in nodes:
+            node_picked = node
+            if not nodes_on_same_ip:
+                if node_picked.ip != master.ip:
+                    log.info(
+                        "Picked node ... {0}:{1}".format(node_picked.ip, node_picked.port))
+                    break
+            else:
+                # temp fix - port numbers of master(machine ip and localhost: 9000 match
+                if int(node_picked.port) == int(
+                    master.port):
+                    log.info("Not picking the master node {0}:{1}.. try again...".format(node_picked.ip,
+                        node_picked.port))
+                else:
+                    log.info(
+                        "Picked  node {0}:{1}".format(node_picked.ip, node_picked.port))
+                    break
+        return node_picked
 
     @staticmethod
     def pick_nodes(master, howmany=1):
