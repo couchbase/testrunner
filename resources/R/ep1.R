@@ -375,6 +375,38 @@ if (nrow(latency_query) > 0) {
     }
     latency_query <- result
 }
+# Get query throughput
+cat("generating query throughput\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ops", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	}, error=function(e) e)
+}
+
+throughput_query <- result
+if (nrow(throughput_query) > 0) {
+    throughput_query$row <- as.numeric(throughput_query$row)
+    throughput_query$queries_per_sec <- as.numeric(throughput_query$queriesPerSec)
+    throughput_query$buildinfo.version <- throughput_query$buildinfo.version
+    throughput_query$timestamp <- as.numeric(throughput_query$startTime)
+
+    all_builds = factor(throughput_query$buildinfo.version)
+    result <- data.frame()
+    for(a_build in levels(all_builds)) {
+        tt <- throughput_query[throughput_query $buildinfo.version==a_build,]
+	    tt$timestamp <- as.numeric(tt$timestamp)
+	    min_timestamp = min(tt$timestamp)
+	    filtered = transform(tt, row=timestamp-min_timestamp)
+        result <- rbind(result, filtered)
+    }
+    throughput_query <- result
+}
 
 # Get Latency-get histogram
 cat("generating latency-get histogram")
@@ -780,6 +812,21 @@ for(build in levels(builds)) {
 	}
 }
 
+builds = factor(throughput_query$buildinfo.version)
+for(build in levels(builds)) {
+    fi <- throughput_query[throughput_query$buildinfo.version == build, ]
+	d <- mean(fi$queries_per_sec)
+
+    if(build == baseline){
+		row <-c ("baseline", "query throughput", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "query throughput", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+}
+
 p <- combined[2:nrow(combined), ]
 p$value <- as.numeric(p$value)
 
@@ -805,6 +852,7 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[14])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[15])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[16])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[17])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[18])))
 
 CB <- c()
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[1]/3600)))
@@ -824,10 +872,10 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[14])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[15])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[16])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[17])))
-
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[18])))
 
 testdf <- data.frame(MB,CB)
-rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)" )
+rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS")
 plot.new()
 col1 <- paste(unlist(strsplit(baseline_build, "-"))[1],"-",unlist(strsplit(baseline_build, "-"))[2])
 col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2]) 
@@ -1190,6 +1238,17 @@ if (nrow(latency_query) > 0) {
 
 }
 
+if (nrow(throughput_query) > 0) {
+    if (length(throughput_query$queries_per_sec)) {
+        cat("query throughput\n")
+        temp <- throughput_query[, ]
+        p <- ggplot(temp, aes(temp$row, temp$queries_per_sec, color=buildinfo.version, label=temp$queries_per_sec)) + labs(x="----time (sec)--->", y="Queries/sec")
+        p <- p + geom_point()
+        p <- addopts(p,"Query throughput")
+        print(p)
+        makeFootnote(footnote)
+    }
+}
 # cat("generating cpu_util \n")
 # p <- ggplot(ns_server_data_system, aes(row, cpu_util, color=buildinfo.version , label= cpu_util)) + labs(x="----time (sec)--->", y="cpu_util")
 # p <- p + geom_point()
