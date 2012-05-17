@@ -292,7 +292,6 @@ class RemoteMachineShellConnection:
             files = self.list_files(remote_path)
             for f in files:
                 sftp.remove("{0}/{1}".format(f["path"], f["file"]))
-                log.info("{0}/{1} is deleted".format(f["path"], f["file"]))
             sftp.rmdir(remote_path)
             sftp.close()
         except IOError:
@@ -376,7 +375,6 @@ class RemoteMachineShellConnection:
             full_src_path = os.path.join(src_path, file)
             full_des_path = os.path.join(des_path, file)
             self.copy_file_local_to_remote(full_src_path, full_des_path)
-            log.info('file "{0}" is copied to {1}'.format(file, des_path))
 
     # create a remote file from input string
     def create_file(self, remote_path, file_data):
@@ -715,7 +713,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             exists = self.file_exists(remotepath, filename)
             if exists:
                 log.error('at {2} file still exists : {0}/{1}'.format(remotepath, filename, self.ip))
-                time.sleep(1)
+                time.sleep(5)
             else:
                 log.info('at {2} FILE DOES NOT EXIST ANYMORE : {0}/{1}'.format(remotepath, filename, self.ip))
                 deleted = True
@@ -729,7 +727,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             exists = self.file_exists(remotepath, filename)
             if not exists:
                 log.error('at {2} file does not exist : {0}/{1}'.format(remotepath, filename, self.ip))
-                time.sleep(1)
+                time.sleep(5)
             else:
                 log.info('at {2} FILE EXISTS : {0}/{1}'.format(remotepath, filename, self.ip))
                 added = True
