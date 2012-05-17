@@ -56,12 +56,8 @@ class RebalanceBaseTest(unittest.TestCase):
         rest.init_cluster(username=master.rest_username,
             password=master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-        if self.do_ascii:
-            BucketOperationHelper.create_multiple_buckets(master, self.replica, node_ram_ratio * (2.0 / 3.0),
-                howmany=self.num_buckets, sasl=False)
-        else:
-            BucketOperationHelper.create_multiple_buckets(master, self.replica, node_ram_ratio * (2.0 / 3.0),
-                howmany=self.num_buckets, sasl=True)
+        BucketOperationHelper.create_multiple_buckets(master, self.replica, node_ram_ratio * (2.0 / 3.0),
+                howmany=self.num_buckets, sasl=not self.do_ascii)
         buckets = rest.get_buckets()
         for bucket in buckets:
             ready = BucketOperationHelper.wait_for_memcached(master, bucket.name)
@@ -626,7 +622,8 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
         while len(nodes) > 1:
             #pick a node that is not the master node
             toBeEjectedNode = RebalanceHelper.pick_node(master)
-            RebalanceBaseTest.load_data_for_buckets(rest, ram_ratio, distribution, [master], bucket_data, self)
+            distribution = RebalanceBaseTest.get_distribution(self.load_ratio)
+            RebalanceBaseTest.load_data_for_buckets(rest, self.load_ratio, distribution, [master], bucket_data, self)
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             #let's start/step rebalance three times
             self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
@@ -773,9 +770,7 @@ class FailoverRebalanceRepeatTests(unittest.TestCase):
             msg = "unable to add node {0} to the cluster {1}"
             self.assertTrue(otpNode, msg.format(server.ip, master.ip))
             distribution = RebalanceBaseTest.get_distribution(self.load_ratio)
-            RebalanceBaseTest.load_data_for_buckets(rest, self.load_ratio, distribution, rebalanced_servers, bucket_data
-                ,
-                self)
+            RebalanceBaseTest.load_data_for_buckets(rest, self.load_ratio, distribution, rebalanced_servers, bucket_data, self)
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(),
                 msg="rebalance operation failed after adding node {0}".format(server.ip))

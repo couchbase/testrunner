@@ -292,15 +292,14 @@ class RebalanceHelper():
         vbucket_replica_sum = 0
         vbucket_pending_sum = 0
         all_server_stats = []
-        stats_received = 0
+        stats_received = True
         nodes = rest.get_nodes()
         for server in nodes:
             #get the stats
             server_stats = rest.get_bucket_stats_for_node(bucket, server)
             if not server_stats:
                 log.info("unable to get stats from {0}:{1}".format(server.ip, server.port))
-            else:
-                stats_received += 1
+                stats_received = False
             all_server_stats.append((server, server_stats))
         if not stats_received:
             raise StatsUnavailableException()
@@ -336,18 +335,15 @@ class RebalanceHelper():
         delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
         delta = abs(delta)
         if sum > 0:
-            missing_percentage = delta * 1.0 / sum * (replica_factor + 1)
+            missing_percentage = delta * 1.0 / (sum * (replica_factor + 1))
         else:
-            missing_percentage = 100
+            missing_percentage = 1
         log.info("delta : {0} missing_percentage : {1} replica_factor : {2}".format(delta, \
             missing_percentage, replica_factor))
-        if replica_factor > 1:
-           # If no items missing then, return True
-           if not delta:
-              return True
-           return False
-        else:
-           return (sum * (replica_factor + 1)) == master_stats["curr_items_tot"]
+        # If no items missing then, return True
+        if not delta:
+            return True
+        return False
 
     @staticmethod
     def verify_maps(vbucket_map_before, vbucket_map_after):
