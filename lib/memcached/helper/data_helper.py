@@ -1075,6 +1075,14 @@ class KVStoreSmartClientHelper(object):
         status = False
         msg = ""
 
+        if(expired_kv_item is not None and mc_item is None):
+            status = True
+        elif(expired_kv_item is None):  	
+            msg = "exp. status not set in kv_store"
+        elif(mc_item is not None):
+            msg = "key still exists in memcached" 	
+        return msg, status
+
 def start_reader_process(info, keyset, queue):
     ReaderThread(info, keyset, queue).start()
 
