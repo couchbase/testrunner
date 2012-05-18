@@ -159,6 +159,11 @@ if __name__ == "__main__":
                 row.update({"row":index})
                 index = index + 1
             del input_json["ops"]
+        if "qps" in input_json:
+            print "flattening qps"
+            attachments["qps"] = input_json["qps"]
+            attachments["qps"].update(z)
+            del input_json["qps"]
         if "systemstats" in input_json:
             print "flattening systemstats"
             attachments["systemstats"] = input_json["systemstats"]

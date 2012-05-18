@@ -92,6 +92,10 @@ class EPerfMaster(perf.PerfBase):
 
         return output
 
+    def calc_avg_qps(self, ops_array):
+        qps = (ops.get('queriesPerSec', 0) for ops in ops_array)
+        return sum(qps) / len(ops_array)
+
     def aggregate_all_stats(self, len_clients, type="loop"):
         i = 0
 
@@ -114,27 +118,31 @@ class EPerfMaster(perf.PerfBase):
         i += 1
         merge_keys = []
         for latency in final_json.keys():
-             if latency.startswith('latency'):
-                 merge_keys.append(str(latency))
+            if latency.startswith('latency'):
+                merge_keys.append(str(latency))
+
+        # Average QPS
+        final_json['qps'] = {'average': self.calc_avg_qps(final_json['ops'])}
 
         for i in range(i, len_clients):
-             try:
+            try:
                 file  = gzip.open("{0}.{1}.json.gz".format(i, type),'rb')
-             except IOError as e:
+            except IOError as e:
                 # cannot find stats produced by this client, check stats collection.
                 # the results might be incomplete.
                 print "[stats aggregation error] cannot open file : {0}.{1}.json.gz".format(i, type)
                 continue
 
-             dict = file.read()
-             file.close()
-             dict = json.loads(dict)
-             for key, value in dict.items():
-                 if key in merge_keys:
-                     if key.endswith("histogram"):
-                         self.merge_dict(final_json[key], value)
-                         continue
-                     final_json[key].extend(value)
+            dict = file.read()
+            file.close()
+            dict = json.loads(dict)
+            for key, value in dict.items():
+                if key in merge_keys:
+                    if key.endswith("histogram"):
+                        self.merge_dict(final_json[key], value)
+                        continue
+                    final_json[key].extend(value)
+            final_json['qps']['average'] += self.calc_avg_qps(dict['ops'])
 
         file = gzip.open("{0}.{1}.json.gz".format('final', type), 'wb')
         file.write("{0}".format(json.dumps(final_json)))
