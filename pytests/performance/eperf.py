@@ -101,6 +101,52 @@ class EPerfMaster(perf.PerfBase):
             # Otherwise
             return 0
 
+    def _merge_query_ops(self, base_ops, new_ops):
+        """Normalize and merge query ops arrays into single one.
+
+        Arguments:
+        base_ops -- first array of ops stats
+        new_ops  -- second array of ops stats
+        """
+
+        # Ignore empty arrays
+        if not base_ops and not new_ops:
+            return base_ops
+
+        # Define normalized timeline
+        end_time = 0
+        start_time = float('inf')
+        num_steps = 0
+        for ops_array in [base_ops, new_ops]:
+            end_time = max(max(ops['endTime'] for ops in ops_array),
+                           end_time)
+            start_time = min(min(ops['startTime'] for ops in ops_array),
+                             start_time)
+        num_steps = max(len(base_ops), len(new_ops))
+        step = float(end_time - start_time) / num_steps
+
+        # Merge (terrible time complexity)
+        merged_ops = list()
+        for i in xrange(num_steps):
+            # Current time frame
+            start_of_step = start_time + step * i
+            end_of_step = start_of_step + step
+            total_queries = 0
+            # Aggregation
+            for ops_array in [base_ops, new_ops]:
+                for ops in ops_array:
+                    if ops['endTime'] <= end_of_step:
+                        total_queries += ops['totalQueries']
+                        ops['totalQueries'] = 0
+                    else:
+                        break
+            qps = total_queries / step
+            merged_ops.append({'startTime': start_of_step,
+                               'endTime': end_of_step,
+                               'totalQueries': total_queries,
+                               'queriesPerSec': qps})
+        return merged_ops
+
     def aggregate_all_stats(self, len_clients, type="loop"):
         i = 0
 
@@ -152,6 +198,7 @@ class EPerfMaster(perf.PerfBase):
                     final_json[key].extend(value)
             if type == 'loop':
                 final_json['qps']['average'] += self.calc_avg_qps(dict['ops'])
+                final_json['ops'] = self._merge_query_ops(final_json['ops'], dict['ops'])
 
         file = gzip.open("{0}.{1}.json.gz".format('final', type), 'wb')
         file.write("{0}".format(json.dumps(final_json)))
