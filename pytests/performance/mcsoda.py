@@ -228,7 +228,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
                 # Sleep if too fast. It must be too fast.
                 if ops_per_sec > max_ops_per_sec:
                     sleep_time = CORRECTION_FACTOR * ops_done / max_ops_per_sec - delta2
-                    time.sleep(sleep_time)
+                    time.sleep(max(sleep_time, 0))
 
             if hot_shift > 0:
                 cur['cur-base'] = cur.get('cur-base', 0) + (hot_shift * delta1)
