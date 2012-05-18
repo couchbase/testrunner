@@ -45,3 +45,4 @@ class PerfDefaults:
     tear_down_on_setup      =   0        # teardown routine to clean up resources during startup. 1: enabled, 0: disabled
     view_compaction         =   10       # view fragmentation percentage triggers compaction
     vbuckets                =   1024     # number of vbuckets
+    warmup                  =   0        # restart memcached and measure warmup phase. 1: enabled, 0: disabled

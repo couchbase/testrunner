@@ -567,6 +567,9 @@ class PerfBase(unittest.TestCase):
         if self.parami("loop_wait_until_drained", 0) == 1:
             self.wait_until_drained()
 
+        if self.parami("warmup", PerfDefaults.warmup) == 1:
+            self.warmup()
+
         if self.parami("collect_stats", 1):
             self.end_stats(sc, ops, self.spec_reference + ".loop")
 
@@ -593,6 +596,31 @@ class PerfBase(unittest.TestCase):
                                               fn=RebalanceHelper.wait_for_stats_no_timeout)
 
         return time.time()
+
+    def warmup(self):
+        """
+        Restart cluster and wait for it to warm up.
+        In current version, affect the master node only.
+        """
+        if not self.input.servers:
+            print "[warmup error] empty server list"
+            return
+
+        print "[warmup] preparing to warmup cluster ..."
+
+        server = self.input.servers[0]
+        shell = RemoteMachineShellConnection(server)
+        print "[warmup] stopping couchbase ... ({0}, {1})"\
+            .format(server.ip, time.strftime('%X %x %Z'))
+        shell.stop_couchbase()
+        print "[warmup] couchbase stopped ({0}, {1})"\
+            .format(server.ip, time.strftime('%X %x %Z'))
+        shell.start_couchbase()
+        print "[warmup] couchbase restarted ({0}, {1})"\
+            .format(server.ip, time.strftime('%X %x %Z'))
+
+        self.wait_until_warmed_up()
+        print "[warmup] warmup finished"
 
     def wait_until_warmed_up(self):
         master = self.input.servers[0]
