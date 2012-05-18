@@ -10,6 +10,7 @@ import testconstants
 import gzip
 import urllib
 
+RETRIES = 10
 # The histo dict is returned by add_timing_sample().
 # The percentiles must be sorted, ascending, like [0.90, 0.99].
 def histo_percentile(histo, percentiles):
@@ -337,12 +338,24 @@ class StatsCollector(object):
 
         while not self._aborted():
             time_left = frequency
+            timings = None
             # at minimum we want to check for aborted every minute
             while not self._aborted() and time_left > 0:
                 time.sleep(min(time_left, 60))
                 time_left -= 60
             for mc in mcs:
-                stats = mc.stats()
+                retries = 0
+                stats = {}
+                while not stats and retries < RETRIES:
+                    try:
+                        stats = mc.stats()
+                    except EOFError as e:
+                        print "[memebase_stats] EOFError: {0}, retries = {1}"\
+                            .format(str(e), retries)
+                        time.sleep(2)
+                        mc.reconnect()
+                        retries += 1
+                        continue
                 stats["time"] = time.time()
                 stats["ip"] = mc.host
                 d[mc.host]["snapshots"].append(stats)
@@ -351,9 +364,11 @@ class StatsCollector(object):
                 dispatcher = mc.stats('dispatcher')
                 d[mc.host]["dispatcher"].append(dispatcher)
             print "\nDumping disk timing stats: {0}".format(time.strftime('%X %x %Z'))
-            for key, value in sorted(timings.iteritems()):
-                if key.startswith("disk"):
-                    print "{0:50s}:     {1}".format(key, value)
+            if timings:
+                # TODO dump timings for all servers
+                for key, value in sorted(timings.iteritems()):
+                    if key.startswith("disk"):
+                        print "{0:50s}:     {1}".format(key, value)
 
         start_time = str(self._task["time"])
         for mc in mcs:

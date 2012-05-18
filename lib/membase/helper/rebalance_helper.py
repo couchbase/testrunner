@@ -155,9 +155,18 @@ class RebalanceHelper():
     def wait_for_mc_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
                                                                                 stat_value, master.ip))
-        c = MemcachedClient(master.ip, 11210)
-        stats = c.stats()
-        c.close()
+        # keep retrying until reaches the server
+        stats = {}
+        while not stats:
+            try:
+                c = MemcachedClient(master.ip, 11210)
+                stats = c.stats()
+            except EOFError as e:
+                log.info("EOFError :{0}, retry in 2 seconds ...".format(str(e)))
+                stats = {}
+                time.sleep(2)
+            finally:
+                c.close()
 
         while str(stats[stat_key]) != str(stat_value):
             c = MemcachedClient(master.ip, 11210)
