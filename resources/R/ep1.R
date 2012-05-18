@@ -203,26 +203,26 @@ for(a_build in levels(all_builds)) {
 ns_server_data <- result_tmp
 ns_server_data$row = ns_server_data $row/1000
 
-# cat("generating memcached stats ")
-# result <- data.frame()
-# mc_result <- vector()
-# for(index in nrow(builds_list):1) {
-       # tryCatch({
-                # url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","membasestats", sep='')
-                # cat(paste(url,"\n"))
-                # doc_json <- fromJSON(file=url)
-				# for(jIndex in 1:length(doc_json)) {
-					# # print(length(unlist(doc_json[jIndex])))
-					# one <- unlist(doc_json[jIndex])
-					# x <- c(one["row"],one["time"],one["ep_tap_bg_fetched "],one["ep_bg_max_load"],one["ep_bg_load"],one["buildinfo.version"])
-					# mc_result <- rbind(mc_result, x)
-				# }
-       # },error=function(e)e, finally=print("Error getting system stats from memcached"))
-# }
+cat("generating memcached stats ")
+memcached_stats <- data.frame()
+for(index in 1:nrow(builds_list)) {
+       tryCatch({
+                url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","membasestats", sep='')
+                cat(paste(url,"\n"))
+                doc_json <- fromJSON(file=url)
+				for(index in 1:length(doc_json)) {
+					unlisted <- plyr::ldply(doc_json[index], unlist)
+					unlisted <- unlisted[, c('row', 'ep_warmup_time', 'buildinfo.version')]
+					memcached_stats <- rbind.fill(memcached_stats, unlisted)
+				}
+       },error=function(e) {
+                print("Error getting system stats from memcached")
+       })
+}
 
+memcached_stats$row <- as.numeric(memcached_stats$row)
+memcached_stats$ep_warmup_time <- as.numeric(memcached_stats$ep_warmup_time)
 
-# memcached_stats <- as.data.frame(mc_result)
-# memcached_stats $row <- as.numeric(memcached_stats $row)
 # memcached_stats $ep_bg_wait_avg <- as.numeric(memcached_stats $ep_bg_wait_avg)
 # memcached_stats $ep_tap_bg_fetched <- as.numeric(memcached_stats $ep_tap_bg_fetched)
 # memcached_stats $ep_bg_max_load <- as.numeric(memcached_stats $ep_bg_max_load)
@@ -578,7 +578,7 @@ for(build in levels(builds)) {
 builds = factor(system_stats$buildinfo.version)
 for(build in levels(builds)) {	
     id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
-	fi_memcached <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id == id, ]
+	fi_beamched <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id == id, ]
 	fi_beam <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(beam.smp)" & system_stats$unique_id == id, ]
 
 	print("here")
@@ -827,6 +827,21 @@ for(build in levels(builds)) {
 	}
 }
 
+builds = factor(memcached_stats$buildinfo.version)
+for(build in levels(builds)) {
+    fi <- memcached_stats[memcached_stats$buildinfo.version == build, ]
+	d <- mean(fi$ep_warmup_time) / 1000
+
+    if(build == baseline){
+		row <-c ("baseline", "warmup time", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "warmup time", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+}
+
 p <- combined[2:nrow(combined), ]
 p$value <- as.numeric(p$value)
 
@@ -853,6 +868,7 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[15])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[16])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[17])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[18])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[19])))
 
 CB <- c()
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[1]/3600)))
@@ -873,9 +889,10 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[15])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[16])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[17])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[18])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
 
 testdf <- data.frame(MB,CB)
-rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS")
+rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS", "Warmup Time (ms)")
 plot.new()
 col1 <- paste(unlist(strsplit(baseline_build, "-"))[1],"-",unlist(strsplit(baseline_build, "-"))[2])
 col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2]) 
