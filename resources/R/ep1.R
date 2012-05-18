@@ -812,7 +812,10 @@ for(build in levels(builds)) {
 	}
 }
 
-builds = factor(throughput_query$buildinfo.version)
+if(length(throughput_query$buildinfo.version) > 0) {
+    builds = factor(throughput_query$buildinfo.version)
+}
+
 for(build in levels(builds)) {
     fi <- throughput_query[throughput_query$buildinfo.version == build, ]
 	d <- mean(fi$queries_per_sec)
@@ -827,7 +830,10 @@ for(build in levels(builds)) {
 	}
 }
 
-builds = factor(memcached_stats$buildinfo.version)
+if (length(memcached_stats$buildinfo.version) > 0) {
+    builds = factor(memcached_stats$buildinfo.version)
+}
+
 for(build in levels(builds)) {
     fi <- memcached_stats[memcached_stats$buildinfo.version == build, ]
 	d <- mean(fi$ep_warmup_time) / 1000
