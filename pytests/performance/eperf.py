@@ -94,7 +94,12 @@ class EPerfMaster(perf.PerfBase):
 
     def calc_avg_qps(self, ops_array):
         qps = (ops.get('queriesPerSec', 0) for ops in ops_array)
-        return sum(qps) / len(ops_array)
+        try:
+            # Access phase w/ fg thread
+            return sum(qps) / len(ops_array)
+        except:
+            # Otherwise
+            return 0
 
     def aggregate_all_stats(self, len_clients, type="loop"):
         i = 0
@@ -122,7 +127,10 @@ class EPerfMaster(perf.PerfBase):
                 merge_keys.append(str(latency))
 
         # Average QPS
-        final_json['qps'] = {'average': self.calc_avg_qps(final_json['ops'])}
+        if type == 'loop':
+            final_json['qps'] = {'average': self.calc_avg_qps(final_json['ops'])}
+        else:
+            final_json['qps'] = {'average': 0}
 
         for i in range(i, len_clients):
             try:
@@ -142,7 +150,8 @@ class EPerfMaster(perf.PerfBase):
                         self.merge_dict(final_json[key], value)
                         continue
                     final_json[key].extend(value)
-            final_json['qps']['average'] += self.calc_avg_qps(dict['ops'])
+            if type == 'loop':
+                final_json['qps']['average'] += self.calc_avg_qps(dict['ops'])
 
         file = gzip.open("{0}.{1}.json.gz".format('final', type), 'wb')
         file.write("{0}".format(json.dumps(final_json)))
