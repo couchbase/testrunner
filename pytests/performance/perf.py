@@ -564,9 +564,6 @@ class PerfBase(unittest.TestCase):
                 "start-time": start_time,
                 "end-time": end_time }
 
-        if self.parami("loop_wait_until_drained", 0) == 1:
-            self.wait_until_drained()
-
         if self.parami("collect_stats", 1):
             self.end_stats(sc, ops, self.spec_reference + ".loop")
 
@@ -584,6 +581,8 @@ class PerfBase(unittest.TestCase):
         TODO()
 
     def wait_until_drained(self):
+        print "[drain] draining disk write queue ..."
+
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
@@ -591,6 +590,8 @@ class PerfBase(unittest.TestCase):
                                               fn=RebalanceHelper.wait_for_stats_no_timeout)
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0, \
                                               fn=RebalanceHelper.wait_for_stats_no_timeout)
+
+        print "[drain] disk write queue has been drained"
 
         return time.time()
 

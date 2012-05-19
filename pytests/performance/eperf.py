@@ -405,6 +405,10 @@ class EPerfMaster(perf.PerfBase):
                               ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
                               ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
                               max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+
+        if self.parami("loop_wait_until_drained", 0) == 1:
+            self.wait_until_drained()
+
         if self.parami("warmup", PerfDefaults.warmup) == 1:
             self.warmup_phase()
 
