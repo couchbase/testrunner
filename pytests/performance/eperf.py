@@ -1623,7 +1623,16 @@ class ViewGen:
         Optional arguments:
         use_all_docs -- add query on primary index
         use_reduce -- add query on view with reduce step
+
+        if ddocs is None it returns only queries on primary index
         """
+
+        # Only all_docs case
+        if ddocs is None:
+            queries_by_kind = [['/default/_all_docs?limit=' + str(limit) + '&startkey="{key}"']]
+            remaining = [1]
+            queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
+            return self.join_queries(queries)
 
         ddoc_names = list()
         for ddoc_name, ddoc in sorted(ddocs.items()):
