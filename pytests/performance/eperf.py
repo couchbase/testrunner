@@ -319,6 +319,10 @@ class EPerfMaster(perf.PerfBase):
                       ratio_queries = ratio_queries,
                       queries = queries)
 
+    # restart the cluster and wait for it to warm up
+    def warmup_phase(self):
+        self.warmup(collect_stats=True)
+
     # create design docs and index documents
     def index_phase(self, ddocs, bucket="default"):
         if self.parami("index_phase", 1) > 0:
@@ -401,6 +405,8 @@ class EPerfMaster(perf.PerfBase):
                               ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
                               ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
                               max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+        if self.parami("warmup", PerfDefaults.warmup) == 1:
+            self.warmup_phase()
 
     def test_eperf_rebalance(self):
         """

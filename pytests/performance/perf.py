@@ -567,9 +567,6 @@ class PerfBase(unittest.TestCase):
         if self.parami("loop_wait_until_drained", 0) == 1:
             self.wait_until_drained()
 
-        if self.parami("warmup", PerfDefaults.warmup) == 1:
-            self.warmup()
-
         if self.parami("collect_stats", 1):
             self.end_stats(sc, ops, self.spec_reference + ".loop")
 
@@ -597,7 +594,7 @@ class PerfBase(unittest.TestCase):
 
         return time.time()
 
-    def warmup(self):
+    def warmup(self, collect_stats=True):
         """
         Restart cluster and wait for it to warm up.
         In current version, affect the master node only.
@@ -606,7 +603,18 @@ class PerfBase(unittest.TestCase):
             print "[warmup error] empty server list"
             return
 
+        if collect_stats:
+            client_id = self.parami("prefix", 0)
+            test_params = {'test_time': time.time(),
+                           'test_name': self.id(),
+                           'json': 0}
+            sc = self.start_stats(self.spec_reference + ".warmup",
+                                  test_params=test_params,
+                                  client_id=client_id)
+
         print "[warmup] preparing to warmup cluster ..."
+
+        start_time = time.time()
 
         server = self.input.servers[0]
         shell = RemoteMachineShellConnection(server)
@@ -621,6 +629,18 @@ class PerfBase(unittest.TestCase):
 
         self.wait_until_warmed_up()
         print "[warmup] warmup finished"
+
+        end_time = time.time()
+        ops = { 'tot-sets': 0,
+                'tot-gets': 0,
+                'tot-items': 0,
+                'tot-creates': 0,
+                'tot-misses': 0,
+                "start-time": start_time,
+                "end-time": end_time }
+
+        if collect_stats:
+            self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
     def wait_until_warmed_up(self):
         master = self.input.servers[0]

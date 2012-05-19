@@ -66,3 +66,4 @@ else:
     obj.aggregate_all_stats(int(num_clients), "load")
     obj.aggregate_all_stats(int(num_clients), "reload")
     obj.aggregate_all_stats(int(num_clients), "loop")
+    obj.aggregate_all_stats(int(num_clients), "warmup")
