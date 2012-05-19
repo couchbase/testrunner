@@ -351,8 +351,8 @@ class StatsCollector(object):
                 while not stats and retries < RETRIES:
                     try:
                         stats = mc.stats()
-                    except EOFError as e:
-                        print "[memebase_stats] EOFError: {0}, retries = {1}"\
+                    except Exception as e:
+                        print "[memebase_stats] Exception: {0}, retries = {1}"\
                             .format(str(e), retries)
                         time.sleep(2)
                         mc.reconnect()

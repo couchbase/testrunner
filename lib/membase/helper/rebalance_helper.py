@@ -161,8 +161,8 @@ class RebalanceHelper():
             try:
                 c = MemcachedClient(master.ip, 11210)
                 stats = c.stats()
-            except EOFError as e:
-                log.info("EOFError :{0}, retry in 2 seconds ...".format(str(e)))
+            except Exception as e:
+                log.info("Exception: {0}, retry in 2 seconds ...".format(str(e)))
                 stats = {}
                 time.sleep(2)
             finally:
