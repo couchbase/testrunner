@@ -578,7 +578,7 @@ for(build in levels(builds)) {
 builds = factor(system_stats$buildinfo.version)
 for(build in levels(builds)) {	
     id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
-	fi_beamched <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id == id, ]
+	fi_memcached <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id == id, ]
 	fi_beam <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(beam.smp)" & system_stats$unique_id == id, ]
 
 	print("here")
