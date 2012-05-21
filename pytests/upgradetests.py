@@ -694,7 +694,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 if version != initial_version:
                     log.info("Upgrading to version {0}".format(version))
                     self._stop_membase_servers(servers)
-                    if previous_version.startswith("1.7") and current_version.startswith("1.8.0"):
+                    if previous_version.startswith("1.7") and current_version.startswith("1.8"):
                         save_upgrade_config = True
 
                     appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
