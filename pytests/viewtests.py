@@ -58,7 +58,6 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def common_tearDown(self):
         master = self.servers[0]
-        remote_info = None
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
             try:
                 RestConnection(master).stop_rebalance()
@@ -68,8 +67,6 @@ class ViewBaseTests(unittest.TestCase):
                 if server.port != '8091':
                     continue
                 shell = RemoteMachineShellConnection(server)
-                if master.ip == server.ip:
-                    remote_info = shell.extract_remote_info()
                 if shell.is_membase_installed():
                     shell.start_membase()
                 else:
@@ -82,22 +79,7 @@ class ViewBaseTests(unittest.TestCase):
                 rest.delete_view(bucket, view)
                 self.log.info("deleted view {0} from bucket {1}".format(view, bucket))
 
-            # todo: remove this code when delete default bucket bug fixed
-            if remote_info is not None and remote_info.type.lower() == 'windows':
-                #shell = RemoteMachineShellConnection(master)
-                #shell.execute_command("taskkill /F /T /IM memcached.exe")
-                #self.log.info("WAIT 5 SECONDS HERE TO COMPLETE DELETE MEMCACHED PROCESS")
-                #time.sleep(5)
-                BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-                #self.log.info("DELETE DEFAULT DATABASE FILES")
-                #shell.execute_command("rm -rf /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchdb/default")
-                #self.log.info("WAIT 2 SECONDS HERE TO COMPLETE DELETE DEFAULT BUCKET")
-                #time.sleep(2)
-                #self.log.info("DELETE CONFIG.DAT FILES")
-                #shell.execute_command("rm -f /cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/config/config.dat")
-                #shell.disconnect()
-            else:
-                BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
 
             ClusterOperationHelper.cleanup_cluster(self.servers)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
@@ -461,7 +443,7 @@ class ViewBaseTests(unittest.TestCase):
             self.assertEquals(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn)
 
     @staticmethod
-    def _get_view_results(self, rest, bucket, view, limit=20, full_set=True, extra_params={}, type_="view"):
+    def _get_view_results(self, rest, bucket, view, limit=20, extra_params={}, type_="view"):
         # increase number of try to 40 to test on windows
         num_tries = self.input.param('num-tries', 40)
         timeout = self.input.param('timeout', 10)
@@ -753,12 +735,7 @@ class ViewBaseTests(unittest.TestCase):
                             time.sleep(1)
                     else:
                         raise e
-        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket,
-                                                    'ep_queue_size', 0)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket,
-                                                    'ep_flusher_todo', 0)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket,
-                                                    'ep_uncommitted_items', 0)
+        RebalanceHelper.wait_for_persistence(master, bucket)
         self.log.info("inserted {0} json documents".format(num_docs))
         if verify:
             ViewBaseTests._verify_keys(self, doc_names, prefix)
@@ -1009,8 +986,7 @@ class ViewBasicTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
         ViewBaseTests._load_docs(self, self.num_docs, prefix)
-        doc_names = ViewBaseTests._delete_docs(self, self.num_docs, num_of_deleted_docs, prefix)
-        ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
+        ViewBaseTests._delete_docs(self, self.num_docs, num_of_deleted_docs, prefix)
 
     def test_readd_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
@@ -1020,10 +996,8 @@ class ViewBasicTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._create_view_doc_name(self, prefix)
         ViewBaseTests._load_docs(self, self.num_docs, prefix)
-        doc_names = ViewBaseTests._delete_docs(self, self.num_docs, num_of_readd_docs, prefix)
-        ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
-        doc_names = ViewBaseTests._update_docs(self, self.num_docs, num_of_readd_docs, prefix)
-        ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
+        ViewBaseTests._delete_docs(self, self.num_docs, num_of_readd_docs, prefix)
+        ViewBaseTests._update_docs(self, self.num_docs, num_of_readd_docs, prefix)
 
     def test_update_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
@@ -1034,9 +1008,8 @@ class ViewBasicTests(unittest.TestCase):
         ViewBaseTests._create_view_doc_name(self, prefix)
         ViewBaseTests._load_docs(self, self.num_docs, prefix)
         self.log.info("loaded {0} docs".format(self.num_docs))
-        doc_names = ViewBaseTests._update_docs(self, self.num_docs, num_of_update_docs, prefix)
+        ViewBaseTests._update_docs(self, self.num_docs, num_of_update_docs, prefix)
         self.log.info("updated {0} docs out of {1} docs".format(num_of_update_docs, self.num_docs))
-        ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
 
     def test_invalid_view(self):
         master = self.servers[0]
@@ -1213,9 +1186,6 @@ class ViewRebalanceTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
 
-        rebalanced_servers = []
-        rebalanced_servers.extend(self.servers)
-
         nodes = rest.node_statuses()
 
         while len(nodes) > 1:
@@ -1235,12 +1205,6 @@ class ViewRebalanceTests(unittest.TestCase):
                             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
 
             t.join()
-
-            for node in nodes:
-                for rebalanced_server in rebalanced_servers:
-                    if rebalanced_server.ip.find(node.ip) != -1:
-                        rebalanced_servers.remove(rebalanced_server)
-                        break
 
             ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
             nodes = rest.node_statuses()
