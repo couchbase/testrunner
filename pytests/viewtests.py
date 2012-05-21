@@ -218,13 +218,9 @@ class ViewBaseTests(unittest.TestCase):
 
         # Only if the lengths are not equal, look for missing keys
         if len(keys) != len(doc_names):
-            not_found = []
-            for name in doc_names:
-                if not name in keys:
-                    not_found.append(name)
-            if not_found:
-                ViewBaseTests._print_keys_not_found(self, not_found, 10)
-                self.fail("map function did not return docs for {0} keys".format(len(not_found)))
+            not_found = list(set(doc_names)-set(keys))
+            ViewBaseTests._print_keys_not_found(self, not_found, 10)
+            self.fail("map function did not return docs for {0} keys".format(len(not_found)))
 
     @staticmethod
     def _test_count_reduce_multiple_docs(self, num_docs):
@@ -574,10 +570,7 @@ class ViewBaseTests(unittest.TestCase):
             results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names))
             keys = ViewBaseTests._get_keys(self, results)
         keys = ViewBaseTests._get_keys(self, results)
-        not_found = []
-        for name in doc_names:
-            if not name in keys:
-                not_found.append(name)
+        not_found = list(set(doc_names)-set(keys))
         if not_found:
             ViewBaseTests._print_keys_not_found(self, not_found, 10)
             self.fail("map function did not return docs for {0} keys".format(len(not_found)))
