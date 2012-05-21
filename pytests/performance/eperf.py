@@ -1658,13 +1658,27 @@ class ViewGen:
 
         return ddocs
 
+    def generate_all_docs_view(self):
+        """ Return view definition which mimics primary index
+        (aka _all_docs).
+
+        """
+
+        map_function = """
+            function (doc) {
+                emit(doc._id, {"rev": doc._rev});
+            }"""
+
+        return {'all': {'views': {'docs': {'map': map_function}}}}
+
     def generate_queries(self, limit, query_suffix, ddocs,
-                         use_all_docs=False, use_reduce=False):
+                         use_all_docs=False, use_reduce=False, pseudo=False):
         """Generate string from permuted queries.
 
         Optional arguments:
         use_all_docs -- add query on primary index
         use_reduce -- add query on view with reduce step
+        pseudo -- only queries on pseudo "all docs" index
 
         if ddocs is None it returns only queries on primary index
         """
@@ -1676,6 +1690,14 @@ class ViewGen:
             queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
             return self.join_queries(queries)
 
+        # Pseudo all docs case
+        if pseudo:
+            queries_by_kind = [['/default/_design/all/_view/docs?limit=' + str(limit) + '&startkey="{key}"']]
+            remaining = [1]
+            queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
+            return self.join_queries(queries)
+
+        # General case
         ddoc_names = list()
         for ddoc_name, ddoc in sorted(ddocs.items()):
             for view in ddoc["views"]:
