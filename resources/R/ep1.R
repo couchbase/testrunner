@@ -375,6 +375,21 @@ if (nrow(latency_query) > 0) {
     }
     latency_query <- result
 }
+
+# Get average query throughput
+cat("generating average query throughput\n")
+avg_qps <- c()
+for(index in 1:nrow(builds_list)) {
+    tryCatch({
+        url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","qps", sep='')
+        doc_json <- fromJSON(file=url)
+        avg_qps <- c(avg_qps, doc_json$buildinfo.version, doc_json$average)
+    }, error=function(e) e)
+}
+if (length(c) > 0) {
+    avg_qps <- array(avg_qps, c(2, nrow(builds_list)))
+}
+
 # Get query throughput
 cat("generating query throughput\n")
 result <- data.frame()
@@ -812,22 +827,20 @@ for(build in levels(builds)) {
 	}
 }
 
-if(length(throughput_query$buildinfo.version) > 0) {
-    builds = factor(throughput_query$buildinfo.version)
-}
+if(ncol(avg_qps) > 0) {
+    for(i in 1:ncol(avg_qps)) {
+        build <- avg_qps[1, i]
+        average <- as.numeric(avg_qps[2, i])
 
-for(build in levels(builds)) {
-    fi <- throughput_query[throughput_query$buildinfo.version == build, ]
-	d <- mean(fi$queries_per_sec)
-
-    if(build == baseline){
-		row <-c ("baseline", "query throughput", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-	else{
-		row <-c (build, "query throughput", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
+        if(build == baseline){
+            row <- c("baseline", "query throughput", average)
+            combined <- rbind(combined, row)
+        }
+        else{
+            row <- c(build, "query throughput", average)
+            combined <- rbind(combined, row)
+        }
+    }
 }
 
 if (length(memcached_stats$buildinfo.version) > 0) {
