@@ -228,29 +228,23 @@ memcached_stats$ep_warmup_time <- as.numeric(memcached_stats$ep_warmup_time)
 # memcached_stats $ep_bg_max_load <- as.numeric(memcached_stats $ep_bg_max_load)
 # memcached_stats $ep_bg_load <- as.numeric(memcached_stats $ep_bg_load)
 
-# cat("generating System stats from ns_server_data_system ")
-# result <- data.frame()
-# for(index in 1:nrow(builds_list)) {
-		# tryCatch({
-		# url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data_system", sep='')
-		# #cat(paste(url,"\n"))
-		# doc_json <- fromJSON(file=url)
-		# cat(paste(builds_list[index,]$id,"\n"))
-		# unlisted <- plyr::ldply(doc_json, unlist)
-        # ncol(unlisted)
-		# result <- rbind(result,unlisted)
-		# print(nrow(result))
-	# },error=function(e)e, finally=print("Error getting system stats from ns_server_data"))
-# }
-# cat("generated ns_server_data_system data frame\n")
-# #cat(paste("result has ", nrow(result)," rows \n"))
+cat("generating System stats from ns_server_data_system ")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+    tryCatch({
+        url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data_system", sep='')
+        doc_json <- fromJSON(file=url)
+        unlisted <- plyr::ldply(doc_json, unlist)
+        result <- rbind(result,unlisted)
+    }, error=function(e) e)
+}
+cat("generated ns_server_data_system data frame\n")
+cat(paste("result has ", nrow(result)," rows \n"))
 
-# ns_server_data_system <- result
-# ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
-# ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
+ns_server_data_system <- result
+ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
+ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
 # ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
-
-
 
 cat("generating system stats\n")
 result <- data.frame()
@@ -1003,6 +997,19 @@ p <- addopts(p,"cur_items_total")
 print(p)
 makeFootnote(footnote)
 
+cat("generating cpu_util \n")
+nodes = factor(ns_server_data_system$node)
+for(ns_node in levels(nodes)) {
+    node_system_stats = subset(ns_server_data_system, node==ns_node)
+    p <- ggplot(node_system_stats, aes(row, cpu_util, color=buildinfo.version, label=cpu_util))
+    p <- p + labs(x="----time (sec)--->", y="%")
+    p <- p + coord_cartesian(ylim = c(0, 100))
+    p <- p + geom_point()
+    p <- addopts(p, paste("CPU utilization", ns_node, sep=" - "))
+    print(p)
+    makeFootnote(footnote)
+}
+
 cat("generating mem_used \n")
 p <- ggplot(ns_server_data, aes(row, mem_used, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="bytes")
 p <- p + geom_point()
@@ -1285,12 +1292,6 @@ if (nrow(throughput_query) > 0) {
         makeFootnote(footnote)
     }
 }
-# cat("generating cpu_util \n")
-# p <- ggplot(ns_server_data_system, aes(row, cpu_util, color=buildinfo.version , label= cpu_util)) + labs(x="----time (sec)--->", y="cpu_util")
-# p <- p + geom_point()
-# p <- addopts(p,"cpu_util")
-# print(p)
-# makeFootnote(footnote)
 
 # cat("generating swap_used \n")
 # p <- ggplot(ns_server_data_system, aes(row, swap_used, color=buildinfo.version , label= swap_used)) + labs(x="----time (sec)--->", y="swap_used")
