@@ -323,7 +323,7 @@ class EPerfMaster(perf.PerfBase):
 
     # restart the cluster and wait for it to warm up
     def warmup_phase(self):
-        if self.is_master:
+        if self.is_leader:
             self.warmup(collect_stats=True)
 
     # create design docs and index documents
