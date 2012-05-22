@@ -11,7 +11,7 @@ import gzip
 import ast
 import copy
 import mcsoda
-import threading
+import multiprocessing
 
 # membase imports
 from membase.api.rest_client import RestConnection, RestHelper
@@ -27,6 +27,8 @@ from perf_defaults import PerfDefaults
 from performance import perf
 
 from scripts.perf.rel_cri_stats import CBStatsCollector
+
+from cbsoda import StoreCouchbase
 
 class EPerfMaster(perf.PerfBase):
     specURL = "http://hub.internal.couchbase.org/confluence/pages/viewpage.action?pageId=1901816"
@@ -97,7 +99,7 @@ class EPerfMaster(perf.PerfBase):
     def calc_avg_qps(self, ops_array):
         qps = (ops.get('queriesPerSec', 0) for ops in ops_array)
         try:
-            # Access phase w/ fg thread
+            # Access phase w/ foreground manager
             return sum(qps) / len(ops_array)
         except:
             # Otherwise
@@ -1541,7 +1543,7 @@ class EPerfClient(EPerfMaster):
         self.wait_until_drained()
 
 
-# The EVPerfClient subclass deploys another background thread to drive
+# The EVPerfClient subclass deploys another background process to drive
 # a concurrent amount of memcached traffic, during the "loop" or
 # access phase.  Otherwise, with the basic EPerfClient, the http
 # queries would gate the ops/second performance due to mcsoda's
@@ -1552,35 +1554,36 @@ class EVPerfClient(EPerfClient):
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
                    stats_collector = None, stores = None, ctl = None,
                    heartbeat = 0, why = None, bucket="default"):
-        self.bg_thread = None
-        self.bg_thread_ctl = None
+        bg_manager = None
+        bg_manager_ctl = multiprocessing.Value('i', False)
 
         num_clients, start_at = self.access_phase_clients_start_at()
 
-        # If non-zero background ops/second, the background thread,
+        # If non-zero background ops/second, the background process,
         # with cloned parameters, doesn't do any queries, only basic
         # key-value ops.
         if why == "loop" and self.parami("bg_max_ops_per_sec", self.bg_max_ops_per_sec):
-            self.bg_thread_cfg = copy.deepcopy(cfg)
-            self.bg_thread_cfg['max-ops-per-sec'] = self.parami("bg_max_ops_per_sec",
+            bg_manager_cfg = copy.deepcopy(cfg)
+            bg_manager_cfg['max-ops-per-sec'] = self.parami("bg_max_ops_per_sec",
                                                                 self.bg_max_ops_per_sec)
-            self.bg_thread_cfg['ratio-queries'] = self.paramf("bg_ratio_queries", 0.0)
-            self.bg_thread_cfg['queries'] = self.param("bg_queries", "")
-            self.bg_thread_cur = copy.deepcopy(cur)
-            self.bg_thread_ctl = { 'run_ok': True }
+            bg_manager_cfg['ratio-queries'] = self.paramf("bg_ratio_queries", 0.0)
+            bg_manager_cfg['queries'] = self.param("bg_queries", "")
+            bg_manager_cur = copy.deepcopy(cur)
 
-            from cbsoda import StoreCouchbase
+            # If True -- manager is up and running, down otherwise
+            bg_manager_ctl.value = True
 
-            self.bg_stores = [StoreCouchbase()]
+            # Background workers must use Membase binary protocol
+            bg_protocol = 'membase-binary'
 
-            self.bg_thread = threading.Thread(target=mcsoda.run,
-                                              args=(self.bg_thread_cfg,
-                                                    self.bg_thread_cur,
-                                                    protocol, host_port, user, pswd,
-                                                    stats_collector, self.bg_stores, self.bg_thread_ctl,
+            # Non-daemon background manager
+            bg_manager = multiprocessing.Process(target=mcsoda.run,
+                                              args=(bg_manager_cfg,
+                                                    bg_manager_cur,
+                                                    bg_protocol, host_port, user, pswd,
+                                                    stats_collector, stores, bg_manager_ctl,
                                                     heartbeat, "loop-bg"))
-            self.bg_thread.daemon = True
-            self.bg_thread.start()
+            bg_manager.start()
 
             # Also, the main mcsoda run should do no memcached/key-value requests.
             cfg['ratio-sets'] = self.paramf("fg_ratio_sets", 0.0)
@@ -1597,11 +1600,14 @@ class EVPerfClient(EPerfClient):
                                                  ctl=ctl,
                                                  heartbeat=heartbeat,
                                                  why="loop-fg")
-        if self.bg_thread_ctl:
-            self.bg_thread_ctl['run_ok'] = False
+
+        # Once the main work manager finished his job, stop the background one
+        if bg_manager and bg_manager_ctl:
+            bg_manager_ctl.value = False
+            while bg_manager.is_alive():
+                time.sleep(1)
 
         return rv_cur, start_time, end_time
-
 
 def params_to_str(params):
     param_str = ""
