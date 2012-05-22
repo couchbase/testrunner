@@ -34,6 +34,7 @@ def histo_percentile(histo, percentiles):
 class StatsCollector(object):
     _task = {}
     _verbosity = True
+    _mb_stats = {"snapshots": []}   # manually captured memcached stats
 
     def __init__(self, verbosity):
         self._verbosity = verbosity
@@ -322,6 +323,30 @@ class StatsCollector(object):
     def couchdb_stats(nodes):
         pass
 
+    def capture_mb_snapshot(self, node):
+        """
+        Capture membase stats snapshot manually
+        """
+        print "[capture_mb_snapshot] capturing memcache stats snapshot for {0}"\
+            .format(node.ip)
+        stats = {}
+
+        try:
+            bucket = RestConnection(node).get_buckets()[0].name
+            mc = MemcachedClientHelper.direct_client(node, bucket)
+            stats = mc.stats()
+        except Exception as e:
+            print "[capture_mb_snapshot] Exception: {0}".format(str(e))
+            return False
+
+        stats["time"] = time.time()
+        stats["ip"] = node.ip
+        self._mb_stats["snapshots"].append(stats)
+
+        print stats
+        print "[capture_mb_snapshot] memcache stats snapshot captured"
+        return True
+
     def membase_stats(self,nodes, bucket, frequency, verbose=False):
         mcs = []
         for node in nodes:
@@ -377,11 +402,16 @@ class StatsCollector(object):
             ip = mc.host
             unique_id = ip+'-'+start_time
             current_time = time.time()
-            for snapshot in d[mc.host]["snapshots"]:
-                snapshot['unique_id'] = unique_id
-                snapshot['time'] = current_time
-                snapshot['ip'] = ip
-                self._task["membasestats"].append(snapshot)
+            if self._mb_stats["snapshots"]:
+                # use manually captured stats
+                self._task["membasestats"] = self._mb_stats["snapshots"]
+            else:
+                # use periodically captured stats
+                for snapshot in d[mc.host]["snapshots"]:
+                    snapshot['unique_id'] = unique_id
+                    snapshot['time'] = current_time
+                    snapshot['ip'] = ip
+                    self._task["membasestats"].append(snapshot)
             for timing in d[mc.host]["timings"]:
                 timing['unique_id'] = unique_id
                 timing['time'] = current_time
