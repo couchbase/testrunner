@@ -696,7 +696,9 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                     self._stop_membase_servers(servers)
                     if previous_version.startswith("1.7") and current_version.startswith("1.8"):
                         save_upgrade_config = True
-
+                    # No need to save the upgrade config from 180 to 181
+                    if previous_version.startswith("1.8.0") and current_version.startswith("1.8.1"):
+                        save_upgrade_config = False
                     appropriate_build = _get_build(servers[0], version, is_amazon=is_amazon)
                     self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(version))
                     for server in servers:
