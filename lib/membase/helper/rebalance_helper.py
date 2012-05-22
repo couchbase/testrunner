@@ -244,7 +244,6 @@ class RebalanceHelper():
                     time.sleep(2)
             except StatsUnavailableException:
                 log.info("unable to retrieve stats for any node. returning true")
-                verified = True
                 break
         rest = RestConnection(master)
         RebalanceHelper.print_taps_from_all_nodes(rest, bucket)
@@ -337,13 +336,13 @@ class RebalanceHelper():
 
         msg = "summation of vb_active_num : {0} vb_pending_num : {1} vb_replica_num : {2}"
         log.info(msg.format(vbucket_active_sum, vbucket_pending_sum, vbucket_replica_sum))
-        msg = 'sum : {0} and sum * replica_factor ({1}) : {2}'
-        log.info(msg.format(sum, replica_factor, (sum * (replica_factor + 1))))
+        msg = 'sum : {0} and sum * (replica_factor + 1) ({1}) : {2}'
+        log.info(msg.format(sum, replica_factor + 1, (sum * (replica_factor + 1))))
         master_stats = rest.get_bucket_stats(bucket)
         log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
         delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
         delta = abs(delta)
-        if sum > 0:
+        if delta > 0:
             missing_percentage = delta * 1.0 / (sum * (replica_factor + 1))
         else:
             missing_percentage = 1
