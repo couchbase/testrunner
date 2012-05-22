@@ -323,8 +323,38 @@ class EPerfMaster(perf.PerfBase):
 
     # restart the cluster and wait for it to warm up
     def warmup_phase(self):
-        if self.is_leader:
-            self.warmup(collect_stats=True)
+        if not self.is_leader:
+            return
+
+        server = self.input.servers[0]
+        client_id = self.parami("prefix", 0)
+        test_params = {'test_time': time.time(),
+                       'test_name': self.id(),
+                       'json': 0}
+
+        sc = self.start_stats(self.spec_reference + ".warmup",
+            test_params=test_params,
+            client_id=client_id)
+
+        start_time = time.time()
+
+        self.warmup(collect_stats=False, flush_os_cache=True)
+        sc.capture_mb_snapshot(server)
+
+        self.warmup(collect_stats=False, flush_os_cache=False)
+        sc.capture_mb_snapshot(server)
+
+        end_time = time.time()
+
+        ops = { 'tot-sets': 0,
+                'tot-gets': 0,
+                'tot-items': 0,
+                'tot-creates': 0,
+                'tot-misses': 0,
+                "start-time": start_time,
+                "end-time": end_time }
+
+        self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
     # create design docs and index documents
     def index_phase(self, ddocs, bucket="default"):

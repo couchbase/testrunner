@@ -595,7 +595,7 @@ class PerfBase(unittest.TestCase):
 
         return time.time()
 
-    def warmup(self, collect_stats=True):
+    def warmup(self, collect_stats=True, flush_os_cache=False):
         """
         Restart cluster and wait for it to warm up.
         In current version, affect the master node only.
@@ -615,10 +615,15 @@ class PerfBase(unittest.TestCase):
 
         print "[warmup] preparing to warmup cluster ..."
 
-        start_time = time.time()
-
         server = self.input.servers[0]
         shell = RemoteMachineShellConnection(server)
+
+        start_time = time.time()
+
+        if flush_os_cache:
+            print "[warmup] flushing os cache ..."
+            shell.flush_os_caches()
+
         print "[warmup] stopping couchbase ... ({0}, {1})"\
             .format(server.ip, time.strftime('%X %x %Z'))
         shell.stop_couchbase()
