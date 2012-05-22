@@ -7,6 +7,7 @@ import os
 import urllib2
 import uuid
 import sys
+from os.path import basename, splitext
 sys.path = ["lib","pytests"] + sys.path
 
 if sys.hexversion < 0x02060000:
@@ -154,6 +155,11 @@ def parse_conf_file(filename, tests, params):
             name = prefix + "." + name
         prefix = ".".join(name.split(",")[0].split('.')[0:-1])
         append_test(tests, name)
+
+    # If spec parameter isn't defined, testrunner uses the *.conf filename for
+    # the spec value
+    if 'spec' not in params:
+        params['spec'] = splitext(basename(filename))[0]
 
 def create_headers(username, password):
     authorization = base64.encodestring('%s:%s' % (username, password))
