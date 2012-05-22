@@ -497,8 +497,8 @@ combined <- data.frame(t(rep(NA,3)))
 names(combined)<- c("system","test","value")
 p <- combined[2:nrow(combined), ]
 
+builds = factor(builds_list$build)
 # Test runtime is present in builds_list
-builds = factor(ns_server_data$buildinfo.version)
 for(build in levels(builds)) {	
 	fi <-builds_list[builds_list$build==build, ]
 	d <- fi$runtime
@@ -513,7 +513,7 @@ for(build in levels(builds)) {
 	}
 
 }
-builds = factor(ns_server_data$buildinfo.version)
+
 for(build in levels(builds)) {	
 
 	fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ep_diskqueue_drain!=0, ]
@@ -530,8 +530,6 @@ for(build in levels(builds)) {
 	
 }
 
-
-builds = factor(ns_server_data$buildinfo.version)
 for(build in levels(builds)) {	
 
 	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
@@ -548,7 +546,6 @@ for(build in levels(builds)) {
 	
 }
 
-builds = factor(ns_server_data$buildinfo.version)
 for(build in levels(builds)) {	
 
 	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]	
@@ -566,7 +563,6 @@ for(build in levels(builds)) {
 	
 }
 
-builds = factor(ns_server_data$buildinfo.version)
 for(build in levels(builds)) {	
 
 	fi <-disk_data[disk_data$buildinfo.version==build, ]
@@ -583,8 +579,6 @@ for(build in levels(builds)) {
 	
 }
 
-
-builds = factor(system_stats$buildinfo.version)
 for(build in levels(builds)) {	
     id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
 	fi_memcached <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id == id, ]
@@ -631,8 +625,6 @@ if (length(unique(df$system)) == 2) {
     makeFootnote(footnote)
 }
 
-
-builds = factor(ns_server_data$buildinfo.version)
 for(build in levels(builds)) {	
 
 	fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ops !=0, ]			         
@@ -651,7 +643,6 @@ for(build in levels(builds)) {
 	
 }
 
-builds = factor(system_stats$buildinfo.version)
 for(build in levels(builds)) {
 	id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
     print(id)	
@@ -672,7 +663,6 @@ for(build in levels(builds)) {
 	
 }
 
-builds = factor(system_stats$buildinfo.version)
 for(build in levels(builds)) {	
     id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
     print(id)
@@ -693,7 +683,6 @@ for(build in levels(builds)) {
 	
 }
 
-builds = factor(ns_server_data$buildinfo.version)
 for(build in levels(builds)) {	
 
 	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
@@ -709,7 +698,7 @@ for(build in levels(builds)) {
 	}
 	
 }
-builds = factor(ns_server_data$buildinfo.version)
+
 for(build in levels(builds)) {	
 
 	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
@@ -726,7 +715,7 @@ for(build in levels(builds)) {
 	}
 	
 }
-builds = factor(ns_server_data$buildinfo.version)
+
 for(build in levels(builds)) {	
 
 	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]
@@ -743,7 +732,7 @@ for(build in levels(builds)) {
 }
 
 
-builds = factor(ns_server_data$buildinfo.version)
+
 for(build in levels(builds)) {	
 
 	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]
@@ -835,10 +824,6 @@ if(ncol(avg_qps) > 0) {
             combined <- rbind(combined, row)
         }
     }
-}
-
-if (length(memcached_stats$buildinfo.version) > 0) {
-    builds = factor(memcached_stats$buildinfo.version)
 }
 
 for(build in levels(builds)) {
