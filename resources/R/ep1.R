@@ -833,14 +833,29 @@ for(build in levels(builds)) {
 	d <- fi$ep_warmup_time[1] / 1000000
 
     if(build == baseline){
-		row <-c ("baseline", "warmup time", as.numeric(d))
+		row <-c ("baseline", "warmup time (with os flush)", as.numeric(d))
 		combined <- rbind(combined, row)
 	}
 	else{
-		row <-c (build, "warmup time", as.numeric(d))
+		row <-c (build, "warmup time (with os flush)", as.numeric(d))
 		combined <- rbind(combined, row)
 	}
 }
+
+for(build in levels(builds)) {
+    fi <- memcached_stats[memcached_stats$buildinfo.version == build, ]
+	d <- fi$ep_warmup_time[2] / 1000000
+
+    if(build == baseline){
+		row <-c ("baseline", "warmup time (no os flush)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "warmup time (no os flush)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+}
+
 
 p <- combined[2:nrow(combined), ]
 p$value <- as.numeric(p$value)
@@ -868,7 +883,11 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[15])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[16])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[17])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[18])))
-MB <- append(MB,as.numeric(sprintf("%.2f",MB1[19])))
+
+if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
+    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[19])))
+    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[20])))
+}
 
 CB <- c()
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[1]/3600)))
@@ -889,10 +908,21 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[15])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[16])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[17])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[18])))
-CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
+
+if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
+    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
+    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[20])))
+}
 
 testdf <- data.frame(MB,CB)
-rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS", "Warmup Time (sec)")
+
+row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS")
+
+if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
+	row_names <- c(row_names, c("Warmup Time - flush (sec)", "Warmup Time - no flush (sec)"))
+}
+
+rownames(testdf) <- row_names
 plot.new()
 col1 <- paste(unlist(strsplit(baseline_build, "-"))[1],"-",unlist(strsplit(baseline_build, "-"))[2])
 col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2]) 
