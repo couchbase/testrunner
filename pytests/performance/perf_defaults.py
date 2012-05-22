@@ -27,9 +27,12 @@ class PerfDefaults:
     ratio_expirations   =    0.025
     max_creates         =    30000000    # 30 million
 
-    # rebalance
+    # cbstats collector
+    cb_stats            =    0
     cb_stats_exc        =    "/opt/couchbase/bin/cbstats"
     cb_stats_freq       =    1200        # collect cbstats every 20 minutes
+
+    # rebalance
     rebalance_after     =    200000
     num_nodes_after     =    7           # num of nodes after rebalance.
 

@@ -425,9 +425,19 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_mixed")
         items = self.parami("items", PerfDefaults.items)
+
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+
         if self.parami("access_phase", 1) == 1:
+
+            if self.parami("cb_stats", 1) == 1:
+                # starts cbstats collection
+                cbStatsCollector = CBStatsCollector()
+                cbStatsCollector.collect_cb_stats(servers=self.input.servers,
+                    cb_exc=self.param("cb_stats_exc", PerfDefaults.cb_stats_exc),
+                    frequency=self.parami("cb_stats_freq", PerfDefaults.cb_stats_freq))
+
             self.access_phase(items,
                               ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
                               ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
@@ -438,6 +448,9 @@ class EPerfMaster(perf.PerfBase):
                               ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
                               ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
                               max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+
+            if self.parami("cb_stats", 1) == 1:
+                cbStatsCollector.stop()
 
         if self.parami("loop_wait_until_drained", 0) == 1:
             self.wait_until_drained()
@@ -457,12 +470,15 @@ class EPerfMaster(perf.PerfBase):
         rebalance_after = self.parami("rebalance_after", PerfDefaults.rebalance_after)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                 getattr(self, "latched_rebalance"))]
+
         if self.parami("access_phase", 1) == 1:
-            # starts cbstats collection
-            cbStatsCollector = CBStatsCollector()
-            cbStatsCollector.collect_cb_stats(servers=self.input.servers,
-                cb_exc=self.param("cb_stats_exc", PerfDefaults.cb_stats_exc),
-                frequency=self.parami("cb_stats_freq", PerfDefaults.cb_stats_freq))
+
+            if self.parami("cb_stats", 1) == 1:
+                # starts cbstats collection
+                cbStatsCollector = CBStatsCollector()
+                cbStatsCollector.collect_cb_stats(servers=self.input.servers,
+                    cb_exc=self.param("cb_stats_exc", PerfDefaults.cb_stats_exc),
+                    frequency=self.parami("cb_stats_freq", PerfDefaults.cb_stats_freq))
 
             self.access_phase(items,
                               ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
@@ -474,7 +490,9 @@ class EPerfMaster(perf.PerfBase):
                               ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
                               ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
                               max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
-            cbStatsCollector.stop()
+
+            if self.parami("cb_stats", 1) == 1:
+                cbStatsCollector.stop()
 
 # -- read, write and rebalance tests below this line need to be replaced by conf files ---
 
