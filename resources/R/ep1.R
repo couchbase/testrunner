@@ -212,8 +212,10 @@ for(index in 1:nrow(builds_list)) {
                 doc_json <- fromJSON(file=url)
 				for(index in 1:length(doc_json)) {
 					unlisted <- plyr::ldply(doc_json[index], unlist)
-					unlisted <- unlisted[, c('row', 'ep_warmup_time', 'buildinfo.version')]
-					memcached_stats <- rbind.fill(memcached_stats, unlisted)
+                    if(unlisted$ep_warmup_thread == "complete") {
+                        unlisted <- unlisted[c('row', 'ep_warmup_thread', 'ip', 'ep_warmup_time', 'buildinfo.version')]
+                        memcached_stats <- rbind.fill(memcached_stats, unlisted)
+					}
 				}
        },error=function(e) {
                 print("Error getting system stats from memcached")
@@ -828,7 +830,7 @@ if(ncol(avg_qps) > 0) {
 
 for(build in levels(builds)) {
     fi <- memcached_stats[memcached_stats$buildinfo.version == build, ]
-	d <- mean(fi$ep_warmup_time) / 1000
+	d <- fi$ep_warmup_time[1] / 1000000
 
     if(build == baseline){
 		row <-c ("baseline", "warmup time", as.numeric(d))
@@ -890,7 +892,7 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[18])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
 
 testdf <- data.frame(MB,CB)
-rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS", "Warmup Time (ms)")
+rownames(testdf)<-c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS", "Warmup Time (sec)")
 plot.new()
 col1 <- paste(unlist(strsplit(baseline_build, "-"))[1],"-",unlist(strsplit(baseline_build, "-"))[2])
 col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2]) 
