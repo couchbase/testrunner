@@ -4,6 +4,7 @@ import time
 import unittest
 import json
 import sys
+import copy
 from threading import Thread
 from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper
@@ -347,15 +348,21 @@ class QueryView:
         view_name = self.name
         max_dupe_result_count = \
             tc.input.param('max-dupe-result-count', 5)
+        num_verified_docs = tc.input.param('num-verified-docs', 20)
 
         for query in self.queries:
             params = query.params
 
             params["debug"] = "true"
+
+            if self.reduce_fn is not None and "include_docs" in params:
+                del params["include_docs"]
+
             expected_num_docs = query.expected_num_docs
             num_keys = -1
 
             if expected_num_docs is not None and verify_results:
+
                 attempt = 0
                 delay = 15
                 results = None
@@ -389,25 +396,42 @@ class QueryView:
                         result_count_stats[num_keys] = 1
                     else:
                         if result_count_stats[num_keys] == max_dupe_result_count:
-                            self.log.error("Last query result:\n\n%s\n\n" % (json.dumps(results, sort_keys=True, indent=4)))
-                            self.results.addFailure(tc, sys.exc_info())
                             break
                         else:
                             result_count_stats[num_keys] += 1
                     time.sleep(delay)
 
-                if(num_keys != expected_num_docs):
-                    msg = "Query failed: {0} Documents Retrieved,  expected {1}"
-                    val = msg.format(num_keys, expected_num_docs)
-                    try:
-                        tc.assertEquals(num_keys, expected_num_docs, val)
-                    except Exception as ex:
-                        self.log.error(val)
-                        self.log.error("Last query result:\n\n%s\n\n" % (json.dumps(results, sort_keys=True, indent=4)))
-                        self.results.addFailure(tc, sys.exc_info())
+                try:
+                    if(num_keys != expected_num_docs):
 
-                if 'include_docs' in params:
-                    self.view_doc_integrity(tc, results, expected_num_docs, kv_store)
+                        # debug query results
+                        if self.reduce_fn is not None:
+
+                            # query again with reduce false
+                            params["reduce"] = "false"
+                            results = ViewBaseTests._get_view_results(tc, rest,
+                                                                      self.bucket,
+                                                                      view_name,
+                                                                      limit=None,
+                                                                      extra_params=params,
+                                                                      type_ = query.type_)
+
+                        # verify keys
+                        key_failures = QueryHelper.verify_query_keys(rest, query,
+                                                                     results, self.bucket,
+                                                                     num_verified_docs)
+                        msg = "unable to retrieve expected results: {0}".format(key_failures)
+                        tc.assertEquals(len(key_failures), 0, msg)
+
+                    # verify values for include_docs tests
+                    if('include_docs' in params):
+                        failures = QueryHelper.verify_query_values(rest, query, results, self.bucket)
+                        msg = "data integrity failed: {0}".format(failures)
+                        tc.assertEquals(len(failures), 0, msg)
+
+                except:
+                    self.log.error("Last query result:\n\n%s\n\n" % (json.dumps(results, sort_keys=True, indent=4)))
+                    self.results.addFailure(tc, sys.exc_info())
 
             else:
                 # query without verification
@@ -415,41 +439,6 @@ class QueryView:
                 results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
                                                           limit=None, extra_params=params,
                                                           type_ = query.type_)
-
-
-    def view_doc_integrity(self, tc, results, expected_num_docs, kv_store):
-        rest = tc._rconn()
-
-        try:
-            kv_client = KVStoreAwareSmartClient(rest,
-                                                self.bucket,
-                                                kv_store = kv_store)
-            valid_keys = kv_client.get_all_valid_items()
-            tc.assertEquals(len(valid_keys), expected_num_docs)
-
-            # retrieve doc from view result and compare with memcached
-            for row in results['rows']:
-
-                # retrieve doc from view result
-                tc.assertTrue('doc' in row, "malformed view result")
-                view_doc = row['doc']
-                doc_id = str(view_doc['_id'])
-
-                # retrieve doc from memcached
-                mc_item = kv_client.mc_get_full(doc_id)
-                tc.assertFalse(mc_item == None, "document missing from memcached")
-                mc_doc = json.loads(mc_item["value"])
-
-                # compare
-                for key in mc_doc.keys():
-                    err_msg = "error verifying document id {0}: retrieved value {1} expected {2}"
-                    err_msg_fmt = err_msg.format(doc_id, mc_doc[key], view_doc[key])
-                    tc.assertEquals(mc_doc[key], view_doc[key], err_msg_fmt)
-
-        except AssertionError :
-            self.log.error("error during data verification")
-            self.results.addFailure(tc, sys.exc_info())
-
 
     """
         helper function for verifying results when _count reduce is used.
@@ -588,7 +577,8 @@ class EmployeeDataSet:
             complex_query_key_count = 9*all_docs_per_day + 4*self.days*all_docs_per_day \
                                         + all_docs_per_day
 
-            view.queries += [QueryHelper({"start_key" : "[2008,7,1]",
+            view.queries += [QueryHelper(
+                                        {"start_key" : "[2008,7,1]",
                                           "startkey_docid" : "arch0000-2008_7_1"}, index_size/2  - offset),
                             QueryHelper({"start_key" : "[2008,7,1]",
                                           "startkey_docid" : "ui0000-2008_7_1"}, index_size/2  - offset*2),
@@ -699,7 +689,6 @@ class EmployeeDataSet:
         for t  in data_threads:
             t.join()
 
-        # set expected_keys for all queries
         self.preload_matching_query_keys()
 
 
@@ -828,7 +817,20 @@ class EmployeeDataSet:
         if 'inclusive_end' in query.params:
             inclusive_end = json.loads(query.params['inclusive_end'])
             if inclusive_end == False and 'endkey_docid' not in query.params:
-               q_end_day -= 1
+                if descending == False:
+                    # decrement end_key
+                    if q_end_day <= 1:
+                        q_end_mo -= 1
+                        q_end_day = 28
+                    else:
+                        q_end_day -= 1
+                else:
+                    # increment start_key
+                    if q_start_day == 28:
+                        q_start_mo += 1
+                        q_start_day = 1
+                    else:
+                        q_start_day += 1
 
 
         if type_filter is None:
@@ -942,7 +944,6 @@ class SimpleDataSet:
             index_size = view.index_size
             view.queries += [QueryHelper({"include_docs" : "true"}, index_size)]
 
-
     def add_startkey_endkey_queries(self, views = None):
 
         if views is None:
@@ -966,6 +967,7 @@ class SimpleDataSet:
                                           "inclusive_end" : "false"}, end_key),
                              QueryHelper({"start_key"     : start_key},
                                             index_size - start_key)]
+
     def add_stale_queries(self, views = None):
         if views is None:
             views = self.views
@@ -1016,3 +1018,112 @@ class QueryHelper:
         self.expected_num_groups = expected_num_groups
         self.type_ = type_   # "view" or "all_docs"
         self.expected_keys = []
+
+    # TODO: parameterize failure count, less open clients
+    @staticmethod
+    def verify_query_keys(rest, query, results, bucket = "default", num_verified_docs = 20):
+        failures = []
+
+        if(len(query.expected_keys) == 0):
+            return failures
+
+        kv_client = KVStoreAwareSmartClient(rest, bucket)
+
+        ids=[doc['id'] for doc in results['rows']]
+
+        couch_set = set(ids)
+        expected_set = set(query.expected_keys)
+
+        missing_item_set = expected_set - couch_set
+        extra_item_set = couch_set - expected_set
+
+
+        # treat duplicate doc_ids as extra_items
+        if len(ids)!=len(couch_set):
+            for id_ in couch_set:
+                if ids.count(id_) > 1:
+                    extra_item_set.add(id_)
+
+
+        if(len(extra_item_set) > 0 ):
+
+            # report unexpected/duplicate documents
+            copy_ids = copy.deepcopy(ids)
+            for doc_id in extra_item_set:
+                for id_count in range(copy_ids.count(doc_id)):
+                    ex_doc_idx = copy_ids.index(doc_id)
+                    ex_doc_row = results['rows'][ex_doc_idx + id_count]
+                    failures.append("extra documents detected in result: %s " % (ex_doc_row))
+                    copy_ids.pop(ex_doc_idx)
+
+        if(len(missing_item_set) > 0):
+
+            # debug missing documents
+            for doc_id in list(missing_item_set)[:num_verified_docs]:
+
+                # attempt retrieve doc from memcached
+                mc_item = kv_client.mc_get_full(doc_id)
+                if mc_item == None:
+                    failures.append("document %s missing from memcached" % (doc_id))
+
+                # attempt to retrieve doc from couchdb
+                # TODO: look into another way of reading from disk
+                else:
+                    status, cb_doc = \
+                        rest._index_results(bucket, "all_docs", None, {'key' : doc_id}, 5)
+
+                    if(status == True):
+                        if( len(cb_doc['rows']) > 0 ):
+                            v_doc_id = cb_doc['rows'][0]['id']
+                            if( v_doc_id != doc_id):
+                                msg = "query doc_id: %s does not match couchdb id: %s" % \
+                                    (v_doc_id, doc_id)
+                                failures.append(msg)
+                        else:
+                            msg = "query doc_id: %s doesn't exist in bucket: %s" % \
+                                (doc_id, bucket)
+                            failures.append(msg)
+
+                    else:
+                        msg = "query request failed for doc: %s" % (doc_id)
+                        failures.append(msg)
+
+                if(len(failures) == 0):
+                    msg = "view engine failed to index doc: %s \n query: %s" % (doc_id, query.params)
+                    failures.append(msg)
+
+        return failures
+
+    @staticmethod
+    def verify_query_values(rest, query, results, bucket = "default"):
+
+        failures = []
+        kv_client = KVStoreAwareSmartClient(rest, bucket)
+
+        if('include_docs' in query.params):
+            docs = [row['doc'] for row in results['rows']]
+
+            # retrieve doc from view result and compare with memcached
+            for view_doc in docs:
+
+                doc_id = str(view_doc['_id'])
+                mc_item = kv_client.mc_get_full(doc_id)
+
+                if mc_item is not None:
+                    mc_doc = json.loads(mc_item["value"])
+
+                    # compare doc content
+                    for key in mc_doc.keys():
+                        if(mc_doc[key] != view_doc[key]):
+                            err_msg =\
+                                "error verifying document id %s: retrieved value %s expected %s" % \
+                                    (doc_id, mc_doc[key], view_doc[key])
+                            failures.append(err_msg)
+                else:
+                    failures.append("doc_id %s could not be retrieved for verification" % doc_id)
+
+        else:
+            failures.append("cannot verify view result values without include_docs filter")
+
+        return failures
+
