@@ -71,9 +71,9 @@ class StatsCollector(object):
             bucket_size_thead = Thread(target=self.get_bucket_size,
                                        args=(bucket, rest, frequency))
             bucket_size_thead.start()
-            #data_size_thread = Thread(target=self.get_data_file_size,
-            #                        args=(nodes, 60, bucket))
-            #data_size_thread.start()
+            data_size_thread = Thread(target=self.get_data_file_size,
+                                    args=(nodes, 60, bucket))
+            data_size_thread.start()
             self._task["threads"] = [sysstats_thread, ns_server_stats_thread, bucket_size_thead,
                                      mbstats_thread]
                                      #data_size_thread ]

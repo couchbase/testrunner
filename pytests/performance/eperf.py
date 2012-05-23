@@ -431,7 +431,7 @@ class EPerfMaster(perf.PerfBase):
 
         if self.parami("access_phase", 1) == 1:
 
-            if self.parami("cb_stats", 1) == 1:
+            if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 # starts cbstats collection
                 cbStatsCollector = CBStatsCollector()
                 cbStatsCollector.collect_cb_stats(servers=self.input.servers,
@@ -449,7 +449,7 @@ class EPerfMaster(perf.PerfBase):
                               ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
                               max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
 
-            if self.parami("cb_stats", 1) == 1:
+            if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 cbStatsCollector.stop()
 
         if self.parami("loop_wait_until_drained", 0) == 1:
@@ -473,7 +473,7 @@ class EPerfMaster(perf.PerfBase):
 
         if self.parami("access_phase", 1) == 1:
 
-            if self.parami("cb_stats", 1) == 1:
+            if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 # starts cbstats collection
                 cbStatsCollector = CBStatsCollector()
                 cbStatsCollector.collect_cb_stats(servers=self.input.servers,
@@ -491,7 +491,7 @@ class EPerfMaster(perf.PerfBase):
                               ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
                               max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
 
-            if self.parami("cb_stats", 1) == 1:
+            if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 cbStatsCollector.stop()
 
 # -- read, write and rebalance tests below this line need to be replaced by conf files ---
