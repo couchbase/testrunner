@@ -1241,7 +1241,7 @@ class ViewRebalanceTests(unittest.TestCase):
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node")
 
-            self.assertTrue(rebalanced_in, msg="unable to add and rebalance more nodes")
+            self.assertTrue(len(rest.node_statuses()) -len(nodes)==1, msg="unable to add and rebalance more nodes")
             nodes = rest.node_statuses()
 
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)

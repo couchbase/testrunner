@@ -141,6 +141,83 @@ class ViewQueryTests(unittest.TestCase):
             msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
             self.assertTrue(RestConnection(self.servers[0]).monitorRebalance(), msg=msg)
 
+        def test_employee_dataset_alldocs_queries_start_stop_rebalance_in_incremental(self):
+            docs_per_day = self.input.param('docs-per-day', 20)
+            data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+            data_set.add_all_docs_queries()
+            self._query_test_init(data_set, False)
+
+            master = self.servers[0]
+            RebalanceHelper.wait_for_persistence(master, "default")
+
+            rest=RestConnection(self.servers[0])
+            nodes = rest.node_statuses()
+
+            for server in self.servers[1:]:
+                self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+                self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
+                otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
+                msg = "unable to add node {0}:{1} to the cluster"
+                self.assertTrue(otpNode, msg.format(server.ip, server.port))
+
+                # Just doing 2 iterations
+                for i in [1, 2]:
+                    rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+                    expected_progress = 30*i
+                    reached = RestHelper(rest).rebalance_reached(expected_progress)
+                    self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
+                    stopped = rest.stop_rebalance()
+                    self.assertTrue(stopped, msg="unable to stop rebalance")
+                    self._query_all_views(data_set.views)
+
+                    rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+                    self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
+                    self._query_all_views(data_set.views)
+
+                self.assertTrue(len(rest.node_statuses()) -len(nodes)==1, msg="number of cluster's nodes is not correct")
+                nodes = rest.node_statuses()
+
+    def test_employee_dataset_alldocs_queries_start_stop_rebalance_out_incremental(self):
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
+        docs_per_day = self.input.param('docs-per-day', 20)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+        data_set.add_all_docs_queries()
+        self._query_test_init(data_set, False)
+
+        master = self.servers[0]
+        RebalanceHelper.wait_for_persistence(master, "default")
+
+        rest=RestConnection(self.servers[0])
+        nodes = rest.node_statuses()
+
+        for server in self.servers[1:]:
+            ejectedNodes=[]
+            self.log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
+            for node in nodes:
+                if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
+                    ejectedNodes.append(node.id)
+                    break
+
+            # Just doing 2 iterations
+            for i in [1, 2]:
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
+                expected_progress = 30*i
+                reached = RestHelper(rest).rebalance_reached(expected_progress)
+                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
+                stopped = rest.stop_rebalance()
+                self.assertTrue(stopped, msg="unable to stop rebalance")
+                self._query_all_views(data_set.views)
+
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
+                self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
+                self._query_all_views(data_set.views)
+
+            self.assertTrue(len(nodes) - len(rest.node_statuses()) == 1, msg="number of cluster's nodes is not correct")
+            nodes = rest.node_statuses()
 
     def test_employee_dataset_startkey_endkey_docid_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
