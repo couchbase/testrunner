@@ -153,21 +153,24 @@ metric_list = c('ns_server_data', 'systemstats', 'latency-get','latency-set') #u
 cat("generating ns_server_data ")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
-	url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data", sep='')
-	# cat(paste(url,"\n"))
-	doc_json <- fromJSON(file=url)
-	# cat(paste(builds_list[index,]$id,"\n"))
-	unlisted <- plyr::ldply(doc_json, unlist)
-	# print(ncol(unlisted))
-	# print(nrow(unlisted))
-	# print(unlisted[1,])
-	if (ncol(result) > 0 & ncol(result) != ncol(unlisted)) {
-		#rbind.fill does not work if arg1 or arg2 is empty
-		result <- rbind.fill(result,unlisted)
-	} else {
-		result <- rbind(result,unlisted)
-	}
+    url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data", sep='')
+    # cat(paste(url,"\n"))
+    doc_json <- fromJSON(file=url)
+    # cat(paste(builds_list[index,]$id,"\n"))
+    tryCatch({
+            unlisted <- plyr::ldply(doc_json, unlist)
+        if (ncol(result) > 0 & ncol(result) != ncol(unlisted)) {
+            #rbind.fill does not work if arg1 or arg2 is empty
+            result <- rbind.fill(result,unlisted)
+        } else {
+            result <- rbind(result,unlisted)
+        }
+    }, error=function(e) {
+        print("cannot generate ns server data")
+        print(e)
+    })
 }
+
 cat("generated ns_server_data data frame\n")
 cat(paste("result has ", nrow(result)," rows \n"))
 
@@ -516,20 +519,29 @@ for(build in levels(builds)) {
 
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
-	fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ep_diskqueue_drain!=0, ]
-	d <- mean(fi$ep_diskqueue_drain)
-	print(d)
-	if(build == baseline){
-		row <-c ("baseline", "drain rate", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-	else{
-		row <-c (build, "drain rate", as.numeric(d))
-		combined <- rbind(combined, row)	
-	}
-	
+    if (length(ns_server_data) == 0 | nrow(ns_server_data) == 0) {
+        if(build == baseline){
+            row <-c ("baseline", "drain rate", "NA")
+        } else {
+            row <-c (build, "drain rate", "NA")
+        }
+        combined <- rbind(combined, row)
+        next;
+    }
+
+    fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ep_diskqueue_drain!=0, ]
+    d <- mean(fi$ep_diskqueue_drain)
+    print(d)
+    if(build == baseline){
+        row <-c ("baseline", "drain rate", as.numeric(d))
+        combined <- rbind(combined, row)
+    }
+    else{
+        row <-c (build, "drain rate", as.numeric(d))
+        combined <- rbind(combined, row)
+    }
 }
 
 for(build in levels(builds)) {	
@@ -629,20 +641,29 @@ if (length(unique(df$system)) == 2) {
 
 for(build in levels(builds)) {	
 
-	fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ops !=0, ]			         
-	print("here")
-	d <- mean(fi$ops)
-	print(d)
-	if(build == baseline){
-		row <-c ("baseline", "ops", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-	else{
-		row <-c (build, "ops", as.numeric(d))
-		combined <- rbind(combined, row)	
-	}
-	
-	
+    if (length(ns_server_data) == 0 | nrow(ns_server_data) == 0) {
+        if(build == baseline){
+            row <-c ("baseline", "ops", "NA")
+        } else {
+        row <-c (build, "ops", "NA")
+        }
+
+        combined <- rbind(combined, row)
+        next;
+    }
+
+    fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ops !=0, ]
+    d <- mean(fi$ops)
+
+    print(d)
+    if(build == baseline){
+        row <-c ("baseline", "ops", as.numeric(d))
+        combined <- rbind(combined, row)
+    }
+    else{
+        row <-c (build, "ops", as.numeric(d))
+        combined <- rbind(combined, row)
+    }
 }
 
 for(build in levels(builds)) {
