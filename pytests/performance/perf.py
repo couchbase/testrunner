@@ -325,6 +325,7 @@ class PerfBase(unittest.TestCase):
                 'ratio-sets': self.paramf("load_ratio_sets", ratio_sets),
                 'ratio-misses': self.paramf("load_ratio_misses", 0.0),
                 'ratio-creates': self.paramf("load_ratio_creates", 1.0),
+                'ratio-deletes': self.paramf("load_ratio_deletes", 0.0),
                 'ratio-hot': 0.0,
                 'ratio-hot-sets': ratio_hot_sets,
                 'ratio-hot-gets': ratio_hot_gets,
