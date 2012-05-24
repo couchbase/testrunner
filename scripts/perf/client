@@ -17,5 +17,9 @@ if [ -n "${hot_load_phase}" ] ; then
   extra=",hot_load_phase=1"
 fi
 
+if [ -n "${warmup}" ] ; then
+  extra=${extra}",warmup="${warmup}
+fi
+
 ./testrunner -i ${ini_file} -c ${test_conf} -p prefix=${1},num_clients=${2},load_phase=${load_phase},index_phase=${index_phase},access_phase=${access_phase}${extra}
 
