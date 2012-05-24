@@ -1021,7 +1021,8 @@ if (nrow(ns_server_data) > 0) {
     makeFootnote(footnote)
 
     cat("generating vb_active_resident_items_ratio \n")
-    p <- ggplot(ns_server_data, aes(row, vb_active_resident_items_ratio, color=buildinfo.version , label= prettySize(vb_active_resident_items_ratio))) + labs(x="----time (sec)--->", y="vb_active_resident_items_ratio")
+    ns_server_data_filtered = ns_server_data[ns_server_data$vb_active_resident_items_ratio > 0, ]
+    p <- ggplot(ns_server_data_filtered, aes(row, vb_active_resident_items_ratio, color=buildinfo.version , label= prettySize(vb_active_resident_items_ratio))) + labs(x="----time (sec)--->", y="vb_active_resident_items_ratio")
     p <- p + geom_point()
     p <- addopts(p,"vb_active_resident_items_ratio")
     print(p)
