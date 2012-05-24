@@ -187,6 +187,13 @@ ns_server_data $vb_active_eject <- as.numeric(ns_server_data $vb_active_eject)
 ns_server_data $vb_replica_eject <- as.numeric(ns_server_data $vb_replica_eject)
 ns_server_data $ep_tap_replica_queue_backoff <- as.numeric(ns_server_data $ep_tap_replica_queue_backoff)
 ns_server_data $mem_used <- as.numeric(ns_server_data$mem_used)
+tryCatch({
+    ns_server_data $docs_size <- as.numeric(ns_server_data$couch_docs_actual_disk_size)
+    ns_server_data $views_size <- as.numeric(ns_server_data$couch_views_actual_disk_size)
+    ns_server_data $total_disk_size <- as.numeric(ns_server_data$couch_total_disk_size)
+}, error=function(e) {
+    print("Cannot find detailed disk stats, they are only available in 2.0")
+})
 ns_server_data $curr_items_tot <- as.numeric(ns_server_data$curr_items_tot)
 ns_server_data $cmd_get <- as.numeric(ns_server_data$cmd_get)
 ns_server_data $cmd_set <- as.numeric(ns_server_data$cmd_set)
@@ -578,19 +585,21 @@ for(build in levels(builds)) {
 }
 
 for(build in levels(builds)) {
-
-	fi <-disk_data[disk_data$buildinfo.version==build, ]
-	d <- max(fi$size)
-	print(d)
-	if(build == baseline){
-		row <-c ("baseline", "peak disk", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-	else{
-		row <-c (build, "peak disk", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-
+    if (is.null(ns_server_data$total_disk_size)) {
+        fi <-disk_data[disk_data$buildinfo.version==build, ]
+        d <- max(fi$size)
+    } else {
+        fi <-ns_server_data[ns_server_data$buildinfo.version==build, ]
+        d <- max(fi$total_disk_size)/1024**2
+    }
+    if (build == baseline) {
+        row <-c ("baseline", "peak disk", as.numeric(d))
+        combined <- rbind(combined, row)
+    }
+    else {
+        row <-c (build, "peak disk", as.numeric(d))
+        combined <- rbind(combined, row)
+    }
 }
 
 for(build in levels(builds)) {
@@ -1040,6 +1049,36 @@ if (nrow(ns_server_data) > 0) {
     print(p)
     makeFootnote(footnote)
 
+    if(is.null(ns_server_data$total_disk_size)) {
+        cat("generating data disk size\n")
+        p <- ggplot(disk_data, aes(row,size, color=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="MB")
+        p <- p + geom_point()
+        p <- addopts(p,"Total disk size")
+        print(p)
+        makeFootnote(footnote)
+    } else {
+        cat("generating couch_docs_actual_disk_size \n")
+        p <- ggplot(ns_server_data, aes(row, docs_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Docs disk size")
+        print(p)
+        makeFootnote(footnote)
+
+        cat("generating couch_views_actual_disk_size \n")
+        p <- ggplot(ns_server_data, aes(row, views_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Views disk size")
+        print(p)
+        makeFootnote(footnote)
+
+        cat("generating couch_total_disk_size \n")
+        p <- ggplot(ns_server_data, aes(row, total_disk_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Total disk size")
+        print(p)
+        makeFootnote(footnote)
+    }
+
     cat("generating cmd_get \n")
     p <- ggplot(ns_server_data, aes(row, cmd_get, color=buildinfo.version , label= cmd_get)) + labs(x="----time (sec)--->", y="ops/sec")
     p <- p + geom_point()
@@ -1091,12 +1130,6 @@ for(ns_node in levels(nodes)) {
 }
 
 
-cat("generating data disk size\n")
-p <- ggplot(disk_data, aes(row,size, color=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="size (MB)")
-p <- p + geom_point()
-p <- addopts(p,"data disk size")
-print(p)
-makeFootnote(footnote)
 
 if (nrow(latency_get_histo) > 0) {
     cat("plotting latency-get histogram \n")
