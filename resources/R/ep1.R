@@ -585,13 +585,9 @@ for(build in levels(builds)) {
 }
 
 for(build in levels(builds)) {
-    if (is.null(ns_server_data$total_disk_size)) {
-        fi <-disk_data[disk_data$buildinfo.version==build, ]
-        d <- max(fi$size)
-    } else {
-        fi <-ns_server_data[ns_server_data$buildinfo.version==build, ]
-        d <- max(fi$total_disk_size)/1024**2
-    }
+    fi <-disk_data[disk_data$buildinfo.version==build, ]
+    d <- max(fi$size)
+
     if (build == baseline) {
         row <-c ("baseline", "peak disk", as.numeric(d))
         combined <- rbind(combined, row)
@@ -1050,14 +1046,7 @@ if (nrow(ns_server_data) > 0) {
     print(p)
     makeFootnote(footnote)
 
-    if(is.null(ns_server_data$total_disk_size)) {
-        cat("generating data disk size\n")
-        p <- ggplot(disk_data, aes(row,size, color=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="MB")
-        p <- p + geom_point()
-        p <- addopts(p,"Total disk size")
-        print(p)
-        makeFootnote(footnote)
-    } else {
+    if(!is.null(ns_server_data$total_disk_size)) {
         cat("generating couch_docs_actual_disk_size \n")
         p <- ggplot(ns_server_data, aes(row, docs_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
         p <- p + geom_point()
@@ -1130,7 +1119,12 @@ for(ns_node in levels(nodes)) {
     makeFootnote(footnote)
 }
 
-
+cat("generating data disk size\n")
+p <- ggplot(disk_data, aes(row, size, color=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="MB")
+p <- p + geom_point()
+p <- addopts(p,"Data disk size")
+print(p)
+makeFootnote(footnote)
 
 if (nrow(latency_get_histo) > 0) {
     cat("plotting latency-get histogram \n")
