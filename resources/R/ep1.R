@@ -504,17 +504,17 @@ p <- combined[2:nrow(combined), ]
 
 builds = factor(builds_list$build)
 # Test runtime is present in builds_list
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 	fi <-builds_list[builds_list$build==build, ]
 	d <- fi$runtime
-	print(d)	
+	print(d)
 	if(build == baseline){
 		row <-c ("baseline", "runtime", as.numeric(d))
 		combined <- rbind(combined, row)
 	}
 	else{
 		row <-c (build, "runtime", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
 
 }
@@ -544,7 +544,7 @@ for(build in levels(builds)) {
     }
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
 	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
 	d <- mean(fi$percentile_95th)
@@ -555,14 +555,14 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "latency-get (95th)", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
-	
+
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
-	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]	
+	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]
 	d <- mean(fi$percentile_95th)
 
 	print(d)
@@ -572,12 +572,12 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "latency-set (95th)", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
-	
+
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
 	fi <-disk_data[disk_data$buildinfo.version==build, ]
 	d <- max(fi$size)
@@ -588,19 +588,19 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "peak disk", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
-	
+
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
     id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
 	fi_memcached <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id == id, ]
 	fi_beam <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(beam.smp)" & system_stats$unique_id == id, ]
 
 	print("here")
 	d <- max(fi_memcached$rss + fi_beam$rss)
-	
+
 	print(d)
 	if(build == baseline){
 		row <-c ("baseline", "peak mem", as.numeric(d))
@@ -608,9 +608,9 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "peak mem", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
-	
+
 }
 
 footnote <- paste(builds_list$test_name, baseline_build, new_build, format(Sys.time(), "%d %b %Y"), sep=" / ")
@@ -639,7 +639,7 @@ if (length(unique(df$system)) == 2) {
     makeFootnote(footnote)
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
     if (length(ns_server_data) == 0 | nrow(ns_server_data) == 0) {
         if(build == baseline){
@@ -668,12 +668,12 @@ for(build in levels(builds)) {
 
 for(build in levels(builds)) {
 	id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
-    print(id)	
+    print(id)
 	fi_memcached <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(memcached)" & system_stats$unique_id==id, ]
 
 	print("here")
 	d <- mean(fi_memcached$rss)
-	
+
 	print(d)
 	if(build == baseline){
 		row <-c ("baseline", "Avg. mem memcached", as.numeric(d))
@@ -681,19 +681,19 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "Avg. mem memcached", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
-	
+
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
     id <- unique(system_stats[system_stats$buildinfo.version==build,]$unique_id)[1]
     print(id)
 	fi_beam <-system_stats[system_stats$buildinfo.version==build & system_stats$comm=="(beam.smp)" & system_stats$unique_id ==id, ]
 
 	print("here")
 	d <- mean(fi_beam$rss)
-	
+
 	print(d)
 	if(build == baseline){
 		row <-c ("baseline", "Avg. mem beam.smp", as.numeric(d))
@@ -701,12 +701,12 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "Avg. mem beam.smp", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
-	
+
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
 	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
 	d <- mean(fi$percentile_90th)
@@ -717,12 +717,12 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "latency-get (90th)", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
-	
+
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
 	fi <-latency_get[latency_get$buildinfo.version==build & latency_get$client_id ==0, ]
 	d1 <- mean(fi$percentile_99th)
@@ -734,12 +734,12 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "latency-get (99th)", as.numeric(d1))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
-	
+
 }
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
 	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]
 	d <- mean(fi$percentile_90th)
@@ -750,13 +750,13 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "latency-set (90th)", as.numeric(d))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
 }
 
 
 
-for(build in levels(builds)) {	
+for(build in levels(builds)) {
 
 	fi <-latency_set[latency_set$buildinfo.version==build & latency_set$client_id ==0, ]
 	d1 <- mean(fi$percentile_99th)
@@ -767,7 +767,7 @@ for(build in levels(builds)) {
 	}
 	else{
 		row <-c (build, "latency-set (99th)", as.numeric(d1))
-		combined <- rbind(combined, row)	
+		combined <- rbind(combined, row)
 	}
 }
 
@@ -946,7 +946,7 @@ if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
 rownames(testdf) <- row_names
 plot.new()
 col1 <- paste(unlist(strsplit(baseline_build, "-"))[1],"-",unlist(strsplit(baseline_build, "-"))[2])
-col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2]) 
+col2 <- paste(unlist(strsplit(new_build, "-"))[1],"-",unlist(strsplit(new_build, "-"))[2])
 grid.table(testdf, h.even.alpha=1, h.odd.alpha=1,  v.even.alpha=0.5, v.odd.alpha=1,cols=c(col1, col2))
 makeFootnote(footnote)
 
@@ -1105,6 +1105,14 @@ if (nrow(latency_get_histo) > 0) {
     p <- addopts(p,"Latency get histogram")
     print(p)
     makeFootnote(footnote)
+
+    cat("plotting latency-get histogram (0-10ms) \n")
+    latency_get_histo = latency_get_histo[latency_get_histo$time < 10, ]
+    p <- ggplot(latency_get_histo, aes(time, count, color=buildinfo.version , label= prettySize(count))) + labs(x="----latency (ms)--->", y="count")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency get histogram (0-10 ms)")
+    print(p)
+    makeFootnote(footnote)
 }
 
 if (nrow(latency_set_histo) > 0) {
@@ -1114,6 +1122,15 @@ if (nrow(latency_set_histo) > 0) {
     p <- addopts(p,"Latency set histogram")
     print(p)
     makeFootnote(footnote)
+
+    cat("plotting latency-set histogram (0-10ms) \n")
+    latency_set_histo = latency_set_histo[latency_set_histo$time < 10, ]
+    p <- ggplot(latency_set_histo, aes(time, count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (ms)--->", y="count")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency set histogram (0-10 ms)")
+    print(p)
+    makeFootnote(footnote)
+
 }
 
 if (nrow(latency_query_histo) > 0) {
