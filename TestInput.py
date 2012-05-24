@@ -96,7 +96,7 @@ class TestInputParser():
     def get_test_input(argv):
         #if file is given use parse_from_file
         #if its from command line
-        (opts, args) = getopt.getopt(argv[1:], 'ht:c:v:s:i:p:', [])
+        (opts, args) = getopt.getopt(argv[1:], 'ht:c:v:s:i:p:l:', [])
         #first let's loop over and find out if user has asked for help
         #if it has i
         params = {}
