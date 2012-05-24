@@ -374,6 +374,12 @@ class EPerfMaster(perf.PerfBase):
                 for view_name, x in d["views"].items():
                     self.rest.query_view(ddoc_name, view_name, bucket, { "limit": 10 })
 
+            # Wait until there are no active indexing tasks
+            tasks = self.rest.active_tasks
+            while([task for task in tasks(None) if task['type'] == 'indexer']):
+                print "Waiting for index to finish"
+                time.sleep(10)
+
     def latched_rebalance(self, cur):
         if not self.latched_rebalance_done:
             self.latched_rebalance_done = True
