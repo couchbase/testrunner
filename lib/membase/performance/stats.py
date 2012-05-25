@@ -149,13 +149,17 @@ class StatsCollector(object):
                }
 
         if self.client_id:
-            filename = str(self.client_id)+'.loop'
-            if re.search('reload$', self._task["name"]):
-                filename = str(self.client_id)+'.reload'
-            elif re.search('load$', self._task["name"]):
-                filename = str(self.client_id)+'.load'
-            elif re.search('warmup$', self._task["name"]):
-                filename = str(self.client_id)+'.warmup'
+            patterns = ['reload$', 'load$', 'warmup$', 'index$']
+            phases = ['.reload', '.load', '.warmup', '.index']
+
+            name_picker = lambda (pattern, phase): re.search(pattern, self._task["name"])
+            try:
+                phase = filter(name_picker, zip(patterns, phases))[0][1]
+            except IndexError:
+                phase = '.loop'
+
+            filename = str(self.client_id) + phase
+
             file = gzip.open("{0}.json.gz".format(filename), 'wb')
             file.write("{0}".format(json.dumps(obj)))
             file.close()

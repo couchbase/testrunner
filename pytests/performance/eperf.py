@@ -358,9 +358,24 @@ class EPerfMaster(perf.PerfBase):
 
         self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
-    # create design docs and index documents
     def index_phase(self, ddocs, bucket="default"):
+        """Create design documents and views"""
+
         if self.parami("index_phase", 1) > 0:
+            # Start stats collector
+            if self.parami("collect_stats", 1):
+                client_id = self.parami("prefix", 0)
+                test_params = {'test_time': time.time(),
+                               'test_name': self.id(),
+                               'json': 0}
+
+                sc = self.start_stats(self.spec_reference + ".index",
+                    test_params=test_params,
+                    client_id=client_id)
+
+                start_time = time.time()
+
+            # Create design documents and views
             for ddoc_name, d in ddocs.items():
                 d = copy.copy(d)
                 d["language"] = "javascript"
@@ -370,6 +385,8 @@ class EPerfMaster(perf.PerfBase):
                                                             bucket, ddoc_name)
                 self.rest._http_request(api, 'PUT', d_json,
                                         headers=self.rest._create_capi_headers())
+
+            # Initialize indexing
             for ddoc_name, d in ddocs.items():
                 for view_name, x in d["views"].items():
                     self.rest.query_view(ddoc_name, view_name, bucket, { "limit": 10 })
@@ -380,6 +397,15 @@ class EPerfMaster(perf.PerfBase):
             while([task for task in tasks() if task['type'] == 'indexer']):
                 print "Waiting for index to finish"
                 time.sleep(10)
+
+            # Stop stats collector
+            if self.parami("collect_stats", 1):
+                end_time = time.time()
+
+                ops = { 'start-time': start_time,
+                        'end-time': end_time }
+
+                self.end_stats(sc, ops, self.spec_reference + ".index")
 
     def latched_rebalance(self, cur):
         if not self.latched_rebalance_done:
