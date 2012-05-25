@@ -1230,25 +1230,26 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
               (argv[0]))
         print("  default protocol = memcached-binary://")
         print("  default port     = 11211\n")
-        examples = ["examples: %s membase://127.0.0.1:8091 max-items=1000000 json=1",
-                    "          %s memcached://127.0.0.1:11210 vbuckets=1024",
-                    "          %s memcached://127.0.0.1:11211",
-                    "          %s memcached-ascii://127.0.0.1:11211",
-                    "          %s memcached-binary://127.0.0.1:11211",
-                    "          %s 127.0.0.1:11211",
-                    "          %s 127.0.0.1",
-                    "          %s my-test-bucket@127.0.0.1",
-                    "          %s my-test-bucket:MyPassword@127.0.0.1",
-                    "          %s none://"]
+        examples = ["examples:",
+                    "  %s membase://127.0.0.1:8091 max-items=1000000 json=1",
+                    "  %s memcached://127.0.0.1:11210 vbuckets=1024",
+                    "  %s memcached://127.0.0.1:11211",
+                    "  %s memcached-ascii://127.0.0.1:11211",
+                    "  %s memcached-binary://127.0.0.1:11211",
+                    "  %s 127.0.0.1:11211",
+                    "  %s 127.0.0.1",
+                    "  %s my-test-bucket@127.0.0.1",
+                    "  %s my-test-bucket:MyPassword@127.0.0.1",
+                    "  %s none://"]
         if extra_examples:
             examples = examples + extra_examples
-            for s in examples:
-                if s.find("%s") > 0:
-                    print(s % (argv[0]))
-                else:
-                    print(s)
-                print("")
-            print("optional key=val's and their defaults:")
+        for s in examples:
+            if s.find("%s") > 0:
+                print(s % (argv[0]))
+            else:
+                print(s)
+        print("")
+        print("optional key=val's and their defaults:")
         for d in [cfg_defaults, cur_defaults]:
             for k in sorted(d.iterkeys()):
                 print("  %s = %s %s" %
