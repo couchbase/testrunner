@@ -53,6 +53,20 @@ makeFootnote <- function(footnoteText=
    popViewport()
 }
 
+makeMetricDef <- function(defText="unknown metric",
+                          size=.7,
+                          color="blue")
+{
+    pushViewport(viewport())
+    grid.text(label=defText,
+              x=unit(0.75, "npc"),
+              y=unit(0.3, "npc"),
+              gp=gpar(cex=size, col=color, fontface="italic"),
+              check.overlap=TRUE,
+              just=0)
+    popViewport()
+}
+
 addopts <- function(aplot,atitle) {
 	aplot <- aplot + opts(panel.background = theme_rect(colour = 'black', fill = 'white', size = ))
 	aplot <- aplot + opts(axis.ticks = theme_segment(colour = 'red', size = 1))
@@ -963,6 +977,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"ops/sec")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Number of ops per second")
 
     cat("generating ep queue size \n")
     p <- ggplot(ns_server_data, aes(row, ep_queue_size, color=buildinfo.version , label= prettySize(ep_queue_size))) + labs(x="----time (sec)--->", y="ep_queue_size")
@@ -970,6 +985,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"ep queue size")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Number of items queued for storage")
 
     cat("generating ep_diskqueue_drain \n")
     p <- ggplot(ns_server_data, aes(row, ep_diskqueue_drain, color=buildinfo.version , label= prettySize(ep_diskqueue_drain))) + labs(x="----time (sec)--->", y="ep_diskqueue_drain")
@@ -977,6 +993,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"ep_diskqueue_drain")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Total drained items on disk queue")
 
     cat("generating ep_bg_fetched \n")
     p <- ggplot(ns_server_data, aes(row, ep_bg_fetched, color=buildinfo.version , label= prettySize(ep_bg_fetched))) + labs(x="----time (sec)--->", y="ep_bg_fetched")
@@ -984,6 +1001,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"ep_bg_fetched ops/sec")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Number of items fetched from disk")
 
     cat("generating tmp_oom \n")
     p <- ggplot(ns_server_data, aes(row, ep_tmp_oom_errors, color=buildinfo.version , label= prettySize(ep_tmp_oom_errors))) + labs(x="----time (sec)--->", y="tmp_oom")
@@ -991,6 +1009,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"tmp_oom ops/sec")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Number of times temporary OOMs")
 
     ns_server_data $vb_replica_eject <- as.numeric(ns_server_data $vb_replica_eject)
     ns_server_data $ep_tap_replica_queue_backoff <- as.numeric(ns_server_data $ep_tap_replica_queue_backoff)
@@ -1001,6 +1020,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"vb_active_eject/sec")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Number of times item values got ejected")
 
     cat("generating vb_replica_eject \n")
     p <- ggplot(ns_server_data, aes(row, vb_replica_eject, color=buildinfo.version , label= prettySize(vb_replica_eject))) + labs(x="----time (sec)--->", y="vb_replica_eject")
@@ -1008,6 +1028,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"vb_replica_eject/sec")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Number of times item values got ejected")
 
     cat("generating ep_tap_replica_queue_backoff \n")
     p <- ggplot(ns_server_data, aes(row, ep_tap_replica_queue_backoff, color=buildinfo.version , label= prettySize(ep_tap_replica_queue_backoff))) + labs(x="----time (sec)--->", y="ep_tap_replica_queue_backoff")
@@ -1015,6 +1036,10 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"ep_tap_replica_queue_backoff/sec")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef(paste("Number of back-offs received per second ",
+                        "while sending data over replication ",
+                         "TAP connections",
+                         sep="\n"))
 
     cat("generating vb_active_resident_items_ratio \n")
     ns_server_data_filtered = ns_server_data[ns_server_data$vb_active_resident_items_ratio > 0, ]
@@ -1023,6 +1048,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"vb_active_resident_items_ratio")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Percentage of active items cached in RAM")
 
     cat("generating vb_replica_resident_items_ratio \n")
     p <- ggplot(ns_server_data, aes(row, vb_replica_resident_items_ratio, color=buildinfo.version , label= prettySize(vb_replica_resident_items_ratio))) + labs(x="----time (sec)--->", y="vb_replica_resident_items_ratio")
@@ -1030,7 +1056,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"vb_replica_resident_items_ratio")
     print(p)
     makeFootnote(footnote)
-
+    makeMetricDef("Percentage of replica items cached in RAM")
 
     cat("generating cur_items_total \n")
     p <- ggplot(ns_server_data, aes(row, curr_items_tot, color=buildinfo.version , label= prettySize(curr_items_tot))) + labs(x="----time (sec)--->", y="curr_items_tot")
@@ -1038,6 +1064,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"cur_items_total")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Total number of items")
 
     cat("generating mem_used \n")
     p <- ggplot(ns_server_data, aes(row, mem_used, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="bytes")
@@ -1045,6 +1072,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"mem_used")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Engine's total memory usage")
 
     if(!is.null(ns_server_data$total_disk_size)) {
         cat("generating couch_docs_actual_disk_size \n")
@@ -1053,6 +1081,10 @@ if (nrow(ns_server_data) > 0) {
         p <- addopts(p,"Docs disk size")
         print(p)
         makeFootnote(footnote)
+        makeMetricDef(paste("The size of all data files for this bucket, ",
+                            "including the data itself, meta data ",
+                            "and temporary files (2.0 only)",
+                            sep="\n"))
 
         cat("generating couch_views_actual_disk_size \n")
         p <- ggplot(ns_server_data, aes(row, views_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
@@ -1060,6 +1092,9 @@ if (nrow(ns_server_data) > 0) {
         p <- addopts(p,"Views disk size")
         print(p)
         makeFootnote(footnote)
+        makeMetricDef(paste("The size of all active items ",
+                            "in all the indexes on disk (2.0 only)",
+                            sep="\n"))
 
         cat("generating couch_total_disk_size \n")
         p <- ggplot(ns_server_data, aes(row, total_disk_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
@@ -1067,6 +1102,9 @@ if (nrow(ns_server_data) > 0) {
         p <- addopts(p,"Total disk size")
         print(p)
         makeFootnote(footnote)
+        makeMetricDef(paste("The total size on disk of all data ",
+                            "and view files. (2.0 only)",
+                            sep="\n"))
     }
 
     cat("generating cmd_get \n")
@@ -1075,6 +1113,7 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"cmd_get ops/sec")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Cumulative number of retrieval reqs")
 
     cat("generating get misses \n")
     p <- ggplot(ns_server_data, aes(row, get_misses, color=buildinfo.version , label= get_misses)) + labs(x="----time (sec)--->", y="# of get misses")
@@ -1082,6 +1121,9 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"# of get misses")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef(paste("Number of get operations per second ",
+                        "for data that the bucket does not contain",
+                        sep="\n"))
 
     cat("generating get hits \n")
     p <- ggplot(ns_server_data, aes(row, get_hits, color=buildinfo.version , label= get_hits)) + labs(x="----time (sec)--->", y="# of get hits")
@@ -1089,6 +1131,9 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"# of get hits")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef(paste("Number of get operations per second ",
+                        "for data that the bucket contains",
+                        sep="\n"))
 
     cat("generating cache_miss \n")
     p <- ggplot(ns_server_data, aes(row, cache_miss, color=buildinfo.version , label= cache_miss)) + labs(x="----time (sec)--->", y="cache_miss percentage")
@@ -1096,6 +1141,9 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"cache_miss percentage")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef(paste("Percentage of reads per second ",
+                        "from disk as opposed to RAM",
+                        sep="\n"))
 
     cat("generating cache_miss ( between 0-5 ) \n")
     ns_server_data$cache_miss_0_5 <- ifelse(ns_server_data $cache_miss>5,5, ns_server_data$cache_miss)
@@ -1133,6 +1181,7 @@ if (nrow(latency_get_histo) > 0) {
     p <- addopts(p,"Latency get histogram")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Final latency histogram for get commands")
 
     cat("plotting latency-get histogram (0-10ms) \n")
     latency_get_histo = latency_get_histo[latency_get_histo$time < 10, ]
@@ -1150,6 +1199,7 @@ if (nrow(latency_set_histo) > 0) {
     p <- addopts(p,"Latency set histogram")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Final latency histogram for set commands")
 
     cat("plotting latency-set histogram (0-10ms) \n")
     latency_set_histo = latency_set_histo[latency_set_histo$time < 10, ]
@@ -1158,7 +1208,6 @@ if (nrow(latency_set_histo) > 0) {
     p <- addopts(p,"Latency set histogram (0-10 ms)")
     print(p)
     makeFootnote(footnote)
-
 }
 
 if (nrow(latency_query_histo) > 0) {
@@ -1168,6 +1217,7 @@ if (nrow(latency_query_histo) > 0) {
     p <- addopts(p,"Latency query histogram")
     print(p)
     makeFootnote(footnote)
+    makeMetricDef("Final latency histogram for query commands")
 }
 
 if (nrow(latency_get) > 0) {
