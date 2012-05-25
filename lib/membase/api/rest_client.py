@@ -1182,6 +1182,25 @@ class RestConnection(object):
             status, content = self._http_request(api, "POST", params)
         return status
 
+    def set_global_loglevel(self, loglevel='error'):
+        """Set cluster-wide logging level for core components
+
+        Possible loglevel:
+            -- debug
+            -- info
+            -- warn
+            -- error
+        """
+
+        api = self.baseUrl + 'diag/eval'
+
+        request_body = 'rpc:eval_everywhere(erlang, apply, [fun () -> \
+                        [ale:set_loglevel(L, {0}) || L <- \
+                        [ns_server, couchdb, user, menelaus, ns_doctor, stats, \
+                        rebalance, cluster, views, stderr]] end, []]).'.format(loglevel)
+
+        return self._http_request(api=api, method='POST', params=request_body,
+                                  headers=self._create_headers())
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
