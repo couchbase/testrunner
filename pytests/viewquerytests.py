@@ -1019,7 +1019,7 @@ class QueryHelper:
         self.type_ = type_   # "view" or "all_docs"
         self.expected_keys = []
 
-    # TODO: parameterize failure count, less open clients
+    # less open clients
     @staticmethod
     def verify_query_keys(rest, query, results, bucket = "default", num_verified_docs = 20):
         failures = []
@@ -1061,19 +1061,22 @@ class QueryHelper:
             # debug missing documents
             for doc_id in list(missing_item_set)[:num_verified_docs]:
 
-                # attempt retrieve doc from memcached
+                # attempt to retrieve doc from memcached
                 mc_item = kv_client.mc_get_full(doc_id)
                 if mc_item == None:
                     failures.append("document %s missing from memcached" % (doc_id))
 
-                # attempt to retrieve doc from couchdb
-                # TODO: look into another way of reading from disk
+                # attempt to retrieve doc from disk
                 else:
-                    status, cb_doc = \
-                        rest._index_results(bucket, "all_docs", None, {'key' : doc_id}, 5)
+                    num_vbuckets = len(rest.get_vbuckets(bucket))
+                    doc_meta = kv_client.get_doc_metadata(num_vbuckets, doc_id)
 
-                    if(status == True):
-                        if( len(cb_doc['rows']) > 0 ):
+                    if(doc_meta != None):
+                        if (doc_meta['key_valid'] != 'valid'):
+                            msg = "Error expected in results for key with invalid state %s" % doc_meta
+                            failures.append(msg)
+
+                        if (len(cb_doc['rows']) > 0):
                             v_doc_id = cb_doc['rows'][0]['id']
                             if( v_doc_id != doc_id):
                                 msg = "query doc_id: %s does not match couchdb id: %s" % \

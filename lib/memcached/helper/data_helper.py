@@ -899,8 +899,26 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
 
         self._rlock.release()
 
+    """
+    " retrieve meta data of document from disk
+    """
+    def get_doc_metadata(self, num_vbuckets, key):
+        vid = crc32.crc32_hash(key) & (num_vbuckets - 1)
+
+        mc = self.memcached(key)
+        metadatastats = None
+
+        try:
+            metadatastats = mc.stats("vkey {0} {1}".format(key, vid))
+        except MemcachedError:
+            msg = "key {0} doesn't exist in memcached".format(key)
+            self.log.info(msg)
+
+        return metadatastats
+
+
     def delete(self, key):
-        try: 
+        try:
             self._rlock.acquire()
             opaque, cas, data = self.memcached(key).delete(key)
             if self.store_enabled and cas == 0:
