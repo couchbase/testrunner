@@ -182,6 +182,15 @@ class RestConnection(object):
 
         return json_parsed
 
+    def ns_server_tasks(self):
+        api = self.baseUrl + 'pools/default/tasks'
+
+        try:
+            status, content = self._http_request(api, 'GET', headers=self._create_headers())
+            return json.loads(content)
+        except ValueError:
+            return ""
+
     # DEPRECATED: use create_ddoc() instead.
     def create_view(self, design_doc_name, bucket_name, views):
         return self.create_ddoc(design_doc_name, bucket_name, views)
