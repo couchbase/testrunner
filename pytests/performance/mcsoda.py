@@ -10,7 +10,7 @@ import socket
 import string
 import struct
 import random
-import multiprocessing
+import threading
 
 sys.path.append("lib")
 sys.path.append(".")
@@ -154,7 +154,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
 
     heartbeat_last = t_last
 
-    while ctl.value:
+    while ctl.get('run_ok', True):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
         if cfg.get('max-ops', 0) > 0 and cfg.get('max-ops', 0) <= num_ops:
@@ -1090,9 +1090,9 @@ def run(cfg, cur, protocol, host_port, user, pswd,
                                md5(str(len(cfg['body'][mvs]))).hexdigest()
         cfg['suffix'][mvs] = "\"body\":\"" + cfg['body'][mvs] + "\"}"
 
-    ctl = ctl or multiprocessing.Value('i', True)
+    ctl = ctl or { 'run_ok': True }
 
-    workers = []
+    threads = []
 
     for i in range(cfg.get('threads', 1)):
         store = None
@@ -1107,9 +1107,9 @@ def run(cfg, cur, protocol, host_port, user, pswd,
         store.connect(host_port, user, pswd, cfg, cur, bucket=bucket)
         store.stats_collector(stats_collector)
 
-        workers.append(multiprocessing.Process(target=run_worker,
-                                               args=(ctl, cfg, cur, store,
-                                                     "worker-" + str(i) + ": ")))
+        threads.append(threading.Thread(target=run_worker,
+                                       args=(ctl, cfg, cur, store,
+                                             "thread-" + str(i) + ": ")))
 
     store.show_some_keys()
 
@@ -1129,28 +1129,28 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
     def stop_after(secs):
         time.sleep(secs)
-        ctl.value = False
+        ctl['run_ok'] = False
 
     if cfg.get('time', 0) > 0:
-        stopper = multiprocessing.Process(target=stop_after, args=(cfg.get('time', 0)))
-        stopper.daemon = True
-        stopper.start()
+        t = threading.Thread(target=stop_after, args=(cfg.get('time', 0),))
+        t.daemon = True
+        t.start()
 
     t_start = time.time()
 
     try:
-        if len(workers) <= 1:
+        if len(threads) <= 1:
             run_worker(ctl, cfg, cur, store, "", heartbeat, why)
         else:
-            for worker in workers:
-                worker.daemon = True
-                worker.start()
+            for thread in threads:
+                thread.daemon = True
+                thread.start()
 
-            while len(workers) > 0:
-                workers[0].join(1)
-                workers = [worker for worker in workers if worker.is_alive()]
+            while len(threads) > 0:
+                threads[0].join(1)
+                threads = [t for t in threads if t.isAlive()]
     except KeyboardInterrupt:
-        ctl.value = False
+        ctl['run_ok'] = False
 
     t_end = time.time()
 
@@ -1164,15 +1164,15 @@ def run(cfg, cur, protocol, host_port, user, pswd,
         total_cmds = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
     log.info("    ops/sec: %s" %(total_cmds / total_time))
 
-    workers = [worker for worker in workers if worker.is_alive()]
+    threads = [t for t in threads if t.isAlive()]
     heartbeat = 0
-    while len(workers) > 0:
-        workers[0].join(1)
+    while len(threads) > 0:
+        threads[0].join(1)
         heartbeat = heartbeat + 1
         if heartbeat >= 60:
             heartbeat = 0
-            log.info("    mcsoda is running with %s workers" % len(workers))
-        workers = [worker for worker in workers if worker.is_alive()]
+            log.info("    mcsoda is running with %s threads" % len(threads))
+        threads = [t for t in threads if t.isAlive()]
 
     log.info("[mcsoda: %s] stopped running." %why)
     return cur, t_start, t_end
