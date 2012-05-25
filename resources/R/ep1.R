@@ -5,6 +5,7 @@ require(plyr, quietly=TRUE)
 require(rjson, quietly=TRUE)
 require(ggplot2, quietly=TRUE)
 require(gridExtra, quietly=TRUE)
+require(gplots, quietly=TRUE)
 
 library(plotrix)
 library(methods)
@@ -33,6 +34,46 @@ pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
 i_builds = c(baseline_build, new_build)
 
 cat(paste("args : ",args,""),sep="\n")
+
+dumpTextFile <- function(filename=NULL) {
+    # dump and plot text file as it is
+
+    if (is.null(filename)) {
+        return(NULL)
+    }
+
+    tryCatch({
+        data <- readLines(filename, -1)
+    }, error = function(e) {
+        print(paste("unable to open file: ", filename))
+        print(e)
+        return(NULL)
+    })
+
+    if (is.null(data)  == FALSE) {
+        simple_name = unlist(strsplit(test_name, "\\."))[1]
+        data = c(paste(simple_name, ".conf", sep=""),
+                 unlist(data))
+        textplot(data)
+    }
+
+    return(data)
+}
+
+buildConfPath <- function(test_name=NULL) {
+    # build relative path for conf file
+
+    if (is.null(test_name)) {
+        return(NULL)
+    }
+
+    path = paste("../../conf/perf/",
+                 unlist(strsplit(test_name, "\\."))[1],
+                 ".conf",
+                 sep="")
+    print(path)
+    return(path)
+}
 
 commaize <- function(x, ...) {
 	prettySize(x)
@@ -138,6 +179,8 @@ createProcessUsageDataFrame <- function(bb,process) {
 	temp_data_frame
 }
 
+conf_file = buildConfPath(test_name)
+dumpTextFile(conf_file)
 
 builds_json <- fromJSON(file=paste("http://",dbip,":5984/",dbname,"/","/_design/data/_view/by_test_time", sep=''))$rows
 builds_list <- plyr::ldply(builds_json, unlist)
