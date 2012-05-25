@@ -567,6 +567,8 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 #readd this to the cluster
                 ClusterOperationHelper.add_all_nodes_or_assert(master, [server], rest_settings, self)
                 nodes = rest.node_statuses()
+                log.info("wait 30 seconds before asking older node for start rebalance")
+                time.sleep(30)
                 otpNodeIds = []
                 for node in nodes:
                     otpNodeIds.append(node.id)
