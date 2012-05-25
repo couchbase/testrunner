@@ -375,8 +375,8 @@ class EPerfMaster(perf.PerfBase):
                     self.rest.query_view(ddoc_name, view_name, bucket, { "limit": 10 })
 
             # Wait until there are no active indexing tasks
-            tasks = self.rest.active_tasks
-            while([task for task in tasks(None) if task['type'] == 'indexer']):
+            tasks = self.rest.ns_server_tasks
+            while([task for task in tasks() if task['type'] == 'indexer']):
                 print "Waiting for index to finish"
                 time.sleep(10)
 
