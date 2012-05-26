@@ -392,11 +392,20 @@ class EPerfMaster(perf.PerfBase):
                     self.rest.query_view(ddoc_name, view_name, bucket, { "limit": 10 })
 
             # Wait until there are no active indexing tasks
-            time.sleep(30)
             tasks = self.rest.ns_server_tasks
-            while([task for task in tasks() if task['type'] == 'indexer']):
-                print "Waiting for index to finish"
-                time.sleep(10)
+
+            if self.parami('wait_for_indexer', 1):
+                time.sleep(30)
+                while([task for task in tasks() if task['type'] == 'indexer']):
+                    print "Waiting for index to finish"
+                    time.sleep(10)
+
+            # Wait until there are no active view compaction tasks
+            if self.parami('wait_for_compaction', 1):
+                time.sleep(30)
+                while([task for task in tasks() if task['type'] == 'view_compaction']):
+                    print "Waiting for compaction to finish"
+                    time.sleep(10)
 
             # Stop stats collector
             if self.parami("collect_stats", 1):
