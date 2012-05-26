@@ -61,6 +61,11 @@ class PerfBase(unittest.TestCase):
         self.setUpBucket()
         self.setUpProxy()
 
+        # Set custom loglevel
+        loglevel = self.param('loglevel', None)
+        if loglevel:
+            self.rest.set_global_loglevel(loglevel)
+
         if self.parami("dgm", getattr(self, "dgm", 1)):
             self.setUp_dgm()
 
