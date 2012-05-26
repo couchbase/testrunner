@@ -993,7 +993,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
                 self.create_multiple_dir(dir_paths)
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
-                self.stop_membase()
                 # modify bat file to run uninstall schedule task
                 self.modify_bat_file('/cygdrive/c/automation', bat_file,
                                        product, info.architecture_type, info.windows_name, short_version, task)
