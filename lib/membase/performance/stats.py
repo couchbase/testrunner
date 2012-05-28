@@ -431,18 +431,6 @@ class StatsCollector(object):
 
     def ns_server_stats(self, nodes, bucket, frequency, verbose=False):
 
-        def fetch_stats(host, port, stats, user='Administrator', pswd='password'):
-            """Fetch ns_server stats via RESTful API"""
-
-            url_base = 'http://{0}:{1}@{2}:{3}'.format(user, pswd, host, port)
-            if stats == 'bucket':
-                url_path = '/pools/{0}/buckets/{0}/stats?zoom=minute'.format(bucket)
-            elif stats == 'system':
-                url_path = '/pools/default/'
-
-            response = urllib.urlopen(url_base + url_path)
-            return json.loads(response.read())
-
         self._task["ns_server_stats"] = []
         self._task["ns_server_stats_system"] = []
         d = {}
@@ -453,10 +441,11 @@ class StatsCollector(object):
             time.sleep(frequency)
             print "Collecting ns_server_stats"
             for node in nodes:
-                data_json = fetch_stats(host=node.ip, port=node.port, stats='bucket')
+                rest = RestConnection(node)
+                data_json = rest.fetch_bucket_stats(bucket='bucket', zoom='minute')
                 d[node]["snapshots"].append(data_json)
 
-                data_json = fetch_stats(host=node.ip, port=node.port, stats='system')
+                data_json = rest.fetch_system_stats()
                 d[node]["system_snapshots"].append(data_json)
 
         for node in nodes:
