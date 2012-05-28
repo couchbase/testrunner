@@ -915,6 +915,28 @@ class RestConnection(object):
 
         return stats
 
+    def fetch_bucket_stats(self, bucket='default', zoom='minute'):
+        """Return deserialized buckets stats.
+
+        Keyword argument:
+        bucket -- bucket name
+        zoom -- stats zoom level (minute | hour | day | week | month | year)
+        """
+
+        api = self.baseUrl + 'pools/default/buckets/{0}/stats?zoom={1}'.format(bucket, zoom)
+
+        status, content = self._http_request(api)
+
+        return json.loads(content)
+
+    def fetch_system_stats(self):
+        """Return deserialized system stats."""
+
+        api = self.baseUrl + 'pools/default/'
+
+        status, content = self._http_request(api)
+
+        return json.loads(content)
 
     def get_nodes(self):
         nodes = []
