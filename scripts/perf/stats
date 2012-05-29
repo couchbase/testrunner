@@ -1,7 +1,14 @@
 #!/bin/sh
 
+# determine number of clients
+if [ -z ${1} ]; then
+    num_clients=3
+else
+    num_clients=${1}
+fi
+
 # hacky way of aggregating stats from clients
-python pytests/performance/do_cluster.py -i ${ini_file} -p num_clients=3 tearDown
+python pytests/performance/do_cluster.py -i ${ini_file} -p num_clients=$num_clients tearDown
 
 # backup
 rm -rf backup
