@@ -185,7 +185,7 @@ dumpTextFile(conf_file)
 builds_json <- fromJSON(file=paste("http://",dbip,":5984/",dbname,"/","/_design/data/_view/by_test_time", sep=''))$rows
 builds_list <- plyr::ldply(builds_json, unlist)
 
-names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','is_json','test_time')
+names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','is_json', 'reb_dur', 'test_time')
 
  # Pick the latest stats doc for a given test on a given build
  (fbl <- builds_list[FALSE, ])
@@ -912,6 +912,20 @@ if(ncol(avg_qps) > 0) {
 }
 
 for(build in levels(builds)) {
+    fi <-builds_list[builds_list$build==build, ]
+    d <- fi$reb_dur
+
+    if(build == baseline){
+        row <-c ("baseline", "reb duration", as.numeric(d))
+        combined <- rbind(combined, row)
+    }
+    else{
+        row <-c (build, "reb duration", as.numeric(d))
+        combined <- rbind(combined, row)
+    }
+}
+
+for(build in levels(builds)) {
     fi <- memcached_stats[memcached_stats$buildinfo.version == build, ]
 	d <- fi$ep_warmup_time[1] / 1000000
 
@@ -966,10 +980,11 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[15])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[16])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[17])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[18])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[19])))
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[19])))
     MB <- append(MB,as.numeric(sprintf("%.2f",MB1[20])))
+    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[21])))
 }
 
 CB <- c()
@@ -991,15 +1006,16 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[15])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[16])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[17])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[18])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
     CB <- append(CB,as.numeric(sprintf("%.2f",CB1[20])))
+    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[21])))
 }
 
 testdf <- data.frame(MB,CB)
 
-row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS")
+row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS", "Rebalance Time (sec)")
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
 	row_names <- c(row_names, c("Warmup Time - flush (sec)", "Warmup Time - no flush (sec)"))
