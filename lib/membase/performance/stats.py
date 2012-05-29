@@ -35,6 +35,7 @@ class StatsCollector(object):
     _task = {}
     _verbosity = True
     _mb_stats = {"snapshots": []}   # manually captured memcached stats
+    _reb_stats = {}
 
     def __init__(self, verbosity):
         self._verbosity = verbosity
@@ -119,6 +120,8 @@ class StatsCollector(object):
                 temp.append(self.client_id)
                 temp.append(delta)
                 self._task["latency"][key].append(temp)
+
+        test_params.update(self._reb_stats)
 
         obj = {"buildinfo": self._task.get("buildstats", {}),
                "machineinfo": self._task.get("machinestats", {}),
@@ -276,6 +279,10 @@ class StatsCollector(object):
     def machine_stats(self,nodes):
         machine_stats = StatUtil.machine_info(nodes[0])
         self._task["machinestats"] = machine_stats
+
+    def reb_stats(self, dur):
+        print "[reb_stats] recording reb duration = {0}".format(dur)
+        self._reb_stats["reb_dur"] = dur
 
     def _extract_proc_info(self, shell, pid):
         o, r = shell.execute_command("cat /proc/{0}/stat".format(pid))

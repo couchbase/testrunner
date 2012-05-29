@@ -426,13 +426,19 @@ class PerfBase(unittest.TestCase):
         self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1, do_shuffle=False))
 
     @staticmethod
-    def delayed_rebalance_worker(servers, num_nodes, delay_seconds):
+    def delayed_rebalance_worker(servers, num_nodes, delay_seconds, sc):
         time.sleep(delay_seconds)
+        if not sc:
+            print "[delayed_rebalance_worker] invalid stats collector"
+            return
+        start_time = time.time()
         RebalanceHelper.rebalance_in(servers, num_nodes - 1)
+        end_time = time.time()
+        sc.reb_stats(end_time - start_time)
 
     def delayed_rebalance(self, num_nodes, delay_seconds=10):
         t = threading.Thread(target=PerfBase.delayed_rebalance_worker,
-                             args=(self.input.servers, num_nodes, delay_seconds))
+                             args=(self.input.servers, num_nodes, delay_seconds, self.sc))
         t.daemon = True
         t.start()
 
