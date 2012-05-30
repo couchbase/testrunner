@@ -449,7 +449,7 @@ class StatsCollector(object):
             print "Collecting ns_server_stats"
             for node in nodes:
                 rest = RestConnection(node)
-                data_json = rest.fetch_bucket_stats(bucket='bucket', zoom='minute')
+                data_json = rest.fetch_bucket_stats(bucket=bucket, zoom='minute')
                 d[node]["snapshots"].append(data_json)
 
                 data_json = rest.fetch_system_stats()
