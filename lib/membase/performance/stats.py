@@ -10,6 +10,8 @@ import testconstants
 import gzip
 import urllib
 
+from mc_bin_client import MemcachedError
+
 RETRIES = 10
 # The histo dict is returned by add_timing_sample().
 # The percentiles must be sorted, ascending, like [0.90, 0.99].
@@ -400,6 +402,11 @@ class StatsCollector(object):
                 while not stats and retries < RETRIES:
                     try:
                         stats = mc.stats()
+                        try:
+                            mem_stats = mc.stats('raw memory')
+                        except MemcachedError:
+                            mem_stats = mc.stats('memory')
+                        stats.update(mem_stats)
                     except Exception as e:
                         print "[memebase_stats] Exception: {0}, retries = {1}"\
                             .format(str(e), retries)
