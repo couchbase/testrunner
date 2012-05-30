@@ -6,11 +6,9 @@ from membase.api.rest_client import RestConnection
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import KVStoreAwareSmartClient, KVStoreSmartClientHelper
-from mc_bin_client import MemcachedError
 import copy
 import json
 import uuid
-from mc_bin_client import MemcachedClient
 from memcached.helper.data_helper import MemcachedClientHelper
 
 #TODO: Setup stacktracer
@@ -118,7 +116,7 @@ class BucketCreateTask(Task):
         rest = RestConnection(self.server)
         if self.size <= 0:
             info = rest.get_nodes_self()
-            size = info.memoryQuota * 2 / 3
+            self.size = info.memoryQuota * 2 / 3
 
         authType = 'none' if self.password is None else 'sasl'
 
@@ -144,7 +142,7 @@ class BucketCreateTask(Task):
                 return
             else:
                 self.log.info("vbucket map not ready after try {0}".format(self.retries))
-        except Exception as e:
+        except Exception:
             self.log.info("vbucket map not ready after try {0}".format(self.retries))
         self.retries = self.retries + 1
         task_manager.schedule(self)
@@ -330,7 +328,6 @@ class FailOverTask(Task):
 
     def start_failover(self, task_manager):
         rest = RestConnection(self.servers[0])
-        nodes = rest.node_statuses()
         ejectedNodes = []
         for node in self.to_remove:
             ejectedNodes.append(node.id)
@@ -344,7 +341,6 @@ class FailOverTask(Task):
 
     def failingOver(self, task_manager):
         rest = RestConnection(self.servers[0])
-        nodes = rest.node_statuses()
         ejectedNodes = []
 
         for node in self.to_remove:
@@ -400,9 +396,6 @@ class GenericLoadingTask(Thread, Task):
         elif self.state != "finished":
             raise Exception("Bad State in DocumentGeneratorTask")
 
-    def do_ops(self):
-        noop = "override"
-
     def do_task_op(self, op, key, value=None, expiration=None):
         retry_count = 0
         ok = False
@@ -421,7 +414,7 @@ class GenericLoadingTask(Thread, Task):
                 if op == "delete":
                     self.client.delete(key)
                 ok = True
-            except Exception as e:
+            except Exception:
                 retry_count += 1
                 self.client.reset_vbucket(self.rest, key)
         return value
