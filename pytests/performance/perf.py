@@ -632,15 +632,16 @@ class PerfBase(unittest.TestCase):
 
         start_time = time.time()
 
-        if flush_os_cache:
-            print "[warmup] flushing os cache ..."
-            shell.flush_os_caches()
-
         print "[warmup] stopping couchbase ... ({0}, {1})"\
             .format(server.ip, time.strftime('%X %x %Z'))
         shell.stop_couchbase()
         print "[warmup] couchbase stopped ({0}, {1})"\
             .format(server.ip, time.strftime('%X %x %Z'))
+
+        if flush_os_cache:
+            print "[warmup] flushing os cache ..."
+            shell.flush_os_caches()
+
         shell.start_couchbase()
         print "[warmup] couchbase restarted ({0}, {1})"\
             .format(server.ip, time.strftime('%X %x %Z'))
