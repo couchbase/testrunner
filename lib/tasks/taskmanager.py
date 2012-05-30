@@ -1,6 +1,5 @@
 import time
 import Queue
-import sys
 
 from threading import Thread
 from tasks.task import Task

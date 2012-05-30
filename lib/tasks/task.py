@@ -10,9 +10,6 @@ from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientH
 from mc_bin_client import MemcachedError
 from tasks.future import Future
 import json
-import uuid
-from mc_bin_client import MemcachedClient
-from memcached.helper.data_helper import MemcachedClientHelper
 
 #TODO: Setup stacktracer
 #TODO: Needs "easy_install pygments"

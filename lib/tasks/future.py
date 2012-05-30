@@ -1,6 +1,5 @@
 import logging
 import threading
-import time
 
 # Possible future states (for internal use by the futures package).
 PENDING = 'PENDING'
