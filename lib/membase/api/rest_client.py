@@ -368,14 +368,17 @@ class RestConnection(object):
 
         return status, json_parsed
 
-    def all_docs(self, bucket, params={}, limit=None):
-        status, json = self._index_results(bucket, 'all_docs', '', params,
-                                           limit)
+    def all_docs(self, bucket, params={}, limit=None, timeout=120):
+        api = self.baseUrl + 'couchBase/{0}/_all_docs?{1}'.format(bucket, urllib.urlencode(params))
+        log.info("query all_docs url: {0}".format(api))
+
+        status, content = self._http_request(api, headers=self._create_capi_headers(),
+                                             timeout=timeout)
 
         if not status:
             raise Exception("unable to obtain all docs")
 
-        return json
+        return  json.loads(content)
 
     def _create_design_doc(self, bucket, name, function):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, name)
