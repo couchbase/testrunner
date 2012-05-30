@@ -1,4 +1,3 @@
-from random import shuffle
 import time
 import unittest
 from TestInput import TestInputSingleton
@@ -7,7 +6,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached, LoadWithMcsoda
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached, LoadWithMcsoda
 from threading import Thread
 
 from old_tasks import task, taskmanager
@@ -245,9 +244,6 @@ class RebalanceBaseTest(unittest.TestCase):
             exp_docs_count = int(len(current_keys) * EXPIRY_RATIO)
             end_exp_index = del_docs_count + exp_docs_count
 
-            if end_exp_index > len(current_keys):
-                docs_to_expire = len(current_keys)
-
             keys_to_get = current_keys[:get_docs_count]
             keys_to_delete = current_keys[:del_docs_count]
             keys_to_expire = current_keys[del_docs_count:end_exp_index]
@@ -349,23 +345,23 @@ class RebalanceBaseTest(unittest.TestCase):
                 msg = "start task to send {0} items with value of size : {1}"
                 log.info(msg.format(how_many, size))
 
-                task = RebalanceTaskHelper.add_doc_gen_task(task_manager, rest,
+                doc_gen_task = RebalanceTaskHelper.add_doc_gen_task(task_manager, rest,
                     how_many, bucket,
                     kv_store=kv_store,
                     doc_generators=[doc_gen],
                     monitor=monitor)
-                tasks.append({'task': task, 'seed': seed})
+                tasks.append({'task': doc_gen_task, 'seed': seed})
         else:
             msg = "start task to send {0} items to bucket {1}"
             log.info(msg.format(keys_count, bucket))
-            task = RebalanceTaskHelper.add_doc_gen_task(task_manager,
+            doc_gen_task = RebalanceTaskHelper.add_doc_gen_task(task_manager,
                 rest,
                 keys_count,
                 bucket,
                 kv_store,
                 seed=seed,
                 monitor=monitor)
-            tasks.append({'task': task, 'seed': seed})
+            tasks.append({'task': doc_gen_task, 'seed': seed})
 
         return tasks
 
@@ -601,7 +597,6 @@ class IncrementalRebalanceOut(unittest.TestCase):
         master = self.servers[0]
 
         rest = RestConnection(master)
-        master_node = rest.node_statuses()
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
         cluster_size = self.input.param("cluster_size", len(self.servers))
@@ -623,8 +618,6 @@ class IncrementalRebalanceOut(unittest.TestCase):
         RebalanceBaseTest.load_all_buckets_task(rest, self.task_manager,
             bucket_data, ram_load_ratio=self.load_ratio,
             keys_count=self.keys_count)
-
-        nodes = rest.node_statuses()
 
         while howMany > 0:
             if len(rest.node_statuses()) < 2:
