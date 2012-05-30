@@ -347,7 +347,7 @@ class QueryView:
 
         view_name = self.name
         max_dupe_result_count = \
-            tc.input.param('max-dupe-result-count', 5)
+            tc.input.param('max-dupe-result-count', 10)
         num_verified_docs = tc.input.param('num-verified-docs', 20)
 
         for query in self.queries:
@@ -402,6 +402,7 @@ class QueryView:
                     time.sleep(delay)
 
                 try:
+                    num_keys -= 1
                     if(num_keys != expected_num_docs):
 
                         # debug query results
@@ -535,14 +536,20 @@ class EmployeeDataSet:
 
             section_size = index_size/len(self.get_data_sets())
 
-            view.queries += [QueryHelper({"start_key": '"arch0000-2008_10_1"'}, index_size - section_size),
-                             QueryHelper({"start_key" : '"ui0000-2008_10_1"'}, index_size  - section_size*2),
-                             QueryHelper({"start_key" : '"arch0000-2008_10_1"',
-                                          "end_key"   : '"ui0000-2008_10_1"',
-                                          "inclusive_end" : "false"}, section_size),
+            view.queries += [QueryHelper({"start_key": '"arch0000-2008_10_01"'},
+                                         index_size - section_size - self.days*9),
+                             QueryHelper({"start_key" : '"ui0000-2008_10_01"'},
+                                         index_size  - section_size*2 - self.days*9),
+                             QueryHelper({"start_key" : '"arch0000-2008_10_01"',
+                                          "end_key"   : '"ui0000-2008_10_01"',
+                                          "inclusive_end" : "false"},
+                                         index_size - section_size*2)]
                              # test design docs are included when start_key not specified
-                             QueryHelper({"end_key" : '"ui0000-2008_10_1"',
-                                          "inclusive_end" : "false"}, index_size  - section_size + len(self.views))]
+                             # TODO: cannot verify this query unless we store view names in
+                             #       doc_id_map
+                             #QueryHelper({"end_key" : '"ui0000-2008_10_01"',
+                             #             "inclusive_end" : "false"},
+                             #             index_size - section_size + 9*self.days + len(self.views))]
 
             # set all_docs flag
             for query in view.queries:
@@ -579,37 +586,37 @@ class EmployeeDataSet:
 
             view.queries += [QueryHelper(
                                         {"start_key" : "[2008,7,1]",
-                                          "startkey_docid" : "arch0000-2008_7_1"}, index_size/2  - offset),
+                                          "startkey_docid" : "arch0000-2008_07_01"}, index_size/2  - offset),
                             QueryHelper({"start_key" : "[2008,7,1]",
-                                          "startkey_docid" : "ui0000-2008_7_1"}, index_size/2  - offset*2),
+                                          "startkey_docid" : "ui0000-2008_07_01"}, index_size/2  - offset*2),
                                           # +endkey_docid
                             QueryHelper({"start_key" : "[2008,0,1]",
                                          "end_key"   : "[2008,7,1]",
-                                         "endkey_docid" : "arch0000-2008_7_1",
+                                         "endkey_docid" : "arch0000-2008_07_01",
                                          "inclusive_end" : "false"}, index_size/2 + offset),
                             QueryHelper({"end_key"   : "[2008,7,1]",
-                                         "endkey_docid" : "ui0000-2008_7_1",
+                                         "endkey_docid" : "ui0000-2008_07_01",
                                          "inclusive_end" : "false"}, index_size/2 + offset*2),
                                           # + inclusive_end
                             QueryHelper({"end_key"   : "[2008,7,1]",
-                                         "endkey_docid" : "arch0000-2008_7_1",
+                                         "endkey_docid" : "arch0000-2008_07_01",
                                          "inclusive_end" : "true"}, index_size/2 + offset + 1),
                                           # + single bounded and descending
                             QueryHelper({"start_key" : "[2008,7,1]",
                                          "end_key"   : "[2008,2,20]",
-                                         "endkey_docid"   : "ui0000-2008_2_20",
+                                         "endkey_docid"   : "ui0000-2008_02_20",
                                          "descending"   : "true",
                                          "inclusive_end" : "true"}, complex_query_key_count - offset * 2),
                             QueryHelper({"start_key" : "[2008,7,1]",
                                          "end_key"   : "[2008,2,20]",
-                                         "endkey_docid"   : "arch0000-2008_2_20",
+                                         "endkey_docid"   : "arch0000-2008_02_20",
                                          "descending"   : "true",
                                          "inclusive_end" : "false"}, complex_query_key_count - offset - 1),
                                           # + double bounded and descending
                             QueryHelper({"start_key" : "[2008,7,1]",
-                                         "startkey_docid" : "admin0000-2008_7_1",
+                                         "startkey_docid" : "admin0000-2008_07_01",
                                          "end_key"   : "[2008,2,20]",
-                                         "endkey_docid"   : "arch0000-2008_2_20",
+                                         "endkey_docid"   : "arch0000-2008_02_20",
                                          "descending"   : "true",
                                          "inclusive_end" : "false"},
                                          complex_query_key_count - offset - all_docs_per_day)]
@@ -748,11 +755,13 @@ class EmployeeDataSet:
                 month = json_map["join_mo"]
                 day = json_map["join_day"]
 
+
                 doc_id = "{0}{1}-{2}_{3}_{4}".format(type_,
                                                      str(idx).zfill(4),
                                                      year,
-                                                     month,
-                                                     day)
+                                                     str(month).rjust(2,'0'),
+                                                     str(day).rjust(2,'0'))
+
                 del json_map["_id"]
                 smart.memcached(doc_id).set(doc_id, 0, 0, json.dumps(json_map))
                 doc_ids.append(doc_id)
@@ -785,10 +794,20 @@ class EmployeeDataSet:
         q_end_mo  = self.months
         q_end_day = self.days
 
+        q_params = copy.deepcopy(query.params)
 
-        if 'start_key' in query.params:
+        if query.type_ == "all_docs":
+            if 'start_key' in q_params:
+                q_params['startkey_docid'] = q_params['start_key']
+                del q_params['start_key']
+
+            if 'end_key' in q_params:
+                q_params['endkey_docid'] = q_params['end_key']
+                del q_params['end_key']
+
+        if 'start_key' in q_params:
             start_key_set = True
-            params = json.loads(query.params['start_key'])
+            params = json.loads(q_params['start_key'])
             if params[0] and not None:
                 q_start_yr = params[0] - 2007
             if params[1] and not None:
@@ -796,9 +815,9 @@ class EmployeeDataSet:
             if params[2] and not None:
                 q_start_day = params[2]
 
-        if 'end_key' in query.params:
+        if 'end_key' in q_params:
             end_key_set = True
-            params = json.loads(query.params['end_key'])
+            params = json.loads(q_params['end_key'])
             if params[0] and not None:
                 q_end_yr = params[0] - 2007
             if params[1] and not None:
@@ -806,17 +825,17 @@ class EmployeeDataSet:
             if params[2] and not None:
                 q_end_day = params[2]
 
-        if 'descending' in query.params:
-            descending = json.loads(query.params['descending'])
+        if 'descending' in q_params:
+            descending = json.loads(q_params['descending'])
             if descending == True:
                 q_start_yr, q_end_yr = q_end_yr, q_start_yr
                 q_start_mo, q_end_mo = q_end_mo, q_start_mo
                 q_start_day, q_end_day = q_end_day, q_start_day
 
         # note: inclusive end check must occur after descending
-        if 'inclusive_end' in query.params:
-            inclusive_end = json.loads(query.params['inclusive_end'])
-            if inclusive_end == False and 'endkey_docid' not in query.params:
+        if 'inclusive_end' in q_params:
+            inclusive_end = json.loads(q_params['inclusive_end'])
+            if inclusive_end == False and 'endkey_docid' not in q_params:
                 if descending == False:
                     # decrement end_key
                     if q_end_day <= 1:
@@ -891,16 +910,20 @@ class EmployeeDataSet:
                     mo_idx += 1
             type_idx += 1
 
+        if query.type_ == "all_docs":
+            # use ascii sort
+            query.expected_keys.sort()
+
         if descending == True:
             query.expected_keys.reverse()
 
-        if 'startkey_docid' in query.params:
-            startkey_docid = query.params['startkey_docid']
+        if 'startkey_docid' in q_params:
+            startkey_docid = q_params['startkey_docid'].strip("\"")
             start_idx = query.expected_keys.index(startkey_docid)
             query.expected_keys = query.expected_keys[start_idx:]
 
-        if 'endkey_docid' in query.params:
-            endkey_docid = query.params['endkey_docid']
+        if 'endkey_docid' in q_params:
+            endkey_docid = q_params['endkey_docid'].strip("\"")
             end_idx = query.expected_keys.index(endkey_docid)
             query.expected_keys = query.expected_keys[:end_idx + 1]
             if inclusive_end == False:
@@ -1029,14 +1052,13 @@ class QueryHelper:
 
         kv_client = KVStoreAwareSmartClient(rest, bucket)
 
-        ids=[doc['id'] for doc in results['rows']]
+        ids=[str(doc['id']) for doc in results['rows']]
 
         couch_set = set(ids)
         expected_set = set(query.expected_keys)
 
         missing_item_set = expected_set - couch_set
         extra_item_set = couch_set - expected_set
-
 
         # treat duplicate doc_ids as extra_items
         if len(ids)!=len(couch_set):
@@ -1076,19 +1098,9 @@ class QueryHelper:
                             msg = "Error expected in results for key with invalid state %s" % doc_meta
                             failures.append(msg)
 
-                        if (len(cb_doc['rows']) > 0):
-                            v_doc_id = cb_doc['rows'][0]['id']
-                            if( v_doc_id != doc_id):
-                                msg = "query doc_id: %s does not match couchdb id: %s" % \
-                                    (v_doc_id, doc_id)
-                                failures.append(msg)
-                        else:
-                            msg = "query doc_id: %s doesn't exist in bucket: %s" % \
-                                (doc_id, bucket)
-                            failures.append(msg)
-
                     else:
-                        msg = "query request failed for doc: %s" % (doc_id)
+                        msg = "query doc_id: %s doesn't exist in bucket: %s" % \
+                            (doc_id, bucket)
                         failures.append(msg)
 
                 if(len(failures) == 0):
