@@ -1541,6 +1541,30 @@ function(doc) {
                           max_creates = self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
+    def test_stats_collector(self):
+        """Fake test for stats collection"""
+
+        test_params = {'test_time': time.time(),
+                       'test_name': self.id(),
+                       'json': 0}
+
+        sc = self.start_stats('loop',
+                              test_params=test_params,
+                              client_id=0)
+
+        start_time = time.time()
+
+        try:
+            time.sleep(self.parami('sleep_time', 3600))
+        except KeyboardInterrupt:
+            print "Stats collection was interrupted"
+
+        end_time = time.time()
+
+        ops = {'start-time': start_time,
+               'end-time': end_time}
+
+        self.end_stats(sc, ops, 'loop')
 
 class EPerfClient(EPerfMaster):
 
