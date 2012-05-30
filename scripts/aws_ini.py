@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
-import os
 import sys
-import json
 
 from boto.ec2.connection import EC2Connection
 

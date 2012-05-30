@@ -279,9 +279,6 @@ class MembaseServerStandaloneInstaller(Installer):
 
     def initialize(self, params):
 #        log = logger.new_logger("Installer")
-        start_time = time.time()
-        cluster_initialized = False
-        server = params["server"]
         remote_client = RemoteMachineShellConnection(params["server"])
         remote_client.create_directory("/opt/membase/var/lib/membase/data")
         remote_client.execute_command("chown membase:membase /opt/membase/var/lib/membase/data")
@@ -371,9 +368,6 @@ class CouchbaseServerStandaloneInstaller(Installer):
 
     def initialize(self, params):
 #        log = logger.new_logger("Installer")
-        start_time = time.time()
-        cluster_initialized = False
-        server = params["server"]
         remote_client = RemoteMachineShellConnection(params["server"])
         remote_client.create_directory("/opt/couchbase/var/lib/membase/data")
         remote_client.execute_command("chown couchbase:couchbase /opt/couchbase/var/lib/membase/data")

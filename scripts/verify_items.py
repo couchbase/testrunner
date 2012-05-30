@@ -5,8 +5,6 @@ import time
 import sys
 import getopt
 import pickle
-import uuid
-import random
 import re
 import mc_bin_client
 import exceptions

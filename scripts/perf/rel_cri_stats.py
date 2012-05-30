@@ -99,8 +99,8 @@ def parse_args(argv):
         parser.error("please specify an .ini file (-i)")
         parser.print_help()
 
-    cb_exc = options.cbstats or CB_EXEC
-    freq = options.freq or FREQ
+    cb_exc = options.cbstats or CBStatsCollector._CB_EXEC
+    freq = options.freq or CBStatsCollector._FREQ
 
     return  cb_exc, int(freq)
 

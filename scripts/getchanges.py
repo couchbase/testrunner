@@ -20,4 +20,3 @@ if __name__ == "__main__":
                 changes.close()
             except urllib2.HTTPError as error:
                 print 'unable to download {0}'.format(build.change.url)
-  
