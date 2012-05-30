@@ -582,6 +582,9 @@ if __name__ == "__main__":
             if o == "-h":
                 usage()
 
+        if len(sys.argv) <= 1:
+            usage()
+
         input = TestInput.TestInputParser.get_test_input(sys.argv)
         if not input.servers:
             usage("ERROR: no servers specified. Please use the -i parameter.")
