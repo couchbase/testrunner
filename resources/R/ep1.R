@@ -21,6 +21,7 @@ test_name = args[3]
 dbip = args[4]
 dbname = args[5]
 pdfname = args[6]
+cluster_name = args[7]
 # pdfname = "ept-write-nonjson-180-200r452"
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
@@ -51,25 +52,26 @@ dumpTextFile <- function(filename=NULL) {
     })
 
     if (is.null(data)  == FALSE) {
-        simple_name = unlist(strsplit(test_name, "\\."))[1]
-        data = c(paste(simple_name, ".conf", sep=""),
-                 unlist(data))
+        simple_name = tail(unlist(strsplit(filename, "/")), 1)
+        data = c(simple_name, unlist(data))
         textplot(data)
     }
 
     return(data)
 }
 
-buildConfPath <- function(test_name=NULL) {
-    # build relative path for conf file
+buildPath <- function(name=NULL,
+                      prefix="",
+                      suffix="") {
+    # build relative file path
 
-    if (is.null(test_name)) {
+    if (is.null(name)) {
         return(NULL)
     }
 
-    path = paste("../../conf/perf/",
-                 unlist(strsplit(test_name, "\\."))[1],
-                 ".conf",
+    path = paste(prefix,
+                 unlist(strsplit(name, "\\."))[1],
+                 suffix,
                  sep="")
     print(path)
     return(path)
@@ -179,7 +181,7 @@ createProcessUsageDataFrame <- function(bb,process) {
 	temp_data_frame
 }
 
-conf_file = buildConfPath(test_name)
+conf_file = buildPath(test_name, "../../conf/perf/", ".conf")
 dumpTextFile(conf_file)
 
 builds_json <- fromJSON(file=paste("http://",dbip,":5984/",dbname,"/","/_design/data/_view/by_test_time", sep=''))$rows
@@ -1547,6 +1549,8 @@ if (nrow(throughput_query) > 0) {
 # print(p)
 # makeFootnote(footnote)
 
+ini_file = buildPath(cluster_name, "../../resources/perf/", ".ini")
+dumpTextFile(ini_file)
 
 dev.off()
 
