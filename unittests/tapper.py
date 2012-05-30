@@ -1,19 +1,14 @@
-from multiprocessing.queues import Queue, Empty
-from multiprocessing.process import Process
-from smtpd import asyncore
+from multiprocessing.queues import Queue
 import sys
 from threading import Thread
 import uuid
-import asyncore
 import time
-import thread
 from mc_bin_client import MemcachedClient
 
-from membase.api.rest_client import RestConnection
 import memcacheConstants
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 from resourceparser import ServerInfo
-from membase.api.tap import TapClient, TapConnection, TapDescriptor
+from membase.api.tap import TapConnection
 
 
 class TapListener(Thread):

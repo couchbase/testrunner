@@ -1,6 +1,5 @@
 import sys
 import uuid
-import time
 
 from membase.api.rest_client import RestConnection
 from membase.helper.rebalance_helper import RebalanceHelper
