@@ -4,7 +4,7 @@ import logger
 from membase.api.exception import StatsUnavailableException, ServerAlreadyJoinedException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from mc_bin_client import MemcachedClient, MemcachedError
 
 log = logger.Logger.get_logger()
@@ -536,6 +536,89 @@ class RebalanceHelper():
         nodes = rest.node_statuses()
         otpNodeIds = [node.id for node in nodes]
         return otpNodeIds
+
+    @staticmethod
+    def verify_vBuckets_info(master, bucket="default"):
+        '''
+        verify vBuckets' state and items count(for active/replica) in them related to vBucketMap for all nodes in cluster
+        '''
+        awareness = VBucketAwareMemcached(RestConnection(master), bucket)
+        vb_map=awareness.vBucketMap
+        vb_mapReplica=awareness.vBucketMapReplica
+        replica_num=len(vb_mapReplica[0])
+
+        #get state and count items for all vbuckets for each node
+        node_stats=RebalanceHelper.get_vBuckets_info(master)
+        state=True
+        #iterate throught all vbuckets by their numbers
+        for num in vb_map:
+            #verify that active vbucket in memcached  is also active in stats("hash)
+            if(node_stats[vb_map[num]]["vb_"+ str(num)][0]!="active"):
+                log.info("vBucket {0} in {1} node has wrong state {3}".format("vb_"+ str(num), vb_map[num], node_stats[vb_map[num]]["vb_"+ str(num)]));
+                state = False
+            #number of active items for num vBucket
+            vb = node_stats[vb_map[num]]["vb_"+ str(num)][1]
+            active_vb=vb_map[num]
+            #list of nodes for wich num vBucket is replica
+            replica_vbs=vb_mapReplica[key]
+            sum_items_replica=0
+            #sum of replica items for all nodes for num vBucket
+            for i in range(replica_num):
+                if(node_stats[vb_mapReplica[num][i]]["vb_"+ str(num)][0]!="replica"):
+                    log.info("vBucket {0} in {1} node has wrong state {3}".format("vb_"+ str(num), vb_mapReplica[num], node_stats[vb_mapReplica[num]]["vb_"+ str(num)]));
+                    state = False
+                sum_items_replica+=int(node_stats[replica_vbs[i]]["vb_"+ str(num)][1])
+            #print information about the discrepancy of the number of replica and active items for num vBucket
+            if (int(vb)*len(vb_mapReplica[num])!=sum_items_replica):
+                log.info("sum of active items doesn't correspond to replica's vBucets in {0} vBucket:".format("vb_"+ str(num)))
+                log.info("items in active vBucket {0}:{1}".format(vb_map[num], node_stats[vb_map[num]]["vb_"+ str(num)]))
+                for j in range(replica):
+                    log.info("items in replica vBucket {0}: {1}".format(vb_mapReplica[num][j], node_stats[vb_mapReplica[num][j]]["vb_"+ str(num)]))
+                    log.info(node_stats[vb_mapReplica[num][0]])
+                state = False
+
+        if not state:
+             log.error("Something is wrong, see log above. See details:")
+             log.error("vBucetMap: {0}".format(vb_map))
+             log.error("vBucetReplicaMap: {0}".format(vb_mapReplica))
+             log.error("node_stats: {0}".format(node_stats))
+        return state
+
+    @staticmethod
+    def get_vBuckets_info(master):
+        """
+        return state and count items for all vbuckets for each node
+        format: dict: {u'1node_ip1': {'vb_79': ['replica', '0'], 'vb_78': ['active', '0']..}, u'1node_ip1':....}
+        """
+        rest = RestConnection(master)
+        port = rest.get_nodes_self().memcached
+        nodes = rest.node_statuses()
+        _nodes_stats= {}
+        for node in nodes:
+            stat={}
+            buckets = []
+            _server = {"ip": node.ip, "port": node.port, "username": master.rest_username,
+                           "password": master.rest_password}
+            try:
+                buckets = rest.get_buckets()
+                mc = MemcachedClient(node.ip, port)
+                stat_hash = mc.stats("hash")
+            except Exception:
+                if not buckets:
+                    log.error("There are not any buckets in {0}:{1} node".format(node.ip, node.port))
+                else:
+                    log.error("Impossible to get vBucket's information for {0}:{1} node".format(node.ip, node.port))
+                    _nodes_stats[node.ip+":"+str(node.port)]
+                continue
+            mc.close()
+            vb_names=[key[:key.index(":")] for key in stat_hash.keys()]
+
+            for name in vb_names:
+                stat[name]=[stat_hash[name + ":state"], stat_hash[name+":counted"]]
+            _nodes_stats[node.ip+":"+str(port)] = stat
+        log.info(_nodes_stats)
+        return _nodes_stats
+
 
     @staticmethod
     def pick_node(master):
