@@ -12,6 +12,7 @@ from base64 import b64encode
 from cgi import parse_header
 try:
     from hashlib import md5
+    md5; # Pyflakes workaround
 except ImportError:
     from md5 import new as md5
 import sys

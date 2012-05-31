@@ -19,11 +19,13 @@ import socket
 import time
 try:
     from cStringIO import StringIO
+    StringIO; # Pyflakes workaround
 except ImportError:
     from StringIO import StringIO
 import sys
 try:
     from threading import Lock
+    Lock # Pyflakes workaround
 except ImportError:
     from dummy_threading import Lock
 import urllib
