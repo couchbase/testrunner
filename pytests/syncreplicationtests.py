@@ -3,7 +3,6 @@ import random
 from threading import Thread
 import unittest
 import uuid
-import time
 from TestInput import TestInputSingleton
 import logger
 from mc_bin_client import MemcachedError

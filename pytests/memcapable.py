@@ -1,4 +1,3 @@
-import json
 import os
 import random
 from threading import Thread
@@ -8,6 +7,7 @@ import mc_bin_client
 import time
 import uuid
 import logger
+import datetime
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -246,11 +246,6 @@ class GetlTests(unittest.TestCase):
     #set an item for 5 seconds
     #getl for 15 seconds and verify that setting the item again
     #throes Data exists
-    def setUp(self):
-        self.memcapableTestBase = MemcapableTestBase()
-        self.memcapableTestBase.setUp_bucket('default', 11211, 'membase', self)
-
-
     def _getl_body(self, prefix, getl_timeout, expiration):
         node = self.memcapableTestBase.master
         mc = MemcachedClientHelper.direct_client(node, "default")
@@ -742,7 +737,6 @@ class GetrTests(unittest.TestCase):
         self.log.info("deleted {0} items in {1} seconds".format(item_count, time.time() - time_start))
 
     def _eject_items(self, item_count, prefix):
-        flags = 0
         client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
         time_start = time.time()
         for i in range(item_count):

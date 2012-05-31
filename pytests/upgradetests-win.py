@@ -2,8 +2,6 @@ import logger
 import re
 import time
 import unittest
-import os
-import sys
 from TestInput import TestInputSingleton
 from builds.build_query import BuildQuery
 from membase.api.rest_client import RestConnection, RestHelper
@@ -77,7 +75,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         rest_settings = input.membase_settings
         servers = input.servers
         server = servers[0]
-        save_upgrade_config = False
         is_amazon = False
         if input.test_params.get('amazon',False):
             is_amazon = True
@@ -311,10 +308,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         upgrade_path = ['1.7.0', '1.7.1.1']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
-    def test_multiple_version_upgrade_start_one_2(self):
-        upgrade_path = ['1.7.1.1']
-        self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
-
     def test_multiple_version_upgrade_start_all_2(self):
         upgrade_path = ['1.7.1.1']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
@@ -417,7 +410,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         input_version = input.test_params['version']
         rest_settings = input.membase_settings
         servers = input.servers
-        save_upgrade_config = False
         is_amazon = False
         if input.test_params.get('amazon',False):
             is_amazon = True

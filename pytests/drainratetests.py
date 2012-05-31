@@ -3,6 +3,7 @@ import unittest
 import time
 from TestInput import TestInputSingleton
 import logger
+import datetime
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper

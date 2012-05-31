@@ -821,10 +821,9 @@ class ViewBaseTests(unittest.TestCase):
 
         bucket = "default"
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
-        doc_names = []
         delete_count = 0
         for i in range(start_index, end_index):
-            key = doc_name = "{0}-{1}".format(prefix, i)
+            key = "{0}-{1}".format(prefix, i)
             moxi.delete(key)
             delete_count+=1
         self.log.info("deleted {0} json documents".format(delete_count))
@@ -857,7 +856,6 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
 
-        allNodes = []
         ejectedNodes = []
         nodes = rest.node_statuses()
         #        for node in nodes:
@@ -964,8 +962,8 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("description : create a view")
         _view_name = view_name or "dev_test_view-{0}".format(prefix)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "\") != -1) { emit(doc.name, doc);}}"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
-        self.created_views[view_name] = bucket
+        rest.create_view(_view_name, bucket, [View(_view_name, map_fn)])
+        self.created_views[_view_name] = bucket
 
 
 class ViewBasicTests(unittest.TestCase):

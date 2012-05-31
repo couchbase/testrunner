@@ -26,7 +26,7 @@ class SpatialInfoTests(unittest.TestCase):
         self.helper.create_index_fun(design_name, prefix)
 
         # Fill the database and add an index
-        doc_names = self.helper.insert_docs(2000, prefix)
+        self.helper.insert_docs(2000, prefix)
         self.helper.get_results(design_name)
         status, info = self.helper.info(design_name)
         disk_size = info["spatial_index"]["disk_size"]
@@ -46,7 +46,7 @@ class SpatialInfoTests(unittest.TestCase):
         # Insert a lot new documents, and return after starting to
         # build up (not waiting until it's done) the index to test
         # if the updater fields are set correctly
-        doc_names = self.helper.insert_docs(50000, prefix)
+        self.helper.insert_docs(50000, prefix)
         self.helper.get_results(design_name,
                                 extra_params={"stale": "update_after"})
         # Somehow stale=update_after doesn't really return immediately,

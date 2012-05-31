@@ -237,7 +237,7 @@ class RunQueriesThread(threading.Thread):
 
         try:
             self._run_queries()
-        except Exception as ex:
+        except Exception:
             self.log.error("Last query result:\n\n{0}\n\n"\
                                .format(json.dumps(self._last_results,
                                                   sort_keys=True)))
@@ -294,7 +294,7 @@ class RunQueriesThread(threading.Thread):
                     self.helper.testcase.assertEquals(num_keys,
                                                       expected_num_docs,
                                                       error)
-                except Exception as ex:
+                except Exception:
                     self.log.error(error)
                     raise
             else:

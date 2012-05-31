@@ -7,7 +7,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from memcached.helper.data_helper import MemcachedClientHelper
 from rebalancetests import RebalanceBaseTest
 
 log = logger.Logger.get_logger()
@@ -115,7 +115,6 @@ class ReplicationTests(unittest.TestCase):
         rejected_keys = []
         #quit after updating max 100,000 keys
         self.updated_keys = []
-        rest = RestConnection(self.servers[0])
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], self.bucket_name)
         for key in self.keys:
             if len(self.updated_keys) > 10000:
@@ -130,9 +129,6 @@ class ReplicationTests(unittest.TestCase):
                 rejected_keys.append(key)
         if len(rejected_keys) > 0:
             self.log.error("unable to update {0} keys".format(len(rejected_keys)))
-        vbaware.done()
-
-    #verify
 
     def _verify_minimum_requirement(self, number_of_replicas):
         # we should at least have
@@ -165,7 +161,6 @@ class ReplicationTests(unittest.TestCase):
     def _verify_data(self, version):
         #verify all the keys
         #let's use vbucketaware
-        rest = RestConnection(self.servers[0])
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], self.bucket_name)
         index = 0
         all_verified = True

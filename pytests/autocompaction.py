@@ -1,15 +1,12 @@
 import unittest
-import uuid
 import logger
-import os
-import mc_bin_client
 import random
 import time
 
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from TestInput import TestInputSingleton
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -64,7 +61,7 @@ class AutoCompactionTests(unittest.TestCase):
             items = (int(available_ram*1000)/2)/item_size
             rest.create_bucket(bucket= bucket_name, ramQuotaMB=int(available_ram), authType='sasl',
                                saslPassword='password', replicaNumber=1, proxyPort=11211)
-            ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket_name)
+            BucketOperationHelper.wait_for_memcached(serverInfo, bucket_name)
             BucketOperationHelper.wait_for_vbuckets_ready_state(serverInfo, bucket_name)
 
             self.log.info("start to load {0}K keys with {1} bytes/key".format(items, item_size))
@@ -107,4 +104,3 @@ class AutoCompactionTests(unittest.TestCase):
             self.log.info(serverInfo)
             rest = RestConnection(serverInfo)
             rest.reset_auto_compaction()
-            parallelDBAndView = "false"

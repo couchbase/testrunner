@@ -614,8 +614,6 @@ class EmployeeDataSet:
 
         for view in views:
             index_size = view.index_size
-            offset = self.docs_per_day
-
 
             section_size = index_size/len(self.get_data_sets())
 
@@ -791,8 +789,6 @@ class EmployeeDataSet:
 
 
     def _iterative_load(self, info, tc, view, loads_per_iteration, verify_docs_loaded):
-        loaded_docs = []
-
         try:
             smart = VBucketAwareMemcached(self.rest, self.bucket)
             for i in range(1,self.years + 1):
@@ -819,7 +815,7 @@ class EmployeeDataSet:
                         docs = DocumentGenerator.make_docs(loads_per_iteration, kv_template, options)
                         doc_sets.append(docs)
                     # load docs
-                    doc_ids = self._load_chunk(smart, doc_sets)
+                    self._load_chunk(smart, doc_sets)
 
         except Exception as ex:
             view.results.addError(tc, sys.exc_info())
@@ -864,8 +860,6 @@ class EmployeeDataSet:
                 self._preload_matching_query_keys(q, v.type_filter)
 
     def _preload_matching_query_keys(self, query, type_filter = None):
-        start_key_set = False
-        end_key_set = False
         inclusive_end = True
         descending = False
 
@@ -889,7 +883,6 @@ class EmployeeDataSet:
                 del q_params['end_key']
 
         if 'start_key' in q_params:
-            start_key_set = True
             params = json.loads(q_params['start_key'])
             if params[0] and not None:
                 q_start_yr = params[0] - 2007
@@ -899,7 +892,6 @@ class EmployeeDataSet:
                 q_start_day = params[2]
 
         if 'end_key' in q_params:
-            end_key_set = True
             params = json.loads(q_params['end_key'])
             if params[0] and not None:
                 q_end_yr = params[0] - 2007

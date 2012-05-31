@@ -1,20 +1,11 @@
-import uuid
 from TestInput import TestInputSingleton
 import logger
 import time
-
 import unittest
-import string
-import urllib
-import httplib
-import json
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection
-from couchdb import client
 from rebalancingtests import RebalanceDataGenerator
 from memcached.helper.old_kvstore import ClientKeyValueStore
 
@@ -284,7 +275,6 @@ class XDCRTests(unittest.TestCase):
                         "Verification of replicated revisions failed")
 
     def test_continuous_unidirectional_recreates(self):
-        cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 
@@ -357,7 +347,6 @@ class XDCRTests(unittest.TestCase):
                         "Replication verification failed")
 
     def test_continuous_unidirectional_deletes_1(self):
-        cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 
@@ -434,7 +423,6 @@ class XDCRTests(unittest.TestCase):
                         "Changes feed verification failed")
 
     def test_continuous_unidirectional_deletes_2(self):
-        cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 
@@ -861,8 +849,6 @@ class XDCRTests(unittest.TestCase):
         servers_b = self._input.clusters.get(1)
         rebalanced_servers_a = []
         rebalanced_servers_b = []
-        which_servers_a = []
-        which_servers_b = []
 
         # Rebalance all the nodes together
         RebalanceHelper.rebalance_in(servers_a, len(servers_a)-1)

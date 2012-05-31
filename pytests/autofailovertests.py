@@ -3,10 +3,9 @@ import logger
 import time
 
 import unittest
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
@@ -45,8 +44,6 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
     @staticmethod
     def wait_for_failover_or_assert(master, autofailover_count, timeout, testcase):
-        log = logger.Logger.get_logger()
-
         time_start = time.time()
         time_max_end = time_start + timeout + 60
         failover_count = 0

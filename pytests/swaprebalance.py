@@ -6,8 +6,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached, LoadWithMcsoda
-from membase.helper.failover_helper import FailoverHelper
+from memcached.helper.data_helper import LoadWithMcsoda
 from threading import Thread
 
 class SwapRebalanceBase(unittest.TestCase):
@@ -95,10 +94,10 @@ class SwapRebalanceBase(unittest.TestCase):
     def items_verification(master, test):
         rest = RestConnection(master)
         #Verify items count across all node
-        time = 600
+        timeout = 600
         for bucket in rest.get_buckets():
-            verified = RebalanceHelper.wait_till_total_numbers_match(master, bucket.name, timeout_in_seconds=time)
-            test.assertTrue(verified, "Lost items!!.. failing test in {0} secs".format(time))
+            verified = RebalanceHelper.wait_till_total_numbers_match(master, bucket.name, timeout_in_seconds=timeout)
+            test.assertTrue(verified, "Lost items!!.. failing test in {0} secs".format(timeout))
 
     @staticmethod
     def start_load_phase(self, master):
@@ -301,7 +300,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for i in [1, 2, 3]:
             expected_progress = 20*i
             self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(expected_progress))
-            reached = RestHelper(rest).rebalance_reached(expected_progress)
+            RestHelper(rest).rebalance_reached(expected_progress)
             command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
             memcached_restarted = rest.diag_eval(command)
             self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")

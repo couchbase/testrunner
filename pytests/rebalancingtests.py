@@ -1,9 +1,7 @@
-from random import shuffle
 import hashlib
 import time
 import uuid
 import unittest
-import uuid
 import json
 import sys
 from TestInput import TestInputSingleton
@@ -13,7 +11,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from mc_bin_client import MemcachedError
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper, MutationThread, VBucketAwareMemcached
+from memcached.helper.data_helper import VBucketAwareMemcached
 from threading import Thread
 from memcached.helper.data_helper import DocumentGenerator
 from memcached.helper.old_kvstore import ClientKeyValueStore
@@ -133,7 +131,6 @@ class RebalanceTestsUnderLoad(unittest.TestCase):
         num_of_docs = TestInputSingleton.input.param("num_of_docs",100000)
         replica = TestInputSingleton.input.param("replica",100000)
         add_items_count = TestInputSingleton.input.param("num_of_creates",30000)
-        rebalance_in = TestInputSingleton.input.param("rebalance_in",1)
         size = TestInputSingleton.input.param("item_size",256)
         params = {"sizes": [size], "count": num_of_docs, "seed": str(uuid.uuid4())[:7]}
         rest = RestConnection(master)
@@ -315,7 +312,7 @@ class RebalanceDataGenerator(object):
                     try:
                         smart.memcached(k).get(k)
                         validation_failures[k] = ["expired key"]
-                    except MemcachedError as e:
+                    except MemcachedError:
                         pass
                 else:
                     try:
@@ -323,7 +320,7 @@ class RebalanceDataGenerator(object):
                        actualmd5 = hashlib.md5(value).digest()
                        if actualmd5 != expected["value"]:
                           validation_failures[k] = ["value mismatch"]
-                    except  MemcachedError as e:
+                    except  MemcachedError:
                        validation_failures[k] = ["key not found"]
         return validation_failures
 

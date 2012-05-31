@@ -9,8 +9,6 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection
-import os
 
 class WarmUpClusterTest(unittest.TestCase):
     input = None
@@ -153,8 +151,6 @@ class WarmUpClusterTest(unittest.TestCase):
             mc = MemcachedClientHelper.direct_client(server, "default")
             expected_curr_items_tot = map["{0}:{1}".format(server.ip, server.port)]["curr_items_tot"]
             now_items = 0
-            retry = 0
-
             start = time.time()
 
             if server == self.servers[0]:

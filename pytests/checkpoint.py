@@ -19,7 +19,7 @@ log = logger.Logger.get_logger()
 ACTIVE="active"
 REPLICA1="replica1"
 REPLICA2="replica2"
-Replica3="replica3"
+REPLICA3="replica3"
 
 class CheckpointTests(unittest.TestCase):
 
@@ -122,7 +122,6 @@ class CheckpointTests(unittest.TestCase):
 
         tasks = []
         chk_pnt = str(int(m_stats[m_stats.keys()[0]]) + (num_items / chk_size))
-        chk_items = num_items - (chk_size * 2)
         tasks.append(self.cluster.async_wait_for_stats([master], self.bucket, param, stat_key,
                                                        '==', chk_pnt))
         tasks.append(self.cluster.async_wait_for_stats([slave1], self.bucket, param, stat_key,

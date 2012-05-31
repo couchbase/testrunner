@@ -7,7 +7,7 @@ import mc_bin_client
 import uuid
 import logger
 import time
-import crc32
+import datetime
 from membase.api.rest_client import RestConnection
 from membase.api.tap import TapConnection
 from membase.helper.bucket_helper import BucketOperationHelper

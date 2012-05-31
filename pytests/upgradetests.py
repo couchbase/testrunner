@@ -70,7 +70,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                              initialize_cluster=False,
                              create_buckets=False,
                              insert_data=False):
-        log = logger.Logger.get_logger()
         input = TestInputSingleton.input
         rest_settings = input.membase_settings
         servers = input.servers
@@ -350,25 +349,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
                                   insert_data=True,
                                   create_buckets=True)
 
-    def test_single_node_upgrade_s5(self):
-        #install the latest version and upgrade to itself
-        input = TestInputSingleton.input
-        servers = input.servers
-        server = servers[0]
-        builds, changes = BuildQuery().get_all_builds()
-        remote = RemoteMachineShellConnection(server)
-        info = remote.extract_remote_info()
-        remote.disconnect()
-        filtered_builds = []
-        for build in builds:
-            if build.deliverable_type == info.deliverable_type and\
-               build.architecture_type == info.architecture_type:
-                filtered_builds.append(build)
-        sorted_builds = BuildQuery().sort_builds_by_version(filtered_builds)
-        latest_version = sorted_builds[0].product_version
-        self._install_and_upgrade(initial_version=latest_version
-        )
-
         #TODO : expect a message like 'package membase-server-1.7~basestar-1.x86_64 is already installed'
 
     def test_upgrade(self):
@@ -493,10 +473,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
     def test_multiple_version_upgrade_start_all_1(self):
         upgrade_path = ['1.7.0', '1.7.1.1']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
-
-    def test_multiple_version_upgrade_start_one_2(self):
-        upgrade_path = ['1.7.1.1']
-        self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_all_2(self):
         upgrade_path = ['1.7.1.1']

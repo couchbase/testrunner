@@ -19,7 +19,6 @@ class SpatialCompactionTests(unittest.TestCase):
     def test_spatial_compaction(self):
         self.log.info(
             "description : test manual compaction for spatial indexes")
-        rest = self.helper.rest
         prefix = str(uuid.uuid4())[:7]
         design_name = "dev_test_spatial_compaction"
 
@@ -28,7 +27,7 @@ class SpatialCompactionTests(unittest.TestCase):
         # Insert (resp. update, as they have the same prefix) and query
         # the spatial index several time so that the compaction makes sense
         for i in range(0, 8):
-            doc_names = self.helper.insert_docs(2000, prefix)
+            self.helper.insert_docs(2000, prefix)
             self.helper.get_results(design_name)
 
         # Get the index size prior to compaction

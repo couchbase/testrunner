@@ -276,8 +276,6 @@ class BackupRestoreTests(unittest.TestCase):
         self.assertTrue(ready, "wait_for_memcached failed")
         self.add_nodes_and_rebalance()
 
-        rest = RestConnection(self.master)
-
         distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
 
         inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
