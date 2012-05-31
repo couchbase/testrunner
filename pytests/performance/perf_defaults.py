@@ -51,3 +51,4 @@ class PerfDefaults:
     view_compaction         =   10       # view fragmentation percentage triggers compaction
     vbuckets                =   1024     # number of vbuckets
     warmup                  =   0        # restart memcached and measure warmup phase. 1: enabled, 0: disabled
+    parallel_compaction     =   "true"   # process Database and View compaction in parallel. "true": enabled, "false": disabled

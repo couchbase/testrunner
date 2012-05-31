@@ -105,10 +105,19 @@ class PerfBase(unittest.TestCase):
                         msg="unable to create {0} bucket".format(bucket))
 
         try:
-            db_compaction  = self.parami("db_compaction", PerfDefaults.db_compaction)
-            view_compaction  = self.parami("view_compaction", PerfDefaults.view_compaction)
-            self.rest.reset_auto_compaction(dbFragmentThreshold = db_compaction,
-                              viewFragmntThreshold = view_compaction)
+            # Parallel database and view compaction
+            parallel_compaction = self.parami("parallel_compaction",
+                                              PerfDefaults.parallel_compaction)
+            # Database fragmentation threshold
+            db_compaction = self.parami("db_compaction",
+                                        PerfDefaults.db_compaction)
+            # View fragmentation threshold
+            view_compaction = self.parami("view_compaction",
+                                          PerfDefaults.view_compaction)
+            # Set custom auto-compaction settings
+            self.rest.reset_auto_compaction(parallelDBAndVC=parallel_compaction,
+                                            dbFragmentThreshold=db_compaction,
+                                            viewFragmntThreshold=view_compaction)
         except:
             pass # For example, membase doesn't support auto compaction.
 
