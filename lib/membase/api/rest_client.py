@@ -380,6 +380,19 @@ class RestConnection(object):
 
         return  json.loads(content)
 
+
+    def get_couch_doc(self, doc_id,  bucket = "default", timeout=120):
+        """ use couchBase uri to retrieve document from a bucket """
+
+        api = self.baseUrl + 'couchBase/%s/%s' % (bucket, doc_id)
+        status, content = self._http_request(api, headers=self._create_capi_headers(),
+                                             timeout=timeout)
+
+        if not status:
+            raise Exception("unable to retrieve doc %s" % doc_id)
+
+        return  json.loads(content)
+
     def _create_design_doc(self, bucket, name, function):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, name)
         status, content = self._http_request(
