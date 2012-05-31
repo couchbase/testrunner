@@ -236,13 +236,13 @@ if __name__ == "__main__":
         params = dict(zip(argument_split[::2], argument_split[1::2]))
         log_config_filename = ""
         if params:
-            log_name = logs_folder_abspath + "/" + name + ".log"
-            log_config_filename = logs_folder_abspath + "/" + name + ".logging.conf"
+            log_name = os.path.join(logs_folder_abspath, name + ".log")
+            log_config_filename = os.path.join(logs_folder_abspath, name + ".logging.conf")
         else:
             dotnames = name.split('.')
-            log_name = logs_folder_abspath + "/" + dotnames[len(dotnames) - 1] + ".log"
-            log_config_filename = logs_folder_abspath + "/" + dotnames[len(dotnames) - 1] + ".logging.conf"
-        create_log_file(log_config_filename,log_name, options.loglevel)
+            log_name = os.path.join(logs_folder_abspath, dotnames[-1] + ".log")
+            log_config_filename = os.path.join(logs_folder_abspath, dotnames[-1] + ".logging.conf")
+        create_log_file(log_config_filename, log_name, options.loglevel)
         logging.config.fileConfig(log_config_filename)
         print("  ./testrunner -i {0} {1} -t {2}".format(arg_i or "", arg_p or "", name))
         name = name.split(",")[0]
