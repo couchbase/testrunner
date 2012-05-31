@@ -453,7 +453,7 @@ class EPerfMaster(perf.PerfBase):
                               ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
                               max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
 
-    def test_eperf_mixed(self):
+    def test_eperf_mixed(self, save_snapshot=False):
         """
         Eperf mixed test, using parameters from conf/*.conf file.
         """
@@ -491,6 +491,28 @@ class EPerfMaster(perf.PerfBase):
 
         if self.parami("warmup", PerfDefaults.warmup) == 1:
             self.warmup_phase()
+
+        if save_snapshot:
+            self.save_snapshots(self.param("snapshot_filename", ""),
+                                self.param("bucket", PerfDefaults.bucket))
+
+    def test_eperf_warmup(self):
+        """
+        Eperf warmup test, using parameters from conf/*.conf file.
+        """
+        self.spec("test_eperf_warmup")
+        file_base = self.param("snapshot_file_base", "")
+        bucket = self.param("bucket", PerfDefaults.bucket)
+
+        if self.load_snapshots(file_base, bucket) \
+            and self.parami("warmup", PerfDefaults.warmup):
+            self.gated_start(self.input.clients)
+            print "[test_eperf_warmup] loaded snapshot, start warmup phase"
+            self.warmup_phase()
+            return
+
+        print "[test_eperf_warmup] unable to find snapshot file, rerun the test"
+        self.test_eperf_mixed(save_snapshot=True)
 
     def test_eperf_rebalance(self):
         """

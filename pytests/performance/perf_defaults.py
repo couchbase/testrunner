@@ -11,6 +11,8 @@ class PerfDefaults:
     kind                =    "nonjson"
     mem_quota           =    6000
     num_nodes           =    10
+    conf_file           =    "default.conf"
+    bucket              =    "default"
 
     # load phase
     items               =    22000000    # 22 million
