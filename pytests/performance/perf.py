@@ -58,6 +58,11 @@ class PerfBase(unittest.TestCase):
         self.num_items_loaded = 0
 
         self.setUpCluster()
+
+        # Rebalance
+        num_nodes = self.parami("num_nodes", 10)
+        self.nodes(num_nodes)
+
         self.setUpBucket()
         self.setUpProxy()
 

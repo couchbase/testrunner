@@ -52,13 +52,6 @@ obj.input = TestInputSingleton.input
 # Run setUp with load_phase=0 and access_phase=0
 if "setUp" in sys.argv:
     obj.setUp()
-    what = obj.param("test", "test_ept_read_1")
-    # Parse in case the what/test parameter looks like a fully qualified
-    # "performance.eperf.EVPerfClient.test_foo" instead of just "test_foo".
-    what_arr = what.split('.')
-    what = what_arr[len(what_arr) - 1]
-    meth = getattr(obj, what)
-    meth()
 else:
     obj.setUpBase0() # This will call tearDown on our behalf.
     num_clients = obj.param("num_clients", 10)
