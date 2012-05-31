@@ -2,6 +2,7 @@ import unittest
 import logger
 import time
 import threading
+import os
 
 # membase imports
 from couchbase.document import View
@@ -17,6 +18,7 @@ from cbsoda import StoreCouchbase
 from TestInput import TestInputSingleton
 from perf_defaults import PerfDefaults
 import mcsoda
+import testconstants
 
 def TODO():
     pass
@@ -287,6 +289,119 @@ class PerfBase(unittest.TestCase):
         untar_command = 'cd {1}; tar -xzf {0}'.format(dir+file, destination_folder)
         output, error = remote.execute_command(untar_command)
         remote.log_command_output(output, error)
+
+    def _exec_and_log(self, shell, cmd):
+        """helper method to execute a command and log output"""
+        if not cmd or not shell:
+            return
+
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+
+    def _build_tar_name(self, bucket, version="unknown_version", file_base=None):
+        """
+        build tar file name.
+        {file_base}-{version}-{bucket}.tar.gz
+        """
+        if not file_base:
+            file_base = os.path.splitext(
+                os.path.basename(self.param("conf_file", PerfDefaults.conf_file)))[0]
+        return "{0}-{1}-{2}.tar.gz".format(file_base, version, bucket)
+
+    def _save_snapshot(self, server, bucket, file_base=None):
+        """Save data files to a snapshot"""
+
+        src_data_path = os.path.dirname(server.data_path or testconstants.COUCHBASE_DATA_PATH)
+        dest_data_path = "{0}-snapshots".format(src_data_path)
+
+        print "[perf: _save_snapshot] server = {0} , src_data_path = {1}, dest_data_path = {2}"\
+                .format(server.ip, src_data_path, dest_data_path)
+
+        shell = RemoteMachineShellConnection(server)
+
+        build_name, short_version, full_version = \
+            shell.find_build_version("/opt/couchbase/", "VERSION.txt", "cb")
+
+        dest_file = self._build_tar_name(bucket, full_version, file_base)
+
+        self._exec_and_log(shell, "mkdir -p {0}".format(dest_data_path))
+
+        # save as gzip file, if file exsits, overwrite
+        # TODO: multiple buckets
+        zip_cmd = "cd {0}; tar -cvzf {1}/{2} {3} {3}-data _*"\
+                    .format(src_data_path, dest_data_path, dest_file, bucket)
+        self._exec_and_log(shell, zip_cmd)
+
+        shell.disconnect()
+        return True
+
+    def _load_snapshot(self, server, bucket, file_base=None, overwrite=True):
+        """Load data files from a snapshot"""
+
+        dest_data_path = os.path.dirname(server.data_path or testconstants.COUCHBASE_DATA_PATH)
+        src_data_path = "{0}-snapshots".format(dest_data_path)
+
+        print "[perf: _load_snapshot] server = {0} , src_data_path = {1}, dest_data_path = {2}"\
+                .format(server.ip, src_data_path, dest_data_path)
+
+        shell = RemoteMachineShellConnection(server)
+
+        build_name, short_version, full_version = \
+            shell.find_build_version("/opt/couchbase/", "VERSION.txt", "cb")
+
+        src_file = self._build_tar_name(bucket, full_version, file_base)
+
+        if not shell.file_exists(src_data_path, src_file):
+            print "[perf: _load_snapshot] file '{0}/{1}' does not exist"\
+                .format(src_data_path, src_file)
+            shell.disconnect()
+            return False
+
+        if not overwrite:
+            self._save_snapshot(server,
+                               bucket,
+                               "{0}.tar.gz".format(time.strftime('%X-%x-%Z'))) # TODO: filename
+
+        rm_cmd = "rm -rf {0}/{1} {0}/{1}-data {0}/_*".format(dest_data_path, bucket)
+        self._exec_and_log(shell, rm_cmd)
+
+        unzip_cmd = "cd {0}; tar -xvzf {1}/{2}".format(dest_data_path, src_data_path, src_file)
+        self._exec_and_log(shell, unzip_cmd)
+
+        shell.disconnect()
+        return True
+
+    def save_snapshots(self, file_base, bucket):
+        """Save snapshots on all servers"""
+        if not self.input.servers or not bucket:
+            print "[perf: save_snapshot] invalid server list or bucket name"
+            return False
+
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+
+        for server in self.input.servers:
+            self._save_snapshot(server, bucket, file_base)
+
+        ClusterOperationHelper.start_cluster(self.input.servers)
+
+        return True
+
+    def load_snapshots(self, file_base, bucket):
+        """Load snapshots on all servers"""
+        if not self.input.servers or not bucket:
+            print "[perf: load_snapshot] invalid server list or bucket name"
+            return False
+
+        ClusterOperationHelper.stop_cluster(self.input.servers)
+
+        for server in self.input.servers:
+            if not self._load_snapshot(server, bucket, file_base):
+                ClusterOperationHelper.start_cluster(self.input.servers)
+                return False
+
+        ClusterOperationHelper.start_cluster(self.input.servers)
+
+        return True
 
     def spec(self, reference):
         self.spec_reference = self.param("spec", reference)
