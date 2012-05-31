@@ -1,7 +1,5 @@
 #!/usr/bin/env python2.6
 
-import sys
-import math
 import time
 import json
 
@@ -16,7 +14,7 @@ def default(o):
     if isinstance(o, ServerInfo):
         return o.__dict__
     else:
-        return JSONEncoder.default(o)
+        return json.JSONEncoder.default(o)
 
 
 load_info = {

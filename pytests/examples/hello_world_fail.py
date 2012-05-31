@@ -1,4 +1,5 @@
 import unittest
+import TestInput
 import logger
 
 class HelloWorldFailTest(unittest.TestCase):
@@ -8,7 +9,7 @@ class HelloWorldFailTest(unittest.TestCase):
     
     def setUp(self):
         self.log = logger.Logger.get_logger()
-        self.input = TestInputSingleton.input
+        self.input = TestInput.TestInputSingleton.input
         self.log.info('test setUp invoked')
         self.log.info('getting server ips')
         servers = self.input.servers
