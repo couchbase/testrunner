@@ -40,6 +40,7 @@ class StatsCollector(object):
     def __init__(self, verbosity):
         self._verbosity = verbosity
         self.is_leader = False
+        self.merge_in_progress = False
 
     #this function starts collecting stats from all nodes with the given
     #frequency
@@ -232,9 +233,21 @@ class StatsCollector(object):
         self._task["ops-temp"].append(ops_stat)
         if len(self._task["ops-temp"]) >= 100:
             print "Merging ops stats..."
+
+            # Prevent concurrent merge
+            while self.merge_in_progress:
+                time.sleep(0.2)
+
+            # Semaphore: red
+            self.merge_in_progress = True
+
+            # Merge
             merged = self._merge()
             self._task["ops"].append(merged)
             self._task["ops-temp"] = []
+
+            # Semaphore: green
+            self.merge_in_progress = False
 
         #if self._task["ops"] has more than 1000 elements try to aggregate them ?
 
