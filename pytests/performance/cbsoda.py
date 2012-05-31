@@ -2,15 +2,10 @@
 
 import re
 import sys
-import copy
-import math
-import time
 import socket
 import threading
 import mcsoda
 import errno
-
-from membase.api.rest_client import RestConnection
 
 sys.path.append("lib")
 sys.path.append(".")

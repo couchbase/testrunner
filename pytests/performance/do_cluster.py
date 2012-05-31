@@ -34,8 +34,6 @@ sys.path.append("lib")
 sys.path.append("pytests")
 sys.path.append(".")
 
-import TestInput
-
 from TestInput import TestInputParser, TestInputSingleton
 
 import performance.eperf as eperf

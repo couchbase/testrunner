@@ -3,6 +3,7 @@ import logger
 import time
 import threading
 import os
+import testconstants
 
 # membase imports
 from couchbase.document import View

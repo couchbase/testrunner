@@ -2,12 +2,10 @@
 
 import sys
 import copy
-import math
 import time
 import mcsoda
-import pymongo # Use: pip install pymongo==2.0
 
-from pymongo import Connection
+from pymongo import Connection # Use: pip install pymongo==2.0
 
 mongoDocCache = {}
 

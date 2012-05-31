@@ -3,23 +3,18 @@ Executive performance dashboard tests.
 """
 
 # general imports
-import logger
 import time
 import json
 import os
 import gzip
-import ast
 import copy
 import mcsoda
 import threading
 
 # membase imports
-from membase.api.rest_client import RestConnection, RestHelper
-from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from membase.helper.rebalance_helper import RebalanceHelper
-from membase.performance.stats import StatsCollector, CallbackStatsCollector
-from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
+from membase.performance.stats import CallbackStatsCollector
+from remote.remote_util import RemoteMachineShellConnection
 
 # testrunner imports
 from TestInput import TestInputSingleton
@@ -158,7 +153,7 @@ class EPerfMaster(perf.PerfBase):
             try:
                 file = gzip.open("{0}.{1}.json.gz".format(i, type), 'rb')
                 break
-            except IOError as e:
+            except IOError:
                 print "[stats aggregation error] cannot open file : {0}.{1}.json.gz".format(i, type)
                 i += 1
 
@@ -183,7 +178,7 @@ class EPerfMaster(perf.PerfBase):
         for i in range(i, len_clients):
             try:
                 file  = gzip.open("{0}.{1}.json.gz".format(i, type),'rb')
-            except IOError as e:
+            except IOError:
                 # cannot find stats produced by this client, check stats collection.
                 # the results might be incomplete.
                 print "[stats aggregation error] cannot open file : {0}.{1}.json.gz".format(i, type)
@@ -460,7 +455,7 @@ class EPerfMaster(perf.PerfBase):
         self.spec("test_eperf_mixed")
         items = self.parami("items", PerfDefaults.items)
 
-        notify = self.gated_start(self.input.clients)
+        self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
 
         if self.parami("access_phase", 1) == 1:
@@ -520,7 +515,7 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_rebalance")
         items = self.parami("items", PerfDefaults.items)
-        notify = self.gated_start(self.input.clients)
+        self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
         rebalance_after = self.parami("rebalance_after", PerfDefaults.rebalance_after)

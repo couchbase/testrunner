@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 
 import re
-import os
 import sys
 import math
 import time
-import heapq
 import socket
 import string
 import struct
@@ -27,12 +25,12 @@ except:
 
 try:
     from hashlib import md5
+    md5; # Pyflakes workaround
 except ImportError:
     from md5 import md5
 
 import crc32
 import mc_bin_client
-import memcacheConstants
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETMPFAIL
