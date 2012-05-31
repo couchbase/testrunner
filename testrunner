@@ -157,6 +157,8 @@ def parse_conf_file(filename, tests, params):
     if 'spec' not in params:
         params['spec'] = splitext(basename(filename))[0]
 
+    params['conf_file'] = filename
+
 def create_headers(username, password):
     authorization = base64.encodestring('%s:%s' % (username, password))
     return {'Content-Type': 'application/x-www-form-urlencoded',
