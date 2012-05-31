@@ -402,7 +402,6 @@ class QueryView:
                     time.sleep(delay)
 
                 try:
-                    num_keys -= 1
                     if(num_keys != expected_num_docs):
 
                         # debug query results
@@ -410,6 +409,13 @@ class QueryView:
 
                             # query again with reduce false
                             params["reduce"] = "false"
+
+                            # remove any grouping
+                            if "group" in params:
+                                del params["group"]
+                            if "group_level" in params:
+                                del params["group_level"]
+
                             results = ViewBaseTests._get_view_results(tc, rest,
                                                                       self.bucket,
                                                                       view_name,
