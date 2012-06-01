@@ -106,7 +106,7 @@ class PerfBase(unittest.TestCase):
 
         try:
             # Parallel database and view compaction
-            parallel_compaction = self.parami("parallel_compaction",
+            parallel_compaction = self.param("parallel_compaction",
                                               PerfDefaults.parallel_compaction)
             # Database fragmentation threshold
             db_compaction = self.parami("db_compaction",
