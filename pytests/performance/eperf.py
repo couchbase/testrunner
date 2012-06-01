@@ -1679,6 +1679,8 @@ class EVPerfClient(EPerfClient):
                                                  why="loop-fg")
         if self.bg_thread_ctl:
             self.bg_thread_ctl['run_ok'] = False
+            while self.bg_thread.is_alive():
+                time.sleep(1)
 
         return rv_cur, start_time, end_time
 
