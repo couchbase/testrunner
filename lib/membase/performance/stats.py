@@ -116,7 +116,7 @@ class StatsCollector(object):
                 temp = []
                 delta = histo['delta']
                 del histo['delta']
-                p = histo_percentile(histo, [0.80, 0.90, 0.95, 0.99])
+                p = histo_percentile(histo, [0.80, 0.90, 0.95, 0.99, 0.999])
                 # p is list of tuples
                 for val in p:
                     temp.append(val[-1])
