@@ -422,6 +422,9 @@ if (nrow(latency_query) > 0) {
 
     latency_query$row <- as.numeric(latency_query$row)
     latency_query$mystery <- as.numeric(latency_query$mystery)
+    if (length(latency_query$percentile_999th)) {
+        latency_query$percentile_999th <- as.numeric(latency_query$percentile_999th) * 1000
+    }
     latency_query$percentile_99th <- as.numeric(latency_query$percentile_99th) * 1000
     latency_query$percentile_95th <- as.numeric(latency_query$percentile_95th) * 1000
     latency_query$percentile_90th <- as.numeric(latency_query$percentile_90th) * 1000
@@ -897,6 +900,21 @@ for(build in levels(builds)) {
 	}
 }
 
+for(build in levels(builds)) {
+
+	fi <-latency_query[latency_query$buildinfo.version==build & latency_query$client_id ==0, ]
+	d <- mean(fi$percentile_999th)
+	print(d)
+	if(build == baseline){
+		row <-c ("baseline", "latency-query (99.9th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+	else{
+		row <-c (build, "latency-query (99.9th)", as.numeric(d))
+		combined <- rbind(combined, row)
+	}
+}
+
 if(ncol(avg_qps) > 0) {
     for(i in 1:ncol(avg_qps)) {
         build <- avg_qps[1, i]
@@ -983,10 +1001,11 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[16])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[17])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[18])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[19])))
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[20])))
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[20])))
     MB <- append(MB,as.numeric(sprintf("%.2f",MB1[21])))
+    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[22])))
 }
 
 CB <- c()
@@ -1009,15 +1028,16 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[16])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[17])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[18])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[20])))
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[20])))
     CB <- append(CB,as.numeric(sprintf("%.2f",CB1[21])))
+    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[22])))
 }
 
 testdf <- data.frame(MB,CB)
 
-row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Avg. QPS", "Rebalance Time (sec)")
+row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Latency-query (99.9th) (ms)", "Avg. QPS", "Rebalance Time (sec)")
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
 	row_names <- c(row_names, c("Warmup Time - flush (sec)", "Warmup Time - no flush (sec)"))
@@ -1465,6 +1485,26 @@ if (nrow(latency_query) > 0) {
     p <- addopts(p,"Latency-query 99th  percentile (0 - 10ms)")
     print(p)
     makeFootnote(footnote)
+
+    if (length(latency_query$percentile_999th)) {
+        cat("Latency-query 99.9th\n")
+        temp <- latency_query[latency_query$client_id ==0,]
+        p <- ggplot(temp, aes(temp$row, temp$percentile_999th, color=buildinfo.version, label=temp$percentile_999th)) + labs(x="----time (sec)--->", y="ms")
+        p <- p + geom_point()
+        p <- addopts(p,"Latency-query 99.9th  percentile")
+        print(p)
+        makeFootnote(footnote)
+
+        cat("Latency-query 99.9th (0 - 10ms) \n")
+        temp <- latency_query[latency_query$client_id ==0,]
+        temp$percentile_999th_0_10 <- ifelse(temp$percentile_999th > 10, 10, temp$percentile_999th)
+        p <- ggplot(temp, aes(temp$row, temp$percentile_999th_0_10, color=buildinfo.version ,fill= buildinfo.version, label=temp$percentile_999th_0_10, linetype=buildinfo.version))
+        p <- p + labs(x="----time (sec)--->", y="ms")
+        p <- p + geom_point()
+        p <- addopts(p,"Latency-query 99.9th  percentile (0 - 10ms)")
+        print(p)
+        makeFootnote(footnote)
+    }
 
 }
 
