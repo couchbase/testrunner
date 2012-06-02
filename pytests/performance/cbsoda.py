@@ -41,7 +41,7 @@ class Reader(threading.Thread):
         self.reader_go.clear()
         while True:
             try:
-                data = self.src.recv(4096)
+                data = self.src.recv(16384)
                 if not data:
                     log.error("[cbsoda] Reader.recv-nodata / reader recv'ed nothing: %s" % data)
                     self.cur["cur-Reader.recv-nodata"] = self.cur.get("cur-Reader.recv-nodata", 0) + 1
@@ -52,7 +52,7 @@ class Reader(threading.Thread):
 
                 self.received += len(data)
 
-                found = len(re.findall("HTTP/1.1 ", data))
+                found = len(re.findall("HTTP", data))
 
                 self.inflight -= found
             except Exception as e:
