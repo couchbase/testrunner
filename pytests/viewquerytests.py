@@ -14,12 +14,13 @@ from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from old_tasks import task, taskmanager
 from memcached.helper.old_kvstore import ClientKeyValueStore
+from TestInput import TestInputSingleton
 
 class ViewQueryTests(unittest.TestCase):
 
     def setUp(self):
         ViewBaseTests.common_setUp(self)
-
+        self.limit = TestInputSingleton.input.param("limit", None)
         self.task_manager = taskmanager.TaskManager()
         self.task_manager.start()
 
@@ -30,7 +31,7 @@ class ViewQueryTests(unittest.TestCase):
 
     def test_simple_dataset_stale_queries(self):
         # init dataset for test
-        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set = SimpleDataSet(self._rconn(), self.num_docs, self.limit)
         data_set.add_stale_queries()
         self._query_test_init(data_set)
 
@@ -332,7 +333,7 @@ class ViewQueryTests(unittest.TestCase):
 
         # run queries while loading data
         while(load_task.is_alive()):
-            self._query_all_views(views, False)
+            self._query_all_views(views, False, limit=data_set.limit)
             time.sleep(5)
         if 'result' in dir(load_task):
             load_task.result()
@@ -341,7 +342,7 @@ class ViewQueryTests(unittest.TestCase):
 
         # results will be verified if verify_results set
         if verify_results:
-            self._query_all_views(views, verify_results, data_set.kv_store)
+            self._query_all_views(views, verify_results, data_set.kv_store, limit = data_set.limit)
         else:
             self._check_view_intergrity(views)
 
@@ -349,13 +350,13 @@ class ViewQueryTests(unittest.TestCase):
     ##
     # run all queries for all views in parallel
     ##
-    def _query_all_views(self, views, verify_results = True, kv_store = None):
+    def _query_all_views(self, views, verify_results = True, kv_store = None, limit = None):
 
         query_threads = []
         for view in views:
             t = Thread(target=view.run_queries,
                name="query-{0}".format(view.name),
-               args=(self, verify_results, kv_store))
+               args=(self, verify_results, kv_store,limit))
             query_threads.append(t)
             t.start()
 
@@ -415,7 +416,7 @@ class QueryView:
             rest.create_view(self.name, self.bucket, [View(self.name, self.fn_str, self.reduce_fn)])
 
     # query this view
-    def run_queries(self, tc, verify_results = False, kv_store = None):
+    def run_queries(self, tc, verify_results = False, kv_store = None, limit=None):
         rest = tc._rconn()
 
         if not len(self.queries) > 0 :
@@ -452,7 +453,7 @@ class QueryView:
                     results = ViewBaseTests._get_view_results(tc, rest,
                                                               self.bucket,
                                                               view_name,
-                                                              limit=None,
+                                                              limit,
                                                               extra_params=params,
                                                               type_ = query.type_)
 
@@ -1007,12 +1008,13 @@ class EmployeeDataSet:
 
 
 class SimpleDataSet:
-    def __init__(self, rest, num_docs):
+    def __init__(self, rest, num_docs,limit = None):
         self.num_docs = num_docs
         self.views = self.create_views(rest)
         self.name = "simple_dataset"
         self.kv_store = ClientKeyValueStore()
         self.kv_template = {"name": "doc-${prefix}-${seed}-", "age": "${prefix}"}
+        self.limit = limit
 
     def create_views(self, rest):
         view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
@@ -1066,17 +1068,20 @@ class SimpleDataSet:
                              QueryHelper({"start_key"     : start_key},
                                             index_size - start_key)]
 
-    def add_stale_queries(self, views = None):
+    def add_stale_queries(self, views = None, limit= None):
         if views is None:
             views = self.views
 
         for view in views:
             index_size = view.index_size
+            if limit is None:
+                limit = self.limit
+                limit = limit < index_size and limit or index_size
 
-        view.queries += [QueryHelper({"stale" : "false"}, index_size),
-                         QueryHelper({"stale" : "ok"}, index_size),
-                         QueryHelper({"stale" : "update_after"}, index_size)]
 
+            view.queries += [QueryHelper({"stale" : "false" , "limit" : str(limit)}, limit),
+                             QueryHelper({"stale" : "ok" , "limit" : str(limit)}, limit),
+                             QueryHelper({"stale" : "update_after" , "limit" : str(limit)}, limit)]
 
     def add_all_query_sets(self, views = None):
         self.add_startkey_endkey_queries(views)
