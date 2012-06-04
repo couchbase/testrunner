@@ -4,6 +4,7 @@ import time
 import threading
 import os
 import testconstants
+import subprocess
 
 # membase imports
 from couchbase.document import View
@@ -411,6 +412,15 @@ class PerfBase(unittest.TestCase):
     def mk_stats(self, verbosity):
         return StatsCollector(verbosity)
 
+    def _get_src_version(self):
+        """get testrunner version"""
+        try:
+            result = subprocess.check_output("git describe", shell=True)
+        except subprocess.CalledProcessError as e:
+            print "[perf] unable to get src code version : {0}".format(str(e))
+            return "unknown version"
+        return result.rstrip()
+
     def start_stats(self, stats_spec, servers=None,
                     process_names=['memcached', 'beam.smp', 'couchjs'],
                     test_params = None, client_id = '',
@@ -422,6 +432,7 @@ class PerfBase(unittest.TestCase):
         sc = self.mk_stats(False)
         sc.start(servers, "default", process_names, stats_spec, 10, client_id,
                  collect_server_stats = collect_server_stats)
+        test_params['testrunner'] = self._get_src_version()
         self.test_params = test_params
         self.sc = sc
         return self.sc
@@ -474,7 +485,8 @@ class PerfBase(unittest.TestCase):
                 'doc-cache': doc_cache,
                 'prefix': prefix,
                 'report': report,
-                'hot-shift': hot_shift
+                'hot-shift': hot_shift,
+                'cluster_name': param("cluster_name", "")
                 }
         cur = {}
         if start_at >= 0:
@@ -649,7 +661,8 @@ class PerfBase(unittest.TestCase):
                 'prefix': prefix,
                 'queries': queries,
                 'report': report,
-                'hot-shift': hot_shift
+                'hot-shift': hot_shift,
+                'cluster_name': self.param("cluster_name", "")
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
