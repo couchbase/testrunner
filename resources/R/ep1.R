@@ -181,9 +181,6 @@ createProcessUsageDataFrame <- function(bb,process) {
 	temp_data_frame
 }
 
-conf_file = buildPath(test_name, "../../conf/perf/", ".conf")
-dumpTextFile(conf_file)
-
 builds_json <- fromJSON(file=paste("http://",dbip,":5984/",dbname,"/","/_design/data/_view/by_test_time", sep=''))$rows
 builds_list <- plyr::ldply(builds_json, unlist)
 
@@ -1588,6 +1585,9 @@ if (nrow(throughput_query) > 0) {
 # p <- addopts(p,"rss")
 # print(p)
 # makeFootnote(footnote)
+
+conf_file = buildPath(test_name, "../../conf/perf/", ".conf")
+dumpTextFile(conf_file)
 
 ini_file = buildPath(cluster_name, "../../resources/perf/", ".ini")
 dumpTextFile(ini_file)
