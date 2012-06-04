@@ -252,8 +252,10 @@ class EPerfMaster(perf.PerfBase):
                             num_clients))
             items = self.parami("num_items", num_items) / num_clients
             self.is_multi_node = False
+            mvs = self.min_value_size(self.parami("avg_value_size", PerfDefaults.avg_value_size),
+                                      self.parami("num_value_samples", PerfDefaults.num_value_samples))
             self.load(items,
-                      self.param('size', self.min_value_size()),
+                      self.param('size', mvs),
                       kind=self.param('kind', 'json'),
                       protocol=self.mk_protocol(host=self.input.servers[0].ip,
                                                 port=self.input.servers[0].port),
@@ -299,11 +301,13 @@ class EPerfMaster(perf.PerfBase):
             if host is None:
                 host = self.input.servers[0].ip
             port = self.input.servers[0].port
+            mvs = self.min_value_size(self.parami("avg_value_size", PerfDefaults.avg_value_size),
+                                      self.parami("num_value_samples", PerfDefaults.num_value_samples))
             self.loop(num_ops        = 0,
                       num_items      = items,
                       max_items      = items + max_creates + 1,
                       max_creates    = max_creates,
-                      min_value_size = self.param('size', self.min_value_size()),
+                      min_value_size = self.param('size', mvs),
                       kind           = self.param('kind', 'json'),
                       protocol       = self.mk_protocol(host, port, proto_prefix),
                       clients        = self.parami('clients', 1),

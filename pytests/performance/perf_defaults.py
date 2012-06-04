@@ -39,12 +39,15 @@ class PerfDefaults:
     num_nodes_after     =    7           # num of nodes after rebalance.
 
     # control
+    avg_value_size          =   2048     # average size of document body
     db_compaction           =   2        # db fragmentation percentage triggers compaction
     load_wait_until_drained =   1        # wait to be drained on the load phase, 1: enabled, 0: disabled
     loop_wait_until_drained =   0        # wait to be drained on the access phase, 1: enabled, 0: disabled
     mcsoda_heartbeat        =   0        # health check heartbeat message for mcsoda. 0: no heartbeat, ~: in sec
     mcsoda_max_ops_sec      =   0        # max ops per seconds for mcsoda
     mcsoda_fg_stats_ops     =   1000     # fg ops threshold to persist latency stats
+    num_value_samples       =   100      # number of value samples (in memory, use large number with caution)
+    parallel_compaction     =   "true"   # process Database and View compaction in parallel. "true": enabled, "false": disabled
     tear_down               =   1        # 1: enabled, 0: disabled
     tear_down_proxy         =   1        # (prerequsite: tear_down = 1) tear down proxy,  1: enabled, 0: disabled
     tear_down_bucket        =   0        # (prerequsite: tear_down = 1) tear down bucket,  1: enabled, 0: disabled
@@ -53,4 +56,3 @@ class PerfDefaults:
     view_compaction         =   10       # view fragmentation percentage triggers compaction
     vbuckets                =   1024     # number of vbuckets
     warmup                  =   0        # restart memcached and measure warmup phase. 1: enabled, 0: disabled
-    parallel_compaction     =   "true"   # process Database and View compaction in parallel. "true": enabled, "false": disabled
