@@ -43,17 +43,17 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_simple_dataset_startkey_endkey_queries(self):
-        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
         data_set.add_startkey_endkey_queries()
         self._query_test_init(data_set)
 
     def test_simple_dataset_all_queries(self):
-        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
         data_set.add_all_query_sets()
         self._query_test_init(data_set)
 
     def test_simple_dataset_include_queries(self):
-        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
         data_set.add_include_docs_queries([data_set.views[0]])
         self._query_test_init(data_set, tm = self.task_manager)
 
@@ -1207,36 +1207,62 @@ class SimpleDataSet:
                                             seed = seed,
                                             monitor = monitor)
 
-    def add_include_docs_queries(self, views = None):
+    def add_include_docs_queries(self, views=None, limit=None):
         views = views or self.views
-
+        if limit is None:
+                limit = self.limit
         for view in views:
-            index_size = view.index_size
-            view.queries += [QueryHelper({"include_docs" : "true"}, index_size)]
+            if limit is not None:
+                view.queries += [QueryHelper({"include_docs" : "true", "limit" : limit}, limit>view.index_size and limit or view.index_size)]
+            else:
+                view.queries += [QueryHelper({"include_docs" : "true"}, view.index_size)]
 
-    def add_startkey_endkey_queries(self, views = None):
+    def add_startkey_endkey_queries(self, views=None, limit=None):
 
         if views is None:
             views = self.views
 
         for view in views:
-            index_size = view.index_size
-            start_key = index_size/2
-            end_key = index_size - 1000
-            view.queries += [QueryHelper({"start_key"     : end_key,
-                                          "end_key"       : start_key,
-                                          "descending"     : "true"},
-                                            end_key - start_key + 1),
-                             QueryHelper({"start_key"     : end_key,
-                                          "end_key"       : start_key,
-                                          "descending"     : "true"},
-                                           end_key - start_key + 1),
-                             QueryHelper({"end_key"       : end_key},
-                                            end_key + 1),
-                             QueryHelper({"end_key"       : end_key,
-                                          "inclusive_end" : "false"}, end_key),
-                             QueryHelper({"start_key"     : start_key},
-                                            index_size - start_key)]
+            start_key = view.index_size/2
+            end_key = view.index_size - 1000
+            if limit is None:
+                limit = self.limit
+
+            if limit is not None:
+                view.queries += [QueryHelper({"start_key" : end_key,
+                                             "end_key" : start_key,
+                                             "descending" : "true",
+                                             "limit" : str(limit)},
+                                             min(limit, end_key - start_key + 1)),
+                                 QueryHelper({"start_key" : end_key,
+                                             "end_key" : start_key,
+                                             "descending" : "true",
+                                             "limit" : str(limit)},
+                                             min(limit, end_key - start_key + 1)),
+                                 QueryHelper({"end_key" : end_key,
+                                             "limit" : str(limit)},
+                                             min(limit, end_key + 1)),
+                                 QueryHelper({"end_key" : end_key,
+                                             "inclusive_end" : "false",
+                                             "limit" : limit}, min(limit, end_key)),
+                                 QueryHelper({"start_key" : start_key,
+                                              "limit" : str(limit)},
+                                             min(limit, view.index_size - start_key))]
+            else:
+                view.queries += [QueryHelper({"start_key" : end_key,
+                                             "end_key" : start_key,
+                                             "descending" : "true"},
+                                             end_key - start_key + 1),
+                                 QueryHelper({"start_key" : end_key,
+                                             "end_key" : start_key,
+                                             "descending" : "true"},
+                                             end_key - start_key + 1),
+                                 QueryHelper({"end_key" : end_key},
+                                             end_key + 1),
+                                 QueryHelper({"end_key" : end_key,
+                                             "inclusive_end" : "false"}, end_key),
+                                 QueryHelper({"start_key" : start_key},
+                                             view.index_size - start_key)]
 
     def add_stale_queries(self, views = None, limit= None):
         if views is None:
@@ -1265,9 +1291,9 @@ class SimpleDataSet:
             view.queries += [QueryHelper({"reduce" : "false" , "limit" : str(limit)}, min(limit, index_size)),
                              QueryHelper({"reduce" : "true" , "limit" : str(limit)}, min(limit, index_size))]
 
-    def add_all_query_sets(self, views = None):
-        self.add_startkey_endkey_queries(views)
-        self.add_stale_queries(views)
+    def add_all_query_sets(self, views=None, limit=None):
+        self.add_startkey_endkey_queries(views, limit)
+        self.add_stale_queries(views, limit)
 
 class DataLoadHelper:
     @staticmethod
