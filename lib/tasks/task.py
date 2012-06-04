@@ -7,9 +7,11 @@ from membase.api.rest_client import RestConnection
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from couchbase.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
 import json
+from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException
 
 #TODO: Setup stacktracer
 #TODO: Needs "easy_install pygments"
@@ -507,3 +509,47 @@ class ValidateDataTask(GenericLoadingTask):
                 self.state = FINISHED
                 self.set_exception(error)
         self.kv_store.release_partition(key)
+
+class ViewCreateTask(Task):
+    def __init__(self, server, design_doc_name, view, bucket = "default"):
+        Task.__init__(self, "create_view_task")
+        self.server = server
+        self.bucket = bucket
+        self.view = view
+        prefix = ("","dev_")[self.view.dev_view]
+        self.design_doc_name = prefix + design_doc_name
+
+    def execute(self, task_manager):
+
+        rest = RestConnection(self.server)
+
+        try:
+            # appending view to existing design doc
+            content = rest.get_ddoc(self.bucket, self.design_doc_name)
+            ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
+            ddoc.add_view(self.view)
+
+        except ReadDocumentException:
+            # creating first view in design doc
+            ddoc = DesignDocument(self.design_doc_name, [self.view])
+
+        try:
+            rest.create_design_document(self.bucket, ddoc)
+            self.state = CHECKING
+            task_manager.schedule(self)
+
+        except DesignDocCreationException as e:
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        rest = RestConnection(self.server)
+
+        try:
+            query = {"stale" : "ok"}
+            content = \
+                rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
+            self.state = FINISHED
+            self.set_result(True)
+        except QueryViewException as e:
+            task_manager.schedule(self)
