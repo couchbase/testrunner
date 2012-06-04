@@ -2,20 +2,23 @@
 import json
 
 class DesignDocument():
-    def __init__(self, json_string):
-        json_object = json.loads(clean_json_string(json_string))
-        self.id = json_object['_id']
-        self.rev = json_object['_rev']
-        self.views = []
-
-        views_json = json_object['views']
-        for view in views_json.items():
-            self.views.append(View(json.dumps(view)))
-
     def __init__(self, name, views, rev=None):
         self.id = '_design/{0}'.format(name)
         self.rev = rev
         self.views = views
+
+    @classmethod
+    def _init_from_json(ddoc_self, design_doc_name, json_object):
+
+        id_ = json_object['_id']
+        rev_ = json_object['_rev']
+        ddoc_self = DesignDocument(design_doc_name, [], rev = rev_)
+
+        views_json = json_object['views']
+        for view in views_json.items():
+            ddoc_self.views.append(View._init_from_json(view))
+
+        return ddoc_self
 
     def as_json(self):
         json_object = {'_id': self.id,
@@ -33,20 +36,22 @@ class DesignDocument():
         return json.dumps(self.as_json())
 
 class View():
-    def __init__(self, json_string):
-        json_object = json.loads(clean_json_string(json_string))
-        self.name = json_object[0]
-        self.map_func = json_object[1]['map']
-
-        try:
-            self.red_func = json_object[1]['reduce']
-        except KeyError:
-            self.red_func = None
-
     def __init__(self, name, map_func, red_func=None):
         self.name = name
         self.map_func = map_func
         self.red_func = red_func
+
+    @classmethod
+    def _init_from_json(view_self, json_object):
+        name = json_object[0]
+        map_func = clean_string(json_object[1]['map'])
+
+        if 'reduce' in json_object[1]:
+            red_func = clean_string(json_object[1]['reduce'])
+        else:
+            red_func = None
+
+        return View(name, map_func, red_func)
 
     def as_json(self):
         if self.red_func is None:
@@ -60,6 +65,6 @@ class View():
     def __repr__(self):
         return json.dumps(self.as_json())
 
-def clean_json_string(json_string):
-    return json_string.replace('\n', '').replace('\r', '')
+def clean_string(str_):
+    return str_.replace('\n', '').replace('\r', '')
 
