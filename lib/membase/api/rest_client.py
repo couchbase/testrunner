@@ -207,6 +207,18 @@ class RestConnection(object):
                             " on bucket: " + bucket_name)
         return json.loads(content)
 
+    def create_design_document(self, bucket, design_doc):
+
+        design_doc_name = design_doc.id
+        api = "{0}couchBase/{1}/{2}".format(self.baseUrl, bucket, design_doc_name)
+        status, content = self._http_request(api, 'PUT', str(design_doc),
+                                            headers=self._create_capi_headers())
+        if not status:
+            raise Exception("unable to create ddoc: " + design_doc_name +
+                            " on bucket: " + bucket)
+        return json.loads(content)
+
+
     def query_view(self, design_doc_name, view_name, bucket, query, timeout=120):
         status, content = self._query(design_doc_name, view_name, bucket, "view", query,
                                       timeout)
