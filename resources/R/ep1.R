@@ -21,7 +21,6 @@ test_name = args[3]
 dbip = args[4]
 dbname = args[5]
 pdfname = args[6]
-cluster_name = args[7]
 # pdfname = "ept-write-nonjson-180-200r452"
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
@@ -184,7 +183,7 @@ createProcessUsageDataFrame <- function(bb,process) {
 builds_json <- fromJSON(file=paste("http://",dbip,":5984/",dbname,"/","/_design/data/_view/by_test_time", sep=''))$rows
 builds_list <- plyr::ldply(builds_json, unlist)
 
-names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','is_json', 'reb_dur', 'test_time')
+names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','is_json', 'reb_dur',  'testrunner', 'cluster_name', 'test_time')
 
  # Pick the latest stats doc for a given test on a given build
  (fbl <- builds_list[FALSE, ])
@@ -943,6 +942,20 @@ for(build in levels(builds)) {
 }
 
 for(build in levels(builds)) {
+    fi <-builds_list[builds_list$build==build, ]
+    d <- fi$testrunner
+    print(d)
+    if(build == baseline){
+        row <-c ("baseline", "testrunner version", d)
+        combined <- rbind(combined, row)
+    }
+    else{
+        row <-c (build, "testrunner version", d)
+        combined <- rbind(combined, row)
+    }
+}
+
+for(build in levels(builds)) {
     fi <- memcached_stats[memcached_stats$buildinfo.version == build, ]
 	d <- fi$ep_warmup_time[1] / 1000000
 
@@ -970,7 +983,7 @@ for(build in levels(builds)) {
 	}
 }
 
-
+# TODO rewrite (benchmark table)
 p <- combined[2:nrow(combined), ]
 p$value <- as.numeric(p$value)
 
@@ -999,10 +1012,11 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[17])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[18])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[19])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[20])))
+MB <- append(MB,combined[combined[,'system'] == 'baseline',]$value[22])
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[21])))
     MB <- append(MB,as.numeric(sprintf("%.2f",MB1[22])))
+    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[23])))
 }
 
 CB <- c()
@@ -1026,15 +1040,16 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[17])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[18])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[20])))
+CB <- append(CB,combined[combined[,'system'] != 'baseline',]$value[22])
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[21])))
     CB <- append(CB,as.numeric(sprintf("%.2f",CB1[22])))
+    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[23])))
 }
 
 testdf <- data.frame(MB,CB)
 
-row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Latency-query (99.9th) (ms)", "Avg. QPS", "Rebalance Time (sec)")
+row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)","Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Latency-query (99.9th) (ms)", "Avg. QPS", "Rebalance Time (sec)", "Testrunner Version")
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
 	row_names <- c(row_names, c("Warmup Time - flush (sec)", "Warmup Time - no flush (sec)"))
@@ -1589,8 +1604,10 @@ if (nrow(throughput_query) > 0) {
 conf_file = buildPath(test_name, "../../conf/perf/", ".conf")
 dumpTextFile(conf_file)
 
-ini_file = buildPath(cluster_name, "../../resources/perf/", ".ini")
-dumpTextFile(ini_file)
+if (builds_list$cluster_name != "") {
+    ini_file = buildPath(builds_list$cluster_name, "../../resources/perf/", ".ini")
+    dumpTextFile(ini_file)
+}
 
 dev.off()
 
