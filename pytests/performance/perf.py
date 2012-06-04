@@ -119,7 +119,7 @@ class PerfBase(unittest.TestCase):
             view_compaction = self.parami("view_compaction",
                                           PerfDefaults.view_compaction)
             # Set custom auto-compaction settings
-            self.rest.reset_auto_compaction(parallelDBAndVC=parallel_compaction,
+            self.rest.set_autoCompaction(parallelDBAndVC=parallel_compaction,
                                             dbFragmentThreshold=db_compaction,
                                             viewFragmntThreshold=view_compaction)
         except:

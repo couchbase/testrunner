@@ -1193,23 +1193,6 @@ class RestConnection(object):
         data = json.loads(content)
         return data
 
-    # Reset compaction values to default, try with old fields (dp4 build) and then try
-    # with newer fields
-    def reset_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 80,
-                              viewFragmntThreshold = 80):
-        api = self.baseUrl + "controller/setAutoCompaction"
-        params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
-                                   "databaseFragmentationThreshold": dbFragmentThreshold,
-                                   "viewFragmentationThreshold": viewFragmntThreshold})
-        status, content = self._http_request(api, "POST", params)
-        # For non dp4 build, suffix [percentage] is required
-        if not status:
-            params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
-                                       "databaseFragmentationThreshold[percentage]": dbFragmentThreshold,
-                                       "viewFragmentationThreshold[percentage]": viewFragmntThreshold})
-            status, content = self._http_request(api, "POST", params)
-        return status
-
     def set_autoCompaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 100,
                            viewFragmntThreshold = 100):
         api = self.baseUrl + "controller/setAutoCompaction"
@@ -1228,7 +1211,7 @@ class RestConnection(object):
     def set_global_loglevel(self, loglevel='error'):
         """Set cluster-wide logging level for core components
 
-        Possible loglevel:
+        Possible loglevel:w
             -- debug
             -- info
             -- warn
