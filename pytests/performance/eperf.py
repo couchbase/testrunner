@@ -10,6 +10,8 @@ import gzip
 import copy
 import mcsoda
 import threading
+import random
+import math
 
 # membase imports
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -201,16 +203,27 @@ class EPerfMaster(perf.PerfBase):
         file.write("{0}".format(json.dumps(final_json)))
         file.close()
 
-    def min_value_size(self):
+    def min_value_size(self, avg=2048, num_samples=100):
         # Returns an array of different value sizes so that
-        # the average value size is 2k and the ratio of
-        # sizes is 33% 1k, 33% 2k, 33% 3k, 1% 10k.
+        # the average value size is slightly bigger
+        # than [avg] and the ratio of sizes follow
+        # gaussion distribution with std deviation = avg/3
         mvs = []
-        for i in range(33):
-            mvs.append(1024)
-            mvs.append(2048)
-            mvs.append(3072)
-        mvs.append(10240)
+
+        for i in range(2, 6):
+            mvs.append(avg * i)
+            mvs.append(avg / i)
+
+        random.seed(0)
+
+        for i in range(num_samples - 8):
+            mvs.append(int(math.fabs(random.normalvariate(avg, avg / 3))))
+
+        print "value sizes:"
+        print mvs
+        print "num of value samples = {0}".format(num_samples)
+        print "avg value size = {0}".format(sum(mvs) / num_samples)
+
         return mvs
 
     # Gets the vbucket count
