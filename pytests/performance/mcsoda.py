@@ -277,7 +277,7 @@ def next_cmd(cfg, cur, store):
                     cmd = 'arpa'
                     cur['cur-arpas'] = cur.get('cur-arpas', 0) + 1
 
-            key_num = choose_key_num(cur.get('cur-items', 0),
+            key_num = choose_key_num(num_updates,
                                      cfg.get('ratio-hot', 0),
                                      cfg.get('ratio-hot-sets', 0),
                                      cur.get('cur-sets', 0),
