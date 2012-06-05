@@ -486,7 +486,7 @@ class PerfBase(unittest.TestCase):
                 'prefix': prefix,
                 'report': report,
                 'hot-shift': hot_shift,
-                'cluster_name': param("cluster_name", "")
+                'cluster_name': self.param("cluster_name", "")
                 }
         cur = {}
         if start_at >= 0:
