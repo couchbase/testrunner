@@ -233,20 +233,19 @@ class StatsCollector(object):
     def ops_stats(self, ops_stat):
         ops_stat["time"] = time.time()
         self._task["ops-temp"].append(ops_stat)
-        if len(self._task["ops-temp"]) >= 100:
-            print "Merging ops stats..."
-
+        if len(self._task["ops-temp"]) >= 1000:
             # Prevent concurrent merge
             while self.active_mergers:
-                time.sleep(0.2)
+                time.sleep(0.1)
 
             # Semaphore: +1 active
             self.active_mergers += 1
 
             # Merge
             merged = self._merge()
+            merged_length = len(merged)
             self._task["ops"].append(merged)
-            self._task["ops-temp"] = []
+            self._task["ops-temp"] = self._task["ops-temp"][merged_length:]
 
             # Semaphore: -1 active
             self.active_mergers -= 1
