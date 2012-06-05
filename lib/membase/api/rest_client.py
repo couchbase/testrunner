@@ -12,6 +12,7 @@ from membase.api.exception import BucketCreationException, ServerJoinException, 
 
 log = logger.Logger.get_logger()
 #helper library methods built on top of RestConnection interface
+
 class RestHelper(object):
     def __init__(self, rest_connection):
         self.rest = rest_connection
@@ -760,13 +761,12 @@ class RestConnection(object):
 
 
     def _rebalance_progress(self):
-        percentage = -1
+        avg_percentage = -1
         api = self.baseUrl + "pools/default/rebalanceProgress"
 
         status, content = self._http_request(api)
 
         json_parsed = json.loads(content)
-
         if status:
             if "status" in json_parsed:
                 if "errorMessage" in json_parsed:
@@ -774,20 +774,26 @@ class RestConnection(object):
                     log.error(msg)
                     raise RebalanceFailedException(msg)
                 elif json_parsed["status"] == "running":
+                    total_percentage = 0
+                    count = 0
                     for key in json_parsed:
                         if key.find('@') >= 0:
                             ns_1_dictionary = json_parsed[key]
                             percentage = ns_1_dictionary['progress'] * 100
-                            log.info('rebalance percentage : {0} %' .format(percentage))
-                            break
-                    if percentage == -1:
-                        percentage = 0
+                            count += 1
+                            total_percentage += percentage
+                    if count:
+                        avg_percentage = (total_percentage/count)
+                    else:
+                        avg_percentage = 0
+                    if avg_percentage != 100:
+                        log.info('rebalance percentage : {0} %' .format(avg_percentage))
                 else:
-                    percentage = 100
+                    avg_percentage = 100
         else:
-            percentage = -100
+            avg_percentage = -100
 
-        return percentage
+        return avg_percentage
 
 
     #if status is none , is there an errorMessage
