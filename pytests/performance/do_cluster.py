@@ -29,6 +29,7 @@
 # unittest.TestCase/setUp/testFoo/tearDown lifecycle.
 #
 import sys
+import os
 
 sys.path.append("lib")
 sys.path.append("pytests")
@@ -38,7 +39,17 @@ from TestInput import TestInputParser, TestInputSingleton
 
 import performance.eperf as eperf
 
+try:
+    os.symlink('testrunner', 'testrunner.py')
+except OSError:
+    pass
+
+from testrunner import parse_args
+
+_, test_params, _, _, _ = parse_args(sys.argv)
 TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
+test_params.update(TestInputSingleton.input.test_params)
+TestInputSingleton.input.test_params = test_params
 
 class EPerfMasterWrapper(eperf.EPerfMaster):
     def __init__(self):

@@ -32,7 +32,7 @@ if [ -z ${mem_quota} ] ; then
 fi
 
 if [ ${skip_run} != "1" ]; then
-   python pytests/performance/do_cluster.py -i ${ini_file} -p load_phase=0,index_phase=0,access_phase=0,num_nodes=${1},mem_quota=${mem_quota} setUp
+   python pytests/performance/do_cluster.py -i ${ini_file} -c ${test_conf} -p load_phase=0,index_phase=0,access_phase=0,num_nodes=${1},mem_quota=${mem_quota} setUp
 else
    echo "No Cluster setup run"
 fi
