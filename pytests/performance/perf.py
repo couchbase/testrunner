@@ -119,9 +119,9 @@ class PerfBase(unittest.TestCase):
             view_compaction = self.parami("view_compaction",
                                           PerfDefaults.view_compaction)
             # Set custom auto-compaction settings
-            self.rest.set_autoCompaction(parallelDBAndVC=parallel_compaction,
-                                            dbFragmentThreshold=db_compaction,
-                                            viewFragmntThreshold=view_compaction)
+            self.rest.set_auto_compaction(parallelDBAndVC=parallel_compaction,
+                                          dbFragmentThresholdPercentage=db_compaction,
+                                          viewFragmntThresholdPercentage=view_compaction)
         except:
             pass # For example, membase doesn't support auto compaction.
 
@@ -588,7 +588,7 @@ class PerfBase(unittest.TestCase):
     @staticmethod
     def set_auto_compaction(server, parallel_compaction, percent_threshold):
         rest = RestConnection(server)
-        rest.set_autoCompaction(parallel_compaction, percent_threshold, percent_threshold)
+        rest.set_auto_compaction(parallel_compaction, dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=percent_threshold)
 
     @staticmethod
     def delayed_compaction_worker(servers, parallel_compaction,

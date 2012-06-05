@@ -43,9 +43,9 @@ class AutoCompactionTests(unittest.TestCase):
         rest = RestConnection(serverInfo)
         remote_client = RemoteMachineShellConnection(serverInfo)
 
-        rest.set_autoCompaction(dbFragmentThreshold=80, viewFragmntThreshold=80)
+        rest.set_auto_compaction(dbFragmentThresholdPercentage=80, viewFragmntThresholdPercentage=80)
         parallelDBAndView = "false"
-        output = rest.set_autoCompaction(parallelDBAndView, percent_threshold, 100)
+        output = rest.set_auto_compaction(parallelDBAndView, dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=100)
         if not output and percent_threshold < MIN_COMPACTION_THRESHOLD:
             self.log.error("Need to set minimum threshold above {0}%".format(MIN_COMPACTION_THRESHOLD))
         elif not output and percent_threshold > MAX_COMPACTION_THRESHOLD:
@@ -103,4 +103,4 @@ class AutoCompactionTests(unittest.TestCase):
         for serverInfo in self.servers:
             self.log.info(serverInfo)
             rest = RestConnection(serverInfo)
-            rest.set_autoCompaction(dbFragmentThreshold=80, viewFragmntThreshold=80)
+            rest.set_auto_compaction(dbFragmentThresholdPercentage=80, viewFragmntThresholdPercentage=80)

@@ -52,8 +52,8 @@ class ViewBaseTests(unittest.TestCase):
         ViewBaseTests._log_start(self)
         db_compaction = self.input.param("db_compaction", 30)
         view_compaction = self.input.param("view_compaction", 30)
-        rest.set_autoCompaction(dbFragmentThreshold = db_compaction,
-                              viewFragmntThreshold = view_compaction)
+        rest.set_auto_compaction(dbFragmentThresholdPercentage = db_compaction,
+                                 viewFragmntThresholdPercentage = view_compaction)
 
     @staticmethod
     def common_tearDown(self):

@@ -1193,21 +1193,6 @@ class RestConnection(object):
         data = json.loads(content)
         return data
 
-    def set_autoCompaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 100,
-                           viewFragmntThreshold = 100):
-        api = self.baseUrl + "controller/setAutoCompaction"
-        params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
-                                   "databaseFragmentationThreshold[percentage]": dbFragmentThreshold,
-                                   "viewFragmentationThreshold[percentage]": viewFragmntThreshold})
-        status, content = self._http_request(api, "POST", params)
-        # For non dp4 build, suffix [percentage] is required
-        if not status:
-            params = urllib.urlencode({"parallelDBAndViewCompaction": parallelDBAndVC,
-                                       "databaseFragmentationThreshold[percentage]": dbFragmentThreshold,
-                                       "viewFragmentationThreshold[percentage]": viewFragmntThreshold})
-            status, content = self._http_request(api, "POST", params)
-        return status
-
     def set_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold=None,
                            viewFragmntThreshold=None, dbFragmentThresholdPercentage=100,
                            viewFragmntThresholdPercentage=100, allowedTimePeriodFromHour=None,

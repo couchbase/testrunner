@@ -846,7 +846,7 @@ class EPerfMaster(perf.PerfBase):
         self.spec("EPT-MIXED-NOCOMPACT")
         items = self.parami("items", 7000000)
         if self.is_master:
-            self.rest.set_autoCompaction("false", 100, 100) # 100% fragmentation thresholds.
+            self.rest.set_auto_compaction("false", dbFragmentThresholdPercentage=100, viewFragmntThresholdPercentage=100) # 100% fragmentation thresholds.
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
@@ -1560,7 +1560,7 @@ function(doc) {
         items = self.parami("items", 45000000)
         notify = self.gated_start(self.input.clients)
         if self.is_master:
-            self.rest.set_autoCompaction("false", 100, 100) # 100% fragmentation thresholds.
+            self.rest.set_auto_compaction("false", dbFragmentThresholdPercentage=100, viewFragmntThresholdPercentage=100) # 100% fragmentation thresholds.
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
