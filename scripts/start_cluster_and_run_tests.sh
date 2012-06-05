@@ -60,7 +60,7 @@ pushd .
 cd ../ns_server
 make dataclean
 make
-COUCHBASE_NUM_VBUCKETS=64 python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
+COUCHBASE_NUM_VBUCKETS=64 MAX_COUCH_REPS_PER_DOC=64 python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
 pid=$!
 popd
 

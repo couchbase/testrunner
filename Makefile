@@ -34,6 +34,9 @@ test-viewquery:
 e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 
+test-xdcr:
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini -c conf/xdcr.conf
+
 # specify number of nodes and testcase
 any-test:
 	scripts/start_cluster_and_run_tests.sh ${NODES} ${TEST}
