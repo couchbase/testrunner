@@ -1208,6 +1208,28 @@ class RestConnection(object):
             status, content = self._http_request(api, "POST", params)
         return status
 
+    def set_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold=None,
+                           viewFragmntThreshold=None, dbFragmentThresholdPercentage=100,
+                           viewFragmntThresholdPercentage=100, allowedTimePeriodFromHour=None,
+                           allowedTimePeriodFromMin=None, allowedTimePeriodToHour=None,
+                           allowedTimePeriodToMin=None, allowedTimePeriodAbort=None):
+        api = self.baseUrl + "controller/setAutoCompaction"
+        compaction_request={}
+        compaction_request["parallelDBAndViewCompaction"] = parallelDBAndVC
+        # need to verify None because the value could be=0
+        if dbFragmentThreshold is not None: compaction_request["databaseFragmentationThreshold[size]"] = dbFragmentThreshold
+        if viewFragmntThreshold is not None: compaction_request["viewFragmentationThreshold[percentage]"] = viewFragmntThreshold
+        if dbFragmentThresholdPercentage is not None: compaction_request["databaseFragmentationThreshold[percentage]"] = dbFragmentThresholdPercentage
+        if viewFragmntThresholdPercentage is not None: compaction_request["viewFragmentationThreshold[percentage]"] = viewFragmntThresholdPercentage
+        if allowedTimePeriodFromHour is not None: compaction_request["allowedTimePeriod[fromHour]"] = allowedTimePeriodFromHour
+        if allowedTimePeriodFromMin is not None: compaction_request["allowedTimePeriod[fromMinute]"] = allowedTimePeriodFromMin
+        if allowedTimePeriodToHour is not None: compaction_request["allowedTimePeriod[toHour]"] = allowedTimePeriodToHour
+        if allowedTimePeriodToMin is not None: compaction_request["allowedTimePeriod[toMinute]"] = allowedTimePeriodToMin
+        if allowedTimePeriodAbort is not None: compaction_request["allowedTimePeriod[abortOutside]"] = allowedTimePeriodAbort
+        params = urllib.urlencode(compaction_request)
+        status, content = self._http_request(api, "POST", params)
+        return status
+
     def set_global_loglevel(self, loglevel='error'):
         """Set cluster-wide logging level for core components
 
