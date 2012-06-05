@@ -264,3 +264,32 @@ class Cluster(object):
 
     def shutdown(self, force=False):
         self.task_manager.shutdown(force)
+
+    def async_create_view(self, server, design_doc_name, view, bucket = "default"):
+        """Asynchronously creates a views in a design doc
+
+        Parameters:
+            server - The server to handle create view task. (TestInputServer)
+            design_doc_name - Design doc to be created or updated with view(s) being created (String)
+            view - The view being created (document.View)
+            bucket - The name of the bucket containing items for this view. (String)
+
+        Returns:
+            ViewCreateTask - A task future that is a handle to the scheduled task."""
+        _task = ViewCreateTask(server, design_doc_name, view, bucket)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def create_view(self, server, design_doc_name, view, bucket = "default"):
+        """Synchronously creates a views in a design doc
+
+        Parameters:
+            server - The server to handle create view task. (TestInputServer)
+            design_doc_name - Design doc to be created or updated with view(s) being created (String)
+            view - The view being created (document.View)
+            bucket - The name of the bucket containing items for this view. (String)
+
+        Returns:
+            ViewCreateTask - A task future that is a handle to the scheduled task."""
+        _task = self.async_create_view(server, design_doc_name, view, bucket)
+        return _task.result()
