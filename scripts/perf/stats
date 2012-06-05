@@ -8,7 +8,7 @@ else
 fi
 
 # hacky way of aggregating stats from clients
-python pytests/performance/do_cluster.py -i ${ini_file} -p num_clients=$num_clients tearDown
+python pytests/performance/do_cluster.py -i ${ini_file} -c ${test_conf} -p num_clients=$num_clients tearDown
 
 # backup
 rm -rf backup
