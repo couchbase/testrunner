@@ -415,7 +415,7 @@ class PerfBase(unittest.TestCase):
     def _get_src_version(self):
         """get testrunner version"""
         try:
-            result = subprocess.check_output("git describe", shell=True)
+            result = subprocess.Popen(['git', 'describe'], stdout=subprocess.PIPE).communicate()[0]
         except subprocess.CalledProcessError as e:
             print "[perf] unable to get src code version : {0}".format(str(e))
             return "unknown version"
