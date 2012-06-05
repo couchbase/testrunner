@@ -83,15 +83,17 @@ class BaseTestCase(unittest.TestCase):
                                'curr_items', '==', items))
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                                'vb_active_curr_items', '==', items))
-            if len(servers) > 1:
-                stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
-                                   'vb_replica_curr_items', '==', items * self.num_replicas))
-                stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
-                                   'curr_items_tot', '==', items * (self.num_replicas + 1)))
-            else:
-                stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
-                                   'vb_replica_curr_items', '==', 0))
-                stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
-                                   'curr_items_tot', '==', items))
+
+            available_replicas = self.num_replicas
+            if len(servers) == self.num_replicas:
+                available_replicas = len(servers) - 1
+            elif len(servers) <= self.num_replicas:
+                available_replicas = len(servers) - 1
+
+            stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                                   'vb_replica_curr_items', '==', items * available_replicas))
+            stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                                   'curr_items_tot', '==', items * (available_replicas + 1)))
+
         for task in stats_tasks:
             task.result(60)
