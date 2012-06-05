@@ -29,11 +29,14 @@ class SwapRebalanceBase(unittest.TestCase):
         self.replica  = self.input.param("replica", 1)
         self.keys_count = self.input.param("keys-count", 100000)
         self.load_ratio = self.input.param("load-ratio", 1)
+        self.ratio_expiry = self.input.param("ratio-expiry", 0.03)
+        self.ratio_deletes = self.input.param("ratio-deletes", 0.13)
         self.num_buckets = self.input.param("num-buckets", 1)
         self.failover_factor = self.num_swap = self.input.param("num-swap", 1)
         self.num_initial_servers = self.input.param("num-initial-servers", 3)
         self.fail_orchestrator = self.swap_orchestrator = self.input.param("swap-orchestrator", False)
         self.skip_cleanup = self.input.param("skip-cleanup", False)
+        self.do_access = self.input.param("do-access", True)
 
         # Make sure the test is setup correctly
         min_servers = int(self.num_initial_servers) + int(self.num_swap)
@@ -127,8 +130,8 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
             loader["mcsoda"].cfg["ratio-creates"] = 0.5
-            loader["mcsoda"].cfg["ratio-deletes"] = 0.13
-            loader["mcsoda"].cfg["ratio-expirations"] = 0.03
+            loader["mcsoda"].cfg["ratio-deletes"] = self.ratio_deletes
+            loader["mcsoda"].cfg["ratio-expirations"] = self.ratio_expiry
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
             loader["thread"].daemon = True
@@ -204,8 +207,9 @@ class SwapRebalanceBase(unittest.TestCase):
             rest = RestConnection(new_swap_servers[0])
             master = new_swap_servers[0]
 
-        self.log.info("DATA ACCESS PHASE")
-        loaders = SwapRebalanceBase.start_access_phase(self, master)
+        if self.do_access:
+            self.log.info("DATA ACCESS PHASE")
+            loaders = SwapRebalanceBase.start_access_phase(self, master)
 
         self.log.info("SWAP REBALANCE PHASE")
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
