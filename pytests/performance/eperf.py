@@ -25,6 +25,8 @@ from performance import perf
 
 from scripts.perf.rel_cri_stats import CBStatsCollector
 
+from cbkarma.rest_client import CbKarmaClient
+
 class EPerfMaster(perf.PerfBase):
     specURL = "http://hub.internal.couchbase.org/confluence/pages/viewpage.action?pageId=1901816"
 
@@ -238,6 +240,48 @@ class EPerfMaster(perf.PerfBase):
 
     def gated_finish(self, clients, notify):
         pass
+
+    def _dashboard(phase):
+        def _outer(function):
+            def _inner(self, *args, **kargs):
+                if self.input.dashboard:
+                    # Create new rest client if it doesn't exist
+                    if not hasattr(self, 'cbkarma_client'):
+                        hostname, port = self.input.dashboard[0].split(':')
+                        self.cbkarma_client = CbKarmaClient(hostname, port)
+
+                    # Define new test id if it doesn't exist
+                    self.test_id = getattr(self, 'test_id',
+                                           self.cbkarma_client.init()[-1])
+
+                    # Metadata
+                    build = self.rest.get_pools_info()['implementationVersion']
+                    build = build.replace('-enterprise', '')
+                    build = build.replace('-community', '')
+                    spec = self.param('spec', 'unknown')
+                    client_phase = phase + '-' + str(self.parami("prefix", 0))
+
+                    # Change status to 'started'
+                    self.cbkarma_client.update(self.test_id, build=build, spec=spec,
+                                               description='',
+                                               phase=client_phase, status='started')
+
+                    # Execute current phase
+                    result = function(self, *args, **kargs)
+
+                    # Change status to 'done'
+                    self.cbkarma_client.update(self.test_id, build=build, spec=spec,
+                                               description='',
+                                               phase=client_phase, status='done')
+
+                    # Sleep a second in order to avoid timestamp conflict
+                    time.sleep(1)
+                else:
+                    result = function(self, *args, **kargs)
+
+                return result
+            return _inner
+        return _outer
 
     def load_phase(self, num_nodes, num_items):
         # Cluster nodes if master
