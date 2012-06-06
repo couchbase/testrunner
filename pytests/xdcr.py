@@ -2,6 +2,7 @@ from TestInput import TestInputSingleton
 import logger
 import time
 import unittest
+import string
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -121,19 +122,13 @@ class XDCRBaseTest(unittest.TestCase):
         return XDCRBaseTest.poll_for_condition(verify, sleep, timeout)
 
     @staticmethod
-    def verify_changes_feed(rest_conn_a, rest_conn_b, bucket, sleep, timeout):
+    def verify_del_items(rest_conn_a, rest_conn_b, bucket, keys, sleep, timeout):
         def verify():
-            for vbucket in range(len(rest_conn_a.get_vbuckets(bucket))):
-                all_docs = []
-                for rest_conn in [rest_conn_a, rest_conn_b]:
-                    changes = rest_conn.changes_feed(bucket, vbucket)
-                    docs = {}
-                    for change in changes[u'results']:
-                        docs[change[u'id']] = change[u'changes'][u'rev']
-                    all_docs.append(docs)
-                if all_docs[0] != all_docs[1]:
-                    return False
-            return True
+            log = logger.Logger().get_logger()
+            keys_str = '{0}'.format(keys).replace( "'", "\"")
+            all_docs_resp_a = rest_conn_a.all_docs(bucket, {'keys' : keys_str})
+            all_docs_resp_b = rest_conn_b.all_docs(bucket, {'keys' : keys_str})
+            return all_docs_resp_a == all_docs_resp_b
 
         return XDCRBaseTest.poll_for_condition(verify, sleep, timeout)
 
@@ -412,14 +407,13 @@ class XDCRTests(unittest.TestCase):
                                                                cluster_ref_b)
         self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
 
-        time.sleep(15)
-
         # Verify replicated data
-        self.assertTrue(XDCRBaseTest.verify_changes_feed(rest_conn_a,
-                                                         rest_conn_b,
-                                                         self._buckets[0],
-                                                         self._poll_sleep,
-                                                         self._poll_timeout),
+        self.assertTrue(XDCRBaseTest.verify_del_items(rest_conn_a,
+                                                      rest_conn_b,
+                                                      self._buckets[0],
+                                                      kvstore.keys(),
+                                                      self._poll_sleep,
+                                                      self._poll_timeout),
                         "Changes feed verification failed")
 
     def test_continuous_unidirectional_deletes_2(self):
@@ -469,12 +463,13 @@ class XDCRTests(unittest.TestCase):
 
         time.sleep(15)
 
-        # Verify replicated data
-        self.assertTrue(XDCRBaseTest.verify_changes_feed(rest_conn_a,
-                                                         rest_conn_b,
-                                                         self._buckets[0],
-                                                         self._poll_sleep,
-                                                         self._poll_timeout),
+        # Verify replicated data#
+        self.assertTrue(XDCRBaseTest.verify_del_items(rest_conn_a,
+                                                      rest_conn_b,
+                                                      self._buckets[0],
+                                                      kvstore.keys(),
+                                                      self._poll_sleep,
+                                                      self._poll_timeout),
                         "Changes feed verification failed")
 
     def test_continuous_bidirectional_sets(self):

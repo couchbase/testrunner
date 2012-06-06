@@ -1186,18 +1186,15 @@ class RestConnection(object):
                 return True, i
         return False, i
 
-    # Wrapper for reading Couch's changes feed
-    def changes_feed(self, bucket, vbucket, since=0):
-        api = self.baseUrl + "couchBase/{0}%2F{1}/_changes?since={2}".format(bucket, vbucket, since)
-        status, content = httplib2.Http().request(api, "GET")
-        data = json.loads(content)
-        return data
-
     def set_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold=None,
                            viewFragmntThreshold=None, dbFragmentThresholdPercentage=100,
                            viewFragmntThresholdPercentage=100, allowedTimePeriodFromHour=None,
                            allowedTimePeriodFromMin=None, allowedTimePeriodToHour=None,
                            allowedTimePeriodToMin=None, allowedTimePeriodAbort=None):
+    # Reset compaction values to default, try with old fields (dp4 build) and then try
+    # with newer fields
+    def reset_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 80,
+                              viewFragmntThreshold = 80):
         api = self.baseUrl + "controller/setAutoCompaction"
         compaction_request={}
         compaction_request["parallelDBAndViewCompaction"] = parallelDBAndVC
