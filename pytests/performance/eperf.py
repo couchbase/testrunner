@@ -283,6 +283,7 @@ class EPerfMaster(perf.PerfBase):
             return _inner
         return _outer
 
+    @_dashboard(phase='load')
     def load_phase(self, num_nodes, num_items):
         # Cluster nodes if master
         if self.is_master:
@@ -318,6 +319,7 @@ class EPerfMaster(perf.PerfBase):
                                 self.access_phase_items / num_clients))
         return num_clients, start_at
 
+    @_dashboard(phase='access')
     def access_phase(self, items,
                      ratio_sets     = 0,
                      ratio_misses   = 0,
@@ -378,6 +380,7 @@ class EPerfMaster(perf.PerfBase):
                       queries = queries)
 
     # restart the cluster and wait for it to warm up
+    @_dashboard(phase='warmup')
     def warmup_phase(self):
         if not self.is_leader:
             return
@@ -412,6 +415,7 @@ class EPerfMaster(perf.PerfBase):
 
         self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
+    @_dashboard(phase='index')
     def index_phase(self, ddocs, bucket="default"):
         """Create design documents and views"""
 
