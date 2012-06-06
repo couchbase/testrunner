@@ -112,3 +112,16 @@ class RebalanceFailedException(MembaseHttpException):
 class FailoverFailedException(MembaseHttpException):
     def __init__(self, string=''):
         self._message = 'Failover Node failed :{0} '.format(string)
+
+
+class DesignDocCreationException(MembaseHttpException):
+    def __init__(self, design_doc_name, reason = ''):
+        self._message = 'Error occured design document %s: %s' % (design_doc_name, reason)
+
+class QueryViewException(MembaseHttpException):
+    def __init__(self, view_name, reason = ''):
+        self._message = 'Error occured querying view %s: %s' % (view_name, reason)
+
+class ReadDocumentException(MembaseHttpException):
+      def __init__(self, doc_id, reason = ''):
+        self._message = 'Error occured looking up document %s: %s' % (doc_id, reason)
