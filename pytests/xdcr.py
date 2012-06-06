@@ -270,12 +270,18 @@ class XDCRTests(unittest.TestCase):
                         "Verification of replicated revisions failed")
 
     def test_continuous_unidirectional_recreates(self):
+        cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 
         cluster_ref_b = "cluster_ref_b"
         master_b = self._input.clusters.get(1)[0]
         rest_conn_b = RestConnection(master_b)
+
+        # Disable compaction, we should remove these
+        # once the bug in comapctor get fixed
+        rest_conn_a.set_autoCompaction("false", 100, 100)
+        rest_conn_b.set_autoCompaction("false", 100, 100)
 
         # Start load
         kvstore = ClientKeyValueStore()
@@ -342,6 +348,7 @@ class XDCRTests(unittest.TestCase):
                         "Replication verification failed")
 
     def test_continuous_unidirectional_deletes_1(self):
+        cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 
@@ -417,6 +424,7 @@ class XDCRTests(unittest.TestCase):
                         "Changes feed verification failed")
 
     def test_continuous_unidirectional_deletes_2(self):
+        cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 

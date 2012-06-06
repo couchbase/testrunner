@@ -34,8 +34,16 @@ test-viewquery:
 e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 
-test-xdcr:
-	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini -c conf/xdcr.conf
+# Note: remove the comment after fix of MB-5264 is merged
+#test-xdcr-basic:
+#	scripts/start_cluster_and_run_tests.sh b/resources/dev-2-nodes-xdcr.ini conf/xdcr-basic.conf
+
+# Note: remove the comment after all advanced unit tests pass
+#test-xdcr-adv:
+#	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/xdcr-adv.conf
+#test-xdcr-full:
+#    test-xdcr-basic
+#    test-xdcr-adv
 
 # specify number of nodes and testcase
 any-test:
