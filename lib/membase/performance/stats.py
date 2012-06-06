@@ -114,13 +114,15 @@ class StatsCollector(object):
                 # for every sample histogram, produce a temp summary:
                 # temp = [90 per, 95 per, 99 per, client_id, delta]
                 temp = []
+                time = histo['time']
                 delta = histo['delta']
-                del histo['delta']
+                del histo['delta'], histo['time']
                 p = histo_percentile(histo, [0.80, 0.90, 0.95, 0.99, 0.999])
                 # p is list of tuples
                 for val in p:
                     temp.append(val[-1])
                 temp.append(self.client_id)
+                temp.append(time)
                 temp.append(delta)
                 self._task["latency"][key].append(temp)
 
@@ -256,7 +258,9 @@ class StatsCollector(object):
         if self._task["latency"].get(latency_cmd) is None:
             self._task["latency"][latency_cmd] = []
         temp_latency_stat = latency_stat.copy()
-        temp_latency_stat['delta'] =  time.time() - self._task['time']
+        cur_time = time.time()
+        temp_latency_stat['time'] = int(cur_time)
+        temp_latency_stat['delta'] = cur_time - self._task['time']
         self._task["latency"][latency_cmd].append(temp_latency_stat)
 
     def _merge(self):

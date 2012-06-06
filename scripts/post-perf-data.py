@@ -255,7 +255,8 @@ if __name__ == "__main__":
                               "percentile_99th":row[3],
                               "percentile_999th":row[4],
                               "client_id":row[5],
-                              "mystery":row[6]}
+                              "time": row[6],
+                              "mystery":row[7]}
                         lr.update(z)
                         lr.update({"row":index})
                         index = index + 1
