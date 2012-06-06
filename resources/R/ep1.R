@@ -1230,6 +1230,14 @@ if (nrow(ns_server_data) > 0) {
     makeFootnote(footnote)
     makeMetricDef("Cumulative number of retrieval reqs")
 
+    cat("generating cmd_set \n")
+    p <- ggplot(ns_server_data, aes(row, cmd_set, color=buildinfo.version , label= cmd_set)) + labs(x="----time (sec)--->", y="ops/sec")
+    p <- p + geom_point()
+    p <- addopts(p,"cmd_set ops/sec")
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef("Cumulative number of set reqs")
+
     cat("generating get misses \n")
     p <- ggplot(ns_server_data, aes(row, get_misses, color=buildinfo.version , label= get_misses)) + labs(x="----time (sec)--->", y="# of get misses")
     p <- p + geom_point()
