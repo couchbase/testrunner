@@ -8,8 +8,8 @@ import logger
 from couchbase.document import DesignDocument, View
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
 from membase.api.exception import BucketCreationException, ServerJoinException, ClusterRemoteException, \
-    RebalanceFailedException, FailoverFailedException
-
+    RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
+    ReadDocumentException
 log = logger.Logger.get_logger()
 #helper library methods built on top of RestConnection interface
 
@@ -214,8 +214,7 @@ class RestConnection(object):
         status, content = self._http_request(api, 'PUT', str(design_doc),
                                             headers=self._create_capi_headers())
         if not status:
-            raise Exception("unable to create ddoc: " + design_doc_name +
-                            " on bucket: " + bucket)
+            raise DesignDocCreationException(design_doc_name, content)
         return json.loads(content)
 
 
@@ -223,7 +222,7 @@ class RestConnection(object):
         status, content = self._query(design_doc_name, view_name, bucket, "view", query,
                                       timeout)
         if not status:
-            raise Exception("unable to query view")
+            raise QueryViewException(view_name, content)
         return json.loads(content)
 
     def _query(self, design_doc_name, view_name, bucket, view_type, query, timeout):
@@ -283,7 +282,7 @@ class RestConnection(object):
         status, json = self._get_design_doc(bucket, ddoc_name)
 
         if not status:
-            raise Exception("unable to get the ddoc definition: " + ddoc_id)
+            raise ReadDocumentException(ddoc_name, json)
 
         return json
 
@@ -402,7 +401,7 @@ class RestConnection(object):
                                              timeout=timeout)
 
         if not status:
-            raise Exception("unable to retrieve doc %s" % doc_id)
+            raise ReadDocumentException(doc_id, content)
 
         return  json.loads(content)
 
