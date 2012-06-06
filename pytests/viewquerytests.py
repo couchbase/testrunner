@@ -545,7 +545,7 @@ class QueryView:
         return num_keys
 
 class EmployeeDataSet:
-    def __init__(self, rest, docs_per_day = 200, bucket = "default"):
+    def __init__(self, rest, docs_per_day = 200, bucket = "default", limit=None):
         self.docs_per_day = docs_per_day
         self.years = 1
         self.months = 12
@@ -565,6 +565,7 @@ class EmployeeDataSet:
         self.name = "employee_dataset"
         self.kv_store = None
         self.doc_id_map = {}
+        self.limit = limit
 
     def calc_total_doc_count(self):
         return self.years * self.months * self.days * self.docs_per_day * len(self.get_data_sets())
