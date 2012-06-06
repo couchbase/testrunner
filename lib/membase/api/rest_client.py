@@ -1193,8 +1193,6 @@ class RestConnection(object):
                            allowedTimePeriodToMin=None, allowedTimePeriodAbort=None):
     # Reset compaction values to default, try with old fields (dp4 build) and then try
     # with newer fields
-    def reset_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold = 80,
-                              viewFragmntThreshold = 80):
         api = self.baseUrl + "controller/setAutoCompaction"
         compaction_request={}
         compaction_request["parallelDBAndViewCompaction"] = parallelDBAndVC
