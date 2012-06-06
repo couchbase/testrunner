@@ -1233,7 +1233,7 @@ class RestConnection(object):
         if allowedTimePeriodAbort is not None: compaction_request["allowedTimePeriod[abortOutside]"] = allowedTimePeriodAbort
         params = urllib.urlencode(compaction_request)
         status, content = self._http_request(api, "POST", params)
-        return status
+        return status, content
 
     def set_global_loglevel(self, loglevel='error'):
         """Set cluster-wide logging level for core components

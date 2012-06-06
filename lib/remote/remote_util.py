@@ -773,22 +773,19 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
 
     def wait_till_compaction_end(self, rest, bucket, timeout_in_seconds=60):
         end_time = time.time() + float(timeout_in_seconds)
-        ended = False
-        while time.time() < end_time and not ended:
+        compaction_started = False
+        while time.time() < end_time:
             status, vBucket = rest.check_compaction_status(bucket)
             if status:
                 log.info("compacting vBucket {0}".format(vBucket))
                 time.sleep(1)
-                compacting, vBucket = rest.check_compaction_status(bucket)
-                while compacting:
-                    log.info("compacting vBucket {0}".format(vBucket))
-                    time.sleep(1)
-                    compacting, vBucket = rest.check_compaction_status(bucket)
-                    if compacting and vBucket == 0:
-                        ended = True
+                compaction_started = True
+            elif compaction_started:
+                return True
             else:
-                log.error("auto compaction does not start yet.")
+                log.info("auto compaction is not started yet.")
                 time.sleep(1)
+        log.error("auto compaction is not started in {0} sec.".format(str(timeout_in_seconds)))
         return ended
 
     def terminate_processes(self, info, list):
