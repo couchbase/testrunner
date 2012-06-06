@@ -1,4 +1,3 @@
-
 import json
 
 class DesignDocument():
@@ -36,10 +35,11 @@ class DesignDocument():
         return json.dumps(self.as_json())
 
 class View():
-    def __init__(self, name, map_func, red_func=None):
+    def __init__(self, name, map_func, red_func=None, dev_view = True):
         self.name = name
         self.map_func = map_func
         self.red_func = red_func
+        self.dev_view = dev_view
 
     @classmethod
     def _init_from_json(view_self, json_object):
