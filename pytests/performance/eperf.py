@@ -12,6 +12,7 @@ import mcsoda
 import threading
 import random
 import math
+import socket
 
 # membase imports
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -1741,6 +1742,13 @@ class EVPerfClient(EPerfClient):
             self.bg_thread_ctl['run_ok'] = False
             while self.bg_thread.is_alive():
                 time.sleep(1)
+
+        # Send histograms to dashboard
+        if self.input.dashboard and why == "loop":
+            description = socket.gethostname() + '-fg'
+            self.cbkarma_client.histo(self.test_id, description, rv_cur)
+            description = socket.gethostname() + '-bg'
+            self.cbkarma_client.histo(self.test_id, description, self.bg_thread_cur)
 
         return rv_cur, start_time, end_time
 
