@@ -166,6 +166,7 @@ class TestInputParser():
         moxis = []
         moxi_ips = []
         client_ips = []
+        input.dashboard = []
         for section in sections:
             result = re.search('^cluster', section)
             if section == 'servers':
@@ -180,6 +181,8 @@ class TestInputParser():
                 #get global stuff and override for those unset
                 for option in config.options(section):
                     global_properties[option] = config.get(section, option)
+            elif section == 'dashboard':
+                input.dashboard = TestInputParser.get_server_ips(config, section)
             elif result is not None:
                 cluster_list = TestInputParser.get_server_ips(config, section)
                 cluster_ips.extend(cluster_list)
