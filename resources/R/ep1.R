@@ -249,6 +249,7 @@ tryCatch({
 }, error=function(e) {
     print("Cannot find detailed disk stats, they are only available in 2.0")
 })
+ns_server_data $curr_items <- as.numeric(ns_server_data$curr_items)
 ns_server_data $curr_items_tot <- as.numeric(ns_server_data$curr_items_tot)
 ns_server_data $cmd_get <- as.numeric(ns_server_data$cmd_get)
 ns_server_data $cmd_set <- as.numeric(ns_server_data$cmd_set)
@@ -1172,6 +1173,14 @@ if (nrow(ns_server_data) > 0) {
     print(p)
     makeFootnote(footnote)
     makeMetricDef("Percentage of replica items cached in RAM")
+
+    cat("generating curr_items \n")
+    p <- ggplot(ns_server_data, aes(row, curr_items, color=buildinfo.version , label= prettySize(curr_items))) + labs(x="----time (sec)--->", y="curr_items")
+    p <- p + geom_point()
+    p <- addopts(p,"curr_items")
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef("Number of items in bucket")
 
     cat("generating cur_items_total \n")
     p <- ggplot(ns_server_data, aes(row, curr_items_tot, color=buildinfo.version , label= prettySize(curr_items_tot))) + labs(x="----time (sec)--->", y="curr_items_tot")
