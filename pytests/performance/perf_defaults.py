@@ -48,6 +48,7 @@ class PerfDefaults:
     mcsoda_fg_stats_ops     =   1000     # fg ops threshold to persist latency stats
     num_value_samples       =   100      # number of value samples (in memory, use large number with caution)
     parallel_compaction     =   "true"   # process Database and View compaction in parallel. "true": enabled, "false": disabled
+    start_delay             =   0        # delay (seconds) to start access phase
     tear_down               =   1        # 1: enabled, 0: disabled
     tear_down_proxy         =   1        # (prerequsite: tear_down = 1) tear down proxy,  1: enabled, 0: disabled
     tear_down_bucket        =   0        # (prerequsite: tear_down = 1) tear down bucket,  1: enabled, 0: disabled

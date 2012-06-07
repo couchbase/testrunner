@@ -345,7 +345,7 @@ class EPerfMaster(perf.PerfBase):
             print "Accessing"
             items = self.parami("items", items)
             num_clients, start_at = self.access_phase_clients_start_at()
-            start_delay = self.parami("start_delay", 2 * 60) # 2 minute delay.
+            start_delay = self.parami("start_delay", PerfDefaults.start_delay)
             if start_delay > 0:
                 time.sleep(start_delay * self.parami("prefix", 0))
             max_creates = self.parami("max_creates", max_creates) / num_clients
