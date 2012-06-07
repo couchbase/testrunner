@@ -599,3 +599,57 @@ class ViewDeleteTask(Task):
         except QueryViewException as e:
             self.state = FINISHED
             self.set_result(True)
+
+class ViewQueryTask(Task):
+    def __init__(self, server, design_doc_name, view_name,
+                 query, expected_rows = None,
+                 bucket = "default", retry_time = 2):
+        Task.__init__(self, "query_view_task")
+        self.server = server
+        self.bucket = bucket
+        self.view_name = view_name
+        self.design_doc_name = design_doc_name
+        self.query = query
+        self.expected_rows = expected_rows
+        self.retry_time = retry_time
+
+    def execute(self, task_manager):
+
+        rest = RestConnection(self.server)
+
+        try:
+            # make sure view can be queried
+            content =\
+                rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
+
+            if self.expected_rows is None:
+                # no verification
+                self.state = FINISHED
+                self.set_result(content)
+            else:
+                self.state = CHECKING
+                task_manager.schedule(self)
+
+        except QueryViewException as e:
+            # initial query failed, try again
+            task_manager.schedule(self, self.retry_time)
+
+    def check(self, task_manager):
+        rest = RestConnection(self.server)
+
+        try:
+            # query and verify expected num of rows returned
+            content = \
+                rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
+            if content['total_rows'] == self.expected_rows:
+                self.state = FINISHED
+                self.set_result(content)
+            else:
+                # retry until expected results or task times out
+                task_manager.schedule(self, self.retry_time)
+
+        except QueryViewException as e:
+            # subsequent query failed! exit
+            self.state = FINISHED
+            self.set_exception(e)
+
