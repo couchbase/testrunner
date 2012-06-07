@@ -198,7 +198,7 @@ class EPerfMaster(perf.PerfBase):
                         self.merge_dict(final_json[key], value)
                         continue
                     final_json[key].extend(value)
-            if type == 'loop':
+            if type == 'loop' and self.parami("fg_max_ops", 0):
                 final_json['qps']['average'] += self.calc_avg_qps(dict['ops'])
                 final_json['ops'] = self._merge_query_ops(final_json['ops'], dict['ops'])
 
