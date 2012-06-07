@@ -65,7 +65,7 @@ class XDCRBaseTest(unittest.TestCase):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(servers)
         master = servers[0]
         BucketOperationHelper.create_multiple_buckets(
-            master, replica,node_ram_ratio * bucket_ram_ratio, howmany=howmany)
+            master, replica,node_ram_ratio * bucket_ram_ratio, howmany=howmany, sasl=False)
         rest = RestConnection(master)
         buckets = rest.get_buckets()
         for bucket in buckets:
