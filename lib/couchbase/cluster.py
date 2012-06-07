@@ -290,6 +290,35 @@ class Cluster(object):
             bucket - The name of the bucket containing items for this view. (String)
 
         Returns:
-            ViewCreateTask - A task future that is a handle to the scheduled task."""
+            boolean - Whether or not create view was successful."""
         _task = self.async_create_view(server, design_doc_name, view, bucket)
+        return _task.result()
+
+    def async_delete_view(self, server, design_doc_name, view, bucket = "default"):
+        """Asynchronously deletes a views in a design doc
+
+        Parameters:
+            server - The server to handle delete view task. (TestInputServer)
+            design_doc_name - Design doc to be deleted or updated with view(s) being deleted (String)
+            view - The view being deleted (document.View)
+            bucket - The name of the bucket containing items for this view. (String)
+
+        Returns:
+            ViewDeleteTask - A task future that is a handle to the scheduled task."""
+        _task = ViewDeleteTask(server, design_doc_name, view, bucket)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def delete_view(self, server, design_doc_name, view, bucket = "default"):
+        """Synchronously deletes a views in a design doc
+
+        Parameters:
+            server - The server to handle delete view task. (TestInputServer)
+            design_doc_name - Design doc to be deleted or updated with view(s) being deleted (String)
+            view - The view being deleted (document.View)
+            bucket - The name of the bucket containing items for this view. (String)
+
+        Returns:
+            boolean - Whether or not delete view was successful."""
+        _task = self.async_delete_view(server, design_doc_name, view, bucket)
         return _task.result()
