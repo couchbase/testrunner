@@ -422,7 +422,7 @@ class EPerfMaster(perf.PerfBase):
         self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
     @_dashboard(phase='index')
-    def index_phase(self, ddocs, bucket="default"):
+    def index_phase(self, ddocs):
         """Create design documents and views"""
 
         if self.parami("index_phase", 1) > 0:
@@ -440,6 +440,8 @@ class EPerfMaster(perf.PerfBase):
                 start_time = time.time()
 
             # Create design documents and views
+            bucket = self.param('bucket', 'default')
+
             for ddoc_name, d in ddocs.items():
                 d = copy.copy(d)
                 d["language"] = "javascript"
@@ -1724,7 +1726,8 @@ class EVPerfClient(EPerfClient):
                                                     self.bg_thread_cur,
                                                     protocol, host_port, user, pswd,
                                                     stats_collector, self.bg_stores, self.bg_thread_ctl,
-                                                    heartbeat, "loop-bg"))
+                                                    heartbeat, "loop-bg",
+                                                    bucket))
             self.bg_thread.daemon = True
             self.bg_thread.start()
 
@@ -1742,7 +1745,8 @@ class EVPerfClient(EPerfClient):
                                                  stores=stores,
                                                  ctl=ctl,
                                                  heartbeat=heartbeat,
-                                                 why="loop-fg")
+                                                 why="loop-fg",
+                                                 bucket=bucket)
         if self.bg_thread_ctl:
             self.bg_thread_ctl['run_ok'] = False
             while self.bg_thread.is_alive():

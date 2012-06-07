@@ -430,7 +430,8 @@ class PerfBase(unittest.TestCase):
 
         servers = servers or self.input.servers
         sc = self.mk_stats(False)
-        sc.start(servers, "default", process_names, stats_spec, 10, client_id,
+        bucket = self.param("bucket", "default")
+        sc.start(servers, bucket, process_names, stats_spec, 10, client_id,
                  collect_server_stats = collect_server_stats)
         test_params['testrunner'] = self._get_src_version()
         self.test_params = test_params
@@ -710,7 +711,9 @@ class PerfBase(unittest.TestCase):
                                                     protocol, host_port, user, pswd,
                                                     stats_collector=sc,
                                                     ctl=ctl, stores=stores,
-                                                    heartbeat=self.parami("mcsoda_heartbeat", 0),why="loop")
+                                                    heartbeat=self.parami("mcsoda_heartbeat", 0),
+                                                    why="loop",
+                                                    bucket=self.param("bucket", "default"))
 
         ops = { 'tot-sets': cur.get('cur-sets', 0),
                 'tot-gets': cur.get('cur-gets', 0),
