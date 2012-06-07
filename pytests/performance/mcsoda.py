@@ -333,7 +333,7 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
         hot items are chosen from the newest guys.
     """
     num_creates = cur.get('cur-creates', 0)
-    if num_items < 0 or num_items < num_creates \
+    if num_items < 0 \
         or ratio_hot < 0 or ratio_hot > 1:
         print "[mcsoda choose_key_num error] num_items: {0}, num_creates:{1}, ratio_hot: {2}"\
             .format(num_items, num_creates, ratio_hot)
