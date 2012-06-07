@@ -19,6 +19,18 @@ class DesignDocument():
 
         return ddoc_self
 
+    def add_view(self, view):
+        i = 0
+        for current_view in self.views:
+            # if view already exists it will be updated
+            if view.name == current_view.name:
+                self.views[i] = View._init_from_json(view)
+                break
+            i += 1
+
+        if i == len(self.views):
+            self.views.append(view)
+
     def as_json(self):
         json_object = {'_id': self.id,
                  'views': {}}
