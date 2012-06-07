@@ -14,6 +14,7 @@ echo ini_file: ${ini_file}
 cat ${ini_file}
 
 if [ -n "${hot_load_phase}" ] ; then
+  num_clients=1
   extra=",hot_load_phase=1"
 fi
 
