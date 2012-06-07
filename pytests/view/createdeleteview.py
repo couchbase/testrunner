@@ -33,3 +33,11 @@ class CreateDeleteViewTests(ViewBaseTest):
         for design_doc in design_docs:
             self.create_views(server, design_doc, views)
 
+    """Delete single view in single design doc"""
+    def test_delete_view(self):
+        design_doc_name = "ddoc1"
+        server = self.servers[0]
+        view = View("view1", self.default_map_func, self.default_red_func)
+        task = self.cluster.async_create_view(server, design_doc_name, view)
+        task.result(10)
+        self.cluster.delete_view(server, design_doc_name, view)
