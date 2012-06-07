@@ -263,17 +263,21 @@ class EPerfMaster(perf.PerfBase):
                     client_phase = phase + '-' + str(self.parami("prefix", 0))
 
                     # Change status to 'started'
-                    self.cbkarma_client.update(self.test_id, build=build, spec=spec,
-                                               description='',
-                                               phase=client_phase, status='started')
+                    if self.parami(phase + "_phase", 0):
+                        self.cbkarma_client.update(self.test_id, build=build,
+                                                   spec=spec, description='',
+                                                   phase=client_phase,
+                                                   status='started')
 
                     # Execute current phase
                     result = function(self, *args, **kargs)
 
                     # Change status to 'done'
-                    self.cbkarma_client.update(self.test_id, build=build, spec=spec,
-                                               description='',
-                                               phase=client_phase, status='done')
+                    if self.parami(phase + "_phase", 0):
+                        self.cbkarma_client.update(self.test_id, build=build,
+                                                   spec=spec, description='',
+                                                   phase=client_phase,
+                                                   status='done')
 
                     # Sleep a second in order to avoid timestamp conflict
                     time.sleep(1)
