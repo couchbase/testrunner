@@ -31,6 +31,18 @@ class DesignDocument():
         if i == len(self.views):
             self.views.append(view)
 
+    def delete_view(self, view):
+        view_deleted = False
+        i = 0
+        for current_view in self.views:
+            if view.name == current_view.name:
+                del self.views[i]
+                view_deleted = True
+                break
+            i += 1
+
+        return view_deleted
+
     def as_json(self):
         json_object = {'_id': self.id,
                  'views': {}}

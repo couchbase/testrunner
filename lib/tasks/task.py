@@ -553,3 +553,49 @@ class ViewCreateTask(Task):
             self.set_result(True)
         except QueryViewException as e:
             task_manager.schedule(self)
+
+
+class ViewDeleteTask(Task):
+    def __init__(self, server, design_doc_name, view, bucket = "default"):
+        Task.__init__(self, "delete_view_task")
+        self.server = server
+        self.bucket = bucket
+        self.view = view
+        prefix = ("","dev_")[self.view.dev_view]
+        self.design_doc_name = prefix + design_doc_name
+
+    def execute(self, task_manager):
+
+        rest = RestConnection(self.server)
+
+        try:
+            # remove view from existing design doc
+            content = rest.get_ddoc(self.bucket, self.design_doc_name)
+            ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
+            status = ddoc.delete_view(self.view)
+            if not status:
+                self.state = FINISHED
+                self.set_exception(Exception('View does not exist! %s' % (self.view.name)))
+
+            # update design doc
+            rest.create_design_document(self.bucket, ddoc)
+            self.state = CHECKING
+            task_manager.schedule(self, 2)
+
+        except (ValueError, ReadDocumentException, DesignDocCreationException) as e:
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        rest = RestConnection(self.server)
+
+        try:
+            # make sure view was deleted
+            query = {"stale" : "ok"}
+            content = \
+                rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
+            self.state = FINISHED
+            self.set_result(False)
+        except QueryViewException as e:
+            self.state = FINISHED
+            self.set_result(True)
