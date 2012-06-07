@@ -252,8 +252,9 @@ class EPerfMaster(perf.PerfBase):
                         self.cbkarma_client = CbKarmaClient(hostname, port)
 
                     # Define new test id if it doesn't exist
-                    self.test_id = getattr(self, 'test_id',
-                                           self.cbkarma_client.init()[-1])
+                    if not hasattr(self, 'test_id'):
+                        self.test_id = self.param("test_id",
+                                                  self.cbkarma_client.init()[-1])
 
                     # Metadata
                     build = self.rest.get_pools_info()['implementationVersion']
