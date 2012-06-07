@@ -322,3 +322,41 @@ class Cluster(object):
             boolean - Whether or not delete view was successful."""
         _task = self.async_delete_view(server, design_doc_name, view, bucket)
         return _task.result()
+
+
+    def async_query_view(self, server, design_doc_name, view_name, query,
+                         expected_rows = None, bucket = "default", retry_time = 2):
+        """Asynchronously query a views in a design doc
+
+        Parameters:
+            server - The server to handle query view task. (TestInputServer)
+            design_doc_name - Design doc with view(s) being queried(String)
+            view_name - The view being queried (String)
+            expected_rows - The number of rows expected to be returned from the query (int)
+            bucket - The name of the bucket containing items for this view. (String)
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+
+        Returns:
+            ViewQueryTask - A task future that is a handle to the scheduled task."""
+        _task = ViewQueryTask(server, design_doc_name, view_name, query, expected_rows, bucket, retry_time)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def query_view(self, server, design_doc_name, view_name, query,
+                   expected_rows = None, bucket = "default", retry_time = 2):
+        """Synchronously query a views in a design doc
+
+        Parameters:
+            server - The server to handle query view task. (TestInputServer)
+            design_doc_name - Design doc with view(s) being queried(String)
+            view_name - The view being queried (String)
+            expected_rows - The number of rows expected to be returned from the query (int)
+            bucket - The name of the bucket containing items for this view. (String)
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+
+        Returns:
+            ViewQueryTask - A task future that is a handle to the scheduled task."""
+        _task = self.async_query_view(server, design_doc_name, view_name, query, expected_rows, bucket, retry_time)
+        return _task.result()
+
+
