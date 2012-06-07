@@ -1656,6 +1656,52 @@ function(doc) {
 
         self.end_stats(sc, ops, 'loop')
 
+    def test_minimal(self):
+        """Minimal performance test which cover all key phases"""
+
+        self.spec("test-minimal")
+
+        self.rest.create_bucket(bucket='default', ramQuotaMB=128,
+                                bucketType='couchbase')
+
+        # Load phase
+        items = self.parami('items', 1000)
+        notify = self.gated_start(self.input.clients)
+        self.load_phase(self.parami('num_nodes', 10), items)
+
+        # Index phase
+        view_gen = ViewGen()
+        ddocs = view_gen.generate_all_docs_view()
+        self.index_phase(ddocs)
+
+        # Access phase
+        limit = self.parami('limit', 10)
+        query_suffix = self.param("query_suffix", "")
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, pseudo=True)
+
+        self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 50)
+        self.fg_max_ops = self.parami('fg_max_ops', 500)
+
+        # Rotate host so multiple clients don't hit the same HTTP/REST server.
+        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+
+        self.access_phase(items,
+                          ratio_sets = self.paramf('ratio_sets', 0.5),
+                          ratio_misses = self.paramf('ratio_misses', 0.2),
+                          ratio_creates = self.paramf('ratio_creates', 0.5),
+                          ratio_deletes = self.paramf('ratio_deletes', 0.5),
+                          ratio_hot = self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
+                          queries = queries,
+                          proto_prefix = "couchbase",
+                          host = host)
+
+        self.rest.delete_bucket(bucket='default')
+
+        self.gated_finish(self.input.clients, notify)
+
 class EPerfClient(EPerfMaster):
 
     def setUp(self):
