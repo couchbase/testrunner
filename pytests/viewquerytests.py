@@ -515,7 +515,7 @@ class QueryView:
                         tc.assertEquals(len(failures), 0, msg)
 
                 except:
-                    self.log.error("Last query result:\n\n%s\n\n" % (json.dumps(results, sort_keys=True, indent=4)))
+                    self.log.error("Query failed: see test result logs for details")
                     self.results.addFailure(tc, sys.exc_info())
 
             else:
@@ -1212,14 +1212,14 @@ class QueryHelper:
                     for key in mc_doc.keys():
                         if(mc_doc[key] != view_doc[key]):
                             err_msg =\
-                                "error verifying document id %s: retrieved value %s expected %s" % \
+                                "error verifying document id %s: retrieved value %s expected %s \n" % \
                                     (doc_id, mc_doc[key], view_doc[key])
                             failures.append(err_msg)
                 else:
-                    failures.append("doc_id %s could not be retrieved for verification" % doc_id)
+                    failures.append("doc_id %s could not be retrieved for verification \n" % doc_id)
 
         else:
-            failures.append("cannot verify view result values without include_docs filter")
+            failures.append("cannot verify view result values without include_docs filter \n")
 
         return failures
 
