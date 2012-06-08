@@ -523,9 +523,9 @@ class PerfBase(unittest.TestCase):
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
 
         if not user.strip():
-            user = self.param("rest_username", "Administrator")
+            user = self.input.servers[0].rest_username
         if not pswd.strip():
-            pswd = self.param("rest_password", "password")
+            pswd = self.input.servers[0].rest_password
 
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
@@ -699,6 +699,12 @@ class PerfBase(unittest.TestCase):
 
         self.log.info("mcsoda - protocol %s" % protocol)
         protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
+
+        if not user.strip():
+            user = self.input.servers[0].rest_username
+        if not pswd.strip():
+            pswd = self.input.servers[0].rest_password
+
         self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
