@@ -1293,6 +1293,45 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 else:
                     return 0
 
+    def get_process_statistics(self, process_name=None, process_pid=None):
+        '''
+        Gets process statistics for windows nodes
+        WMI is required to be intalled on the node
+        stats_windows_helper should be located on the node
+        '''
+        info = self.extract_remote_info()
+        remote_command = "cd ~; /cygdrive/c/Python27/python stats_windows_helper.py"
+        if process_name:
+            remote_command.append(" " + process_name)
+        elif process_pid:
+            remote_command.append(" " + process_pid)
+
+        if info.type.lower() == "windows":
+            o,r = self.execute_command(remote_command)
+            if r:
+                log.error("Command didn't run successfully. Error: {0}".format(r))
+            return o;
+        else:
+            log.error("Function is implemented only for Windows OS")
+            return None
+
+    def get_process_statistics_parameter(self, parameter, process_name=None, process_pid=None):
+       if not parameter:
+           log.error("parameter cannot be None")
+
+       parameters_list = self.get_process_statistics(process_name, process_pid)
+
+       if not parameters_list:
+           log.error("no statistics found")
+           return None
+       parameters_dic = dict(item.split(' = ') for item in parameters_list)
+
+       if parameter in parameters_dic:
+           return parameters_dic[parameter]
+       else:
+           log.error("parameter '{0}' is not found".format(parameter))
+           return None
+
 class RemoteUtilHelper(object):
 
     @staticmethod
