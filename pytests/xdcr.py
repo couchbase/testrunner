@@ -280,8 +280,8 @@ class XDCRTests(unittest.TestCase):
 
         # Disable compaction, we should remove these
         # once the bug in comapctor get fixed
-        rest_conn_a.set_auto_compaction("false", 100, 100)
-        rest_conn_b.set_auto_compaction("false", 100, 100)
+        #rest_conn_a.set_auto_compaction("false", 100, 100)
+        #rest_conn_b.set_auto_compaction("false", 100, 100)
 
         # Start load
         kvstore = ClientKeyValueStore()
