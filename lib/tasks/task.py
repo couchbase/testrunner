@@ -11,7 +11,8 @@ from couchbase.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
 import json
-from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException
+from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
+                                        GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound
 
 #TODO: Setup stacktracer
 #TODO: Needs "easy_install pygments"
@@ -760,3 +761,283 @@ class ViewQueryTask(Task):
             self.state = FINISHED
             self.log.info("Unexpected Exception Caught")
             self.set_exception(e)
+
+
+class ModifyFragmentationConfigTask(Task):
+
+    """
+        Given a config dictionary attempt to configure fragmentation settings.
+        This task will override the default settings that are provided for
+        a given <bucket>.
+    """
+
+    def __init__(self, server, config = None, bucket = "default"):
+        Task.__init__(self, "modify_frag_config_task")
+
+        self.server = server
+        self.config = {"parallelDBAndVC" : "false",
+                       "dbFragmentThreshold" : None,
+                       "viewFragmntThreshold" : None,
+                       "dbFragmentThresholdPercentage" : 100,
+                       "viewFragmntThresholdPercentage" : 100,
+                       "allowedTimePeriodFromHour" : None,
+                       "allowedTimePeriodFromMin" : None,
+                       "allowedTimePeriodToHour" : None,
+                       "allowedTimePeriodToMin" : None,
+                       "allowedTimePeriodAbort" : None,
+                       "autoCompactionDefined" : "true"}
+        self.bucket = bucket
+
+        for key in config:
+            self.config[key] = config[key]
+
+    def execute(self, task_manager):
+        rest = RestConnection(self.server)
+
+        try:
+            rest.set_auto_compaction(parallelDBAndVC = self.config["parallelDBAndVC"],
+                                     dbFragmentThreshold = self.config["dbFragmentThreshold"],
+                                     viewFragmntThreshold = self.config["viewFragmntThreshold"],
+                                     dbFragmentThresholdPercentage = self.config["dbFragmentThresholdPercentage"],
+                                     viewFragmntThresholdPercentage = self.config["viewFragmntThresholdPercentage"],
+                                     allowedTimePeriodFromHour = self.config["allowedTimePeriodFromHour"],
+                                     allowedTimePeriodFromMin = self.config["allowedTimePeriodFromMin"],
+                                     allowedTimePeriodToHour = self.config["allowedTimePeriodToHour"],
+                                     allowedTimePeriodToMin = self.config["allowedTimePeriodToMin"],
+                                     allowedTimePeriodAbort = self.config["allowedTimePeriodAbort"],
+                                     bucket = self.bucket)
+
+            self.state = CHECKING
+            task_manager.schedule(self, 10)
+
+        except Exception as e:
+            self.state = FINISHED
+            self.set_exception(e)
+
+
+    def check(self, task_manager):
+
+        rest = RestConnection(self.server)
+        try:
+            # verify server accepted settings
+            content = rest.get_bucket_json(self.bucket)
+            if content["autoCompactionSettings"] == False:
+                self.set_exception(Exception("Failed to set auto compaction settings"))
+            else:
+                # retrieved compaction settings
+                self.set_result(True)
+            self.state = FINISHED
+
+        except GetBucketInfoFailed as e:
+            # subsequent query failed! exit
+            self.state = FINISHED
+            self.set_exception(e)
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
+
+class MonitorViewFragmentationTask(Task):
+
+    """
+        Attempt to monitor fragmentation that is occurring for a given design_doc.
+        execute stage is just for preliminary sanity checking of values and environment.
+
+        Check function looks at index file accross all nodes and attempts to calculate
+        total fragmentation occurring by the views within the design_doc.
+
+        Note: If autocompaction is enabled and user attempts to monitor for fragmentation
+        value higher than level at which auto_compaction kicks in a warning is sent and
+        it is best user to use lower value as this can lead to infinite monitoring.
+    """
+
+    def __init__(self, server, design_doc_name, fragmentation_value = 10, bucket = "default"):
+
+        Task.__init__(self, "monitor_frag_task")
+        self.server = server
+        self.bucket = bucket
+        self.fragmentation_value = fragmentation_value
+        self.design_doc_name = design_doc_name
+
+
+    def execute(self, task_manager):
+
+        # sanity check of fragmentation value
+        if  self.fragmentation_value < 0 or self.fragmentation_value > 100:
+            err_msg =\
+                "Invalid value for fragmentation %d" % self.fragmentation_value
+            self.state = FINISHED
+            self.set_exception(Exception(err_msg))
+
+        # warning if autocompaction is less than <fragmentation_value>
+        try:
+            auto_compact_percentage = self._get_current_auto_compaction_percentage()
+            if auto_compact_percentage != "undefined" and auto_compact_percentage < self.fragmentation_value:
+                self.log.warn("Auto compaction is set to %s. Therefore fragmentation_value %s may not be reached" % (auto_compact_percentage, self.fragmentation_value))
+
+            self.state = CHECKING
+            task_manager.schedule(self, 5)
+        except GetBucketInfoFailed as e:
+            self.state = FINISHED
+            self.set_exception(e)
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
+
+    def _get_current_auto_compaction_percentage(self):
+        """ check at bucket level and cluster level for compaction percentage """
+
+        auto_compact_percentage = None
+        rest = RestConnection(self.server)
+
+        content = rest.get_bucket_json(self.bucket)
+        if content["autoCompactionSettings"] != False:
+            auto_compact_percentage =\
+                content["autoCompactionSettings"]["viewFragmentationThreshold"]["percentage"]
+        else:
+            # try to read cluster level compaction settings
+            content = rest.cluster_status()
+            auto_compact_percentage =\
+                content["autoCompactionSettings"]["viewFragmentationThreshold"]["percentage"]
+
+        return auto_compact_percentage
+
+    def check(self, task_manager):
+
+        rest = RestConnection(self.server)
+        new_frag_value = MonitorViewFragmentationTask.\
+            calc_ddoc_fragmentation(rest, self.design_doc_name, self.bucket)
+
+        self.log.info("current amount of fragmentation = %d" % new_frag_value)
+        if new_frag_value > self.fragmentation_value:
+            self.state = FINISHED
+            self.set_result(True)
+        else:
+            # try again
+            task_manager.schedule(self, 2)
+
+    @staticmethod
+    def aggregate_ddoc_info(rest, design_doc_name, bucket = "default"):
+
+        nodes = rest.node_statuses()
+        info = []
+        for node in nodes:
+            server_info = {"ip" : node.ip,
+                           "port" : node.port,
+                           "username" : rest.username,
+                           "password" : rest.password}
+            rest = RestConnection(server_info)
+            status, content = rest.set_view_info(bucket, design_doc_name)
+            if status:
+                info.append(content)
+
+        return info
+    @staticmethod
+    def calc_ddoc_fragmentation(rest, design_doc_name, bucket = "default"):
+
+        total_disk_size = 0
+        total_data_size = 0
+        total_fragmentation = 0
+
+        nodes_ddoc_info = \
+            MonitorViewFragmentationTask.aggregate_ddoc_info(rest,
+                                                         design_doc_name,
+                                                         bucket)
+        total_disk_size = sum([content['disk_size'] for content in nodes_ddoc_info])
+        total_data_size = sum([content['data_size'] for content in nodes_ddoc_info])
+
+        if total_disk_size > 0 and total_data_size > 0:
+            total_fragmentation =\
+                (total_disk_size - total_data_size)/float(total_disk_size) * 100
+
+        return total_fragmentation
+
+class ViewCompactionTask(Task):
+
+    """
+        Executes view compaction for a given design doc. This is technicially view compaction
+        as represented by the api and also because the fragmentation is generated by the
+        keys emitted by map/reduce functions within views.  Task will check that compaction
+        history for design doc is incremented and if any work was really done.
+    """
+
+    def __init__(self, server, design_doc_name, bucket = "default"):
+
+        Task.__init__(self, "view_compaction_task")
+        self.server = server
+        self.bucket = bucket
+        self.design_doc_name = design_doc_name
+        self.ddoc_id = "_design%2f"+design_doc_name
+        self.num_of_compactions = 0
+        self.precompacted_frag_val = 0
+    def execute(self, task_manager):
+        rest = RestConnection(self.server)
+
+        try:
+            self.num_of_compactions, self.precompacted_frag_val = \
+                self._get_compaction_details()
+            self.log.info("begin compacting design doc %s" % self.design_doc_name)
+            rest.ddoc_compaction(self.ddoc_id)
+            self.state = CHECKING
+            task_manager.schedule(self, 2)
+        except (CompactViewFailed, SetViewInfoNotFound) as ex:
+            self.state = FINISHED
+            self.set_exception(ex)
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
+    # verify compaction history incremented and some defraging occurred
+    def check(self, task_manager):
+
+        try:
+            new_compaction_count, compacted_frag_val = self._get_compaction_details()
+            if new_compaction_count > self.num_of_compactions:
+                frag_val_diff = compacted_frag_val - self.precompacted_frag_val
+                self.log.info("fragmentation went from %d to %d" %\
+                              (self.precompacted_frag_val, compacted_frag_val))
+
+                if frag_val_diff > 0:
+                    # compaction ran sucessfully but datasize still same
+                    # perhaps we are still compacting
+                    if self._is_compacting():
+                        task_manager.schedule(self, 2)
+
+                    # probably we already compacted, but no work needed to be done
+                    # returning False
+                    self.set_result(False)
+                else:
+                    self.set_result(True)
+            else:
+                self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
+
+        except (SetViewInfoNotFound) as ex:
+            self.state = FINISHED
+            self.set_exception(ex)
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
+        self.state = FINISHED
+
+    def _get_compaction_details(self):
+        rest = RestConnection(self.server)
+        status, content = rest.set_view_info(self.bucket, self.design_doc_name)
+        curr_no_of_compactions = content["stats"]["compactions"]
+        curr_ddoc_fragemtation = \
+            MonitorViewFragmentationTask.calc_ddoc_fragmentation(rest, self.design_doc_name, self.bucket)
+        return (curr_no_of_compactions, curr_ddoc_fragemtation)
+
+    def _is_compacting(self):
+        rest = RestConnection(self.server)
+        status, content = rest.set_view_info(self.bucket, self.design_doc_name)
+        return content["compact_running"] == "true"

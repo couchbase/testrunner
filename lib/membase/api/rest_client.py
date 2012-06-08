@@ -9,7 +9,7 @@ from couchbase.document import DesignDocument, View
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
 from membase.api.exception import BucketCreationException, ServerJoinException, ClusterRemoteException, \
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
-    ReadDocumentException
+    ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound
 log = logger.Logger.get_logger()
 #helper library methods built on top of RestConnection interface
 
@@ -447,6 +447,19 @@ class RestConnection(object):
 
         return status, json_parsed
 
+    # Make a _design/_info request
+    def set_view_info(self, bucket, design_name):
+        api = self.baseUrl + \
+            'couchBase/_set_view/{0}/_design/{1}/_info'.format(
+            bucket, design_name)
+
+        status, content = self._http_request(
+            api, 'GET', headers=self._create_capi_headers())
+
+        if not status:
+            raise SetViewInfoNotFound(design_name, content)
+        json_parsed = json.loads(content)
+        return status, json_parsed
 
     # Make a _spatial/_info request
     def spatial_info(self, bucket, design_name):
@@ -1028,6 +1041,15 @@ class RestConnection(object):
 
         return stats
 
+    def get_bucket_json(self, bucket='default'):
+        api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
+
+        status, content = self._http_request(api)
+        if not status:
+            raise GetBucketInfoFailed(bucket, content)
+
+        return json.loads(content)
+
     def get_bucket(self, bucket='default'):
         bucketInfo = None
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
@@ -1202,6 +1224,13 @@ class RestConnection(object):
         disk_size = (json_parsed[0]["basicStats"]["diskUsed"]) / (1024 * 1024)
         return status, disk_size
 
+    def ddoc_compaction(self, design_doc_id, bucket = "default"):
+        api = self.baseUrl + "pools/default/buckets/%s/ddocs/%s/controller/compactView" % \
+            (bucket, design_doc_id)
+        status, content = self._http_request(api, 'POST')
+        if not status:
+            raise CompactViewFailed(design_doc_id, content)
+
     def check_compaction_status(self, bucket):
         vbucket = self.get_vbuckets(bucket)
         for i in range(len(vbucket)):
@@ -1230,13 +1259,25 @@ class RestConnection(object):
                             allowedTimePeriodFromMin=None,
                             allowedTimePeriodToHour=None,
                             allowedTimePeriodToMin=None,
-                            allowedTimePeriodAbort=None):
+                            allowedTimePeriodAbort=None,
+                            bucket = None):
         """Reset compaction values to default, try with old fields (dp4 build)
         and then try with newer fields"""
+        params = {}
+        api = self.baseUrl
 
-        api = self.baseUrl + "controller/setAutoCompaction"
+        if bucket is None:
+            # setting is cluster wide
+            api = api + "controller/setAutoCompaction"
+        else:
+            # overriding per/bucket compaction setting
+            api = api + "pools/default/buckets/" + bucket
+            params["autoCompactionDefined"] = "true"
+            # reuse current ram quota in mb
+            quota = self.get_bucket_json(bucket)["quota"]["ram"]/1048576
+            params["ramQuotaMB"] = quota
 
-        params = {"parallelDBAndViewCompaction": parallelDBAndVC}
+        params["parallelDBAndViewCompaction"] =  parallelDBAndVC
         # Need to verify None because the value could be = 0
         if dbFragmentThreshold is not None:
             params["databaseFragmentationThreshold[size]"] = dbFragmentThreshold

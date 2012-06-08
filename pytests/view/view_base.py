@@ -9,6 +9,7 @@ class ViewBaseTest(BaseTestCase):
         map_func = 'function (doc) { emit(null, doc);}'
         self.default_view = View("default_view", map_func, None)
 
+
     def tearDown(self):
         super(ViewBaseTest, self).tearDown()
 
@@ -29,3 +30,12 @@ class ViewBaseTest(BaseTestCase):
         return [View(ref_view.name+str(i), ref_view.map_func, None, False) \
                 for i in range(0,count)]
 
+
+    def disable_compaction(self, server = None, bucket = "default"):
+
+        server = server or self.servers[0]
+        new_config = {"viewFragmntThresholdPercentage" : None,
+                      "dbFragmentThresholdPercentage" :  None,
+                      "dbFragmentThreshold" : None,
+                      "viewFragmntThreshold" : None}
+        self.cluster.modify_fragmentation_config(server, new_config, bucket)

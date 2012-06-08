@@ -360,3 +360,105 @@ class Cluster(object):
         return _task.result(timeout)
 
 
+    def modify_fragmentation_config(self, server, config, bucket = "default", timeout=None):
+        """Synchronously modify fragmentation configuration spec
+
+        Parameters:
+            server - The server to handle fragmentation config task. (TestInputServer)
+            config - New compaction configuration (dict - see task)
+            bucket - The name of the bucket fragementation config applies to. (String)
+
+        Returns:
+            boolean - True if config values accepted."""
+
+        _task = ModifyFragmentationConfigTask(server, config, bucket)
+        self.task_manager.schedule(_task)
+        return _task.result(timeout)
+
+
+    def async_monitor_view_fragmentation(self, server,
+                                         design_doc_name,
+                                         fragmentation_value,
+                                         bucket = "default",
+                                         timeout = None):
+        """Asynchronously monitor view fragmentation.
+
+           When <fragmentation_value> is reached on the
+           index file for <design_doc_name> this method
+           will return.
+
+        Parameters:
+            server - The server to handle fragmentation config task. (TestInputServer)
+            design_doc_name - design doc with views represented in index file. (String)
+            fragmentation_value - target amount of fragmentation within index file to detect. (String)
+            bucket - The name of the bucket design_doc belongs to. (String)
+
+        Returns:
+            MonitorViewFragmentationTask - A task future that is a handle to the scheduled task."""
+
+        _task = MonitorViewFragmentationTask(server, design_doc_name,
+                                             fragmentation_value, bucket)
+        self.task_manager.schedule(_task)
+        return _task
+
+
+    def monitor_view_fragmentation(self, server,
+                                   design_doc_name,
+                                   fragmentation_value,
+                                   bucket = "default",
+                                   timeout = None):
+        """Synchronously monitor view fragmentation.
+
+           When <fragmentation_value> is reached on the
+           index file for <design_doc_name> this method
+           will return.
+
+        Parameters:
+            server - The server to handle fragmentation config task. (TestInputServer)
+            design_doc_name - design doc with views represented in index file. (String)
+            fragmentation_value - target amount of fragmentation within index file to detect. (String)
+            bucket - The name of the bucket design_doc belongs to. (String)
+
+        Returns:
+            boolean - True if <fragmentation_value> reached"""
+
+        _task = self.async_monitor_view_fragmentation(server, design_doc_name,
+                                                      fragmentation_value,
+                                                      bucket)
+        self.task_manager.schedule(_task)
+        return _task.result(timeout)
+
+    def async_compact_view(self, server, design_doc_name, bucket = "default"):
+        """Asynchronously run view compaction.
+
+        Compacts index file represented by views within the specified <design_doc_name>
+
+        Parameters:
+            server - The server to handle fragmentation config task. (TestInputServer)
+            design_doc_name - design doc with views represented in index file. (String)
+            bucket - The name of the bucket design_doc belongs to. (String)
+
+        Returns:
+            ViewCompactionTask - A task future that is a handle to the scheduled task."""
+
+
+        _task = ViewCompactionTask(server, design_doc_name, bucket)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def compact_view(self, server, design_doc_name, bucket = "default", timeout=None):
+        """Synchronously run view compaction.
+
+        Compacts index file represented by views within the specified <design_doc_name>
+
+        Parameters:
+            server - The server to handle fragmentation config task. (TestInputServer)
+            design_doc_name - design doc with views represented in index file. (String)
+            bucket - The name of the bucket design_doc belongs to. (String)
+
+        Returns:
+            boolean - True file size reduced after compaction, False if successful but no work done """
+
+        _task = self.async_compact_view(server, design_doc_name, bucket)
+        return _task.result(timeout)
+

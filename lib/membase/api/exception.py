@@ -125,3 +125,19 @@ class QueryViewException(MembaseHttpException):
 class ReadDocumentException(MembaseHttpException):
       def __init__(self, doc_id, reason = ''):
         self._message = 'Error occured looking up document %s: %s' % (doc_id, reason)
+
+class CompactViewFailed(MembaseHttpException):
+      def __init__(self, design_doc_name, reason = ''):
+        self._message = 'Error occured triggering compaction for design_doc %s: %s' %\
+            (design_doc_name, reason)
+
+class SetViewInfoNotFound(MembaseHttpException):
+      def __init__(self, design_doc_name, reason = ''):
+        self._message = 'Error occured reading set_view _info of ddoc %s: %s' %\
+            (design_doc_name, reason)
+
+
+class GetBucketInfoFailed(MembaseHttpException):
+    def __init__(self, bucket, reason = ''):
+        self._message = 'Error occured getting bucket information %s: %s' %\
+            (bucket, reason)
