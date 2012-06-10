@@ -1019,8 +1019,11 @@ class ViewBasicTests(unittest.TestCase):
 
         api = rest.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
         status, content = rest._http_request(api, 'PUT', function, headers=rest._create_capi_headers())
-#        self.created_views[view] = bucket
-
+        if not status:
+            json_parsed = json.loads(content)
+            self.assertEquals("invalid_view" , json_parsed["reason"])
+        else:
+            self.fail("should be error during creation view with the function : {0}".format(function))
         # try to load some documents to see if memcached is running
         ViewBaseTests._load_docs(self, self.num_docs, prefix, False)
 
