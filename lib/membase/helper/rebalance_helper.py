@@ -342,8 +342,12 @@ class RebalanceHelper():
         log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
         delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
         delta = abs(delta)
+
         if delta > 0:
-            missing_percentage = delta * 1.0 / (sum * (replica_factor + 1))
+            if sum==0:
+                missing_percentage = 0
+            else:
+                missing_percentage = delta * 1.0 / (sum * (replica_factor + 1))
         else:
             missing_percentage = 1
         log.info("delta : {0} missing_percentage : {1} replica_factor : {2}".format(delta, \
