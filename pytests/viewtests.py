@@ -477,7 +477,7 @@ class ViewBaseTests(unittest.TestCase):
             except Exception as ex:
                 self.log.error("view_results not ready yet , try again in {1} seconds... , error {0}".format(ex, timeout))
                 time.sleep(timeout)
-        self.fail("unable to get view_results for {0} after 4 tries".format(view))
+        self.fail("unable to get view_results for {0} after {1} tries".format(view, num_tries))
 
     @staticmethod
     def _setup_cluster(self):
