@@ -169,6 +169,44 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("/etc/init.d/membase-server start")
             self.log_command_output(o, r)
 
+    def start_server(self, os="unix"):
+        if os == "windows":
+            b_version, s_version, f_version = self.find_build_version()
+            if f_version.startswith("1.8") or f_version.startswith("2."):
+                o, r = self.execute_command("net start couchbaseserver")
+                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("net start membaseserver")
+                self.log_command_output(o, r)
+        elif os == "unix":
+            if self.is_membase_installed():
+                o, r = self.execute_command("/etc/init.d/membase-server start")
+                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("/etc/init.d/couchbase-server start")
+                self.log_command_output(o, r)
+        else:
+            self.log.error("don't know operating system or product version")
+
+    def stop_server(self, os="unix"):
+        if os == "windows":
+            b_version, s_version, f_version = self.find_build_version()
+            if f_version.startswith("1.8") or f_version.startswith("2.0"):
+                o, r = self.execute_command("net stop couchbaseserver")
+                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("net stop membaseserver")
+                self.log_command_output(o, r)
+        elif os == "unix":
+            if self.is_membase_installed():
+                o, r = self.execute_command("/etc/init.d/membase-server stop")
+                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("/etc/init.d/couchbase-server stop")
+                self.log_command_output(o, r)
+        else:
+            self.log.error("don't know operating system or product version")
+
     def stop_schedule_tasks(self):
         log.info("STOP ALL SCHEDULE TASKS: installme, removeme and upgrademe")
         output, error = self.execute_command("cmd /c schtasks /end /tn installme")
