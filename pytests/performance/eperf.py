@@ -10,8 +10,6 @@ import gzip
 import copy
 import mcsoda
 import threading
-import random
-import math
 import socket
 
 # membase imports
@@ -206,27 +204,16 @@ class EPerfMaster(perf.PerfBase):
         file.write("{0}".format(json.dumps(final_json)))
         file.close()
 
-    def min_value_size(self, avg=2048, num_samples=100):
+    def min_value_size(self):
         # Returns an array of different value sizes so that
-        # the average value size is slightly bigger
-        # than [avg] and the ratio of sizes follow
-        # gaussion distribution with std deviation = avg/3
+        # the average value size is 2k and the ratio of
+        # sizes is 33% 1k, 33% 2k, 33% 3k, 1% 10k.
         mvs = []
-
-        for i in range(2, 6):
-            mvs.append(avg * i)
-            mvs.append(avg / i)
-
-        random.seed(0)
-
-        for i in range(num_samples - 8):
-            mvs.append(int(math.fabs(random.normalvariate(avg, avg / 3))))
-
-        print "value sizes:"
-        print mvs
-        print "num of value samples = {0}".format(num_samples)
-        print "avg value size = {0}".format(sum(mvs) / num_samples)
-
+        for i in range(33):
+            mvs.append(1024)
+            mvs.append(2048)
+            mvs.append(3072)
+        mvs.append(10240)
         return mvs
 
     # Gets the vbucket count
@@ -303,10 +290,8 @@ class EPerfMaster(perf.PerfBase):
                             num_clients))
             items = self.parami("num_items", num_items) / num_clients
             self.is_multi_node = False
-            mvs = self.min_value_size(self.parami("avg_value_size", PerfDefaults.avg_value_size),
-                                      self.parami("num_value_samples", PerfDefaults.num_value_samples))
             self.load(items,
-                      self.param('size', mvs),
+                      self.param('size', self.min_value_size()),
                       kind=self.param('kind', 'json'),
                       protocol=self.mk_protocol(host=self.input.servers[0].ip,
                                                 port=self.input.servers[0].port),
@@ -353,13 +338,11 @@ class EPerfMaster(perf.PerfBase):
             if host is None:
                 host = self.input.servers[0].ip
             port = self.input.servers[0].port
-            mvs = self.min_value_size(self.parami("avg_value_size", PerfDefaults.avg_value_size),
-                                      self.parami("num_value_samples", PerfDefaults.num_value_samples))
             self.loop(num_ops        = 0,
                       num_items      = items,
                       max_items      = items + max_creates + 1,
                       max_creates    = max_creates,
-                      min_value_size = self.param('size', mvs),
+                      min_value_size = self.param('size', self.min_value_size()),
                       kind           = self.param('kind', 'json'),
                       protocol       = self.mk_protocol(host, port, proto_prefix),
                       clients        = self.parami('clients', 1),
