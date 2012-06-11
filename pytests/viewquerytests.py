@@ -24,6 +24,7 @@ class ViewQueryTests(unittest.TestCase):
         try:
             ViewBaseTests.common_setUp(self)
             self.limit = TestInputSingleton.input.param("limit", None)
+            self.reduce_fn = TestInputSingleton.input.param("reduce_fn", None)
             self.task_manager = taskmanager.TaskManager()
             self.task_manager.start()
         except Exception as ex:
@@ -55,6 +56,11 @@ class ViewQueryTests(unittest.TestCase):
         data_set = SimpleDataSet(self._rconn(), self.num_docs)
         data_set.add_include_docs_queries([data_set.views[0]])
         self._query_test_init(data_set, tm = self.task_manager)
+
+    def test_simple_dataset_reduce_queries(self):
+        data_set = SimpleDataSet(self._rconn(), self.num_docs,limit = self.limit,reduce_fn = self.reduce_fn)
+        data_set.add_reduce_queries()
+        self._query_test_init(data_set)
 
     def test_employee_dataset_startkey_endkey_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
@@ -1015,17 +1021,18 @@ class EmployeeDataSet:
 
 
 class SimpleDataSet:
-    def __init__(self, rest, num_docs,limit = None):
+    def __init__(self, rest, num_docs, limit = None, reduce_fn=None):
         self.num_docs = num_docs
-        self.views = self.create_views(rest)
+        self.views = self.create_views(rest,reduce = reduce_fn)
         self.name = "simple_dataset"
         self.kv_store = ClientKeyValueStore()
         self.kv_template = {"name": "doc-${prefix}-${seed}-", "age": "${prefix}"}
         self.limit = limit
+        self.reduce_fn = reduce_fn
 
-    def create_views(self, rest):
+    def create_views(self, rest, reduce=None):
         view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
-        return [QueryView(rest, self.num_docs, fn_str = view_fn)]
+        return [QueryView(rest, self.num_docs, fn_str=view_fn, reduce_fn=reduce)]
 
     def load(self, tc, view, verify_docs_loaded = True):
         doc_names = ViewBaseTests._load_docs(tc, self.num_docs, view.prefix, verify_docs_loaded)
@@ -1089,6 +1096,18 @@ class SimpleDataSet:
             view.queries += [QueryHelper({"stale" : "false" , "limit" : str(limit)}, limit),
                              QueryHelper({"stale" : "ok" , "limit" : str(limit)}, limit),
                              QueryHelper({"stale" : "update_after" , "limit" : str(limit)}, limit)]
+
+    def add_reduce_queries(self, views = None, limit= None):
+        if views is None:
+            views = self.views
+
+        for view in views:
+            index_size = view.index_size
+            if limit is None:
+                limit = self.limit
+
+            view.queries += [QueryHelper({"reduce" : "false" , "limit" : str(limit)}, min(limit, index_size)),
+                             QueryHelper({"reduce" : "true" , "limit" : str(limit)}, min(limit, index_size))]
 
     def add_all_query_sets(self, views = None):
         self.add_startkey_endkey_queries(views)
