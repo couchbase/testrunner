@@ -1722,7 +1722,6 @@ function(doc) {
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
                           ratio_expirations = self.paramf('ratio_expirations', 0.03),
                           queries = queries,
-                          proto_prefix = "couchbase",
                           host = host)
 
         self.rest.delete_bucket(bucket='default')
