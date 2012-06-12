@@ -20,5 +20,5 @@ if(${multi}); then
     done
     wait
 else
-    scripts/perf/client 0 ${num_clients}
+    scripts/perf/client ${prefix} ${num_clients}
 fi
