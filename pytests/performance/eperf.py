@@ -1821,19 +1821,70 @@ def join_queries(queries):
     return queries
 
 class ViewGen:
-    def __init__(self):
-        self.ddoc_names = ["A", "B", "C", "D", "E", "F", "G", "H"]
 
-        self.view_names = [
-            'city1',
-            'city2',
-            'realm1',
-            'experts1',
-            'experts2',
-            'realm2',
-            'realm3',
-            'category'
-        ]
+    DDOC_NAMES = ["A", "B", "C", "D", "E", "F", "G", "H"]
+
+    VIEW_NAMES = ['city1', 'city2', 'realm1', 'experts1', 'experts2', 'realm2',
+                  'realm3', 'category']
+
+    MAP_FUNCTIONS = [
+        """
+        function(doc) {
+            if (doc.city != null) {
+                emit(doc.city, null);
+            }
+        }
+        """,
+        """
+        function(doc) {
+            if (doc.city != null) {
+                emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
+            }
+        }
+        """,
+        """
+        function(doc) {
+            if (doc.realm != null) {
+                emit(doc.realm, null);
+            }
+        }
+        """,
+        """
+        function(doc) {
+            if (doc.category == 2) {
+                emit([doc.name, doc.coins], null);
+            }
+        }
+        """,
+        """
+        function(doc) {
+            emit([doc.category, doc.coins], null);
+        }
+        """,
+        """
+        function(doc) {
+            emit([doc.realm, doc.coins], null)
+        }
+        """,
+        """
+        function(doc) {
+            emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+        }
+        """,
+        """
+        function(doc) {
+            emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+        }
+        """,
+        """
+        function (doc) {
+            if (doc.achievements.length > 0) {
+                emit(doc.category, doc.coins);
+            }
+        }
+        """]
+
+    REDUCE_FUNCTIONS = ["_count", "_sum", "_stats"]
 
     def generate_ddocs(self, pattern=None, add_reduce=False):
         """Generate dictionary with design documents and views.
@@ -1848,80 +1899,16 @@ class ViewGen:
 
         ddocs = dict()
 
-        map_functions = [
-            """
-            function(doc) {
-                if (doc.city != null) {
-                    emit(doc.city, null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.city != null) {
-                    emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.realm != null) {
-                    emit(doc.realm, null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                if (doc.category == 2) {
-                    emit([doc.name, doc.coins], null);
-                }
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.category, doc.coins], null);
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.realm, doc.coins], null)
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
-            }
-            """,
-            """
-            function(doc) {
-                emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
-            }
-            """,
-            """
-            function (doc) {
-                if (doc.achievements.length > 0) {
-                    emit(doc.category, doc.coins);
-                }
-            }
-            """
-        ]
-
-        reduce_functions = [
-            "_count",
-            "_sum",
-            "_stats"
-        ]
-
         index_of_map = 0
         index_of_ddoc = 0
 
         for number_of_views in pattern:
-            ddoc_name = self.ddoc_names[index_of_ddoc]
+            ddoc_name = self.DDOC_NAMES[index_of_ddoc]
             ddocs[ddoc_name] = {'views': {}}
             for index_of_view in range(number_of_views):
-                view_name = self.view_names[index_of_map]
+                view_name = self.VIEW_NAMES[index_of_map]
                 ddocs[ddoc_name]['views'][view_name] = {}
-                ddocs[ddoc_name]['views'][view_name]['map'] = map_functions[index_of_map]
+                ddocs[ddoc_name]['views'][view_name]['map'] = self.MAP_FUNCTIONS[index_of_map]
                 index_of_map += 1
             index_of_ddoc += 1
 
@@ -1929,8 +1916,8 @@ class ViewGen:
             ddocs['reduce'] = {
                 'views': {
                     'reduce': {
-                        'map': map_functions[-1],
-                        'reduce': reduce_functions[-1]
+                        'map': self.MAP_FUNCTIONS[-1],
+                        'reduce': self.REDUCE_FUNCTIONS[-1]
                     }
                 }
             }
