@@ -5,6 +5,7 @@ import json
 import urllib
 
 from membase.api.rest_client import RestConnection
+from membase.api.exception import ServerUnavailableException
 
 class CbKarmaClient(RestConnection):
     """Performance dashboard (cbkarma) REST API"""
@@ -28,7 +29,11 @@ class CbKarmaClient(RestConnection):
         """Get initial test id (optional)"""
 
         api = self.baseUrl + 'init'
-        return self._http_request(api, 'GET')
+        try:
+            return self._http_request(api, 'GET')
+        except ServerUnavailableException:
+            print "Dashboard is not available... bypassing."
+            return (False, None)
 
     def update(self, id=None, build='', spec='', description='', phase='',
                status=''):
@@ -55,7 +60,10 @@ class CbKarmaClient(RestConnection):
         if id:
             params['id'] = id
 
-        return self._http_request(api, 'POST', urllib.urlencode(params))
+        try:
+            return self._http_request(api, 'POST', urllib.urlencode(params))
+        except ServerUnavailableException:
+            print "Dashboard is not available... bypassing."
 
     def histo(self, id=None, description='', attachment=''):
         """Attach latency histogram to the test"""
@@ -68,4 +76,7 @@ class CbKarmaClient(RestConnection):
         if id:
             params['id'] = id
 
-        return self._http_request(api, 'POST', urllib.urlencode(params))
+        try:
+            return self._http_request(api, 'POST', urllib.urlencode(params))
+        except ServerUnavailableException:
+            print "Dashboard is not available... bypassing."
