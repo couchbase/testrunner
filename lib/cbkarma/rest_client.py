@@ -30,7 +30,7 @@ class CbKarmaClient(RestConnection):
 
         api = self.baseUrl + 'init'
         try:
-            return self._http_request(api, 'GET')
+            return self._http_request(api, 'GET', timeout=30)
         except ServerUnavailableException:
             print "Dashboard is not available... bypassing."
             return (False, None)
@@ -61,7 +61,8 @@ class CbKarmaClient(RestConnection):
             params['id'] = id
 
         try:
-            return self._http_request(api, 'POST', urllib.urlencode(params))
+            return self._http_request(api, 'POST', urllib.urlencode(params),
+                                      timeout=30)
         except ServerUnavailableException:
             print "Dashboard is not available... bypassing."
 
@@ -77,6 +78,7 @@ class CbKarmaClient(RestConnection):
             params['id'] = id
 
         try:
-            return self._http_request(api, 'POST', urllib.urlencode(params))
+            return self._http_request(api, 'POST', urllib.urlencode(params),
+                                      timeout=30)
         except ServerUnavailableException:
             print "Dashboard is not available... bypassing."
