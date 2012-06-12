@@ -1684,7 +1684,7 @@ function(doc) {
         self.end_stats(sc, ops, 'loop')
 
     def test_minimal(self):
-        """Minimal performance test which cover all key phases"""
+        """Minimal performance test which covers load and access phases"""
 
         self.spec("test-minimal")
 
