@@ -1940,7 +1940,8 @@ class ViewGen:
         return {'all': {'views': {'docs': {'map': MAP_FUNCTION}}}}
 
     def generate_queries(self, limit, query_suffix, ddocs,
-                         use_all_docs=False, use_reduce=False, pseudo=False):
+                         use_all_docs=False, use_reduce=False, pseudo=False,
+                         extend=False):
         """Generate string from permuted queries.
 
         Optional arguments:
@@ -2015,6 +2016,8 @@ class ViewGen:
             remaining = remaining + [5]
 
         queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
+        if extend:
+            queries = self.extend_queries(queries, ddocs)
         queries = self.join_queries(queries)
 
         return queries
@@ -2034,6 +2037,18 @@ class ViewGen:
             i = i + 1
 
         return queries
+
+    def extend_queries(self, queries, ddocs):
+        """Extend number of queries if number of views is more than 8. It only
+        makes sense when originally there were only queries on single design
+        document ([8] pattern). Otherwise it's better to avoid this method.
+        """
+
+        rename = lambda query, name: query.replace('/A/', '/{0}/'.format(name))
+
+        ddoc_names = [ddoc_name for ddoc_name in sorted(ddocs.keys())]
+
+        return [rename(query, name) for query in queries for name in ddoc_names]
 
     def join_queries(self, queries):
         """Join queries into string"""
