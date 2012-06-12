@@ -1925,17 +1925,15 @@ class ViewGen:
         return ddocs
 
     def generate_all_docs_view(self):
-        """ Return view definition which mimics primary index
-        (aka _all_docs).
-
+        """ Return view definition which mimics primary index (aka _all_docs).
         """
 
-        map_function = """
+        MAP_FUNCTION = """
             function (doc) {
                 emit(doc._id, {"rev": doc._rev});
             }"""
 
-        return {'all': {'views': {'docs': {'map': map_function}}}}
+        return {'all': {'views': {'docs': {'map': MAP_FUNCTION}}}}
 
     def generate_queries(self, limit, query_suffix, ddocs,
                          use_all_docs=False, use_reduce=False, pseudo=False):
