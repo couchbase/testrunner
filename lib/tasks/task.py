@@ -214,15 +214,19 @@ class StatsWaitTask(Task):
         stat_result = 0
         for server in self.servers:
             client = self._get_connection(server)
-            stats = client.stats(self.param)
-            if not stats.has_key(self.stat):
+            try:
+                stats = client.stats(self.param)
+                if not stats.has_key(self.stat):
+                    self.state = FINISHED
+                    self.set_exception(Exception("Stat {0} not found".format(self.stat)))
+                    return
+                if stats[self.stat].isdigit():
+                    stat_result += long(stats[self.stat])
+                else:
+                    stat_result = stats[self.stat]
+            except EOFError as ex:
                 self.state = FINISHED
-                self.set_exception(Exception("Stat {0} not found".format(self.stat)))
-                return
-            if stats[self.stat].isdigit():
-                stat_result += long(stats[self.stat])
-            else:
-                stat_result = stats[self.stat]
+                self.set_exception(ex)
 
         if not self._compare(self.comparison, str(stat_result), self.value):
             self.log.info("Not Ready: %s %s %s %s expected on %s" % (self.stat, stat_result,
