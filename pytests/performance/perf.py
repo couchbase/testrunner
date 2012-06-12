@@ -419,7 +419,7 @@ class PerfBase(unittest.TestCase):
         except subprocess.CalledProcessError as e:
             print "[perf] unable to get src code version : {0}".format(str(e))
             return "unknown version"
-        return result.rstrip()
+        return result.rstrip()[:7]
 
     def start_stats(self, stats_spec, servers=None,
                     process_names=['memcached', 'beam.smp', 'couchjs'],
