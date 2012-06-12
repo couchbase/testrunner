@@ -1513,6 +1513,50 @@ function(doc) {
                           host = host)
         self.gated_finish(self.input.clients, notify)
 
+    def test_evperf2(self):
+        """3 design documents, 8 views per design document"""
+
+        self.spec("evperf2")
+
+        self.gated_start(self.input.clients)
+
+        items = self.parami('items', PerfDefaults.items)
+        num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
+
+        # Load phase
+        if self.parami("load_phase", 0):
+            self.load_phase(num_nodes, items)
+
+        # Index phase
+        view_gen = ViewGen()
+        ddocs = view_gen.generate_ddocs([8, 8, 8])
+        if self.parami("index_phase", 0):
+            self.index_phase(ddocs)
+
+        # Access phase
+        limit = self.parami('limit', PerfDefaults.limit)
+        query_suffix = self.param("query_suffix", "")
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs,
+                                            use_all_docs=False, extend=True)
+
+        # Rotate host so multiple clients don't hit the same HTTP/REST server.
+        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+
+        if self.parami("access_phase", 0):
+            self.access_phase(items,
+                              ratio_sets = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                              ratio_misses = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                              ratio_creates = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                              ratio_deletes = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                              ratio_hot = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                              max_creates = self.parami("max_creates", PerfDefaults.max_creates),
+                              queries = queries,
+                              proto_prefix = "couchbase",
+                              host = host)
+
     def test_ept_mixed_original(self):
         self.spec("EPT-MIXED-original")
         items = self.parami("items", 45000000)
