@@ -1293,6 +1293,9 @@ for(ip in levels(factor(system_stats$ip))) {
     p <- addopts(p, paste("cpu_time_diff: memcached - ", ip))
     print(p)
     makeFootnote(footnote)
+    makeMetricDef(paste("CPU tick differences (jiffies) ",
+                        "among snapshots across time",
+                        sep="\n"))
 
     cat("generating memcached cpu ticks \n")
     p <- ggplot(beam_temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
@@ -1300,6 +1303,10 @@ for(ip in levels(factor(system_stats$ip))) {
     p <- addopts(p, paste("cpu_time_diff : beam.smp - ", ip))
     print(p)
     makeFootnote(footnote)
+    makeMetricDef(paste("CPU tick differences (jiffies) ",
+                        "among snapshots across time",
+                        sep="\n"))
+
 }
 
 cat("generating data disk size\n")
