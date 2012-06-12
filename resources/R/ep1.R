@@ -21,16 +21,16 @@ test_name = args[3]
 dbip = args[4]
 dbname = args[5]
 pdfname = args[6]
-# pdfname = "ept-write-nonjson-180-200r452"
+
+# baseline_build="1.8.0r-55-g80f24f2-enterprise"
+# new_build = "1.8.1-852-rel-enterprise"
+# test_name = "mixed-suv-4-10.loop"
+# dbip = "couchdb2.couchbaseqe.com"
+# dbname= "eperf"
+# pdfname = "mixed-suv-4-10-1.8.0vs1.8.1-852"
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
-  # baseline_build="1.8.1r-764-rel-enterprise"
-  # new_build = "2.0.0r-1131-debug-enterprise"
-  # test_name = "EPT-MIXED.1-0.05-0.995"
-  # dbip = "couchdb2.couchbaseqe.com"
-  # dbname= "eperf"
-  # pdfname = "one"
-  # i_builds = c("1.7.2r-22-geaf53ef", new_build)
+
 i_builds = c(baseline_build, new_build)
 
 cat(paste("args : ",args,""),sep="\n")
