@@ -14,6 +14,7 @@ python pytests/performance/do_cluster.py -i ${ini_file} -c ${test_conf} -p num_c
 rm -rf backup
 mkdir backup
 cp final.* backup/
+cp *.gz backup/
 
 # decompress all json files
 gunzip final.*.json.gz
@@ -28,3 +29,4 @@ echo "posting $f to couchdb"
 python scripts/post-perf-data.py -n http://couchdb2.couchbaseqe.com:5984 -d eperf -i $f
 done
 rm -rf final.*.json
+rm -rf *.gz
