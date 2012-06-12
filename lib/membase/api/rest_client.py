@@ -746,7 +746,7 @@ class RestConnection(object):
         return status, content
 
 
-    def monitorRebalance(self):
+    def monitorRebalance(self, stop_if_loop=False):
         start = time.time()
         progress = 0
         retry = 0
@@ -760,16 +760,17 @@ class RestConnection(object):
                 retry += 1
             else:
                 retry = 0
-            #reset same_progress_count if get a different result, or progress is still O
-            #(it may take a long time until the results are different from 0)
-            if previous_progress != progress or progress == 0:
-                previous_progress = progress
-                same_progress_count = 0
-            else:
-                same_progress_count += 1
-            if same_progress_count > 50:
-                log.error("apparently rebalance progress code in infinite loop: {0}".format(progress))
-                return False
+            if stop_if_loop:
+                #reset same_progress_count if get a different result, or progress is still O
+                #(it may take a long time until the results are different from 0)
+                if previous_progress != progress or progress == 0:
+                    previous_progress = progress
+                    same_progress_count = 0
+                else:
+                    same_progress_count += 1
+                if same_progress_count > 50:
+                    log.error("apparently rebalance progress code in infinite loop: {0}".format(progress))
+                    return False
             #sleep for 2 seconds
             time.sleep(2)
 
