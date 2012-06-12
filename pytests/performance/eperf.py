@@ -1889,7 +1889,7 @@ class ViewGen:
     def generate_ddocs(self, pattern=None, add_reduce=False):
         """Generate dictionary with design documents and views.
         Pattern looks like:
-            [1] -- 1 ddoc (1 view)
+            [8, 8, 8] -- 8 ddocs (8 views, 8 views, 8 views)
             [2, 2, 4] -- 3 ddocs (2 views, 2 views, 4 views)
             [8] -- 1 ddoc (8 views)
             [1, 1, 1, 1, 1, 1, 1, 1] -- 8 ddocs (1 view)
