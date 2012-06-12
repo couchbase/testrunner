@@ -1906,7 +1906,11 @@ class ViewGen:
             ddoc_name = self.DDOC_NAMES[index_of_ddoc]
             ddocs[ddoc_name] = {'views': {}}
             for index_of_view in range(number_of_views):
-                view_name = self.VIEW_NAMES[index_of_map]
+                try:
+                    view_name = self.VIEW_NAMES[index_of_map]
+                except IndexError:
+                    index_of_map = 0
+                    view_name = self.VIEW_NAMES[index_of_map]
                 ddocs[ddoc_name]['views'][view_name] = {}
                 ddocs[ddoc_name]['views'][view_name]['map'] = self.MAP_FUNCTIONS[index_of_map]
                 index_of_map += 1
