@@ -1967,10 +1967,8 @@ class ViewGen:
             return self.join_queries(queries)
 
         # General case
-        ddoc_names = list()
-        for ddoc_name, ddoc in sorted(ddocs.items()):
-            for view in ddoc["views"]:
-                ddoc_names.append(ddoc_name)
+        ddoc_names = [name for name, ddoc in sorted(ddocs.iteritems())
+                           for view in ddoc["views"]]
 
         b = '/default/'
 
