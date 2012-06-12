@@ -1277,6 +1277,31 @@ for(ns_node in levels(nodes)) {
     makeFootnote(footnote)
 }
 
+
+cat("Generating Memory/CPU usage for beam.smp and memcached\n")
+
+for(ip in levels(factor(system_stats$ip))) {
+
+    node_sys_stats = system_stats[system_stats$ip == ip, ]
+
+    beam_temp_data_frame  = createProcessUsageDataFrame(node_sys_stats, "(beam.smp)")
+    mc_temp_data_frame  = createProcessUsageDataFrame(node_sys_stats, "(memcached)")
+
+    cat("generating beam cpu ticks \n")
+    p <- ggplot(mc_temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
+    p <- p + geom_line()
+    p <- addopts(p, paste("cpu_time_diff: memcached - ", ip))
+    print(p)
+    makeFootnote(footnote)
+
+    cat("generating memcached cpu ticks \n")
+    p <- ggplot(beam_temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
+    p <- p + geom_point()
+    p <- addopts(p, paste("cpu_time_diff : beam.smp - ", ip))
+    print(p)
+    makeFootnote(footnote)
+}
+
 cat("generating data disk size\n")
 p <- ggplot(disk_data, aes(row, size, color=buildinfo.version, label=size)) + labs(x="----time (sec)--->", y="MB")
 p <- p + geom_point()
@@ -1583,24 +1608,6 @@ if (nrow(throughput_query) > 0) {
 # p <- addopts(p,"ep_bg_load")
 # print(p)
 # makeFootnote(footnote)
-
-#cat("Generating Memory/CPU usage for beam.smp and memcached\n")
-# temp_data_frame  = createProcessUsageDataFrame(system_stats, "(beam.smp)")
-# mc_temp_data_frame  = createProcessUsageDataFrame(system_stats, "(memcached)")
-# cat("generating cpu ticks \n")
-# p <- ggplot(temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
-# p <- p + geom_line()
-# p <- addopts(p,"cpu_time_diff")
-# print(p)
-# makeFootnote(footnote)
-
-# cat("generating memcached cpu ticks \n")
-# p <- ggplot(mc_temp_data_frame, aes(row, cpu_time_diff, color=buildinfo.version , label= prettySize(cpu_time_diff))) + labs(x="----time (sec)--->", y="cpu_time_diff")
-# p <- p + geom_point()
-# p <- addopts(p,"cpu_time_diff")
-# print(p)
-# makeFootnote(footnote)
-
 
 # beam <- system_stats[system_stats$comm == "(beam.smp)",]
 # cat("generating beam.smp mem \n")
