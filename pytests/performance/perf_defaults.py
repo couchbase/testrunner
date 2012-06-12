@@ -28,6 +28,7 @@ class PerfDefaults:
     ratio_hot_sets      =    0.995
     ratio_expirations   =    0.025
     max_creates         =    30000000    # 30 million
+    limit               =    50
 
     # cbstats collector
     cb_stats            =    0
