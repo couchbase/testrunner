@@ -1696,18 +1696,8 @@ function(doc) {
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami('num_nodes', 10), items)
 
-        # Index phase
-        view_gen = ViewGen()
-        ddocs = view_gen.generate_all_docs_view()
-        self.index_phase(ddocs)
-
         # Access phase
-        limit = self.parami('limit', 10)
-        query_suffix = self.param("query_suffix", "")
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs, pseudo=True)
-
-        self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 50)
-        self.fg_max_ops = self.parami('fg_max_ops', 500)
+        max_creates = self.parami('max_creates', 100)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
         host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
@@ -1721,7 +1711,7 @@ function(doc) {
                           ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
                           ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
                           ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          queries = queries,
+                          max_creates = max_creates,
                           host = host)
 
         self.rest.delete_bucket(bucket='default')
