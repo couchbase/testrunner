@@ -17,9 +17,7 @@ from memcached.helper.old_kvstore import ClientKeyValueStore
 from TestInput import TestInputSingleton
 
 class ViewQueryTests(unittest.TestCase):
-
-    def __init__(self, skip_setup_failed=False):
-        self.skip_setup_failed = skip_setup_failed
+    skip_setup_failed  = False
 
     @unittest.skipIf(skip_setup_failed, "setup was failed")
     def setUp(self):
