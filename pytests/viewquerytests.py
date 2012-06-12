@@ -18,11 +18,19 @@ from TestInput import TestInputSingleton
 
 class ViewQueryTests(unittest.TestCase):
 
+    def __init__(self, skip_setup_failed=False):
+        self.skip_setup_failed = skip_setup_failed
+
+    @unittest.skipIf(skip_setup_failed, "setup was failed")
     def setUp(self):
-        ViewBaseTests.common_setUp(self)
-        self.limit = TestInputSingleton.input.param("limit", None)
-        self.task_manager = taskmanager.TaskManager()
-        self.task_manager.start()
+        try:
+            ViewBaseTests.common_setUp(self)
+            self.limit = TestInputSingleton.input.param("limit", None)
+            self.task_manager = taskmanager.TaskManager()
+            self.task_manager.start()
+        except Exception as ex:
+            skip_setup_failed = True
+            self.fail(ex)
 
     def tearDown(self):
         ViewBaseTests.common_tearDown(self)
