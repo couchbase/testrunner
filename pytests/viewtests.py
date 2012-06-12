@@ -1416,21 +1416,6 @@ class ViewCreationDeletionTests(unittest.TestCase):
             view_name = "dev_test_view-{0}".format(key)
             ViewBaseTests._verify_views_from_all(self, master, view_bucket[key], view_name, self.num_docs, value)
 
-    def test_view_rebalance_out(self):
-        pass
-
-    def test_view_node_down(self):
-        pass
-
-    def test_view_multi_node_down(self):
-        pass
-
-    def test_view_node_down_and_failed(self):
-        pass
-
-    def test_view_node_failed_and_rebalance_out(self):
-        pass
-
     def test_view_node_warmup(self):
         master = self.servers[0]
         rest = RestConnection(master)
