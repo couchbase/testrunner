@@ -1691,9 +1691,10 @@ function(doc) {
         self.rest.create_bucket(bucket='default', ramQuotaMB=128,
                                 bucketType='couchbase')
 
+        self.gated_start(self.input.clients)
+
         # Load phase
         items = self.parami('items', 1000)
-        notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Access phase
@@ -1715,8 +1716,6 @@ function(doc) {
                           host = host)
 
         self.rest.delete_bucket(bucket='default')
-
-        self.gated_finish(self.input.clients, notify)
 
 class EPerfClient(EPerfMaster):
 
