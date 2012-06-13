@@ -65,6 +65,7 @@ class PerfBase(unittest.TestCase):
 
         # Rebalance
         num_nodes = self.parami("num_nodes", 10)
+        print "[perf.setUp] rebalancing nodes: num_nodes = {0}".format(num_nodes)
         self.nodes(num_nodes)
 
         self.setUpBucket()
@@ -562,7 +563,7 @@ class PerfBase(unittest.TestCase):
                           bucket=bucket)
 
     def nodes(self, num_nodes):
-        if len(self.input.servers) == 1:
+        if len(self.input.servers) == 1 or num_nodes == 1:
             self.log.info("WARNING: running on single node cluster")
             return
 
