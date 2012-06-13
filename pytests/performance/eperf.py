@@ -459,6 +459,24 @@ class EPerfMaster(perf.PerfBase):
 
                 self.end_stats(sc, ops, self.spec_reference + ".index")
 
+    @_dashboard(phase='debug')
+    def debug_phase(self, ddocs=None):
+        """Run post-access phase debugging tasks"""
+
+        if ddocs:
+            # Query with debug argument equals true
+            bucket = self.param('bucket', 'default')
+            ddoc_name = ddocs.keys()[0]
+            view_name = ddocs[ddoc_name]['views'].keys()[0]
+
+            response = self.rest.query_view(ddoc_name, view_name, bucket,
+                                            {'debug': 'true'})
+            debug_info = response['debug_info']
+
+            for subset, data in debug_info.iteritems():
+                self.log.info(subset)
+                self.log.info(data)
+
     def latched_rebalance(self, cur):
         if not self.latched_rebalance_done:
             self.latched_rebalance_done = True
