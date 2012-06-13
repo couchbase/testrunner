@@ -1342,6 +1342,10 @@ function(doc) {
                           queries = queries,
                           proto_prefix = "couchbase",
                           host = host)
+
+        if self.parami("debug_phase", 0):
+            self.debug_phase(ddocs)
+
         self.gated_finish(self.input.clients, notify)
 
     def test_vperf2(self):
@@ -1384,6 +1388,10 @@ function(doc) {
                           queries = queries,
                           proto_prefix = "couchbase",
                           host = host)
+
+        if self.parami("debug_phase", 0):
+            self.debug_phase(ddocs)
+
         self.gated_finish(self.input.clients, notify)
 
     def test_vperf3(self):
@@ -1426,6 +1434,10 @@ function(doc) {
                           queries = queries,
                           proto_prefix = "couchbase",
                           host = host)
+
+        if self.parami("debug_phase", 0):
+            self.debug_phase(ddocs)
+
         self.gated_finish(self.input.clients, notify)
 
     def test_vperf4(self):
@@ -1470,6 +1482,10 @@ function(doc) {
                           queries = queries,
                           proto_prefix = "couchbase",
                           host = host)
+
+        if self.parami("debug_phase", 0):
+            self.debug_phase(ddocs)
+
         self.gated_finish(self.input.clients, notify)
 
     def test_vperf5(self):
@@ -1511,6 +1527,10 @@ function(doc) {
                           queries = queries,
                           proto_prefix = "couchbase",
                           host = host)
+
+        if self.parami("debug_phase", 0):
+            self.debug_phase(ddocs)
+
         self.gated_finish(self.input.clients, notify)
 
     def test_vperf6(self):
@@ -1554,6 +1574,10 @@ function(doc) {
                           queries = queries,
                           proto_prefix = "couchbase",
                           host = host)
+
+        if self.parami("debug_phase", 0):
+            self.debug_phase(ddocs)
+
         self.gated_finish(self.input.clients, notify)
 
     def test_evperf2(self):
@@ -1599,6 +1623,9 @@ function(doc) {
                               queries = queries,
                               proto_prefix = "couchbase",
                               host = host)
+
+        if self.parami("debug_phase", 0):
+            self.debug_phase(ddocs)
 
     def test_ept_mixed_original(self):
         self.spec("EPT-MIXED-original")
