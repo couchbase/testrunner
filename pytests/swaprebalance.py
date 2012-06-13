@@ -166,12 +166,13 @@ class SwapRebalanceBase(unittest.TestCase):
         creds = self.input.membase_settings
         intial_severs = self.servers[:num_initial_servers]
 
+        self.log.info("CREATE BUCKET PHASE")
+        SwapRebalanceBase.create_buckets(self)
+
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
 
-        self.log.info("CREATE BUCKET PHASE")
-        SwapRebalanceBase.create_buckets(self)
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
 
@@ -251,12 +252,12 @@ class SwapRebalanceBase(unittest.TestCase):
         creds = self.input.membase_settings
         intial_severs = self.servers[:num_initial_servers]
 
+        self.log.info("CREATE BUCKET PHASE")
+        SwapRebalanceBase.create_buckets(self)
+
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
-
-        self.log.info("CREATE BUCKET PHASE")
-        SwapRebalanceBase.create_buckets(self)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -334,12 +335,12 @@ class SwapRebalanceBase(unittest.TestCase):
         rest = RestConnection(master)
         creds = self.input.membase_settings
 
+        self.log.info("CREATE BUCKET PHASE")
+        SwapRebalanceBase.create_buckets(self)
+
         # Cluster all servers
         self.log.info("INITIAL REBALANCE PHASE")
         RebalanceHelper.rebalance_in(self.servers, len(self.servers)-1)
-
-        self.log.info("CREATE BUCKET PHASE")
-        SwapRebalanceBase.create_buckets(self)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -437,12 +438,12 @@ class SwapRebalanceBase(unittest.TestCase):
         num_initial_servers = self.num_initial_servers
         intial_severs = self.servers[:num_initial_servers]
 
+        self.log.info("CREATE BUCKET PHASE")
+        SwapRebalanceBase.create_buckets(self)
+
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
-
-        self.log.info("CREATE BUCKET PHASE")
-        SwapRebalanceBase.create_buckets(self)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
