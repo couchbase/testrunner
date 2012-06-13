@@ -440,6 +440,11 @@ class RemoteMachineShellConnection:
     def find_build_version(self, path_to_version, version_file, product):
         sftp = self._ssh_client.open_sftp()
         ex_type = "exe"
+        version_file = testconstants.VERSION_FILE
+        if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
+            path_to_version = testconstants.WIN_CB_PATH
+        else:
+            path_to_version = testconstants.WIN_MB_PATH
         releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1"]
         try:
             log.info(path_to_version)
@@ -448,13 +453,13 @@ class RemoteMachineShellConnection:
             if full_version in releases_version:
                 if full_version == "1.6.5.4-win64":
                     full_version = "1.6.5.4"
-                build_name = "mb_{1}".format(product, full_version)
+                build_name = "mb_{0}".format(full_version)
                 short_version = full_version
             else:
                 tmp = full_version.split("-")
-                if "1.8.0" in tmp[0] or "1.8.1" in tmp[0]:
+                if tmp[0].startswith("1.8") or tmp[0].startswith("2."):
                     product = "cb"
-                if "1.7.2" in tmp[0]:
+                else:
                     product = "mb"
                 build_name = "{0}_{1}-{2}".format(product, tmp[0], tmp[1])
                 short_version = "{0}-{1}".format(tmp[0], tmp[1])
