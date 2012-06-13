@@ -361,6 +361,12 @@ class CouchbaseServerInstaller(Installer):
         if "rest_vbuckets" in params:
             rest_vbuckets = int(params["rest_vbuckets"])
             ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
+        # Optionally disable consistency check
+        if params.get('disable_consistency', 0):
+            rest = RestConnection(params['server'])
+            rest.set_couchdb_option(section='couchdb',
+                                    option='consistency_check_ratio',
+                                    value='0.0')
 
 class CouchbaseServerStandaloneInstaller(Installer):
     def __init__(self):
