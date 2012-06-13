@@ -144,7 +144,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def create_default_bucket(self, server, size, replicas=1):
+    def create_default_bucket(self, server, size, replicas=1, timeout=None):
         """Synchronously creates the default bucket
 
         Parameters:
@@ -155,9 +155,9 @@ class Cluster(object):
         Returns:
             boolean - Whether or not the bucket was created."""
         _task = self.async_create_default_bucket(server, size, replicas)
-        return _task.result()
+        return _task.result(timeout)
 
-    def create_sasl_bucket(self, server, name, password, size, replicas):
+    def create_sasl_bucket(self, server, name, password, size, replicas, timeout=None):
         """Synchronously creates a sasl bucket
 
         Parameters:
@@ -171,9 +171,9 @@ class Cluster(object):
             boolean - Whether or not the bucket was created."""
         _task = async_create_sasl_bucket(server, name, password, replicas, size)
         self.task_manager.schedule(_task)
-        return _task.result()
+        return _task.result(timeout)
 
-    def create_standard_bucket(self, server, name, port, size, replicas):
+    def create_standard_bucket(self, server, name, port, size, replicas, timeout=None):
         """Synchronously creates a standard bucket
 
         Parameters:
@@ -186,9 +186,9 @@ class Cluster(object):
         Returns:
             boolean - Whether or not the bucket was created."""
         _task = self.async_create_standard_bucket(server, name, port, size, replicas)
-        return _task.result()
+        return _task.result(timeout)
 
-    def bucket_delete(self, server, bucket='default'):
+    def bucket_delete(self, server, bucket='default', timeout=None):
         """Synchronously deletes a bucket
 
         Parameters:
@@ -198,7 +198,7 @@ class Cluster(object):
         Returns:
             boolean - Whether or not the bucket was deleted."""
         _task = self.async_bucket_delete(server, bucket)
-        return _task.result()
+        return _task.result(timeout)
 
     def init_node(self, server):
         """Synchronously initializes a node
@@ -214,7 +214,7 @@ class Cluster(object):
         _task = self.async_init_node(server)
         return _task.result()
 
-    def rebalance(self, servers, to_add, to_remove):
+    def rebalance(self, servers, to_add, to_remove, timeout=None):
         """Syncronously rebalances a cluster
 
         Parameters:
@@ -225,22 +225,22 @@ class Cluster(object):
         Returns:
             boolean - Whether or not the rebalance was successful"""
         _task = self.async_rebalance(servers, to_add, to_remove)
-        return _task.result()
+        return _task.result(timeout)
 
-    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp = 0):
+    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp = 0, timeout=None):
         _task = self.async_load_gen_docs(server, bucket, generator, kv_store, op_type, exp)
-        return _task.result()
+        return _task.result(timeout)
 
-    def workload(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp):
+    def workload(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp, timeout=None):
         _task = self.async_workload(server, bucket, kv_store, num_ops, create, read, update,
                                     delete, exp)
-        return _task.result()
+        return _task.result(timeout)
 
-    def verify_data(self, server, bucket, kv_store):
+    def verify_data(self, server, bucket, kv_store, timeout=None):
         _task = self.async_verify_data(server, bucket, kv_store)
-        return _task.result()
+        return _task.result(timeout)
 
-    def wait_for_stats(self, servers, bucket, param, stat, comparison, value):
+    def wait_for_stats(self, servers, bucket, param, stat, comparison, value, timeout=None):
         """Synchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
@@ -260,7 +260,7 @@ class Cluster(object):
         Returns:
             boolean - Whether or not the correct stats state was seen"""
         _task = self.async_wait_for_stats(servers, bucket, param, stat, comparison, value)
-        return _task.result()
+        return _task.result(timeout)
 
     def shutdown(self, force=False):
         self.task_manager.shutdown(force)
@@ -280,7 +280,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def create_view(self, server, design_doc_name, view, bucket = "default"):
+    def create_view(self, server, design_doc_name, view, bucket = "default", timeout=None):
         """Synchronously creates a views in a design doc
 
         Parameters:
@@ -292,7 +292,7 @@ class Cluster(object):
         Returns:
             boolean - Whether or not create view was successful."""
         _task = self.async_create_view(server, design_doc_name, view, bucket)
-        return _task.result()
+        return _task.result(timeout)
 
     def async_delete_view(self, server, design_doc_name, view, bucket = "default"):
         """Asynchronously deletes a views in a design doc
@@ -309,7 +309,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def delete_view(self, server, design_doc_name, view, bucket = "default"):
+    def delete_view(self, server, design_doc_name, view, bucket = "default", timeout=None):
         """Synchronously deletes a views in a design doc
 
         Parameters:
@@ -321,7 +321,7 @@ class Cluster(object):
         Returns:
             boolean - Whether or not delete view was successful."""
         _task = self.async_delete_view(server, design_doc_name, view, bucket)
-        return _task.result()
+        return _task.result(timeout)
 
 
     def async_query_view(self, server, design_doc_name, view_name, query,
@@ -343,7 +343,7 @@ class Cluster(object):
         return _task
 
     def query_view(self, server, design_doc_name, view_name, query,
-                   expected_rows = None, bucket = "default", retry_time = 2):
+                   expected_rows = None, bucket = "default", retry_time = 2, timeout=None):
         """Synchronously query a views in a design doc
 
         Parameters:
@@ -357,6 +357,6 @@ class Cluster(object):
         Returns:
             ViewQueryTask - A task future that is a handle to the scheduled task."""
         _task = self.async_query_view(server, design_doc_name, view_name, query, expected_rows, bucket, retry_time)
-        return _task.result()
+        return _task.result(timeout)
 
 
