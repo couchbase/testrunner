@@ -127,17 +127,20 @@ class EPerfMaster(perf.PerfBase):
 
         # Merge (terrible time complexity)
         merged_ops = list()
+        indexes = [0, 0]
         for i in xrange(num_steps):
             # Current time frame
             start_of_step = start_time + step * i
             end_of_step = start_of_step + step
             total_queries = 0
             # Aggregation
-            for ops_array in [base_ops, new_ops]:
+            for idx, ops_array in enumerate([base_ops[indexes[0]:],
+                                             new_ops[indexes[1]:]]):
                 for ops in ops_array:
                     if ops['endTime'] <= end_of_step:
                         total_queries += ops['totalQueries']
                         ops['totalQueries'] = 0
+                        indexes[idx] += 1
                     else:
                         break
             qps = total_queries / step
