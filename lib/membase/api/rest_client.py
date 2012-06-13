@@ -1255,6 +1255,15 @@ class RestConnection(object):
         return self._http_request(api=api, method='POST', params=request_body,
                                   headers=self._create_headers())
 
+    def set_couchdb_option(self, section, option, value):
+        """Dynamic settings changes"""
+
+        cmd = 'ns_config:set({{couchdb, {{{0}, {1}}}}}, {2}).'.format(section,
+                                                                      option,
+                                                                      value)
+
+        return self.diag_eval(cmd)
+
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
         self.implementationVersion = implementationVersion
