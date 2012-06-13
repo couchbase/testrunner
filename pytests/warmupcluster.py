@@ -46,6 +46,8 @@ class WarmUpClusterTest(unittest.TestCase):
         self._log_start()
 
     def tearDown(self):
+        ClusterOperationHelper.cleanup_cluster(self.servers)
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         self._log_finish()
 
     def _create_default_bucket(self):
