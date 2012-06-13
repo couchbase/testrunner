@@ -18,7 +18,7 @@ if [ -n ${toy_build} ] ; then
 fi
 
 if [ ${skip_install} != "1" ]; then
-   python scripts/install.py -i ${ini_file} -p product=${product},version=${version_number},vbuckets=1024,parallel=True$toy
+   python scripts/install.py -i ${ini_file} -p product=${product},version=${version_number},vbuckets=1024,parallel=True,disable_consistency=1$toy
 else
    echo "No Setup"
 fi
