@@ -1238,7 +1238,7 @@ class RestConnection(object):
     def set_global_loglevel(self, loglevel='error'):
         """Set cluster-wide logging level for core components
 
-        Possible loglevel:w
+        Possible loglevel:
             -- debug
             -- info
             -- warn
