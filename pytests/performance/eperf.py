@@ -1297,57 +1297,45 @@ function(doc) {
         self.gated_finish(self.input.clients, notify)
 
     def test_vperf1(self):
-        # Like test_workload2, but just one design doc, one view.
+        """1 design document, 1 view"""
+
         self.spec("vperf1")
 
         self.gated_start(self.input.clients)
 
-        items = self.parami("items", 1000000)
-        self.load_phase(self.parami("num_nodes", 10), items)
-        ddocs = {}
-        ddocs["A"] = { "views": {} }
-        ddocs["A"]["views"]["city"] = {}
-        ddocs["A"]["views"]["city"]["map"] = """
-function(doc) {
-  if (doc.city != null) {
-    emit(doc.city, null);
-  }
-}
-"""
+        # Load phase
+        items = self.parami('items', PerfDefaults.items)
+        num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
+        self.load_phase(num_nodes, items)
+
+        # Index phase
+        view_gen = ViewGen()
+        ddocs = {'A': {'views': {'city': {'map': view_gen.MAP_FUNCTIONS[0]}}}}
         self.index_phase(ddocs)
 
-        limit = self.parami("limit", 10)
+        # Access phase
+        q = {'city': '/default/_design/A/_view/city?limit=20&startkey="{city}"'}
 
-        b = '/default/'
-
-        q = {}
-        q['city'] = b + '_design/A/_view/city?limit=' + str(limit) + '&startkey="{city}"'
-
-        queries_by_kind = [ [ q['city'] ] ]
-
+        queries_by_kind = [[q['city']]]
         remaining = [1]
-
-        queries = compute_queries(queries_by_kind, remaining,
-                                  self.param("query_suffix", ""))
-        queries = join_queries(queries)
-
-        self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
-        self.fg_max_ops = self.parami("fg_max_ops", 1000000)
+        query_suffix = self.param("query_suffix", "")
+        queries = view_gen.compute_queries(queries_by_kind, remaining,
+                                           query_suffix)
+        queries = view_gen.join_queries(queries)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
         host = self.input.servers[self.parami("prefix", 0) % len(self.input.servers)].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.3571),
+                          ratio_sets = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                          ratio_misses = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                          ratio_creates = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                          ratio_deletes = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                          ratio_hot = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                          max_creates = self.parami("max_creates", PerfDefaults.max_creates),
                           queries = queries,
                           proto_prefix = "couchbase",
                           host = host)
