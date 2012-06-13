@@ -237,7 +237,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
 
 def next_cmd(cfg, cur, store):
     itm_val = None
-    num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
+    num_ops = cur.get('cur-ops', 0)
 
     do_set = cfg.get('ratio-sets', 0) > float(cur.get('cur-sets', 0)) / positive(num_ops)
     if do_set:
@@ -246,6 +246,7 @@ def next_cmd(cfg, cur, store):
         cmd = 'set'
         cur_sets = cur.get('cur-sets', 0) + 1
         cur['cur-sets'] = cur_sets
+        cur['cur-ops'] = cur.get('cur-ops', 0) + 1
 
         do_set_create = ((cfg.get('max-items', 0) <= 0 or
                           cfg.get('max-items', 0) > cur.get('cur-items', 0)) and
@@ -299,6 +300,7 @@ def next_cmd(cfg, cur, store):
     else:
         cmd = 'get'
         cur['cur-gets'] = cur.get('cur-gets', 0) + 1
+        cur['cur-ops'] = cur.get('cur-ops', 0) + 1
 
         do_query = cfg.get('ratio-queries', 0) > \
             float(cur.get('cur-queries', 0)) / cur.get('cur-gets', 0)
