@@ -1299,8 +1299,10 @@ function(doc) {
     def test_vperf1(self):
         # Like test_workload2, but just one design doc, one view.
         self.spec("vperf1")
+
+        self.gated_start(self.input.clients)
+
         items = self.parami("items", 1000000)
-        notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         ddocs = {}
         ddocs["A"] = { "views": {} }
@@ -1353,16 +1355,15 @@ function(doc) {
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
 
-        self.gated_finish(self.input.clients, notify)
-
     def test_vperf2(self):
         """1 design document, 8 views"""
 
         self.spec("vperf2")
 
+        self.gated_start(self.input.clients)
+
         # Load phase
         items = self.parami('items', 45000000)
-        notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1399,16 +1400,15 @@ function(doc) {
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
 
-        self.gated_finish(self.input.clients, notify)
-
     def test_vperf3(self):
         """8 design documents, 1 view"""
 
         self.spec("vperf3")
 
+        self.gated_start(self.input.clients)
+
         # Load phase
         items = self.parami('items', 45000000)
-        notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1445,16 +1445,15 @@ function(doc) {
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
 
-        self.gated_finish(self.input.clients, notify)
-
     def test_vperf4(self):
         """Like workload 2 but without queries on primary index"""
 
         self.spec("vperf4")
 
+        self.gated_start(self.input.clients)
+
         # Load phase
         items = self.parami('items', 45000000)
-        notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1493,16 +1492,15 @@ function(doc) {
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
 
-        self.gated_finish(self.input.clients, notify)
-
     def test_vperf5(self):
         """Only queries on primary index"""
 
         self.spec("vperf5")
 
+        self.gated_start(self.input.clients)
+
         # Load phase
         items = self.parami('items', 45000000)
-        notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1538,16 +1536,15 @@ function(doc) {
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
 
-        self.gated_finish(self.input.clients, notify)
-
     def test_vperf6(self):
         """Only queries on pseudo primary index"""
 
         self.spec("vperf6")
 
+        self.gated_start(self.input.clients)
+
         # Load phase
         items = self.parami('items', 45000000)
-        notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1584,8 +1581,6 @@ function(doc) {
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
-
-        self.gated_finish(self.input.clients, notify)
 
     def test_evperf2(self):
         """3 design documents, 8 views per design document"""
