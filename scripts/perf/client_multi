@@ -1,6 +1,9 @@
 #!/bin/bash
-prefix=${prefix}
-total_masters=${total_masters}
+prefix=$1
+num_clients=$2
+total_masters=$3
+
+echo "prefix:"${prefix}", num_clients="${num_clients}", total_masters="${total_masters}
 
 if [ ${load_phase} -eq 1 ] ; then
     num_clients=3
