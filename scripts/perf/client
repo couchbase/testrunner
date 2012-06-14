@@ -22,7 +22,7 @@ echo "test_id = "$test_id
 
 if [ -n "${hot_load_phase}" ] ; then
   num_clients=1
-  extra=",hot_load_phase=1"
+  extra=${extra}",hot_load_phase=1"
 fi
 
 if [ -n "${warmup}" ] ; then
