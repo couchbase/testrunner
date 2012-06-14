@@ -21,6 +21,7 @@ test_name = args[3]
 dbip = args[4]
 dbname = args[5]
 pdfname = args[6]
+run_id=args[7]
 
 # baseline_build="1.8.0r-55-g80f24f2-enterprise"
 # new_build = "1.8.1-852-rel-enterprise"
@@ -28,6 +29,19 @@ pdfname = args[6]
 # dbip = "couchdb2.couchbaseqe.com"
 # dbname= "eperf"
 # pdfname = "mixed-suv-4-10-1.8.0vs1.8.1-852"
+
+if (length(pdfname) == 0) {
+    if (length(run_id) == 0) {
+        run_id = "*"
+    }
+    pdfname = paste(test_name,
+                    baseline_build,
+                    new_build,
+                    run_id,
+                    format(Sys.time(), "%b-%d-%Y_%X"),
+                    sep="_")
+    print(paste("pdfname:", pdfname))
+}
 
 pdf(file=paste(pdfname,sep="",".pdf"),height=8,width=10,paper='USr')
 
