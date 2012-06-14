@@ -252,8 +252,10 @@ class EPerfMaster(perf.PerfBase):
                     build = build.replace('-community', '')
                     spec = self.param('spec', 'unknown')
                     if self.parami('hot_load_phase', 0):
-                        phase = 'hot_load'
-                    client_phase = phase + '-' + str(self.parami("prefix", 0))
+                        prefix = 'hot_'
+                    else:
+                        prexix = ''
+                    client_phase = prexix + phase + '-' + str(self.parami("prefix", 0))
 
                     # Change status to 'started'
                     if self.parami(phase + "_phase", 0):
