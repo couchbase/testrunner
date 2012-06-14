@@ -11,7 +11,7 @@ from couchbase.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
 import json
-from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException
+from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException
 
 #TODO: Setup stacktracer
 #TODO: Needs "easy_install pygments"
@@ -181,7 +181,11 @@ class RebalanceTask(Task):
 
     def check(self, task_manager):
         rest = RestConnection(self.servers[0])
-        progress = rest._rebalance_progress()
+        try:
+            progress = rest._rebalance_progress()
+        except RebalanceFailedException as ex:
+            self.state = FINISHED
+            self.set_exception(ex)
         if progress != -1 and progress != 100:
             task_manager.schedule(self, 10)
         else:
