@@ -254,8 +254,8 @@ class EPerfMaster(perf.PerfBase):
                     if self.parami('hot_load_phase', 0):
                         prefix = 'hot_'
                     else:
-                        prexix = ''
-                    client_phase = prexix + phase + '-' + str(self.parami("prefix", 0))
+                        prefix = ''
+                    client_phase = prefix + phase + '-' + str(self.parami("prefix", 0))
 
                     # Change status to 'started'
                     if self.parami(phase + "_phase", 0):
