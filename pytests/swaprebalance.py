@@ -60,6 +60,9 @@ class SwapRebalanceBase(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
+            rest = RestConnection(server)
+            if server.data_path:
+                rest.set_data_path(data_path=server.data_path)
         self.log.info("Stopping load in Teardown")
         SwapRebalanceBase.stop_load(self.loaders)
         ClusterHelper.wait_for_ns_servers_or_assert(self.servers, self)
