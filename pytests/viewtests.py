@@ -709,9 +709,6 @@ class ViewBaseTests(unittest.TestCase):
         moxis_restarted = rest.diag_eval(command)
         self.assertTrue(moxis_restarted, "unable to restart moxi process through diag/eval")
 
-        #wait until memcached starts
-        BucketOperationHelper.wait_for_memcached(self.servers[0], bucket)
-
         moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
         doc_names = []
         for i in range(0, num_docs):
