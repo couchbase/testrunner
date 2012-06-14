@@ -2,6 +2,7 @@
 prefix=$1
 num_clients=$2
 total_masters=$3
+test_id=$4
 
 echo "prefix:"${prefix}", num_clients="${num_clients}", total_masters="${total_masters}
 
@@ -27,5 +28,5 @@ if(${multi}); then
     done
     wait
 else
-    scripts/perf/client ${prefix} ${num_clients}
+    scripts/perf/client ${prefix} ${num_clients} ${test_id}
 fi

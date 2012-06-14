@@ -1,5 +1,7 @@
 #!/bin/sh
 
+test_id=${3}
+
 echo scripts/perf/client: testing ${product}: ${version_number} prefix=${1} num_clients=${2} -- ${PARENT_BUILD_NUMBER} - ${BUILD_NUMBER}
 
 git rev-parse HEAD
@@ -12,6 +14,11 @@ cat ${test_conf}
 
 echo ini_file: ${ini_file}
 cat ${ini_file}
+
+if [ -z "${test_id}" ] ; then
+    test_id=`date +%Y%m%d_%H%M%S`
+fi
+echo "test_id = "$test_id
 
 if [ -n "${hot_load_phase}" ] ; then
   num_clients=1
@@ -26,4 +33,4 @@ if [ -z "${loglevel}" ] ; then
   loglevel="DEBUG"
 fi
 
-./testrunner -i ${ini_file} -c ${test_conf} -p prefix=${1},num_clients=${2},load_phase=${load_phase},index_phase=${index_phase},access_phase=${access_phase}${extra} -l $loglevel
+./testrunner -i ${ini_file} -c ${test_conf} -p prefix=${1},num_clients=${2},load_phase=${load_phase},index_phase=${index_phase},access_phase=${access_phase},test_id=${test_id}${extra} -l $loglevel
