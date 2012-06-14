@@ -474,8 +474,11 @@ class Store:
             if histo is None:
                 histo = {}
                 self.cur[key] = histo
-            bucket = round(self.histo_bucket(delta), 6)
-            histo[bucket] = histo.get(bucket, 0) + 1
+            try:
+                bucket = round(self.histo_bucket(delta), 6)
+                histo[bucket] = histo.get(bucket, 0) + 1
+            except TypeError as e:
+                print "[mcsoda TypeError] {0}, delta = {1}".format(str(e), delta)
 
     def histo_bucket(self, samp):
         hp = self.cfg.get("histo-precision", 2)
