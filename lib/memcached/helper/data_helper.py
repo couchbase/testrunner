@@ -828,6 +828,12 @@ class VBucketAwareMemcached(object):
                     vb_error += 1
                 else:
                     raise error
+            except EOFError as error:
+                if "Got empty data (remote died?)" in  error.message and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
 
     def get(self, key):
         vb_error = 0
