@@ -222,16 +222,30 @@ class SwapRebalanceBase(unittest.TestCase):
         if do_stop_start:
             # Rebalance is stopped at 20%, 40% and 60% completion
             self.log.info("STOP/START SWAP REBALANCE PHASE")
-            for i in [1, 2, 3]:
-                expected_progress = 20*i
-                reached = RestHelper(rest).rebalance_reached(expected_progress)
-                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
-                stopped = rest.stop_rebalance()
-                self.assertTrue(stopped, msg="unable to stop rebalance")
-                time.sleep(20)
-                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
-                    ejectedNodes=optNodesIds)
-
+            retry = 0
+            for expected_progress in (20, 40, 60):
+                while True:
+                    progress = rest._rebalance_progress()
+                    if progress < 0:
+                        self.log.error("rebalance progress code : {0}".format(progress))
+                        break
+                    elif progress == 100:
+                        self.log.warn("Rebalance is already reached")
+                        break
+                    elif progress >= expected_progress:
+                        self.log.info("Rebalance will be stopped with {0}%".format(progress))
+                        stopped = rest.stop_rebalance()
+                        self.assertTrue(stopped, msg="unable to stop rebalance")
+                        time.sleep(20)
+                        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
+                                       ejectedNodes=optNodesIds)
+                        break
+                    elif retry > 100:
+                        break
+                    else:
+                        retry += 1
+                        time.sleep(1)
+                #self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
 
