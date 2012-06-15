@@ -1211,6 +1211,15 @@ class RestConnection(object):
                 return True, i
         return False, i
 
+    def set_ensure_full_commit(self, value):
+        """Dynamic settings changes"""
+        # the boolean paramter is used to turn on/off ensure_full_commit(). In XDCR,
+        # issuing checkpoint in this function is expensive and not necessary in some
+        # test, turning off this function would speed up some test. The default value
+        # is ON.
+        cmd = 'ns_config:set(ensure_full_commit_enabled, {0}).'.format(value)
+        return self.diag_eval(cmd)
+
     def set_auto_compaction(self, parallelDBAndVC = "false", dbFragmentThreshold=None,
                            viewFragmntThreshold=None, dbFragmentThresholdPercentage=100,
                            viewFragmntThresholdPercentage=100, allowedTimePeriodFromHour=None,
