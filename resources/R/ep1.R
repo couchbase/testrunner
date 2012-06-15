@@ -269,6 +269,13 @@ tryCatch({
 }, error=function(e) {
     print("Cannot find detailed disk stats, they are only available in 2.0")
 })
+tryCatch({
+    ns_server_data $docs_fragmentation <- as.numeric(ns_server_data$couch_docs_fragmentation)
+    ns_server_data $views_fragmentation <- as.numeric(ns_server_data$couch_views_fragmentation)
+}, error=function(e) {
+    print("Cannot find fragmentation stats, they are only available in 2.0")
+})
+
 ns_server_data $curr_items <- as.numeric(ns_server_data$curr_items)
 ns_server_data $curr_items_tot <- as.numeric(ns_server_data$curr_items_tot)
 ns_server_data $cmd_get <- as.numeric(ns_server_data$cmd_get)
@@ -1266,6 +1273,30 @@ if (nrow(ns_server_data) > 0) {
         makeFootnote(footnote)
         makeMetricDef(paste("The total size on disk of all data ",
                             "and view files. (2.0 only)",
+                            sep="\n"))
+    }
+
+    if(!is.null(ns_server_data$couch_views_fragmentation)) {
+        cat("generating couch_docs_fragmentation \n")
+        p <- ggplot(ns_server_data, aes(row, docs_fragmentation, color=buildinfo.version, label=docs_fragmentation)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Docs fragmentation")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("How much fragmented data there is to be ",
+                            "compacted compared to real data for the ",
+                            "data files in this bucket (2.0 only)",
+                            sep="\n"))
+
+        cat("generating couch_views_fragmentation \n")
+        p <- ggplot(ns_server_data, aes(row, views_fragmentation, color=buildinfo.version, label=views_fragmentation)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Views fragmentation")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("How much fragmented data there is to be ",
+                            "compacted compared to real data for the ",
+                            "view index files in this bucket (2.0 only)",
                             sep="\n"))
     }
 
