@@ -20,8 +20,8 @@ new_build = args[2]
 test_name = args[3]
 dbip = args[4]
 dbname = args[5]
-pdfname = args[6]
-run_id=args[7]
+run_id=args[6]
+pdfname = args[7]
 
 # baseline_build="1.8.0r-55-g80f24f2-enterprise"
 # new_build = "1.8.1-852-rel-enterprise"
