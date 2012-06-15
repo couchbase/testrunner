@@ -846,6 +846,12 @@ class VBucketAwareMemcached(object):
                     vb_error += 1
                 else:
                     raise error
+            except EOFError as error:
+                if "Got empty data (remote died?)" in  error.message and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
 
     def delete(self, key):
         vb_error = 0
@@ -854,6 +860,12 @@ class VBucketAwareMemcached(object):
                 return self._send_op(self.memcached(key).delete, key)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
+            except EOFError as error:
+                if "Got empty data (remote died?)" in  error.message and vb_error < 3:
                     self.reset_vbucket(self.rest, key)
                     vb_error += 1
                 else:
