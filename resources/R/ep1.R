@@ -257,8 +257,14 @@ ns_server_data $vb_replica_eject <- as.numeric(ns_server_data $vb_replica_eject)
 ns_server_data $ep_tap_replica_queue_backoff <- as.numeric(ns_server_data $ep_tap_replica_queue_backoff)
 ns_server_data $mem_used <- as.numeric(ns_server_data$mem_used)
 tryCatch({
-    ns_server_data $docs_size <- as.numeric(ns_server_data$couch_docs_actual_disk_size)
-    ns_server_data $views_size <- as.numeric(ns_server_data$couch_views_actual_disk_size)
+    ns_server_data $docs_data_size <- as.numeric(ns_server_data$couch_docs_data_size)
+    ns_server_data $docs_disk_size <- as.numeric(ns_server_data$couch_docs_disk_size)
+    ns_server_data $docs_actual_disk_size <- as.numeric(ns_server_data$couch_docs_actual_disk_size)
+
+    ns_server_data $views_data_size <- as.numeric(ns_server_data$couch_views_data_size)
+    ns_server_data $views_disk_size <- as.numeric(ns_server_data$couch_views_disk_size)
+    ns_server_data $views_actual_disk_size <- as.numeric(ns_server_data$couch_views_actual_disk_size)
+
     ns_server_data $total_disk_size <- as.numeric(ns_server_data$couch_total_disk_size)
 }, error=function(e) {
     print("Cannot find detailed disk stats, they are only available in 2.0")
@@ -1191,8 +1197,17 @@ if (nrow(ns_server_data) > 0) {
     makeMetricDef("Engine's total memory usage")
 
     if(!is.null(ns_server_data$total_disk_size)) {
-        cat("generating couch_docs_actual_disk_size \n")
-        p <- ggplot(ns_server_data, aes(row, docs_size, color=buildinfo.version , label=docs_size)) + labs(x="----time (sec)--->", y="Bytes")
+        cat("generating couch_data_size \n")
+        p <- ggplot(ns_server_data, aes(row, docs_data_size, color=buildinfo.version , label=docs_data_size)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Docs data size")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("The size of active data in bucket (2.0 only)",
+                            sep="\n"))
+
+        cat("generating couch_docs_disk_size \n")
+        p <- ggplot(ns_server_data, aes(row, docs_disk_size, color=buildinfo.version , label=docs_disk_size)) + labs(x="----time (sec)--->", y="Bytes")
         p <- p + geom_point()
         p <- addopts(p,"Docs disk size")
         print(p)
@@ -1202,10 +1217,41 @@ if (nrow(ns_server_data) > 0) {
                             "and temporary files (2.0 only)",
                             sep="\n"))
 
-        cat("generating couch_views_actual_disk_size \n")
-        p <- ggplot(ns_server_data, aes(row, views_size, color=buildinfo.version , label=views_size)) + labs(x="----time (sec)--->", y="Bytes")
+        cat("generating couch_docs_actual_disk_size \n")
+        p <- ggplot(ns_server_data, aes(row, docs_actual_disk_size, color=buildinfo.version , label=docs_actual_disk_size)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Docs actual disk size")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("The size of all data files for this bucket, ",
+                            "including the data itself, meta data ",
+                            "and temporary files (2.0 only)",
+                            sep="\n"))
+
+        cat("generating couch_views_data_size \n")
+        p <- ggplot(ns_server_data, aes(row, views_data_size, color=buildinfo.version , label=views_data_size)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Views data size")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("The size of all active data on for all the",
+                            "indexes in this bucket (2.0 only)",
+                            sep="\n"))
+
+        cat("generating couch_views_disk_size \n")
+        p <- ggplot(ns_server_data, aes(row, views_disk_size, color=buildinfo.version , label=views_disk_size)) + labs(x="----time (sec)--->", y="Bytes")
         p <- p + geom_point()
         p <- addopts(p,"Views disk size")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("The size of all active items ",
+                            "in all the indexes on disk (2.0 only)",
+                            sep="\n"))
+
+        cat("generating couch_views_actual_disk_size \n")
+        p <- ggplot(ns_server_data, aes(row, views_actual_disk_size, color=buildinfo.version , label=views_actual_disk_size)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p,"Views actual disk size")
         print(p)
         makeFootnote(footnote)
         makeMetricDef(paste("The size of all active items ",
