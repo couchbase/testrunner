@@ -235,7 +235,7 @@ class StatsCollector(object):
     def ops_stats(self, ops_stat):
         ops_stat["time"] = time.time()
         self._task["ops-temp"].append(ops_stat)
-        if len(self._task["ops-temp"]) >= 500:
+        if len(self._task["ops-temp"]) >= 500 * (1 + self.active_mergers):
             # Prevent concurrent merge
             while self.active_mergers:
                 time.sleep(0.1)
