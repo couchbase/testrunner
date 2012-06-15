@@ -30,8 +30,8 @@ pdfname = args[7]
 # dbname= "eperf"
 # pdfname = "mixed-suv-4-10-1.8.0vs1.8.1-852"
 
-if (length(pdfname) == 0) {
-    if (length(run_id) == 0) {
+if (is.na(pdfname) | length(pdfname) == 0) {
+    if (is.na(run_id) | length(run_id) == 0) {
         run_id = "*"
     }
     pdfname = paste(test_name,
