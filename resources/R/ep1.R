@@ -1192,7 +1192,7 @@ if (nrow(ns_server_data) > 0) {
 
     if(!is.null(ns_server_data$total_disk_size)) {
         cat("generating couch_docs_actual_disk_size \n")
-        p <- ggplot(ns_server_data, aes(row, docs_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- ggplot(ns_server_data, aes(row, docs_size, color=buildinfo.version , label=docs_size)) + labs(x="----time (sec)--->", y="Bytes")
         p <- p + geom_point()
         p <- addopts(p,"Docs disk size")
         print(p)
@@ -1203,7 +1203,7 @@ if (nrow(ns_server_data) > 0) {
                             sep="\n"))
 
         cat("generating couch_views_actual_disk_size \n")
-        p <- ggplot(ns_server_data, aes(row, views_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- ggplot(ns_server_data, aes(row, views_size, color=buildinfo.version , label=views_size)) + labs(x="----time (sec)--->", y="Bytes")
         p <- p + geom_point()
         p <- addopts(p,"Views disk size")
         print(p)
@@ -1213,7 +1213,7 @@ if (nrow(ns_server_data) > 0) {
                             sep="\n"))
 
         cat("generating couch_total_disk_size \n")
-        p <- ggplot(ns_server_data, aes(row, total_disk_size, color=buildinfo.version , label= mem_used)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- ggplot(ns_server_data, aes(row, total_disk_size, color=buildinfo.version , label=total_disk_size)) + labs(x="----time (sec)--->", y="Bytes")
         p <- p + geom_point()
         p <- addopts(p,"Total disk size")
         print(p)
