@@ -241,7 +241,7 @@ class ViewQueryTests(unittest.TestCase):
 
     def test_employee_dataset_group_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_group_count_queries()
         self._query_test_init(data_set)
@@ -475,9 +475,14 @@ class QueryView:
                                                         or query.params.has_key("reduce") and query.params["reduce"] == "true"):
                         if self.reduce_fn == "_count":
                             num_keys = self._verify_count_reduce_helper(query, results)
-                        self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
-                            .format(view_name, attempt + 1, query.expected_num_groups,
-                                    num_keys, self.index_size))
+                            if "group" in params or "group_level" in params:
+                                self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
+                                    .format(view_name, attempt + 1, query.expected_num_groups,
+                                            num_keys, expected_num_docs))
+                            else:
+                                self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
+                                    .format(view_name, attempt + 1, query.expected_num_groups,
+                                            num_keys, self.index_size))
                         if self.index_size !=  num_keys:
                             attempt += 1
                             continue
@@ -823,20 +828,35 @@ class EmployeeDataSet:
         by the query is provided.  each group will generate a value that
         when summed, should add up to the number of indexed docs
     """
-    def add_group_count_queries(self, views = None):
+    def add_group_count_queries(self, views=None, limit=None):
         if views is None:
             views = [self.views[-1]]
+        if limit is None:
+            limit = self.limit
 
         for view in views:
-            index_size = view.index_size
-            view.queries += [QueryHelper({"group" : "true"}, index_size,
-                             self.years * self.months * self.days),
-                             QueryHelper({"group_level" : "1"}, index_size,
-                             self.years),
-                             QueryHelper({"group_level" : "2"}, index_size,
-                             self.years * self.months),
-                             QueryHelper({"group_level" : "3"}, index_size,
-                             self.years * self.months * self.days)]
+            if limit:
+                view.queries += [QueryHelper({"group" : "true", "limit" : limit},
+                                             min(limit,view.index_size),
+                                             min(limit, self.years * self.months * self.days)),
+                                 QueryHelper({"group_level" : "1", "limit" : limit},
+                                             min(limit,view.index_size),
+                                             min(limit, self.years)),
+                                 QueryHelper({"group_level" : "2", "limit" : limit},
+                                             min(limit,view.index_size),
+                                             min(limit, self.years * self.months)),
+                                 QueryHelper({"group_level" : "3", "limit" : limit},
+                                             min(limit,view.index_size),
+                                             min(limit, self.years * self.months * self.days))]
+            else:
+                view.queries += [QueryHelper({"group" : "true"}, view.index_size,
+                                             self.years * self.months * self.days),
+                                 QueryHelper({"group_level" : "1"}, view.index_size,
+                                             self.years),
+                                 QueryHelper({"group_level" : "2"}, view.index_size,
+                                             self.years * self.months),
+                                 QueryHelper({"group_level" : "3"}, view.index_size,
+                                             self.years * self.months * self.days)]
 
     def add_all_query_sets(self, views=None, limit=None):
         self.add_stale_queries(views, limit)
