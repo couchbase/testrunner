@@ -298,6 +298,7 @@ class EPerfMaster(perf.PerfBase):
             items = self.parami("num_items", num_items) / num_clients
             self.is_multi_node = False
             mvs = self.min_value_size(self.parami("avg_value_size", PerfDefaults.avg_value_size))
+            prefix = self.params('prefix', '0')
             self.load(items,
                       self.param('size', mvs),
                       kind=self.param('kind', 'json'),
@@ -305,7 +306,7 @@ class EPerfMaster(perf.PerfBase):
                                                 port=self.input.servers[0].port),
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
-                      prefix="",
+                      prefix=prefix,
                       start_at=start_at,
                       is_eperf=True)
             self.restartProxy()

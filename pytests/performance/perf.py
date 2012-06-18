@@ -849,10 +849,15 @@ class PerfBase(unittest.TestCase):
     def param(self, name, default_value):
         input = getattr(self, "input", TestInputSingleton.input)
         return input.test_params.get(name, default_value)
+
     def parami(self, name, default_int):
         return int(self.param(name, default_int))
+
     def paramf(self, name, default_float):
         return float(self.param(name, default_float))
+
+    def params(self, name, default_str):
+        return str(self.param(name, default_str))
 
 
 class NodePeakPerformance(PerfBase):
