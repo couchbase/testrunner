@@ -1,3 +1,5 @@
+import functools
+
 from membase.api.rest_client import RestConnection
 
 from eperf import EPerfClient
@@ -26,3 +28,18 @@ class XPerfTest(EPerfClient):
         if bidir:
             XPerfTest.start_replication(slave, master, replication_type,
                                         buckets, suffix='B')
+
+    def xperf_manager(bidir=False):
+        def _outer_wrapper(test):
+            @functools.wraps(test)
+            def _inner_wrapper(self, *args, **kargs):
+                # Define remote cluster and start replication
+                if self.parami('prefix', -1) == 0:
+                    master = self.input.clusters[0][0]
+                    slave = self.input.clusters[1][0]
+                    XPerfTest.start_replication(master, slave, bidir=bidir)
+
+                # Execute performance test
+                return test(self, *args, **kargs)
+            return _inner_wrapper
+        return _outer_wrapper
