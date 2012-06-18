@@ -64,7 +64,7 @@ class ViewQueryTests(unittest.TestCase):
 
     def test_employee_dataset_startkey_endkey_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_startkey_endkey_queries()
         self._query_test_init(data_set)
@@ -234,7 +234,7 @@ class ViewQueryTests(unittest.TestCase):
 
     def test_employee_dataset_startkey_endkey_docid_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_startkey_endkey_docid_queries()
         self._query_test_init(data_set)
@@ -280,7 +280,7 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
 
         docs_per_day = self.input.param('docs-per-day', 200)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_stale_queries()
         self._query_test_init(data_set)
@@ -290,7 +290,7 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
 
         docs_per_day = self.input.param('docs-per-day', 200)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_all_query_sets()
         self._query_test_init(data_set)
@@ -436,8 +436,9 @@ class QueryView:
             return
 
         view_name = self.name
-        max_dupe_result_count = \
-            tc.input.param('max-dupe-result-count', 10)
+
+        max_dupe_result_count = tc.input.param('max-dupe-result-count', 5)
+
         num_verified_docs = tc.input.param('num-verified-docs', 20)
 
         for query in self.queries:
@@ -470,11 +471,18 @@ class QueryView:
                                                               type_ = query.type_)
 
                     # check if this is a reduced query using _count
-                    if self.reduce_fn is '_count':
-                        num_keys = self._verify_count_reduce_helper(query, results)
+                    if self.reduce_fn and (not query.params.has_key("reduce")\
+                                                        or query.params.has_key("reduce") and query.params["reduce"] == "true"):
+                        if self.reduce_fn == "_count":
+                            num_keys = self._verify_count_reduce_helper(query, results)
                         self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
                             .format(view_name, attempt + 1, query.expected_num_groups,
-                                    num_keys, expected_num_docs))
+                                    num_keys, self.index_size))
+                        if self.index_size !=  num_keys:
+                            attempt += 1
+                            continue
+                        else:
+                            break
                     else:
 
                         num_keys = len(ViewBaseTests._get_keys(self, results))
@@ -509,14 +517,14 @@ class QueryView:
                             results = ViewBaseTests._get_view_results(tc, rest,
                                                                       self.bucket,
                                                                       view_name,
-                                                                      limit=None,
+                                                                      limit=limit,
                                                                       extra_params=params,
                                                                       type_ = query.type_)
 
                         # verify keys
                         key_failures = QueryHelper.verify_query_keys(rest, query,
                                                                      results, self.bucket,
-                                                                     num_verified_docs)
+                                                                     num_verified_docs, limit=limit)
                         msg = "unable to retrieve expected results: {0}".format(key_failures)
                         tc.assertEquals(len(key_failures), 0, msg)
 
@@ -534,7 +542,7 @@ class QueryView:
                 # query without verification
                 self.log.info("Quering view {0} with params: {1}".format(view_name, params));
                 results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
-                                                          limit=None, extra_params=params,
+                                                          limit=limit, extra_params=params,
                                                           type_ = query.type_)
 
     """
@@ -550,8 +558,8 @@ class QueryView:
 
         num_keys = 0
 
-        for i in range(0,query.expected_num_groups):
-            if i < len(results["rows"]):
+        for i in xrange(query.expected_num_groups):
+            if i <= len(results["rows"]):
                 num_keys += results["rows"][i]["value"]
 
         return num_keys
@@ -582,9 +590,11 @@ class EmployeeDataSet:
     def calc_total_doc_count(self):
         return self.years * self.months * self.days * self.docs_per_day * len(self.get_data_sets())
 
-    def add_startkey_endkey_queries(self, views = None):
+    def add_startkey_endkey_queries(self, views=None, limit=None):
         if views is None:
             views = self.views
+        if limit is None:
+            limit = self.limit
 
         for view in views:
             index_size = view.index_size
@@ -595,21 +605,44 @@ class EmployeeDataSet:
             if index_size == self.calc_total_doc_count():
                 offset = offset * len(self.get_data_sets())
 
-            view.queries += [QueryHelper({"start_key" : "[2008,7,null]"}, index_size/2),
-                             QueryHelper({"start_key" : "[2008,0,1]",
-                                          "end_key"   : "[2008,7,1]",
-                                          "inclusive_end" : "false"}, index_size/2),
-                             QueryHelper({"start_key" : "[2008,0,1]",
-                                          "end_key"   : "[2008,7,1]",
-                                          "inclusive_end" : "true"}, index_size/2 + offset),
-                             QueryHelper({"start_key" : "[2008,7,1]",
-                                          "end_key"   : "[2008,1,1]",
-                                          "descending"   : "true",
-                                          "inclusive_end" : "false"}, index_size/2),
-                             QueryHelper({"start_key" : "[2008,7,1]",
-                                          "end_key"   : "[2008,1,1]",
-                                          "descending"   : "true",
-                                          "inclusive_end" : "true"}, index_size/2 + offset)]
+            if limit:
+                view.queries += [QueryHelper({"start_key" : "[2008,7,null]", "limit" : limit},
+                                             min(index_size/2,limit)),
+                                 QueryHelper({"start_key" : "[2008,0,1]",
+                                              "end_key"   : "[2008,7,1]",
+                                              "inclusive_end" : "false", "limit" : limit},
+                                             min(index_size/2,limit)),
+                                 QueryHelper({"start_key" : "[2008,0,1]",
+                                              "end_key"   : "[2008,7,1]",
+                                              "inclusive_end" : "true", "limit" : limit},
+                                             min(index_size/2 + offset,limit)),
+                                 QueryHelper({"start_key" : "[2008,7,1]",
+                                              "end_key"   : "[2008,1,1]",
+                                              "descending"   : "true",
+                                              "inclusive_end" : "false", "limit" : limit},
+                                             min(index_size/2,limit)),
+                                 QueryHelper({"start_key" : "[2008,7,1]",
+                                              "end_key"   : "[2008,1,1]",
+                                              "descending"   : "true",
+                                              "inclusive_end" : "true", "limit" : limit},
+                                             min(index_size/2 + offset,limit))]
+            else:
+                view.queries += [QueryHelper({"start_key" : "[2008,7,null]"}, index_size/2),
+                                 QueryHelper({"start_key" : "[2008,0,1]",
+                                              "end_key"   : "[2008,7,1]",
+                                              "inclusive_end" : "false"}, index_size/2),
+                                 QueryHelper({"start_key" : "[2008,0,1]",
+                                              "end_key"   : "[2008,7,1]",
+                                              "inclusive_end" : "true"}, index_size/2 + offset),
+                                 QueryHelper({"start_key" : "[2008,7,1]",
+                                              "end_key"   : "[2008,1,1]",
+                                              "descending"   : "true",
+                                              "inclusive_end" : "false"}, index_size/2),
+                                 QueryHelper({"start_key" : "[2008,7,1]",
+                                              "end_key"   : "[2008,1,1]",
+                                              "descending"   : "true",
+                                              "inclusive_end" : "true"}, index_size/2 + offset)]
+
 
 
 
@@ -656,7 +689,9 @@ class EmployeeDataSet:
         Only pass in view that indexes all employee types as they are
         expected in the query params...i.e (ui,admin,arch)
     """
-    def add_startkey_endkey_docid_queries(self, views = None):
+    def add_startkey_endkey_docid_queries(self, views=None, limit=None):
+        if limit is None:
+            limit = self.limit
         if views is None:
             views = []
 
@@ -678,54 +713,105 @@ class EmployeeDataSet:
             all_docs_per_day = len(self.get_data_sets()) * offset
             complex_query_key_count = 9*all_docs_per_day + 4*self.days*all_docs_per_day \
                                         + all_docs_per_day
-
-            view.queries += [QueryHelper(
+            if limit:
+                view.queries += [QueryHelper(
+                                        {"start_key" : "[2008,7,1]",
+                                         "startkey_docid" : "arch0000-2008_07_01",
+                                         "limit" : limit}, min(limit, index_size/2  - offset)),
+                                QueryHelper({"start_key" : "[2008,7,1]",
+                                             "startkey_docid" : "ui0000-2008_07_01",
+                                             "limit" : limit}, min(limit, index_size/2  - offset*2)),
+                                              # +endkey_docid
+                                QueryHelper({"start_key" : "[2008,0,1]",
+                                             "end_key"   : "[2008,7,1]",
+                                             "endkey_docid" : "arch0000-2008_07_01",
+                                             "inclusive_end" : "false",
+                                             "limit" : limit}, min(limit, index_size/2 + offset)),
+                                QueryHelper({"end_key"   : "[2008,7,1]",
+                                             "endkey_docid" : "ui0000-2008_07_01",
+                                             "inclusive_end" : "false",
+                                             "limit" : limit}, min(limit, index_size/2 + offset*2)),
+                                              # + inclusive_end
+                                QueryHelper({"end_key"   : "[2008,7,1]",
+                                             "endkey_docid" : "arch0000-2008_07_01",
+                                             "inclusive_end" : "true",
+                                             "limit" : limit}, min(limit, index_size/2 + offset + 1)),
+                                              # + single bounded and descending
+                                QueryHelper({"start_key" : "[2008,7,1]",
+                                             "end_key"   : "[2008,2,20]",
+                                             "endkey_docid"   : "ui0000-2008_02_20",
+                                             "descending"   : "true",
+                                             "inclusive_end" : "true",
+                                             "limit" : limit}, min(limit, complex_query_key_count - offset * 2)),
+                                QueryHelper({"start_key" : "[2008,7,1]",
+                                             "end_key"   : "[2008,2,20]",
+                                             "endkey_docid"   : "arch0000-2008_02_20",
+                                             "descending"   : "true",
+                                             "inclusive_end" : "false",
+                                             "limit" : limit}, min(limit, complex_query_key_count - offset - 1)),
+                                              # + double bounded and descending
+                                QueryHelper({"start_key" : "[2008,7,1]",
+                                             "startkey_docid" : "admin0000-2008_07_01",
+                                             "end_key"   : "[2008,2,20]",
+                                             "endkey_docid"   : "arch0000-2008_02_20",
+                                             "descending"   : "true",
+                                             "inclusive_end" : "false",
+                                             "limit" : limit},
+                                             min(limit, complex_query_key_count - offset - all_docs_per_day))]
+            else:
+                view.queries += [QueryHelper(
                                         {"start_key" : "[2008,7,1]",
                                           "startkey_docid" : "arch0000-2008_07_01"}, index_size/2  - offset),
-                            QueryHelper({"start_key" : "[2008,7,1]",
-                                          "startkey_docid" : "ui0000-2008_07_01"}, index_size/2  - offset*2),
-                                          # +endkey_docid
-                            QueryHelper({"start_key" : "[2008,0,1]",
-                                         "end_key"   : "[2008,7,1]",
-                                         "endkey_docid" : "arch0000-2008_07_01",
-                                         "inclusive_end" : "false"}, index_size/2 + offset),
-                            QueryHelper({"end_key"   : "[2008,7,1]",
-                                         "endkey_docid" : "ui0000-2008_07_01",
-                                         "inclusive_end" : "false"}, index_size/2 + offset*2),
-                                          # + inclusive_end
-                            QueryHelper({"end_key"   : "[2008,7,1]",
-                                         "endkey_docid" : "arch0000-2008_07_01",
-                                         "inclusive_end" : "true"}, index_size/2 + offset + 1),
-                                          # + single bounded and descending
-                            QueryHelper({"start_key" : "[2008,7,1]",
-                                         "end_key"   : "[2008,2,20]",
-                                         "endkey_docid"   : "ui0000-2008_02_20",
-                                         "descending"   : "true",
-                                         "inclusive_end" : "true"}, complex_query_key_count - offset * 2),
-                            QueryHelper({"start_key" : "[2008,7,1]",
-                                         "end_key"   : "[2008,2,20]",
-                                         "endkey_docid"   : "arch0000-2008_02_20",
-                                         "descending"   : "true",
-                                         "inclusive_end" : "false"}, complex_query_key_count - offset - 1),
-                                          # + double bounded and descending
-                            QueryHelper({"start_key" : "[2008,7,1]",
-                                         "startkey_docid" : "admin0000-2008_07_01",
-                                         "end_key"   : "[2008,2,20]",
-                                         "endkey_docid"   : "arch0000-2008_02_20",
-                                         "descending"   : "true",
-                                         "inclusive_end" : "false"},
-                                         complex_query_key_count - offset - all_docs_per_day)]
+                                QueryHelper({"start_key" : "[2008,7,1]",
+                                              "startkey_docid" : "ui0000-2008_07_01"}, index_size/2  - offset*2),
+                                              # +endkey_docid
+                                QueryHelper({"start_key" : "[2008,0,1]",
+                                             "end_key"   : "[2008,7,1]",
+                                             "endkey_docid" : "arch0000-2008_07_01",
+                                             "inclusive_end" : "false"}, index_size/2 + offset),
+                                QueryHelper({"end_key"   : "[2008,7,1]",
+                                             "endkey_docid" : "ui0000-2008_07_01",
+                                             "inclusive_end" : "false"}, index_size/2 + offset*2),
+                                              # + inclusive_end
+                                QueryHelper({"end_key"   : "[2008,7,1]",
+                                             "endkey_docid" : "arch0000-2008_07_01",
+                                             "inclusive_end" : "true"}, index_size/2 + offset + 1),
+                                              # + single bounded and descending
+                                QueryHelper({"start_key" : "[2008,7,1]",
+                                             "end_key"   : "[2008,2,20]",
+                                             "endkey_docid"   : "ui0000-2008_02_20",
+                                             "descending"   : "true",
+                                             "inclusive_end" : "true"}, complex_query_key_count - offset * 2),
+                                QueryHelper({"start_key" : "[2008,7,1]",
+                                             "end_key"   : "[2008,2,20]",
+                                             "endkey_docid"   : "arch0000-2008_02_20",
+                                             "descending"   : "true",
+                                             "inclusive_end" : "false"}, complex_query_key_count - offset - 1),
+                                              # + double bounded and descending
+                                QueryHelper({"start_key" : "[2008,7,1]",
+                                             "startkey_docid" : "admin0000-2008_07_01",
+                                             "end_key"   : "[2008,2,20]",
+                                             "endkey_docid"   : "arch0000-2008_02_20",
+                                             "descending"   : "true",
+                                             "inclusive_end" : "false"},
+                                             complex_query_key_count - offset - all_docs_per_day)]
 
 
-    def add_stale_queries(self, views = None):
+    def add_stale_queries(self, views=None, limit=None):
         if views is None:
             views = self.views
+        if limit is None:
+            limit = self.limit
 
         for view in views:
-            index_size = view.index_size
-            view.queries += [QueryHelper({"stale" : "false"}, index_size),
-                             QueryHelper({"stale" : "ok"}, index_size),
-                             QueryHelper({"stale" : "update_after"}, index_size)]
+            if limit:
+                view.queries += [QueryHelper({"stale" : "false", "limit" : limit}, min(limit, view.index_size)),
+                                 QueryHelper({"stale" : "ok", "limit" : limit}, min(limit, view.index_size)),
+                                 QueryHelper({"stale" : "update_after", "limit" : limit}, min(limit, view.index_size))]
+            else:
+                view.queries += [QueryHelper({"stale" : "false"}, view.index_size),
+                                 QueryHelper({"stale" : "ok"}, view.index_size),
+                                 QueryHelper({"stale" : "update_after"}, view.index_size)]
 
 
     """
@@ -752,10 +838,10 @@ class EmployeeDataSet:
                              QueryHelper({"group_level" : "3"}, index_size,
                              self.years * self.months * self.days)]
 
-    def add_all_query_sets(self, views = None):
-        self.add_stale_queries(views)
-        self.add_startkey_endkey_queries(views)
-        self.add_startkey_endkey_docid_queries(views)
+    def add_all_query_sets(self, views=None, limit=None):
+        self.add_stale_queries(views, limit)
+        self.add_startkey_endkey_queries(views, limit)
+        self.add_startkey_endkey_docid_queries(views, limit)
         self.add_group_count_queries(views)
 
     # views for this dataset
@@ -1150,7 +1236,7 @@ class QueryHelper:
 
     # less open clients
     @staticmethod
-    def verify_query_keys(rest, query, results, bucket = "default", num_verified_docs = 20):
+    def verify_query_keys(rest, query, results, bucket = "default", num_verified_docs = 20, limit=None):
         failures = []
 
         if(len(query.expected_keys) == 0):
@@ -1161,7 +1247,7 @@ class QueryHelper:
         ids=[str(doc['id']) for doc in results['rows']]
 
         couch_set = set(ids)
-        expected_set = set(query.expected_keys)
+        expected_set = limit and set(query.expected_keys[:limit]) or set(query.expected_keys)
 
         missing_item_set = expected_set - couch_set
         extra_item_set = couch_set - expected_set
