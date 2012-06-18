@@ -298,7 +298,7 @@ class EPerfMaster(perf.PerfBase):
             items = self.parami("num_items", num_items) / num_clients
             self.is_multi_node = False
             mvs = self.min_value_size(self.parami("avg_value_size", PerfDefaults.avg_value_size))
-            prefix = self.params('prefix', '0')
+            prefix = self.param('cluster_prefix', '') + self.params('prefix', '0')
             self.load(items,
                       self.param('size', mvs),
                       kind=self.param('kind', 'json'),
