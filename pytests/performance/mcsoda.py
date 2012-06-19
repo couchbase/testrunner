@@ -251,7 +251,7 @@ def next_cmd(cfg, cur, store):
         do_set_create = ((cfg.get('max-items', 0) <= 0 or
                           cfg.get('max-items', 0) > cur.get('cur-items', 0)) and
                          cfg.get('max-creates', 0) > cur.get('cur-creates', 0) and
-                         cfg.get('ratio-creates', 0) > \
+                         cfg.get('ratio-creates', 0) >= \
                            float(cur.get('cur-creates', 0)) / positive(cur.get('cur-sets', 0)))
         if do_set_create:
             # Create...
