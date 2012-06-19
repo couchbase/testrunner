@@ -1317,6 +1317,9 @@ class NodeDataStorage(object):
     def get_data_path(self):
         return self.path
 
+    def get_index_path(self):
+        return self.index_path
+
 
 class NodeDiskStorage(object):
     def __init__(self):

@@ -94,17 +94,19 @@ class RebalanceBaseTest(unittest.TestCase):
         nodes = rest.node_statuses()
         test.log.info("expect {0} / {1} replication ? {2}".format(len(nodes),
             (1.0 + replica), len(nodes) / (1.0 + replica)))
+        for bucket in buckets:
+            ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 30, bucket.name)
         if len(nodes) / (1.0 + replica) >= 1:
             final_replication_state = RestHelper(rest).wait_for_replication(300)
             msg = "replication state after waiting for up to 5 minutes : {0}"
             test.log.info(msg.format(final_replication_state))
             #run expiry_pager on all nodes before doing the replication verification
             for bucket in buckets:
-                ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)
+                ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 30, bucket.name)
                 test.log.info("wait for expiry pager to run on all these nodes")
                 time.sleep(30)
-                ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name, 3600)
-                ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)
+                ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 3600, bucket.name)
+                ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 30, bucket.name)
                 # windows need more than 15 minutes to get number matched
                 replica_match = RebalanceHelper.wait_till_total_numbers_match(bucket=bucket.name,
                     master=master,

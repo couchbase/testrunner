@@ -173,22 +173,16 @@ class CheckpointTests(unittest.TestCase):
                 self.fail("Items weren't deduplicated")
 
     def _set_checkpoint_size(self, servers, bucket, size):
-        for server in servers:
-            client = MemcachedClientHelper.direct_client(server, bucket)
-            client.set_flush_param('chk_max_items', size)
+        ClusterOperationHelper.flushctl_set(servers[0], 'chk_max_items', size, bucket)
 
     def _set_checkpoint_timeout(self, servers, bucket, time):
-        for server in servers:
-            client = MemcachedClientHelper.direct_client(server, bucket)
-            client.set_flush_param('chk_period', time)
+        ClusterOperationHelper.flushctl_set(servers[0], 'chk_period', time, bucket)
 
     def _stop_replication(self, server, bucket):
-        client = MemcachedClientHelper.direct_client(server, bucket)
-        client.set_flush_param('tap_throttle_queue_cap', '0')
+        ClusterOperationHelper.flushctl_set_per_node(server, 'tap_throttle_queue_cap', 0, bucket)
 
     def _start_replication(self, server, bucket):
-        client = MemcachedClientHelper.direct_client(server, bucket)
-        client.set_flush_param('tap_throttle_queue_cap', '1000000')
+        ClusterOperationHelper.flushctl_set_per_node(server, 'tap_throttle_queue_cap', 1000000, bucket)
 
     def _get_vbuckets(self, server):
         rest = RestConnection(server)

@@ -1385,7 +1385,7 @@ class TransactionSize(PerfBase):
     def go(self, settings):
         for key, val in settings:
             val = self.param(key, val)
-            ClusterOperationHelper.flushctl_set(self.input.servers, key, val)
+            ClusterOperationHelper.flushctl_set(self.input.servers[0], key, val)
 
         for key, val in settings:
             key = 'ep_' + key

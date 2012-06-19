@@ -4,6 +4,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.exception import ServerAlreadyJoinedException
 from membase.helper.rebalance_helper import RebalanceHelper
+import memcacheConstants
 
 import logger
 import testconstants
@@ -229,15 +230,48 @@ class ClusterOperationHelper(object):
                 pass
 
     @staticmethod
-    def flushctl_set(servers, key, val):
-        log = logger.Logger.get_logger()
+    def flushctl_set(master, key, val, bucket='default'):
+        rest = RestConnection(master)
+        servers = rest.get_nodes()
         for server in servers:
-            c = MemcachedClient(server.ip, 11210)
-            log.info("Setting flush param on server {0}, {1} to {2}".format(server, key, val))
-            rv = c.set_flush_param(key, val)
-            log.info("Setting flush param on server {0}, {1} to {2}, result: {3}".format(server, key, val, rv))
-            c.close()
+            _server = {"ip": server.ip, "port": master.port,
+                       "username": master.rest_username,
+                       "password": master.rest_password}
+            ClusterOperationHelper.flushctl_set_per_node(_server, key, val, bucket)
 
+    @staticmethod
+    def flushctl_set_per_node(server, key, val, bucket='default'):
+        log = logger.Logger.get_logger()
+        rest = RestConnection(server)
+        node = rest.get_nodes_self()
+        mc = MemcachedClientHelper.direct_client(server, bucket)
+        log.info("Setting flush param on server {0}, {1} to {2} on {3}".format(server, key, val, bucket))
+        # Workaround for CBQE-249, ideally this should be node.version
+        index_path = node.storage[0].get_index_path()
+        if index_path is '':
+            # Indicates non 2.0 build
+            rv = mc.set_flush_param(key, str(val))
+        else:
+            type = ClusterOperationHelper._get_engine_param_type(key)
+            rv = mc.set_param(key, str(val), type)
+        log.info("Setting flush param on server {0}, {1} to {2}, result: {3}".format(server, key, val, rv))
+        mc.close()
+
+    @staticmethod
+    def _get_engine_param_type(key):
+        tap_params = ['tap_keepalive', 'tap_throttle_queue_cap', 'tap_throttle_threshold']
+        checkpoint_params = ['chk_max_items', 'chk_period', 'inconsistent_slave_chk', 'keep_closed_chks',
+                             'max_checkpoints', 'item_num_based_new_chk']
+        flush_params = ['bg_fetch_delay', 'couch_response_timeout', 'exp_pager_stime', 'flushall_enabled',
+                        'klog_compactor_queue_cap', 'klog_max_log_size', 'klog_max_entry_ratio',
+                        'queue_age_cap', 'max_size', 'max_txn_size', 'mem_high_wat', 'mem_low_wat',
+                        'min_data_age', 'timing_log']
+        if key in tap_params:
+            return memcacheConstants.ENGINE_PARAM_TAP
+        if key in checkpoint_params:
+            return memcacheConstants.ENGINE_PARAM_CHECKPOINT
+        if key in flush_params:
+            return memcacheConstants.ENGINE_PARAM_FLUSH
 
     @staticmethod
     def set_expiry_pager_sleep_time(master, bucket, value=30):
