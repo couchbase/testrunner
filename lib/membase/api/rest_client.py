@@ -1303,12 +1303,14 @@ class NodeDataStorage(object):
     def __init__(self):
         self.type = '' #hdd or ssd
         self.path = ''
+        self.index_path = ''
         self.quotaMb = ''
         self.state = '' #ok
 
     def __str__(self):
         return '{0}'.format({'type': self.type,
                              'path': self.path,
+                             'index_path' : self.index_path,
                              'quotaMb': self.quotaMb,
                              'state': self.state})
 
@@ -1442,6 +1444,7 @@ class RestParser(object):
                     if 'path' in dict_parsed and 'state' in dict_parsed and 'quotaMb' in dict_parsed:
                         dataStorage = NodeDataStorage()
                         dataStorage.path = dict_parsed['path']
+                        dataStorage.index_path = dict_parsed.get('index_path', '')
                         dataStorage.quotaMb = dict_parsed['quotaMb']
                         dataStorage.state = dict_parsed['state']
                         dataStorage.type = key
