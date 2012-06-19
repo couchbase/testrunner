@@ -76,6 +76,13 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_all_docs_queries()
         self._query_test_init(data_set)
 
+    def test_employee_dataset_key_quieres(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
+
+        data_set.add_key_queries()
+        self._query_test_init(data_set)
+
     def test_employee_dataset_alldocs_queries_rebalance_in(self):
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
@@ -471,11 +478,10 @@ class QueryView:
                                                               type_ = query.type_)
 
                     # check if this is a reduced query using _count
-                    if self.reduce_fn and (not query.params.has_key("reduce")\
-                                                        or query.params.has_key("reduce") and query.params["reduce"] == "true"):
+                    if self.reduce_fn and (not query.params.has_key("reduce") or query.params.has_key("reduce") and query.params["reduce"] == "true"):
                         if self.reduce_fn == "_count":
                             num_keys = self._verify_count_reduce_helper(query, results)
-                            if "group" in params or "group_level" in params:
+                            if "group" in params or "group_level" in params or "key" in params:
                                 self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
                                     .format(view_name, attempt + 1, query.expected_num_groups,
                                             num_keys, expected_num_docs))
@@ -483,7 +489,7 @@ class QueryView:
                                 self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
                                     .format(view_name, attempt + 1, query.expected_num_groups,
                                             num_keys, self.index_size))
-                        if self.index_size !=  num_keys:
+                        if self.index_size !=  num_keys or expected_num_docs != num_keys:
                             attempt += 1
                             continue
                         else:
@@ -518,6 +524,8 @@ class QueryView:
                                 del params["group"]
                             if "group_level" in params:
                                 del params["group_level"]
+                            if "key" in params and "limit" in params:
+                                expected_num_docs = min(expected_num_docs, limit)
 
                             results = ViewBaseTests._get_view_results(tc, rest,
                                                                       self.bucket,
@@ -649,7 +657,29 @@ class EmployeeDataSet:
                                               "inclusive_end" : "true"}, index_size/2 + offset)]
 
 
+    def add_key_queries(self, views=None, limit=None):
+        if views is None:
+            views = self.views
+        if limit is None:
+            limit = self.limit
 
+        for view in views:
+             # offset includes all data types if
+             # indexing entire data_set
+
+            if view.index_size == self.calc_total_doc_count():
+                expected_num_docs = self.docs_per_day * len(self.get_data_sets())
+            else:
+                expected_num_docs = self.docs_per_day
+
+            if limit:
+               if not view.reduce_fn:
+                   expected_num_docs = min(expected_num_docs, limit)
+               view.queries += [QueryHelper({"key" : "[2008,7,1]", "limit" : limit}, 
+                                            expected_num_docs)]
+            else:
+                view.queries += [QueryHelper({"key" : "[2008,7,1]"},
+                                             expected_num_docs)]
 
     def add_all_docs_queries(self, views = None):
 
