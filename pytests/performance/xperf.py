@@ -58,6 +58,13 @@ class XPerfTest(EPerfClient):
     def collect_replication_stats(self):
         """Monitor remote replication job and report related stats"""
 
+        # Start general stats collector
+        test_params = {'test_time': time.time(), 'test_name': self.id(),
+                       'json': 0}
+
+        sc = self.start_stats('load', test_params=test_params, client_id=0)
+
+        # Wait for all items to be replicated
         slave = self.input.clusters[1][0]
         rest = RestConnection(slave)
 
@@ -72,9 +79,16 @@ class XPerfTest(EPerfClient):
 
             print "Replicated items: {0}".format(replicated_items)
             time.sleep(10)
-        elapsed_time = time.time() - start_time
+
+        # Print average rate
+        end_time = time.time()
+        elapsed_time = end_time - start_time
         rate = float(target_items/elapsed_time)
         print "Average replication rate: {0:.3f} items/sec".format(rate)
+
+        # Stop general stats collector
+        ops = {'start-time': start_time, 'end-time': end_time}
+        self.end_stats(sc, ops, 'load')
 
     @xperf_manager()
     def test_eperf_mixed(self, save_snapshot=False):
