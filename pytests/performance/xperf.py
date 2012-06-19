@@ -2,7 +2,7 @@ import functools
 
 from membase.api.rest_client import RestConnection
 
-from eperf import EPerfClient
+from eperf import EPerfClient, ViewGen
 
 class XPerfTest(EPerfClient):
     """XDCR performance tests"""
@@ -24,6 +24,7 @@ class XPerfTest(EPerfClient):
             master_rest_conn.start_replication(replication_type,
                                                bucket,
                                                remote_reference)
+            ViewGen.create_stats_view(slave, bucket, 'cluster_{0}_'.format(suffix))
 
         if bidir:
             XPerfTest.start_replication(slave, master, replication_type,

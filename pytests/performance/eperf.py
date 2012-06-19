@@ -15,6 +15,7 @@ import socket
 # membase imports
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.performance.stats import CallbackStatsCollector
+from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
 # testrunner imports
@@ -2112,6 +2113,32 @@ class ViewGen:
         queries = self.join_queries(queries)
 
         return queries
+
+    @staticmethod
+    def create_stats_view(slave, bucket, prefix):
+        """Create view definition which counts number of replicated items
+        """
+
+        rest = RestConnection(slave)
+
+        MAP_FUNCTION = """
+            function (doc) {{
+                if (doc._id.indexOf("{0}") === 0) {{
+                    emit(doc._id, null);
+                }}
+            }}""".format(prefix)
+
+        ddoc = {'views': {'replicated': {'map': MAP_FUNCTION,
+                                         'reduce': ViewGen.REDUCE_FUNCTIONS[0]}},
+                'language': 'javascript',
+                '_id': '_design/items'}
+
+        api = '{0}couchBase/{1}/_design/items'.format(rest.baseUrl, bucket)
+
+        rest._http_request(api, 'PUT', json.dumps(ddoc),
+                           headers=rest._create_capi_headers())
+
+        ClusterOperationHelper.wait_for_completion(rest, 'indexer')
 
     def compute_queries(self, queries_by_kind, remaining, suffix=""):
         """Return a list of permuted queries"""
