@@ -38,10 +38,11 @@ class PerfBase(unittest.TestCase):
         self.sc = None
         if self.parami("tear_down_on_setup", PerfDefaults.tear_down_on_setup) == 1:
             self.tearDown() # Tear down in case previous run had unclean death.
-        self.setUpRest()
+        master = self.input.servers[0]
+        self.setUpRest(master)
 
-    def setUpRest(self):
-        self.rest        = RestConnection(self.input.servers[0])
+    def setUpRest(self, master):
+        self.rest = RestConnection(master)
         self.rest_helper = RestHelper(self.rest)
 
     def setUpBase1(self):
@@ -61,7 +62,8 @@ class PerfBase(unittest.TestCase):
         #
         self.num_items_loaded = 0
 
-        self.setUpCluster()
+        master = self.input.servers[0]
+        self.setUpCluster(master)
 
         # Rebalance
         num_nodes = self.parami("num_nodes", 10)
@@ -84,10 +86,8 @@ class PerfBase(unittest.TestCase):
         self.wait_until_warmed_up()
         ClusterOperationHelper.flush_os_caches(self.input.servers)
 
-    def setUpCluster(self):
+    def setUpCluster(self, master):
         print "[perf.setUpCluster] Setting up cluster"
-
-        master = self.input.servers[0]
 
         self.rest.init_cluster(master.rest_username, master.rest_password)
         self.rest.init_cluster_memoryQuota(master.rest_username,
