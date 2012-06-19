@@ -26,7 +26,6 @@ class XPerfTest(EPerfClient):
             master_rest_conn.start_replication(replication_type,
                                                bucket,
                                                remote_reference)
-            ViewGen.create_stats_view(slave, bucket, 'cluster_{0}_'.format(suffix))
 
         if bidir:
             XPerfTest.start_replication(slave, master, replication_type,
@@ -68,12 +67,8 @@ class XPerfTest(EPerfClient):
 
         start_time = time.time()
         while replicated_items < target_items:
-            stats = rest.query_view('items', 'replicated', 'default',
-                                    {'stale': 'false'})
-            try:
-                replicated_items = int(stats['rows'][0]['value'])
-            except IndexError:
-                pass
+            stats = rest.fetch_bucket_stats()
+            replicated_items = stats['op']['samples']['curr_items'][-1]
 
             print "Replicated items: {0}".format(replicated_items)
             time.sleep(10)
@@ -84,9 +79,6 @@ class XPerfTest(EPerfClient):
     @xperf_manager()
     def test_eperf_mixed(self, save_snapshot=False):
         """Mixed workload, get/set commands only"""
-
-        # Define prefix of source cluster items
-        self.input.test_params['cluster_prefix'] = 'cluster_A_'
 
         # Run parent test
         super(XPerfTest, self).test_eperf_mixed(save_snapshot)
