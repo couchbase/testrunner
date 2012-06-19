@@ -35,6 +35,9 @@ class XPerfTest(EPerfClient):
         def _outer_wrapper(test):
             @functools.wraps(test)
             def _inner_wrapper(self, *args, **kargs):
+                # Execute performance test
+                result = test(self, *args, **kargs)
+
                 # Define remote cluster and start replication
                 if self.parami('prefix', -1) == 0:
                     master = self.input.clusters[0][0]
@@ -44,9 +47,6 @@ class XPerfTest(EPerfClient):
                 # Start stats collection thread
                 sc = Thread(target=self.collect_replication_stats)
                 sc.start()
-
-                # Execute performance test
-                result = test(self, *args, **kargs)
 
                 # Wait for stats collection thread to stop
                 sc.join()
