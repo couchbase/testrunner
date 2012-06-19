@@ -80,3 +80,13 @@ class XPerfTest(EPerfClient):
         elapsed_time = time.time() - start_time
         rate = float(target_items/elapsed_time)
         print "Average replication rate: {0:.3f} items/sec".format(rate)
+
+    @xperf_manager()
+    def test_eperf_mixed(self, save_snapshot=False):
+        """Mixed workload, get/set commands only"""
+
+        # Define prefix of source cluster items
+        self.input.test_params['cluster_prefix'] = 'cluster_A_'
+
+        # Run parent test
+        super(XPerfTest, self).test_eperf_mixed(save_snapshot)
