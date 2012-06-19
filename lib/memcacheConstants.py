@@ -97,6 +97,11 @@ VB_STATE_NAMES={'active': VB_STATE_ACTIVE,
                 'pending': VB_STATE_PENDING,
                 'dead': VB_STATE_DEAD}
 
+# Parameter types of CMD_SET_PARAM command.
+ENGINE_PARAM_FLUSH      = 1
+ENGINE_PARAM_TAP        = 2
+ENGINE_PARAM_CHECKPOINT = 3
+
 COMMAND_NAMES = dict(((globals()[k], k) for k in globals() if k.startswith("CMD_")))
 
 # TAP_OPAQUE types

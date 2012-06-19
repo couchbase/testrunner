@@ -269,6 +269,11 @@ class MemcachedClient(object):
         print "setting flush param:", key, val
         return self._doCmd(memcacheConstants.CMD_SET_FLUSH_PARAM, key, val)
 
+    def set_param(self, key, val, type):
+        print "setting param:", key, val
+        type = struct.pack(memcacheConstants.GET_RES_FMT, type)
+        return self._doCmd(memcacheConstants.CMD_SET_FLUSH_PARAM, key, val, type)
+
     def start_onlineupdate(self):
         return self._doCmd(memcacheConstants.CMD_START_ONLINEUPDATE, '', '')
 
