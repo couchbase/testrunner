@@ -62,21 +62,40 @@ class PerfBase(unittest.TestCase):
         #
         self.num_items_loaded = 0
 
-        master = self.input.servers[0]
-        self.setUpCluster(master)
+        if hasattr(self.input, "clusters"):
+            for cluster in self.input.clusters.values():
+                master = cluster[0]
+                self.setUpRest(master)
+                self.setUpCluster(master)
+        else:
+            master = self.input.servers[0]
+            self.setUpCluster(master)
 
         # Rebalance
         num_nodes = self.parami("num_nodes", 10)
         print "[perf.setUp] rebalancing nodes: num_nodes = {0}".format(num_nodes)
         self.nodes(num_nodes)
 
-        self.setUpBucket()
+        if hasattr(self.input, "clusters"):
+            for cluster in self.input.clusters.values():
+                master = cluster[0]
+                self.setUpRest(master)
+                self.setUpBucket()
+        else:
+            self.setUpBucket()
+
         self.setUpProxy()
 
         # Set custom loglevel
         loglevel = self.param('loglevel', None)
         if loglevel:
-            self.rest.set_global_loglevel(loglevel)
+            if hasattr(self.input, "clusters"):
+                for cluster in self.input.clusters.values():
+                    master = cluster[0]
+                    self.setUpRest(master)
+                    self.rest.set_global_loglevel(loglevel)
+            else:
+                self.rest.set_global_loglevel(loglevel)
 
         if self.parami("dgm", getattr(self, "dgm", 1)):
             self.setUp_dgm()
