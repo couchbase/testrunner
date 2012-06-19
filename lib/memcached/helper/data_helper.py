@@ -738,9 +738,15 @@ class VBucketAwareMemcached(object):
                     self.log.info("Recevied forward map, reset vbucket map, new direct_client")
                     self.memcacheds[vBucket.master] = MemcachedClientHelper.direct_client(server, self.bucket)
                     return True
-                else:
-                    # if no one is using that memcached connection anymore just close the connection
-                    return True
+                # if no one is using that memcached connection anymore just close the connection
+                used_nodes = set([self.vBucketMap[vb_name] for vb_name in self.vBucketMap])
+                rm_clients = []
+                for memcache_con in self.memcacheds:
+                    if memcache_con not in used_nodes:
+                        rm_clients.append(memcache_con)
+                for rm_cl in rm_clients:
+                    self.memcacheds[rm_cl].close()
+                    del self.memcacheds[rm_cl]
         return False
 
     def request_map(self, rest, bucket):
@@ -828,6 +834,7 @@ class VBucketAwareMemcached(object):
                     vb_error += 1
                 else:
                     raise error
+
             except EOFError as error:
                 if "Got empty data (remote died?)" in  error.message and vb_error < 3:
                     self.reset_vbucket(self.rest, key)
