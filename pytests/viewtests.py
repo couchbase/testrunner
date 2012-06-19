@@ -443,7 +443,7 @@ class ViewBaseTests(unittest.TestCase):
             self.assertEquals(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn)
 
     @staticmethod
-    def _get_view_results(self, rest, bucket, view, limit=20, extra_params={}, type_="view"):
+    def _get_view_results(self, rest, bucket, view, limit=20, extra_params={}, type_="view", invalid_results=False):
         # increase number of try to 40 to test on windows
         num_tries = self.input.param('num-tries', 40)
         timeout = self.input.param('timeout', 10)
@@ -460,7 +460,9 @@ class ViewBaseTests(unittest.TestCase):
                 if type_ == "all_docs":
                     results = rest.all_docs(bucket, params, limit)
                 else:
-                    results = rest.query_view(view, view, bucket, params)
+                    results = rest.query_view(view, view, bucket, params, invalid_query=invalid_results)
+                    if u'error' in results and results[u'error'].find('not_found') < 0:
+                        raise Exception("{0}: {1}".format(results[u'error'],results[u'reason']))
 
                 if results.get(u'errors', []):
                     self.fail("unable to get view_results for {0} due to error {1}".format(view, results.get(u'errors')))
@@ -475,8 +477,11 @@ class ViewBaseTests(unittest.TestCase):
                     self.log.info("view returned empty results in {0} seconds, sleeping for {1}".format(delta, timeout))
                     time.sleep(timeout)
             except Exception as ex:
+                if invalid_results and ex.message.find('view_undefined') < 0:
+                        raise ex
                 self.log.error("view_results not ready yet , try again in {1} seconds... , error {0}".format(ex, timeout))
                 time.sleep(timeout)
+
         self.fail("unable to get view_results for {0} after {1} tries".format(view, num_tries))
 
     @staticmethod

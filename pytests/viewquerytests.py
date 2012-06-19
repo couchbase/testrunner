@@ -25,6 +25,7 @@ class ViewQueryTests(unittest.TestCase):
             ViewBaseTests.common_setUp(self)
             self.limit = TestInputSingleton.input.param("limit", None)
             self.reduce_fn = TestInputSingleton.input.param("reduce_fn", None)
+            self.error = None
             self.task_manager = taskmanager.TaskManager()
             self.task_manager.start()
         except Exception as ex:
@@ -60,6 +61,16 @@ class ViewQueryTests(unittest.TestCase):
     def test_simple_dataset_reduce_queries(self):
         data_set = SimpleDataSet(self._rconn(), self.num_docs,limit = self.limit,reduce_fn = self.reduce_fn)
         data_set.add_reduce_queries()
+        self._query_test_init(data_set)
+
+    def test_simple_dataset_negative_queries(self):
+        # init dataset for test
+        query_param = TestInputSingleton.input.param("query_param", None)
+        value = TestInputSingleton.input.param("value", None)
+        error = TestInputSingleton.input.param("error", None)
+
+        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set.add_negative_query(query_param, value, error)
         self._query_test_init(data_set)
 
     def test_employee_dataset_startkey_endkey_queries(self):
@@ -369,13 +380,13 @@ class ViewQueryTests(unittest.TestCase):
     ##
     # run all queries for all views in parallel
     ##
-    def _query_all_views(self, views, verify_results = True, kv_store = None, limit = None):
+    def _query_all_views(self, views, verify_results = True, kv_store = None, limit=None):
 
         query_threads = []
         for view in views:
             t = Thread(target=view.run_queries,
                name="query-{0}".format(view.name),
-               args=(self, verify_results, kv_store,limit))
+               args=(self, verify_results, kv_store, limit))
             query_threads.append(t)
             t.start()
 
@@ -473,14 +484,10 @@ class QueryView:
                         params["stale"] = 'false'
 
                     self.log.info("Quering view {0} with params: {1}".format(view_name, params))
-                    results = ViewBaseTests._get_view_results(tc, rest,
-                                                              self.bucket,
-                                                              view_name,
-                                                              limit,
-                                                              extra_params=params,
-                                                              type_ = query.type_)
-
-                    # check if this is a reduced query using _count
+                    results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
+                                                                  limit=limit, extra_params=params,
+                                                                  type_ = query.type_)
+                   # check if this is a reduced query using _count
                     if self.reduce_fn and (not query.params.has_key("reduce") or query.params.has_key("reduce") and query.params["reduce"] == "true"):
                         if self.reduce_fn == "_count":
                             num_keys = self._verify_count_reduce_helper(query, results)
@@ -556,9 +563,23 @@ class QueryView:
             else:
                 # query without verification
                 self.log.info("Quering view {0} with params: {1}".format(view_name, params));
-                results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
-                                                          limit=limit, extra_params=params,
-                                                          type_ = query.type_)
+                try:
+                    results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
+                                                              limit=limit, extra_params=params,
+                                                              type_ = query.type_,
+                                                              invalid_results=query.error and True or False)
+                except Exception as ex:
+                        if query.error and ex.message.find(query.error) > -1:
+                            self.log.info("View results contain '{0}' error as expected".format(query.error))
+                            return
+                        else:
+                            self.log.error("View results expect '{0}' error but {1} raised".format(query.error, ex.message))
+                            self.results.addFailure(tc,(type(ex), ex.message, sys.exc_info()[2]))
+                            return
+                if query.error:
+                    self.log.error("No error raised for negative case. Expected error '{0}'".format(query.error))
+                    self.results.addFailure(tc, (Exception, "No error raised for negative case", sys.exc_info()[2]))
+
 
     """
         helper function for verifying results when _count reduce is used.
@@ -1210,6 +1231,11 @@ class SimpleDataSet:
                                             seed = seed,
                                             monitor = monitor)
 
+    def add_negative_query(self, query_param, value, error, views=None):
+        views = views or self.views
+        for view in views:
+            view.queries += [QueryHelper({query_param : value}, None, error=error)]
+
     def add_include_docs_queries(self, views=None, limit=None):
         views = views or self.views
         if limit is None:
@@ -1323,7 +1349,8 @@ class QueryHelper:
     def __init__(self, params,
                  expected_num_docs,
                  expected_num_groups = 1,
-                 type_ = "view"):
+                 type_ = "view",
+                 error=None):
 
         self.params = params
 
@@ -1332,6 +1359,7 @@ class QueryHelper:
         self.expected_num_groups = expected_num_groups
         self.type_ = type_   # "view" or "all_docs"
         self.expected_keys = []
+        self.error = error
 
     # less open clients
     @staticmethod
