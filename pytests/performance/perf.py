@@ -62,7 +62,7 @@ class PerfBase(unittest.TestCase):
         #
         self.num_items_loaded = 0
 
-        if hasattr(self.input, "clusters"):
+        if self.input.clusters:
             for cluster in self.input.clusters.values():
                 master = cluster[0]
                 self.setUpRest(master)
@@ -76,7 +76,7 @@ class PerfBase(unittest.TestCase):
         print "[perf.setUp] rebalancing nodes: num_nodes = {0}".format(num_nodes)
         self.nodes(num_nodes)
 
-        if hasattr(self.input, "clusters"):
+        if self.input.clusters:
             for cluster in self.input.clusters.values():
                 master = cluster[0]
                 self.setUpRest(master)
@@ -89,7 +89,7 @@ class PerfBase(unittest.TestCase):
         # Set custom loglevel
         loglevel = self.param('loglevel', None)
         if loglevel:
-            if hasattr(self.input, "clusters"):
+            if self.input.clusters:
                 for cluster in self.input.clusters.values():
                     master = cluster[0]
                     self.setUpRest(master)
