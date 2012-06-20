@@ -24,6 +24,7 @@ class BaseTestCase(unittest.TestCase):
         self.num_servers = self.input.param("servers", len(self.servers))
         self.num_replicas = self.input.param("replicas", 1)
         self.num_items = self.input.param("items", 1000)
+        self.dgm_run = self.input.param("dgm_run", False)
 
         if not self.input.param("skip_cleanup", False):
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
@@ -32,6 +33,8 @@ class BaseTestCase(unittest.TestCase):
             ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[0]], self)
 
         self.quota = self._initialize_nodes(self.cluster, self.servers)
+        if self.dgm_run:
+            self.quota = 256
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         if self.default_bucket:
             self.cluster.create_default_bucket(self.servers[0], self.bucket_size, self.num_replicas)
