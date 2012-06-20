@@ -758,6 +758,14 @@ class PerfBase(unittest.TestCase):
                 "start-time": start_time,
                 "end-time": end_time }
 
+        # Wait until there are no active indexing tasks
+        if self.parami('wait_for_indexer', 0):
+            ClusterOperationHelper.wait_for_completion(self.rest, 'indexer')
+
+        # Wait until there are no active view compaction tasks
+        if self.parami('wait_for_compaction', 0):
+            ClusterOperationHelper.wait_for_completion(self.rest, 'view_compaction')
+
         if self.parami("collect_stats", 1):
             self.end_stats(sc, ops, self.spec_reference + ".loop")
 
