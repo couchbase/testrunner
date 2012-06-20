@@ -11,6 +11,13 @@ from rebalancingtests import RebalanceDataGenerator
 from memcached.helper.old_kvstore import ClientKeyValueStore
 
 class XDCRBaseTest(unittest.TestCase):
+    @staticmethod
+    def cluster_rebalance_in(testcase, servers, monitor=True):
+        servers_a = testcase._input.clusters.get(0)
+        servers_b = testcase._input.clusters.get(1)
+
+        RebalanceHelper.rebalance_in(servers_a, len(servers_a) - 1, monitor=True)
+        RebalanceHelper.rebalance_in(servers_b, len(servers_b) - 1, monitor=True)
 
     @staticmethod
     def common_setup(input, testcase):
@@ -19,6 +26,9 @@ class XDCRBaseTest(unittest.TestCase):
             XDCRBaseTest.common_tearDown(servers, testcase)
             XDCRBaseTest.cluster_initialization(servers)
             XDCRBaseTest.create_buckets(servers, testcase, howmany=1)
+
+        #temp fix to rebalance-in the nodes for each cluster
+        XDCRBaseTest.cluster_rebalance_in(testcase, servers, monitor=True)
 
     @staticmethod
     def common_tearDown(servers, testcase):
@@ -174,7 +184,7 @@ class XDCRTests(unittest.TestCase):
             XDCRBaseTest.common_tearDown(servers, self)
 
     def test_continuous_unidirectional_sets(self):
-        cluster_ref_b = "cluster_ref_a"
+        cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 
@@ -217,7 +227,7 @@ class XDCRTests(unittest.TestCase):
                         "Verification of replicated revisions failed")
 
     def test_continuous_unidirectional_sets_deletes(self):
-        cluster_ref_b = "cluster_ref_a"
+        cluster_ref_a= "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 
