@@ -461,6 +461,7 @@ class ViewBaseTests(unittest.TestCase):
                     results = rest.all_docs(bucket, params, limit)
                 else:
                     results = rest.query_view(view, view, bucket, params, invalid_query=invalid_results)
+
                     if u'error' in results and results[u'error'].find('not_found') < 0:
                         raise Exception("{0}: {1}".format(results[u'error'],results[u'reason']))
 
