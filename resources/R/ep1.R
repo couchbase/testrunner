@@ -38,7 +38,7 @@ if (is.na(pdfname) | length(pdfname) == 0) {
                     baseline_build,
                     new_build,
                     run_id,
-                    format(Sys.time(), "%b-%d-%Y_%X"),
+                    format(Sys.time(), "%b-%d-%Y_%H:%M:%S"),
                     sep="_")
     print(paste("pdfname:", pdfname))
 }
