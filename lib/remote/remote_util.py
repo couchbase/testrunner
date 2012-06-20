@@ -1372,6 +1372,22 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
            log.error("parameter '{0}' is not found".format(parameter))
            return None
 
+    def set_environment_variable(self, name, value):
+        """Request an interactive shell session, export custom variable and
+        restart Couchbase server.
+
+        Shell session is necessary because basic SSH client is stateless.
+        """
+
+        shell = self._ssh_client.invoke_shell()
+
+        shell.send('export {0}={1}\n'.format(name, value))
+        shell.send('/etc/init.d/couchbase-server restart\n')
+
+        time.sleep(30)
+        shell.close()
+
+
 class RemoteUtilHelper(object):
 
     @staticmethod
