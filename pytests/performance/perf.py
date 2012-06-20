@@ -97,6 +97,15 @@ class PerfBase(unittest.TestCase):
             else:
                 self.rest.set_global_loglevel(loglevel)
 
+        # Set custom MAX_CONCURRENT_REPS_PER_DOC
+        max_concurrent_reps_per_doc = self.param('max_concurrent_reps_per_doc',
+                                                 None)
+        if max_concurrent_reps_per_doc:
+            for server in self.input.servers:
+                rc = RemoteMachineShellConnection(server)
+                rc.set_environment_variable('MAX_CONCURRENT_REPS_PER_DOC',
+                                            max_concurrent_reps_per_doc)
+
         if self.parami("dgm", getattr(self, "dgm", 1)):
             self.setUp_dgm()
 
