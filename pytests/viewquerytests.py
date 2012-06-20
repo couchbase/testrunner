@@ -481,7 +481,8 @@ class QueryView:
                     if self.reduce_fn and (not query.params.has_key("reduce") or query.params.has_key("reduce") and query.params["reduce"] == "true"):
                         if self.reduce_fn == "_count":
                             num_keys = self._verify_count_reduce_helper(query, results)
-                            if ("group" or "group_level" or "key" or "start_key" or "end_key") in params:
+                            keys = ["group", "group_level", "key", "start_key", "end_key"]
+                            if [key for key in keys if key in params]:
                                 self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
                                     .format(view_name, attempt + 1, query.expected_num_groups,
                                             num_keys, expected_num_docs))
@@ -512,7 +513,6 @@ class QueryView:
 
                 try:
                     if(num_keys != expected_num_docs):
-
                         # debug query results
                         if self.reduce_fn is not None:
                             # query again with reduce false
