@@ -715,7 +715,17 @@ class ViewBaseTests(unittest.TestCase):
         moxis_restarted = rest.diag_eval(command)
         self.assertTrue(moxis_restarted, "unable to restart moxi process through diag/eval")
 
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        while True:
+            try:
+                moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+                break
+            except MemcachedError as e:
+                    fail_count += 1
+                    if (e.status == 54) and fail_count < 5:
+                            self.log.error("moxi is not ready, waiting 5 seconds. error {0}".format(e))
+                            time.sleep(5)
+                    else:
+                        raise e
         doc_names = []
         for i in range(0, num_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
