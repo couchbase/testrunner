@@ -41,6 +41,7 @@ Available keys:
  parallel=false          Useful when you're installing a cluster.
  standalone=false        Install without cluster management
  toy=                    Install a toy build
+ vbuckets=               The number of vbuckets in the server installation.
 
 Examples:
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
