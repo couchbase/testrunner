@@ -468,7 +468,10 @@ class QueryView:
                 # first verify all doc_names get reported in the view
                 # for windows, we need more than 20+ times
                 result_count_stats = {}
-                while attempt < 40 and num_keys != expected_num_docs:
+                while attempt < 15 and num_keys != expected_num_docs:
+                    if attempt > 11:
+                        params["stale"] = 'false'
+
                     self.log.info("Quering view {0} with params: {1}".format(view_name, params))
                     results = ViewBaseTests._get_view_results(tc, rest,
                                                               self.bucket,
