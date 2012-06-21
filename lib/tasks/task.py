@@ -528,6 +528,7 @@ class ViewCreateTask(Task):
         self.view = view
         prefix = ("","dev_")[self.view.dev_view]
         self.design_doc_name = prefix + design_doc_name
+        self.ddoc_rev_no = 0
 
     def execute(self, task_manager):
 
@@ -538,6 +539,7 @@ class ViewCreateTask(Task):
             content = rest.get_ddoc(self.bucket, self.design_doc_name)
             ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
             ddoc.add_view(self.view)
+            self.ddoc_rev_no = self._parse_revision(content['_rev'])
 
         except ReadDocumentException:
             # creating first view in design doc
@@ -561,11 +563,30 @@ class ViewCreateTask(Task):
                 rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
             self.log.info("view : {0} was created successfully in ddoc: {1}".format(self.view.name, self.design_doc_name))
             self.state = FINISHED
-            self.set_result(True)
+            if self._check_ddoc_revision():
+                self.set_result(True)
+            else:
+                self.set_exception(Exception("failed to update design document"))
         except QueryViewException as e:
             task_manager.schedule(self, 2)
 
 
+    def _check_ddoc_revision(self):
+        valid = False
+        rest = RestConnection(self.server)
+
+        try:
+            content = rest.get_ddoc(self.bucket, self.design_doc_name)
+            new_rev_id = self._parse_revision(content['_rev'])
+            if new_rev_id == self.ddoc_rev_no + 1:
+               valid = True
+        except ReadDocumentException:
+            pass
+
+        return valid
+
+    def _parse_revision(self, rev_string):
+        return int(rev_string.split('-')[0])
 class ViewDeleteTask(Task):
     def __init__(self, server, design_doc_name, view, bucket = "default"):
         Task.__init__(self, "delete_view_task")
