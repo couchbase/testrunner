@@ -1149,7 +1149,6 @@ class EmployeeDataSet:
                 mo_idx = 1
                 days_skipped_offset = 0
                 for months in years['months'][q_start_mo:q_end_mo + 1]:
-
                     # at end month only include up to N days
                     if (mo_idx + q_start_mo - 1) == q_end_mo:
                         mo_days = months['days'][1:q_end_day + 1]
@@ -1205,13 +1204,19 @@ class EmployeeDataSet:
 
         if 'startkey_docid' in q_params:
             startkey_docid = q_params['startkey_docid'].strip("\"")
-            start_idx = query.expected_keys.index(startkey_docid)
-            query.expected_keys = query.expected_keys[start_idx:]
+            try:
+                start_idx = query.expected_keys.index(startkey_docid)
+                query.expected_keys = query.expected_keys[start_idx:]
+            except ValueError:
+                pass
 
         if 'endkey_docid' in q_params:
             endkey_docid = q_params['endkey_docid'].strip("\"")
-            end_idx = query.expected_keys.index(endkey_docid)
-            query.expected_keys = query.expected_keys[:end_idx + 1]
+            try:
+                end_idx = query.expected_keys.index(endkey_docid)
+                query.expected_keys = query.expected_keys[:end_idx + 1]
+            except ValueError:
+                pass
             if inclusive_end == False:
                 query.expected_keys = query.expected_keys[:-1]
 
