@@ -803,7 +803,7 @@ class VBucketAwareMemcached(object):
             msg = "vbucket map does not have an entry for vb : {0}"
             raise Exception(msg.format(vBucketId))
         if self.vBucketMap[vBucketId] not in self.memcacheds:
-            msg = "poxi does not have a mc connection for server : {0}"
+            msg = "moxi does not have a mc connection for server : {0}"
             raise Exception(msg.format(self.vBucketMap[vBucketId]))
         return self.memcacheds[self.vBucketMap[vBucketId]]
 
@@ -812,7 +812,7 @@ class VBucketAwareMemcached(object):
             msg = "replica vbucket map does not have an entry for vb : {0}"
             raise Exception(msg.format(vBucketId))
         if self.vBucketMapReplica[vBucketId][replica_index] not in self.memcacheds:
-            msg = "poxi does not have a mc connection for server : {0}"
+            msg = "moxi does not have a mc connection for server : {0}"
             raise Exception(msg.format(self.vBucketMapReplica[vBucketId][replica_index]))
         return self.memcacheds[self.vBucketMapReplica[vBucketId][replica_index]]
 
