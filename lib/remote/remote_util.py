@@ -469,7 +469,7 @@ class RemoteMachineShellConnection:
         sftp.close()
 
     # this function used to modify bat file to run task schedule in windows
-    def modify_bat_file(self, remote_path, file_name, name, os_type, os_version, version, task):
+    def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
         releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1"]
@@ -495,12 +495,12 @@ class RemoteMachineShellConnection:
 
         try:
             f = sftp.open(found, 'w')
-            log.info('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}_{5}_{6}.iss'.format(name, version, name,
-                                                                    product_version, os_type, os_version, task))
+            log.info('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
+                                                       version, name, product_version, task))
             name = name.rstrip()
             version = version.rstrip()
-            f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}_{5}_{6}.iss'.format(name, version, name,
-                                                                    product_version, os_type, os_version, task))
+            f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
+                                                      version, name, product_version, task))
             log.info('Successful write to {0}'.format(found))
             sftp.close()
         except IOError:
@@ -581,8 +581,7 @@ class RemoteMachineShellConnection:
         build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
         if version.startswith("1.8.1"):
             if short_version.startswith("1.7.2") or short_version.startswith("1.8.0"):
-                self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
-                                               architecture, windows_name, version, "modreg")
+                self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb", version, "modreg")
                 self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule to modify version')
                 time.sleep(5)
@@ -590,9 +589,8 @@ class RemoteMachineShellConnection:
                 self.log_command_output(output, error)
                 log.info('pause 30 seconds to execute modify register script')
                 time.sleep(30)
-                log.info('********* CONTINUE UPGRADE PROCCESS **********')
-        self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb",
-                                        architecture, windows_name, version, task)
+                log.info('********* continue upgrade process **********')
+        self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb", version, task)
         self.stop_schedule_tasks()
         log.info('sleep for 5 seconds before running task schedule upgrade me')
         time.sleep(5)
@@ -732,8 +730,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             # build = self.build_url(params)
             self.create_multiple_dir(dir_paths)
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
-            self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product,
-                                           info.architecture_type, info.windows_name, version, task)
+            self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
             self.stop_schedule_tasks()
             log.info('sleep for 5 seconds before running task schedule install me')
             time.sleep(5)
@@ -908,8 +905,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
                 self.stop_couchbase()
                 # modify bat file to run uninstall schedule task
-                self.modify_bat_file('/cygdrive/c/automation', bat_file,
-                                       product, info.architecture_type, info.windows_name, short_version, task)
+                self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule uninstall')
                 time.sleep(5)
@@ -979,8 +975,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.create_multiple_dir(dir_paths)
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             # modify bat file to run uninstall schedule task
-            self.modify_bat_file('/cygdrive/c/automation', bat_file,
-                                       product, os_type, os_name, rm_version, task)
+            self.modify_bat_file('/cygdrive/c/automation', bat_file, product, rm_version, task)
             log.info('sleep for 5 seconds before running task schedule uninstall')
             time.sleep(5)
             # run schedule task uninstall couchbase server
@@ -1034,8 +1029,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 self.create_multiple_dir(dir_paths)
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
                 # modify bat file to run uninstall schedule task
-                self.modify_bat_file('/cygdrive/c/automation', bat_file,
-                                       product, info.architecture_type, info.windows_name, short_version, task)
+                self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule uninstall')
                 time.sleep(5)
