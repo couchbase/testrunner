@@ -580,13 +580,14 @@ class QueryView:
                                                               type_ = query.type_,
                                                               invalid_results=query.error and True or False)
                 except Exception as ex:
-                        if query.error and ex.message.find(query.error) > -1:
-                            self.log.info("View results contain '{0}' error as expected".format(query.error))
-                            return
-                        else:
-                            self.log.error("View results expect '{0}' error but {1} raised".format(query.error, ex.message))
-                            self.results.addFailure(tc,(type(ex), ex.message, sys.exc_info()[2]))
-                            return
+                        if query.error:
+                            if ex.message.find(query.error) > -1:
+                                self.log.info("View results contain '{0}' error as expected".format(query.error))
+                                return
+                            else:
+                                self.log.error("View results expect '{0}' error but {1} raised".format(query.error, ex.message))
+                                self.results.addFailure(tc,(type(ex), ex.message, sys.exc_info()[2]))
+                                return
                 if query.error:
                     self.log.error("No error raised for negative case. Expected error '{0}'".format(query.error))
                     self.results.addFailure(tc, (Exception, "No error raised for negative case", sys.exc_info()[2]))
