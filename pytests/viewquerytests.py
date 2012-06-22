@@ -94,6 +94,17 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_key_queries()
         self._query_test_init(data_set)
 
+    def test_employee_dataset_negative_queries(self):
+        # init dataset for test
+        query_param = TestInputSingleton.input.param("query_param", None)
+        value = TestInputSingleton.input.param("value", None)
+        error = TestInputSingleton.input.param("error", None)
+        docs_per_day = self.input.param('docs-per-day', 20)
+
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set.add_negative_query(query_param, value, error)
+        self._query_test_init(data_set)
+
     def test_employee_dataset_alldocs_queries_rebalance_in(self):
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
@@ -625,6 +636,11 @@ class EmployeeDataSet:
 
     def calc_total_doc_count(self):
         return self.years * self.months * self.days * self.docs_per_day * len(self.get_data_sets())
+
+    def add_negative_query(self, query_param, value, error, views=None):
+        views = views or self.views
+        for view in views:
+            view.queries += [QueryHelper({query_param : value}, None, error=error)]
 
     def add_startkey_endkey_queries(self, views=None, limit=None):
         if views is None:
