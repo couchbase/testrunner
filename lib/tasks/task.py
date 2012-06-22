@@ -560,7 +560,7 @@ class ViewCreateTask(Task):
             self.state = FINISHED
             self.set_result(True)
         except QueryViewException as e:
-            task_manager.schedule(self)
+            task_manager.schedule(self,2)
 
 
 class ViewDeleteTask(Task):
