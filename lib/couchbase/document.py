@@ -24,7 +24,7 @@ class DesignDocument():
         for current_view in self.views:
             # if view already exists it will be updated
             if view.name == current_view.name:
-                self.views[i] = View._init_from_json(view)
+                self.views[i] = view
                 break
             i += 1
 
