@@ -468,6 +468,25 @@ class RemoteMachineShellConnection:
             log.error('Can not read version file')
         sftp.close()
 
+    def find_windows_info(self):
+        found = self.find_file("/cygdrive/c/tmp", "windows_info.txt")
+        if isinstance(found, str):
+            sftp = self._ssh_client.open_sftp()
+            try:
+                f = sftp.open(found)
+                log.info("get windows information")
+                info = {}
+                for line in f:
+                    (key, value) = line.split('=')
+                    key = key.strip(' \t\n\r')
+                    value = value.strip(' \t\n\r')
+                    info[key] = value
+                return info
+            except IOError:
+                log.error("can not find windows info file")
+        else:
+            raise KeyError("can not find windows_info file")
+
     # this function used to modify bat file to run task schedule in windows
     def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
