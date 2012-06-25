@@ -79,9 +79,9 @@ class PerfBase(unittest.TestCase):
             for cluster in self.input.clusters.values():
                 master = cluster[0]
                 self.setUpRest(master)
-                self.setUpBucket()
+                self.set_up_buckets()
         else:
-            self.setUpBucket()
+            self.set_up_buckets()
 
         self.setUpProxy()
 
@@ -121,20 +121,22 @@ class PerfBase(unittest.TestCase):
                                            master.rest_password,
                                            memoryQuota = self.parami("mem_quota", PerfDefaults.mem_quota))
 
-    def setUpBucket(self):
-        print "[perf.setUpBucket] Setting up bucket"
+    def set_up_buckets(self):
+        """Set up data bucket(s)"""
 
-        bucket = self.param("bucket", "default")
+        print "[perf.set_up_buckets] Setting up bucket"
 
-        self.rest.create_bucket(bucket = bucket,
-                                ramQuotaMB = self.parami("mem_quota", PerfDefaults.mem_quota),
-                                replicaNumber = self.parami("replicas",
-                                                          getattr(self, "replicas", 1)))
+        bucket = self.param('bucket', 'default')
+        bucket_ram_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
+        replicas = self.parami('replicas', getattr(self, 'replicas', 1))
 
-        self.assertTrue(RestHelper(self.rest).vbucket_map_ready(bucket, 60),
-                        msg="vbucket_map not ready .. timed out".format(bucket))
-        self.assertTrue(self.rest_helper.bucket_exists(bucket),
-                        msg="unable to create {0} bucket".format(bucket))
+        self.rest.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram_quota,
+                                replicaNumber=replicas)
+
+        status = self.rest_helper.vbucket_map_ready(bucket, 60)
+        self.assertTrue(status, msg='vbucket_map not ready .. timed out')
+        status = self.rest_helper.bucket_exists(bucket)
+        self.assertTrue(status, msg='unable to create {0} bucket'.format(bucket))
 
         try:
             # Parallel database and view compaction
@@ -150,8 +152,10 @@ class PerfBase(unittest.TestCase):
             self.rest.set_auto_compaction(parallelDBAndVC=parallel_compaction,
                                           dbFragmentThresholdPercentage=db_compaction,
                                           viewFragmntThresholdPercentage=view_compaction)
-        except:
-            pass # For example, membase doesn't support auto compaction.
+        except Exception as e:
+            # It's very hard to determine what exception it can raise.
+            # Therefore we have to use general handler.
+            print "ERROR while changing compaction settings: {0}".format(e)
 
     def tearDown(self):
         if self.parami("tear_down", 0) == 1:

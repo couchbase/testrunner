@@ -49,7 +49,7 @@ class EPerfMasterMongo(eperf.EPerfMaster):
     def tearDownCluster(self):
         pass # TODO.
 
-    def setUpBucket(self):
+    def set_up_buckets(self):
         conn, admin = self.admin_db()
         try:
             admin.command("shardcollection", "default.default",
