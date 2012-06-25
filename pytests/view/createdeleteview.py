@@ -265,75 +265,48 @@ class CreateDeleteViewTests(ViewBaseTest):
     v) Tests create view with invalid name having non alpha numeric characters
     and View with long name(test_create_views,inavlid_view = True)
     vi) Tests same name or duplicate view in different design doc"""
-    def test_create_view(self):
+    def test_invalid_view(self):
             self._load_doc_data_all_buckets()
-            invalid_view = self.input.param("invalid_view",False)
-            if invalid_view:
-                invalid_view_name_list = ["","#","{"]
-                long_view_name = 'V'*2000
-                invalid_view_name_list.append(long_view_name)
-                for view_name in invalid_view_name_list:
-                    view = View(view_name,self.default_map_func,None)
-                    try:
-                        self.cluster.create_view(self.servers[0], self.default_design_doc_name, view, 'default',120)
-                    except DesignDocCreationException:
-                        self.log.info("view creation has been failed for view name as"+ view_name )
-            else:
-                self._execute_ddoc_ops('default')
-                self._verify_ddoc_ops_all_buckets()
+            invalid_view_name_list = ["","#","{"]
+            long_view_name = 'V'*2000
+            invalid_view_name_list.append(long_view_name)
+            for view_name in invalid_view_name_list:
+                view = View(view_name,self.default_map_func,None)
+                try:
+                    self.cluster.create_view(self.servers[0], self.default_design_doc_name, view, 'default', 120)
+                    self.log.error("server allowed creation of invalid view:{0}",view_name)
+                except DesignDocCreationException:
+                    self.log.info("view creation has been failed for view name as"+ view_name )
 
     def test_create_view_with_duplicate_name(self):
             self._load_doc_data_all_buckets()
-            for i in range(0,2):
-                self.cluster.create_view(self.servers[0],self.default_design_doc_name, self.default_view, 'default',120)
-                self.view_name_list.append(self.default_view.name)
-            self.ddoc_view_map[self.default_design_doc_name] = self.view_name_list
-            self.bucket_ddoc_map['default'] = self.ddoc_view_map
+            for i in xrange(2):
+                self._execute_ddoc_ops('create', True, 1, 1)
             self._verify_ddoc_ops_all_buckets()
+            self._verify_ddoc_data_all_buckets()
 
     def test_create_view_same_name_parallel(self):
             self._load_doc_data_all_buckets()
-            task_handler = []
-            for i in range(0,2):
-                task_handler.append(self.cluster.async_create_view(self.servers[0],self.default_design_doc_name, self.default_view, 'default'))
-                self.view_name_list.append(self.default_view.name)
-            self.ddoc_view_map[self.default_design_doc_name] = self.view_name_list
-            self.bucket_ddoc_map['default'] = self.ddoc_view_map
-            for _task in task_handler:
-                _task.result(120)
+            for i in xrange(2):
+                tasks = self._async_execute_ddoc_ops('create', True, 1, 1)
+            for task in tasks:
+                task.result(120)
             self._verify_ddoc_ops_all_buckets()
+            self._verify_ddoc_data_all_buckets()
 
-    """ It will test parallel creation of multiple views in different thread
-    and It will also test the scenario in which we create view when design doc getting updated"""
-    def test_create_multiple_view_parallel(self):
-        self._load_doc_data_all_buckets()
-        task_handler = []
-        num_views_per_ddoc = self.input.param("num_views_per_ddoc",2)
-        num_ddocs = self.input.param("num_ddocs",4)
-        design_Docs = self._create_multiple_ddocs_name(num_ddocs)
-        Views = self.make_default_views("MultiViews", num_views_per_ddoc)
-        for doc in design_Docs:
-            for view in Views:
-                task_handler.append(self.cluster.async_create_view(self.servers[0], doc, view, 'default'))
-                self.view_name_list.append(view.name)
-            self.ddoc_view_map[doc] = self.view_name_list
-        self.bucket_ddoc_map['default'] = self.ddoc_view_map
-        for _task in task_handler:
-            _task.result(120)
-        self._verify_ddoc_ops_all_buckets()
-
-        """It will test case when map functions are complicated such as more than 200
+    """It will test case when map functions are complicated such as more than 200
         line or it function does not get compiled"""
     def test_create_view_multi_map_fun(self):
         self._load_doc_data_all_buckets()
-        get_compile = self.input.param("get_compile",True)
+        get_compile = self.input.param("get_compile", True)
         map_fun = self._get_complex_map(get_compile)
-        view = View("View1",map_fun,None,False)
-        self.cluster.create_view(self.servers[0], self.default_design_doc_name, view, 'default',60)
-        self.view_name_list.append(view.name)
-        self.ddoc_view_map[self.default_design_doc_name] = self.view_name_list
+        view = View("View1", map_fun, None, False)
+        self.cluster.create_view(self.servers[0], self.default_design_doc_name, view, 'default', 120)
+        self.view_list.append(view.name)
+        self.ddoc_view_map[self.default_design_doc_name] = self.view_list
         self.bucket_ddoc_map['default'] = self.ddoc_view_map
         self._verify_ddoc_ops_all_buckets()
+        self._verify_ddoc_data_all_buckets()
 
     """Rebalances nodes into a cluster while doing design docs/views ops:create, delete, update.
     This test begins by loading a given number of items into the cluster. It then
@@ -383,3 +356,36 @@ class CreateDeleteViewTests(ViewBaseTest):
             self._verify_stats_all_buckets(self.servers[:i])
             self._verify_ddoc_ops_all_buckets()
             self._verify_ddoc_data_all_buckets()
+
+    def test_view_ops(self):
+        self._load_doc_data_all_buckets()
+        self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc)
+        if self.ddoc_ops in ["update", "delete"]:
+                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view,
+                                        self.num_ddocs/2, self.num_views_per_ddoc/2)
+        self._verify_ddoc_ops_all_buckets()
+        self._verify_ddoc_data_all_buckets()
+        """ Create views while deleting or updating few views using another thread """
+
+    def test_view_ops_parallel(self):
+        self._load_doc_data_all_buckets()
+        create_tasks = self._async_execute_ddoc_ops("create", self.test_with_view, self.num_ddocs,
+                                                     self.num_views_per_ddoc)
+        views_to_ops = self.input.param("views_to_ops", self.num_views_per_ddoc)
+        start_view = self.input.param("start_view",0)
+        tasks = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs,
+                                                       views_to_ops, "dev_ddoc", "views", start_view)
+        for task in create_tasks + tasks:
+            task.result(120)
+        self._verify_ddoc_ops_all_buckets()
+        self._verify_ddoc_data_all_buckets()
+
+    def test_update_delete_parallel(self):
+        self._load_doc_data_all_buckets()
+        self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc)
+        views_to_ops = self.input.param("views_to_ops", self.num_views_per_ddoc)
+        start_view = self.input.param("start_view", 0)
+        tasks_update = self._async_execute_ddoc_ops("update", self.test_with_view, self.num_ddocs, views_to_ops, "dev_ddoc", "views", start_view)
+        tasks_delete = self._async_execute_ddoc_ops("delete", self.test_with_view, self.num_ddocs, views_to_ops, "dev_ddoc", "views", start_view)
+        for task in tasks_update + tasks_delete:
+            task.result(120)
