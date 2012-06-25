@@ -277,7 +277,6 @@ class GenericLoadingTask(Thread, Task):
         self.client = VBucketAwareMemcached(RestConnection(server), bucket)
 
     def execute(self, task_manager):
-        self.log.info("doc's operation '{0}' was started for doc ids :{1}-{2}".format(self.op_type, self.generator.start, self.generator.end ))
         self.start()
         self.state = EXECUTING
 
