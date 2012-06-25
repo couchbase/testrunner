@@ -596,7 +596,15 @@ class PerfBase(unittest.TestCase):
             return
 
         self.is_multi_node = True
-        self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers, num_nodes - 1, do_shuffle=False))
+        if self.input.clusters:
+            for cluster in self.input.clusters.values():
+                self.assertTrue(RebalanceHelper.rebalance_in(cluster,
+                                                             num_nodes - 1,
+                                                             do_shuffle=False))
+        else:
+            self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers,
+                                                         num_nodes - 1,
+                                                         do_shuffle=False))
 
     @staticmethod
     def delayed_rebalance_worker(servers, num_nodes, delay_seconds, sc):
