@@ -494,7 +494,7 @@ class RestConnection(object):
                     reason = "unknown"
                     if "error" in json_parsed:
                         reason = json_parsed["error"]
-                    log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content))
+                    log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content.rstrip('\n')))
                     return False, content
             except socket.error as e:
                 log.error("socket error while connecting to {0}:{1} error {2}: ".format(self.ip, self.port, e))
