@@ -25,7 +25,7 @@ from performance import perf
 
 from scripts.perf.rel_cri_stats import CBStatsCollector
 
-from cbkarma.rest_client import CbKarmaClient
+from lib.cbkarma.rest_client import CbKarmaClient
 
 class EPerfMaster(perf.PerfBase):
     specURL = "http://hub.internal.couchbase.org/confluence/pages/viewpage.action?pageId=1901816"
