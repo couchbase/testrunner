@@ -73,8 +73,7 @@ class PerfBase(unittest.TestCase):
 
         # Rebalance
         num_nodes = self.parami("num_nodes", 10)
-        print "[perf.setUp] rebalancing nodes: num_nodes = {0}".format(num_nodes)
-        self.nodes(num_nodes)
+        self.rebalance_nodes(num_nodes)
 
         if self.input.clusters:
             for cluster in self.input.clusters.values():
@@ -590,21 +589,27 @@ class PerfBase(unittest.TestCase):
                           why=why,
                           bucket=bucket)
 
-    def nodes(self, num_nodes):
-        if len(self.input.servers) == 1 or num_nodes == 1:
-            self.log.info("WARNING: running on single node cluster")
-            return
+    def rebalance_nodes(self, num_nodes):
+        """Rebalance cluster(s) if more than 1 node provided"""
 
-        self.is_multi_node = True
+        if len(self.input.servers) == 1 or num_nodes == 1:
+            print "WARNING: running on single node cluster"
+            return
+        else:
+            print "[perf.setUp] rebalancing nodes: num_nodes = {0}".format(num_nodes)
+            self.is_multi_node = True
+
         if self.input.clusters:
             for cluster in self.input.clusters.values():
-                self.assertTrue(RebalanceHelper.rebalance_in(cluster,
-                                                             num_nodes - 1,
-                                                             do_shuffle=False))
-        else:
-            self.assertTrue(RebalanceHelper.rebalance_in(self.input.servers,
+                status, _ = RebalanceHelper.rebalance_in(cluster,
                                                          num_nodes - 1,
-                                                         do_shuffle=False))
+                                                         do_shuffle=False)
+                self.assertTrue(status)
+        else:
+            status, _ = RebalanceHelper.rebalance_in(self.input.servers,
+                                                     num_nodes - 1,
+                                                     do_shuffle=False)
+            self.assertTrue(status)
 
     @staticmethod
     def delayed_rebalance_worker(servers, num_nodes, delay_seconds, sc):
@@ -997,7 +1002,7 @@ class NodePeakPerformance(PerfBase):
 
     def test_get_5client_2node(self):
         self.spec('NPP-06-1k.1')
-        self.nodes(2)
+        self.rebalance_nodes(2)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
@@ -1015,7 +1020,7 @@ class NodePeakPerformance(PerfBase):
 
     def test_get_5client_3node(self):
         self.spec('NPP-07-1k.1')
-        self.nodes(3)
+        self.rebalance_nodes(3)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
@@ -1033,7 +1038,7 @@ class NodePeakPerformance(PerfBase):
 
     def test_get_5client_5node(self):
         self.spec('NPP-08-1k.1')
-        self.nodes(5)
+        self.rebalance_nodes(5)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
@@ -1051,7 +1056,7 @@ class NodePeakPerformance(PerfBase):
 
     def test_get_1client_rebalance(self):
         self.spec('NPP-09-5k.1')
-        self.nodes(2)
+        self.rebalance_nodes(2)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 5000),
                   kind=self.param('kind', 'binary'))
@@ -1070,7 +1075,7 @@ class NodePeakPerformance(PerfBase):
 
     def test_mixed_1client_rebalance_json(self):
         self.spec('NPP-10-1k.1')
-        self.nodes(2)
+        self.rebalance_nodes(2)
         self.load(self.parami("items", 1000000),
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
@@ -1137,7 +1142,7 @@ class DiskDrainRate(PerfBase):
 
     def test_1M_rebalance(self):
         self.spec('DRR-03')
-        self.nodes(2)
+        self.rebalance_nodes(2)
         self.delayed_rebalance(4)
         sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
                                                                 'test_time':time.time()})
@@ -1286,7 +1291,7 @@ class MapReduce(PerfBase):
 
     def test_VP_005(self):
         self.spec('VP-005')
-        self.nodes(self.parami("nodes", 2))
+        self.rebalance_nodes(self.parami("nodes", 2))
         self.go("key_to_email",
                 "function(doc) { emit(doc.email, 1); }",
                 view_clients=self.parami('view_clients', 4))
@@ -1300,7 +1305,7 @@ class MapReduce(PerfBase):
 
     def test_VP_007(self):
         self.spec('VP-007')
-        self.nodes(self.parami("nodes", 2))
+        self.rebalance_nodes(self.parami("nodes", 2))
         self.go_load()
         self.delayed_rebalance(self.parami("nodes_after", 4))
         self.go("key_to_email",
@@ -1340,7 +1345,7 @@ class MapReduce(PerfBase):
 
     def test_VP_009(self):
         self.spec('VP-009')
-        self.nodes(self.parami("nodes", 2))
+        self.rebalance_nodes(self.parami("nodes", 2))
         self.go_with_mcsoda()
 
 
@@ -1525,7 +1530,7 @@ class WarmupWithMoreReplicas(Warmup):
 
     def test_WARM_03(self):
         self.spec('WARM-03')
-        self.nodes(self.parami("nodes", 3))
+        self.rebalance_nodes(self.parami("nodes", 3))
         self.go(self.parami("items", 15000000),
                 kind='binary')
 
@@ -1573,7 +1578,7 @@ class TODO_ViewPerformance(TODO_PerfBase):
 
     def test_1view_2node(self):
         self.spec('VP-002')
-        self.nodes(2)
+        self.rebalance_nodes(2)
         self.load(1000000)
         self.wait_until_drained()
         self.view(1)
@@ -1586,7 +1591,7 @@ class TODO_ViewPerformance(TODO_PerfBase):
 
     def test_100view_2node_10client(self):
         self.spec('VP-004')
-        self.nodes(2)
+        self.rebalance_nodes(2)
         self.load(1000000)
         self.wait_until_drained()
         self.view(100, 10)
@@ -1600,7 +1605,7 @@ class TODO_ViewPerformance(TODO_PerfBase):
 
     def test_rebalance(self):
         self.spec('VP-006')
-        self.nodes(2)
+        self.rebalance_nodes(2)
         self.load(1000000)
         self.wait_until_drained()
         self.delayed_rebalance(4)
@@ -1620,7 +1625,7 @@ class TODO_SmartClients(TODO_PerfBase):
     def test_client_matrix(self):
         for kind in ['moxi', 'java', 'ruby', 'php', 'python', 'c']:
             for start_num_nodes, end_num_nodes in [[1, 1], [2, 2], [2, 4]]:
-                self.nodes(start_num_nodes)
+                self.rebalance_nodes(start_num_nodes)
                 self.load(1000000, kind=kind)
                 self.wait_until_drained()
                 self.delayed_rebalance(end_num_nodes)

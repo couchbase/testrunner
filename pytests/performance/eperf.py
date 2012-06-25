@@ -288,7 +288,7 @@ class EPerfMaster(perf.PerfBase):
     def load_phase(self, num_nodes, num_items):
         # Cluster nodes if master
         if self.is_master:
-            self.nodes(num_nodes)
+            self.rebalance_nodes(num_nodes)
 
         if self.parami("load_phase", 1) > 0:
             print "Loading"
