@@ -109,6 +109,7 @@ class BucketCreateTask(Task):
     def check(self, task_manager):
         try:
             if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
+                self.log.info("bucket '{0}' was created with per node RAM quota: {1}".format(self.bucket, self.size))
                 self.set_result(True)
                 self.state = FINISHED
                 return
@@ -189,6 +190,7 @@ class RebalanceTask(Task):
         if progress != -1 and progress != 100:
             task_manager.schedule(self, 10)
         else:
+            self.log.info("rebalancing was completed with progress: {0}%".format(progress))
             self.state = FINISHED
             self.set_result(True)
 
@@ -275,6 +277,7 @@ class GenericLoadingTask(Thread, Task):
         self.client = VBucketAwareMemcached(RestConnection(server), bucket)
 
     def execute(self, task_manager):
+        self.log.info("doc's operation '{0}' was started for doc ids :{1}-{2}".format(self.op_type, self.generator.start, self.generator.end ))
         self.start()
         self.state = EXECUTING
 
@@ -557,10 +560,11 @@ class ViewCreateTask(Task):
             query = {"stale" : "ok"}
             content = \
                 rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
+            self.log.info("view : {0} was created successfully in ddoc: {1}".format(self.view.name, self.design_doc_name))
             self.state = FINISHED
             self.set_result(True)
         except QueryViewException as e:
-            task_manager.schedule(self,2)
+            task_manager.schedule(self, 2)
 
 
 class ViewDeleteTask(Task):
@@ -605,6 +609,7 @@ class ViewDeleteTask(Task):
             self.state = FINISHED
             self.set_result(False)
         except QueryViewException as e:
+            self.log.info("view : {0} was successfully deleted in ddoc: {1}".format(self.view.name, self.design_doc_name))
             self.state = FINISHED
             self.set_result(True)
 
