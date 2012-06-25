@@ -4,7 +4,7 @@ from threading import Thread
 
 from membase.api.rest_client import RestConnection
 
-from eperf import EPerfClient, ViewGen
+from eperf import EPerfClient
 
 class XPerfTest(EPerfClient):
     """XDCR performance tests"""
