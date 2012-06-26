@@ -33,7 +33,7 @@ class EPerfMasterMongo(eperf.EPerfMaster):
         self.log.info(conn['admin'])
         return conn, conn['admin']
 
-    def setUpCluster(self):
+    def set_up_cluster(self):
         master = self.input.servers[0]
 
         conn, admin = self.admin_db()

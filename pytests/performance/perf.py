@@ -70,10 +70,10 @@ class PerfBase(unittest.TestCase):
             for cluster in self.input.clusters.values():
                 master = cluster[0]
                 self.setUpRest(master)
-                self.setUpCluster(master)
+                self.set_up_cluster(master)
         else:
             master = self.input.servers[0]
-            self.setUpCluster(master)
+            self.set_up_cluster(master)
 
         # Rebalance
         num_nodes = self.parami("num_nodes", 10)
@@ -104,13 +104,17 @@ class PerfBase(unittest.TestCase):
             self.wait_until_warmed_up()
         ClusterOperationHelper.flush_os_caches(self.input.servers)
 
-    def setUpCluster(self, master):
-        print "[perf.setUpCluster] Setting up cluster"
+    def set_up_cluster(self, master):
+        """Initialize cluster"""
+
+        print "[perf.set_up_cluster] Setting up cluster"
 
         self.rest.init_cluster(master.rest_username, master.rest_password)
+
+        memory_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
         self.rest.init_cluster_memoryQuota(master.rest_username,
                                            master.rest_password,
-                                           memoryQuota = self.parami("mem_quota", PerfDefaults.mem_quota))
+                                           memoryQuota=memory_quota)
 
     def set_up_buckets(self):
         """Set up data bucket(s)"""
