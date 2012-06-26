@@ -16,7 +16,7 @@ class EPerfMasterMongo(eperf.EPerfMaster):
 
         pass # Mongo has no vbuckets.
 
-    def setUpRest(self):
+    def set_up_rest(self):
         pass # There's no REST for couchbase when using mongo.
 
     def start_stats(self, test_name, servers=None,

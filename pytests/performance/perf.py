@@ -39,11 +39,7 @@ class PerfBase(unittest.TestCase):
         if self.parami("tear_down_on_setup", PerfDefaults.tear_down_on_setup) == 1:
             self.tearDown() # Tear down in case previous run had unclean death.
         master = self.input.servers[0]
-        self.setUpRest(master)
-
-    def setUpRest(self, master):
-        self.rest = RestConnection(master)
-        self.rest_helper = RestHelper(self.rest)
+        self.set_up_rest(master)
 
     def setUpBase1(self):
         if self.parami('num_buckets', 1) > 1:
@@ -69,7 +65,7 @@ class PerfBase(unittest.TestCase):
         if self.input.clusters:
             for cluster in self.input.clusters.values():
                 master = cluster[0]
-                self.setUpRest(master)
+                self.set_up_rest(master)
                 self.set_up_cluster(master)
         else:
             master = self.input.servers[0]
@@ -82,7 +78,7 @@ class PerfBase(unittest.TestCase):
         if self.input.clusters:
             for cluster in self.input.clusters.values():
                 master = cluster[0]
-                self.setUpRest(master)
+                self.set_up_rest(master)
                 self.set_up_buckets()
         else:
             self.set_up_buckets()
@@ -103,6 +99,10 @@ class PerfBase(unittest.TestCase):
         else:
             self.wait_until_warmed_up()
         ClusterOperationHelper.flush_os_caches(self.input.servers)
+
+    def set_up_rest(self, master):
+        self.rest = RestConnection(master)
+        self.rest_helper = RestHelper(self.rest)
 
     def set_up_cluster(self, master):
         """Initialize cluster"""
@@ -150,7 +150,7 @@ class PerfBase(unittest.TestCase):
             if self.input.clusters:
                 for cluster in self.input.clusters.values():
                     master = cluster[0]
-                    self.setUpRest(master)
+                    self.set_up_rest(master)
                     self.rest.set_global_loglevel(loglevel)
             else:
                 self.rest.set_global_loglevel(loglevel)
