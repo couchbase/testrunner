@@ -96,7 +96,12 @@ class PerfBase(unittest.TestCase):
 
         time.sleep(10)
         self.setUpBase1()
-        self.wait_until_warmed_up()
+
+        if self.input.clusters:
+            for cluster in self.input.clusters.values():
+                self.wait_until_warmed_up(cluster[0])
+        else:
+            self.wait_until_warmed_up()
         ClusterOperationHelper.flush_os_caches(self.input.servers)
 
     def setUpCluster(self, master):
@@ -886,8 +891,10 @@ class PerfBase(unittest.TestCase):
         if collect_stats:
             self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
-    def wait_until_warmed_up(self):
-        master = self.input.servers[0]
+    def wait_until_warmed_up(self, master=None):
+        if not master:
+            master = self.input.servers[0]
+
         bucket = self.param("bucket", "default")
 
         fn = RebalanceHelper.wait_for_mc_stats_no_timeout
