@@ -150,6 +150,9 @@ class ViewQueryTests(unittest.TestCase):
         msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
         self.assertTrue(rest.monitorRebalance(), msg=msg)
 
+        #verify queries after failover
+        self._query_all_views(data_set.views)
+
     def test_employee_dataset_alldocs_incremental_failover_queries(self):
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
