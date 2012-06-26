@@ -17,6 +17,7 @@ from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemc
 from memcached.helper.data_helper import MemcachedError
 from remote.remote_util import RemoteMachineShellConnection
 
+
 class ViewBaseTests(unittest.TestCase):
 
     #if we create a bucket and a view let's delete them in the end
@@ -865,7 +866,7 @@ class ViewBaseTests(unittest.TestCase):
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
 
     @staticmethod
-    def _begin_rebalance_out(self):
+    def _begin_rebalance_out(self, howmany=0):
         master = self.servers[0]
         rest = RestConnection(master)
 
@@ -873,7 +874,9 @@ class ViewBaseTests(unittest.TestCase):
         nodes = rest.node_statuses()
         #        for node in nodes:
         #            allNodes.append(node.id)
-        for server in self.servers[1:]:
+        if not howmany:
+            howmany= len(self.servers)
+        for server in self.servers[1:howmany]:
             self.log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
             for node in nodes:
                 if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
