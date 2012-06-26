@@ -62,7 +62,7 @@ class EPerfMasterMongo(eperf.EPerfMaster):
     def tearDownBucket(self):
         pass # TODO.
 
-    def setUpProxy(self, bucket=None):
+    def set_up_proxy(self, bucket=None):
         pass
 
     def tearDownProxy(self):

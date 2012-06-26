@@ -83,7 +83,7 @@ class PerfBase(unittest.TestCase):
         else:
             self.set_up_buckets()
 
-        self.setUpProxy()
+        self.set_up_proxy()
 
         self.reconfigure()
 
@@ -223,10 +223,14 @@ class PerfBase(unittest.TestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
         print "[perf.tearDown] Cluster teared down"
 
-    def setUpProxy(self, bucket=None):
-        print "[perf.tearDown] Setting up proxy"
-        bucket = bucket or self.param("bucket", "default")
-        if len(self.input.moxis) > 0:
+    def set_up_proxy(self, bucket=None):
+        """Set up and start Moxi"""
+
+        if self.input.moxis:
+            print '[perf.setUp] Setting up proxy'
+
+            bucket = bucket or self.param('bucket', 'default')
+
             shell = RemoteMachineShellConnection(self.input.moxis[0])
             shell.start_moxi(self.input.servers[0].ip, bucket,
                              self.input.moxis[0].port)
@@ -275,7 +279,7 @@ class PerfBase(unittest.TestCase):
 
     def restartProxy(self, bucket=None):
         self.tearDownProxy()
-        self.setUpProxy(bucket)
+        self.set_up_proxy(bucket)
 
     def setUp_dgm(self):
         # Download fragmented, DGM dataset onto each cluster node, if
