@@ -1,6 +1,8 @@
 import functools
 import time
+import copy
 from threading import Thread
+from multiprocessing import Process
 
 from membase.api.rest_client import RestConnection
 
@@ -73,7 +75,20 @@ class XPerfTest(EPerfClient):
                     self.start_replication(master, slave, bidir=bidir)
 
                 # Execute performance test
-                return test(self, *args, **kargs)
+                # 1st test executor:
+                self_copy = copy.copy(self)
+                self_copy.input.servers = self_copy.input.clusters[0]
+                self_copy.input.test_params['bucket'] = self.get_buckets()[0]
+                primary = Process(target=test, args=(self_copy, ))
+                primary.start()
+
+                # 2nd test executor:
+                self.input.servers = self_copy.input.clusters[1]
+                self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
+                secondary = test(self, *args, **kargs)
+
+                primary.join()
+                return secondary
             return wrapper
         return decorator
 
