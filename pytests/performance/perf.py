@@ -192,7 +192,7 @@ class PerfBase(unittest.TestCase):
         print "[perf.tearDown] tearDown routine starts"
 
         if self.parami("tear_down_proxy", 1) == 1:
-            self.tearDownProxy()
+            self.tear_down_proxy()
         else:
             print "[perf.tearDown] Proxy tearDown skipped"
 
@@ -201,23 +201,23 @@ class PerfBase(unittest.TestCase):
             self.sc = None
 
         if self.parami("tear_down_bucket", 0) == 1:
-            self.tearDownBucket()
+            self.tear_down_buckets()
         else:
             print "[perf.tearDown] Bucket tearDown skipped"
 
         if self.parami("tear_down_cluster", 1) == 1:
-            self.tearDownCluster()
+            self.tear_down_cluster()
         else:
             print "[perf.tearDown] Cluster tearDown skipped"
 
         print "[perf.tearDown] tearDown routine finished"
 
-    def tearDownBucket(self):
+    def tear_down_buckets(self):
         print "[perf.tearDown] Tearing down bucket"
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
         print "[perf.tearDown] Bucket teared down"
 
-    def tearDownCluster(self):
+    def tear_down_cluster(self):
         print "[perf.tearDown] Tearing down cluster"
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
@@ -236,7 +236,7 @@ class PerfBase(unittest.TestCase):
                              self.input.moxis[0].port)
             shell.disconnect()
 
-    def tearDownProxy(self):
+    def tear_down_proxy(self):
         if len(self.input.moxis) > 0:
             shell = RemoteMachineShellConnection(self.input.moxis[0])
             shell.stop_moxi()
@@ -278,7 +278,7 @@ class PerfBase(unittest.TestCase):
                           prefix + '://' + host + ':' + port)
 
     def restartProxy(self, bucket=None):
-        self.tearDownProxy()
+        self.tear_down_proxy()
         self.set_up_proxy(bucket)
 
     def set_up_dgm(self):

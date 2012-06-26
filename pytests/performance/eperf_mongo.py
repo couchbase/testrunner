@@ -46,7 +46,7 @@ class EPerfMasterMongo(eperf.EPerfMaster):
 
         conn.disconnect()
 
-    def tearDownCluster(self):
+    def tear_down_cluster(self):
         pass # TODO.
 
     def set_up_buckets(self):
@@ -59,13 +59,13 @@ class EPerfMasterMongo(eperf.EPerfMaster):
 
         conn.disconnect()
 
-    def tearDownBucket(self):
+    def tear_down_buckets(self):
         pass # TODO.
 
     def set_up_proxy(self, bucket=None):
         pass
 
-    def tearDownProxy(self):
+    def tear_down_proxy(self):
         pass # TODO.
 
     def set_up_dgm(self):
