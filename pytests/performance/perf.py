@@ -107,7 +107,7 @@ class PerfBase(unittest.TestCase):
     def set_up_cluster(self, master):
         """Initialize cluster"""
 
-        print "[perf.set_up_cluster] Setting up cluster"
+        print "[perf.setUp] Setting up cluster"
 
         self.rest.init_cluster(master.rest_username, master.rest_password)
 
@@ -119,7 +119,7 @@ class PerfBase(unittest.TestCase):
     def set_up_buckets(self):
         """Set up data bucket(s)"""
 
-        print "[perf.set_up_buckets] Setting up buckets"
+        print "[perf.setUp] Setting up buckets"
 
         num_buckets = self.parami('num_buckets', 1)
         if num_buckets > 1:
