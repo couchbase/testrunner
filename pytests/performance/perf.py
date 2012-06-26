@@ -46,7 +46,11 @@ class PerfBase(unittest.TestCase):
         self.rest_helper = RestHelper(self.rest)
 
     def setUpBase1(self):
-        vBuckets = self.rest.get_vbuckets(self.param("bucket", "default"))
+        if self.parami('num_buckets', 1) > 1:
+            bucket = 'bucket-0'
+        else:
+            bucket = self.param('bucket', 'default')
+        vBuckets = self.rest.get_vbuckets(bucket)
         self.vbucket_count = len(vBuckets)
 
     def setUp(self):
@@ -124,19 +128,27 @@ class PerfBase(unittest.TestCase):
     def set_up_buckets(self):
         """Set up data bucket(s)"""
 
-        print "[perf.set_up_buckets] Setting up bucket"
+        print "[perf.set_up_buckets] Setting up buckets"
 
-        bucket = self.param('bucket', 'default')
-        bucket_ram_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
-        replicas = self.parami('replicas', getattr(self, 'replicas', 1))
+        num_buckets = self.parami('num_buckets', 1)
+        if num_buckets > 1:
+            self.buckets = ['bucket-{0}'.format(i) for i in range(num_buckets)]
+        else:
+            self.buckets = [self.param('bucket', 'default')]
 
-        self.rest.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram_quota,
-                                replicaNumber=replicas)
+        for bucket in self.buckets:
+            bucket_ram_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
+            bucket_ram_quota = bucket_ram_quota / num_buckets
+            replicas = self.parami('replicas', getattr(self, 'replicas', 1))
 
-        status = self.rest_helper.vbucket_map_ready(bucket, 60)
-        self.assertTrue(status, msg='vbucket_map not ready .. timed out')
-        status = self.rest_helper.bucket_exists(bucket)
-        self.assertTrue(status, msg='unable to create {0} bucket'.format(bucket))
+            self.rest.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram_quota,
+                                    replicaNumber=replicas, authType='sasl')
+
+            status = self.rest_helper.vbucket_map_ready(bucket, 60)
+            self.assertTrue(status, msg='vbucket_map not ready .. timed out')
+            status = self.rest_helper.bucket_exists(bucket)
+            self.assertTrue(status,
+                            msg='unable to create {0} bucket'.format(bucket))
 
         try:
             # Parallel database and view compaction
@@ -872,9 +884,11 @@ class PerfBase(unittest.TestCase):
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
-        RebalanceHelper.wait_for_stats_on_all(master, bucket,
-                                              'ep_warmup_thread', 'complete',
-                                              fn=RebalanceHelper.wait_for_mc_stats_no_timeout)
+        fn = RebalanceHelper.wait_for_mc_stats_no_timeout
+        for bucket in self.buckets:
+            RebalanceHelper.wait_for_stats_on_all(master, bucket,
+                                                  'ep_warmup_thread',
+                                                  'complete', fn=fn)
 
     def clog_cluster(self, servers):
         ClusterOperationHelper.flushctl_stop(servers)
