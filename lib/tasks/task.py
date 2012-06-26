@@ -676,10 +676,19 @@ class ViewQueryTask(Task):
             # query and verify expected num of rows returned
             content = \
                 rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
-            if content['total_rows'] == self.expected_rows:
+
+            self.log.info("(%d rows) expected, (%d rows) returned" %\
+                (len(content['rows']), self.expected_rows))
+
+            if len(content['rows']) == self.expected_rows:
                 self.state = FINISHED
-                self.set_result(content)
+                self.set_result(True)
             else:
+                if "stale" in self.query:
+                    if self.query["stale"].lower() == "false":
+                        self.state = FINISHED
+                        self.set_result(False)
+
                 # retry until expected results or task times out
                 task_manager.schedule(self, self.retry_time)
 
