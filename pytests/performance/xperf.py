@@ -6,9 +6,9 @@ from multiprocessing import Process
 
 from membase.api.rest_client import RestConnection
 
-from eperf import EPerfClient
+from eperf import EVPerfClient
 
-class XPerfTest(EPerfClient):
+class XPerfTest(EVPerfClient):
     """XDCR performance tests"""
 
     def start_replication(self, master, slave, replication_type='continuous',
