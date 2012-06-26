@@ -38,29 +38,41 @@ class XPerfTest(EPerfClient):
             self.start_replication(slave, master, replication_type, buckets,
                                    suffix='B')
 
-    def xperf_manager(bidir=False):
-        def _outer_wrapper(test):
-            @functools.wraps(test)
-            def _inner_wrapper(self, *args, **kargs):
-                # Execute performance test
-                result = test(self, *args, **kargs)
+    def benchmark_manager(test):
+        @functools.wraps(test)
+        def wrapper(self, *args, **kargs):
+            # Execute performance test
+            result = test(self, *args, **kargs)
 
+            # Define remote cluster and start replication
+            master = self.input.clusters[0][0]
+            slave = self.input.clusters[1][0]
+            self.start_replication(master, slave)
+
+            # Start stats collection thread
+            sc = Thread(target=self.collect_replication_stats)
+            sc.start()
+
+            # Wait for stats collection thread to stop
+            sc.join()
+
+            return result
+        return wrapper
+
+    def xperf_manager(bidir=False):
+        def decorator(test):
+            @functools.wraps(test)
+            def wrapper(self, *args, **kargs):
                 # Define remote cluster and start replication
                 if self.parami('prefix', -1) == 0:
                     master = self.input.clusters[0][0]
                     slave = self.input.clusters[1][0]
                     self.start_replication(master, slave, bidir=bidir)
 
-                # Start stats collection thread
-                sc = Thread(target=self.collect_replication_stats)
-                sc.start()
-
-                # Wait for stats collection thread to stop
-                sc.join()
-
-                return result
-            return _inner_wrapper
-        return _outer_wrapper
+                # Execute performance test
+                return test(self, *args, **kargs)
+            return wrapper
+        return decorator
 
     def get_buckets(self, reversed=False):
         """Return list of buckets to be replicated"""
@@ -112,7 +124,7 @@ class XPerfTest(EPerfClient):
         ops = {'start-time': start_time, 'end-time': end_time}
         self.end_stats(sc, ops, 'load')
 
-    @xperf_manager()
+    @benchmark_manager
     def test_eperf_mixed(self, save_snapshot=False):
         """Mixed workload, get/set commands only"""
 
