@@ -9,9 +9,8 @@ from eperf import EPerfClient
 class XPerfTest(EPerfClient):
     """XDCR performance tests"""
 
-    @staticmethod
-    def start_replication(master, slave, replication_type='continuous',
-                          buckets=['default'], bidir=False, suffix='A'):
+    def start_replication(self, master, slave, replication_type='continuous',
+                          buckets=None, bidir=False, suffix='A'):
         """Add remote cluster and start replication"""
 
         master_rest_conn = RestConnection(master)
@@ -22,14 +21,22 @@ class XPerfTest(EPerfClient):
                                             slave.rest_password,
                                             remote_reference)
 
+        if not buckets:
+            buckets = self.get_buckets()
+        else:
+            buckets = self.get_buckets(reversed=True)
+
         for bucket in buckets:
-            master_rest_conn.start_replication(replication_type,
-                                               bucket,
+            master_rest_conn.start_replication(replication_type, bucket,
                                                remote_reference)
 
+        if self.parami('num_buckets', 1) > 1 and suffix == 'A':
+            self.start_replication(slave, master, replication_type, buckets,
+                                   suffix='B')
+
         if bidir:
-            XPerfTest.start_replication(slave, master, replication_type,
-                                        buckets, suffix='B')
+            self.start_replication(slave, master, replication_type, buckets,
+                                   suffix='B')
 
     def xperf_manager(bidir=False):
         def _outer_wrapper(test):
@@ -42,7 +49,7 @@ class XPerfTest(EPerfClient):
                 if self.parami('prefix', -1) == 0:
                     master = self.input.clusters[0][0]
                     slave = self.input.clusters[1][0]
-                    XPerfTest.start_replication(master, slave, bidir=bidir)
+                    self.start_replication(master, slave, bidir=bidir)
 
                 # Start stats collection thread
                 sc = Thread(target=self.collect_replication_stats)
@@ -54,6 +61,21 @@ class XPerfTest(EPerfClient):
                 return result
             return _inner_wrapper
         return _outer_wrapper
+
+    def get_buckets(self, reversed=False):
+        """Return list of buckets to be replicated"""
+
+        num_buckets = self.parami('num_buckets', 1)
+        if num_buckets > 1:
+            num_replicated_buckets = self.parami('num_replicated_buckets',
+                                                 num_buckets)
+            buckets = ['bucket-{0}'.format(i) for i in range(num_buckets)]
+            if not reversed:
+                return buckets[:num_replicated_buckets]
+            else:
+                return buckets[-1:-1 - num_replicated_buckets:-1]
+        else:
+            return [self.param('bucket', 'default')]
 
     def collect_replication_stats(self):
         """Monitor remote replication job and report related stats"""
