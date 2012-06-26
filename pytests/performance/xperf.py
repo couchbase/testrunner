@@ -63,8 +63,11 @@ class XPerfTest(EPerfClient):
         def decorator(test):
             @functools.wraps(test)
             def wrapper(self, *args, **kargs):
-                # Define remote cluster and start replication
-                if self.parami('prefix', -1) == 0:
+                # Define remote cluster and start replication (only before
+                # load phase)
+                if (self.parami('prefix', -1) == 0 and
+                    self.parami('load_phase', 0) and
+                    not self.parami('hot_load_phase', 0)):
                     master = self.input.clusters[0][0]
                     slave = self.input.clusters[1][0]
                     self.start_replication(master, slave, bidir=bidir)
