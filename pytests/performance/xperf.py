@@ -148,3 +148,10 @@ class XPerfTest(EVPerfClient):
 
         # Run parent test
         super(XPerfTest, self).test_eperf_mixed(save_snapshot)
+
+    @xperf_manager()
+    def test_vperf2_unidir(self):
+        """1 design document, 8 views"""
+
+        # Run parent test
+        super(XPerfTest, self).test_vperf2()
