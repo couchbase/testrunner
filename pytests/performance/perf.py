@@ -89,25 +89,7 @@ class PerfBase(unittest.TestCase):
 
         self.setUpProxy()
 
-        # Set custom loglevel
-        loglevel = self.param('loglevel', None)
-        if loglevel:
-            if self.input.clusters:
-                for cluster in self.input.clusters.values():
-                    master = cluster[0]
-                    self.setUpRest(master)
-                    self.rest.set_global_loglevel(loglevel)
-            else:
-                self.rest.set_global_loglevel(loglevel)
-
-        # Set custom MAX_CONCURRENT_REPS_PER_DOC
-        max_concurrent_reps_per_doc = self.param('max_concurrent_reps_per_doc',
-                                                 None)
-        if max_concurrent_reps_per_doc:
-            for server in self.input.servers:
-                rc = RemoteMachineShellConnection(server)
-                rc.set_environment_variable('MAX_CONCURRENT_REPS_PER_DOC',
-                                            max_concurrent_reps_per_doc)
+        self.reconfigure()
 
         if self.parami("dgm", getattr(self, "dgm", 1)):
             self.setUp_dgm()
@@ -150,6 +132,30 @@ class PerfBase(unittest.TestCase):
             self.assertTrue(status,
                             msg='unable to create {0} bucket'.format(bucket))
 
+    def reconfigure(self):
+        """Customize basic Couchbase setup"""
+
+        # Set custom loglevel
+        loglevel = self.param('loglevel', None)
+        if loglevel:
+            if self.input.clusters:
+                for cluster in self.input.clusters.values():
+                    master = cluster[0]
+                    self.setUpRest(master)
+                    self.rest.set_global_loglevel(loglevel)
+            else:
+                self.rest.set_global_loglevel(loglevel)
+
+        # Set custom MAX_CONCURRENT_REPS_PER_DOC
+        max_concurrent_reps_per_doc = self.param('max_concurrent_reps_per_doc',
+                                                 None)
+        if max_concurrent_reps_per_doc:
+            for server in self.input.servers:
+                rc = RemoteMachineShellConnection(server)
+                rc.set_environment_variable('MAX_CONCURRENT_REPS_PER_DOC',
+                                            max_concurrent_reps_per_doc)
+
+        # Set custom autocompaction settings
         try:
             # Parallel database and view compaction
             parallel_compaction = self.param("parallel_compaction",
