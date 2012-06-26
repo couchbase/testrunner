@@ -126,6 +126,16 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_negative_query(query_param, value, error)
         self._query_test_init(data_set)
 
+    def test_employee_dataset_invalid_startkey_docid_endkey_docid_queries(self):
+        # init dataset for test
+        valid_params = TestInputSingleton.input.param("valid_params", None)
+        invalid_params = TestInputSingleton.input.param("invalid_params", None)
+        docs_per_day = self.input.param('docs-per-day', 200)
+
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set.add_query_invalid_startkey_endkey_docid(valid_params, invalid_params)
+        self._query_test_init(data_set)
+
     def test_employee_dataset_alldocs_queries_rebalance_in(self):
         docs_per_day = self.input.param('docs-per-day', 200)
         num_nodes_to_add = self.input.param('num_nodes_to_add',0)
@@ -727,6 +737,38 @@ class EmployeeDataSet:
         views = views or self.views
         for view in views:
             view.queries += [QueryHelper({query_param : value}, None, error=error)]
+
+    def add_query_invalid_startkey_endkey_docid(self, valid_query_params, invalid_query_params, views=None):
+        views = views or self.views
+        if valid_query_params:
+            if valid_query_params.find(';') < 0:
+                query_params_dict = dict([valid_query_params.split("-")])
+            else:
+                query_params_dict = dict(item.split("-") for item in valid_query_params.split(";"))
+        if invalid_query_params.find(';') < 0:
+            invalid_query_params_dict = dict([invalid_query_params.split("-")] )
+        else:
+            invalid_query_params_dict = dict(item.split("-") for item in invalid_query_params.split(";"))
+
+        for view in views:
+            expected_docs = 0
+            offset  = (self.docs_per_day, self.docs_per_day * len(self.get_data_sets()))[view.index_size == self.calc_total_doc_count()]
+
+            if "start_key" in query_params_dict:
+                start_year, start_mo, start_day = [int(item) for item in query_params_dict["start_key"][1:-1].split(',')]
+            else:
+                start_year, start_mo, start_day = [2007, 1, 1]
+            if "end_key" in query_params_dict:
+                end_year, end_mo, end_day = [int(item) for item in query_params_dict["end_key"][1:-1].split(',')]
+            else:
+                end_year, end_mo, end_day = [2007 + self.years + 1, self.months, self.days + 1]
+            expected_docs = offset * (end_year - start_year) * ((end_mo - start_mo) * self.days  + (end_day - start_day))
+
+            if query_params_dict:
+                query_params_dict.update(invalid_query_params_dict)
+            else:
+                query_params_dict = invalid_query_params_dict
+            view.queries += [QueryHelper(query_params_dict, expected_docs)]
 
     def add_startkey_endkey_queries(self, views=None, limit=None):
         if views is None:
