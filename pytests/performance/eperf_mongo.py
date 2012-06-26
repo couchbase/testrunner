@@ -68,7 +68,7 @@ class EPerfMasterMongo(eperf.EPerfMaster):
     def tearDownProxy(self):
         pass # TODO.
 
-    def setUp_dgm(self):
+    def set_up_dgm(self):
         pass # TODO - need DGM for mongo.
 
     def wait_until_drained(self):

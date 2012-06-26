@@ -58,7 +58,7 @@ class PerfBase(unittest.TestCase):
         self.data_path = master.data_path
 
         # Number of items loaded by load() method.
-        # Does not include or count any items that came from setUp_dgm().
+        # Does not include or count any items that came from set_up_dgm().
         #
         self.num_items_loaded = 0
 
@@ -88,7 +88,7 @@ class PerfBase(unittest.TestCase):
         self.reconfigure()
 
         if self.parami("dgm", getattr(self, "dgm", 1)):
-            self.setUp_dgm()
+            self.set_up_dgm()
 
         time.sleep(10)
         self.setUpBase1()
@@ -281,19 +281,19 @@ class PerfBase(unittest.TestCase):
         self.tearDownProxy()
         self.set_up_proxy(bucket)
 
-    def setUp_dgm(self):
-        # Download fragmented, DGM dataset onto each cluster node, if
-        # not already locally available.
-        #
-        # The number of vbuckets and database schema must match the
-        # target cluster.
-        #
-        # Shutdown all cluster nodes.
-        #
-        # Do a cluster-restore.
-        #
-        # Restart all cluster nodes.
-        #
+    def set_up_dgm(self):
+        """Download fragmented, DGM dataset onto each cluster node, if not
+        already locally available.
+
+        The number of vbuckets and database schema must match the
+        target cluster.
+
+        Shutdown all cluster nodes.
+
+        Do a cluster-restore.
+
+        Restart all cluster nodes."""
+
         bucket = self.param("bucket", "default")
         ClusterOperationHelper.stop_cluster(self.input.servers)
         for server in self.input.servers:
