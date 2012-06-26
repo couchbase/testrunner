@@ -160,6 +160,7 @@ class RebalanceHelper():
         while not stats:
             try:
                 c = MemcachedClient(master.ip, 11210)
+                c.sasl_auth_plain(bucket, '')
                 stats = c.stats()
             except Exception as e:
                 log.info("Exception: {0}, retry in 2 seconds ...".format(str(e)))
@@ -170,6 +171,7 @@ class RebalanceHelper():
 
         while str(stats[stat_key]) != str(stat_value):
             c = MemcachedClient(master.ip, 11210)
+            c.sasl_auth_plain(bucket, '')
             stats = c.stats()
             c.close()
             if verbose:
