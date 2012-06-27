@@ -836,7 +836,15 @@ class VBucketAwareMemcached(object):
                     raise error
 
             except EOFError as error:
-                if "Got empty data (remote died?)" in  error.message and vb_error < 3:
+                if "Got empty data (remote died?)" in  error.message or \
+                   "Timeout waiting for socket send." in  error.message \
+                    and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
+            except Exception as error:
+                if "moxi does not have a mc connection for server" in  error.message and vb_error < 3:
                     self.reset_vbucket(self.rest, key)
                     vb_error += 1
                 else:
@@ -854,7 +862,15 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
             except EOFError as error:
-                if "Got empty data (remote died?)" in  error.message and vb_error < 3:
+                if "Got empty data (remote died?)" in  error.message or \
+                   "Timeout waiting for socket send." in  error.message \
+                    and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
+            except Exception as error:
+                if "moxi does not have a mc connection for server" in  error.message and vb_error < 3:
                     self.reset_vbucket(self.rest, key)
                     vb_error += 1
                 else:
@@ -872,7 +888,15 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
             except EOFError as error:
-                if "Got empty data (remote died?)" in  error.message and vb_error < 3:
+                if "Got empty data (remote died?)" in  error.message or \
+                   "Timeout waiting for socket send." in  error.message \
+                    and vb_error < 3:
+                    self.reset_vbucket(self.rest, key)
+                    vb_error += 1
+                else:
+                    raise error
+            except Exception as error:
+                if "moxi does not have a mc connection for server" in  error.message and vb_error < 3:
                     self.reset_vbucket(self.rest, key)
                     vb_error += 1
                 else:
