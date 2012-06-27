@@ -290,7 +290,7 @@ class Cluster(object):
             bucket - The name of the bucket containing items for this view. (String)
 
         Returns:
-            boolean - Whether or not create view was successful."""
+            string - revision number of design doc."""
         _task = self.async_create_view(server, design_doc_name, view, bucket)
         return _task.result(timeout)
 
