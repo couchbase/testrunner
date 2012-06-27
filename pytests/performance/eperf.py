@@ -434,6 +434,9 @@ class EPerfMaster(perf.PerfBase):
                 start_time = time.time()
 
             # Create design documents and views
+            master = self.input.servers[0]
+            self.set_up_rest(master)
+
             bucket = self.param('bucket', 'default')
 
             for ddoc_name, d in ddocs.items():
@@ -1271,7 +1274,8 @@ function(doc) {
         """Access phase"""
         limit = self.parami('limit', 10)
         query_suffix = self.param('query_suffix', '')
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs,
+        bucket = self.params('bucket', 'default')
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
                                             use_all_docs=True,
                                             use_reduce=True)
 
@@ -1364,7 +1368,9 @@ function(doc) {
         # Access phase
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs, use_all_docs=False)
+        bucket = self.params('bucket', 'default')
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
+                                            use_all_docs=False)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
@@ -1409,7 +1415,8 @@ function(doc) {
         # Access phase
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs, use_all_docs=False)
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
+                                            use_all_docs=False)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
@@ -1454,7 +1461,7 @@ function(doc) {
         # Access phase
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs,
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
                                             use_all_docs=False,
                                             use_reduce=False)
 
@@ -1546,7 +1553,8 @@ function(doc) {
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
         view_gen = ViewGen()
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs, pseudo=True)
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
+                                            pseudo=True)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
@@ -1595,7 +1603,7 @@ function(doc) {
         # Access phase
         limit = self.parami('limit', PerfDefaults.limit)
         query_suffix = self.param("query_suffix", "")
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs,
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
                                             use_all_docs=False, extend=True)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
@@ -2033,7 +2041,7 @@ class ViewGen:
 
         return {'all': {'views': {'docs': {'map': MAP_FUNCTION}}}}
 
-    def generate_queries(self, limit, query_suffix, ddocs,
+    def generate_queries(self, limit, query_suffix, ddocs, bucket='default',
                          use_all_docs=False, use_reduce=False, pseudo=False,
                          extend=False):
         """Generate string from permuted queries.
@@ -2046,16 +2054,19 @@ class ViewGen:
         if ddocs is None it returns only queries on primary index
         """
 
+        # Base path
+        b = '/{0}/'.format(bucket)
+
         # Only all_docs case
         if ddocs is None:
-            queries_by_kind = [['/default/_all_docs?limit=' + str(limit) + '&startkey="{key}"']]
+            queries_by_kind = [[b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"']]
             remaining = [1]
             queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
             return self.join_queries(queries)
 
         # Pseudo all docs case
         if pseudo:
-            queries_by_kind = [['/default/_design/all/_view/docs?limit=' + str(limit) + '&startkey="{key}"']]
+            queries_by_kind = [[b + '_design/all/_view/docs?limit=' + str(limit) + '&startkey="{key}"']]
             remaining = [1]
             queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
             return self.join_queries(queries)
@@ -2063,8 +2074,6 @@ class ViewGen:
         # General case
         ddoc_names = [name for name, ddoc in sorted(ddocs.iteritems())
                            for view in ddoc["views"]]
-
-        b = '/default/'
 
         q = {}
         q['city']        = b + '_design/' + ddoc_names[0] + '/_view/city1?limit=' + str(limit) + '&startkey="{city}"'
