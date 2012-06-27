@@ -163,7 +163,8 @@ class ViewBaseTests(unittest.TestCase):
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        rest = RestConnection(self.servers[0])
+        smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         total_time = 0
@@ -172,7 +173,7 @@ class ViewBaseTests(unittest.TestCase):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
-            moxi.set(key, 0, 0, json.dumps(value))
+            smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(len(doc_names)))
         time.sleep(5)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
@@ -216,7 +217,7 @@ class ViewBaseTests(unittest.TestCase):
         reduce_fn = "_count"
         rest.create_view(view_name, bucket, [View(view_name, map_fn, reduce_fn)])
         self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         self.log.info("inserting {0} json objects".format(num_docs))
@@ -224,7 +225,7 @@ class ViewBaseTests(unittest.TestCase):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": i}
-            moxi.set(key, 0, 0, json.dumps(value))
+            smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_docs))
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
@@ -269,7 +270,7 @@ class ViewBaseTests(unittest.TestCase):
         reduce_fn = "_sum"
         rest.create_view(view_name, bucket, [View(view_name, map_fn, reduce_fn)])
         self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
         sum = 0
@@ -280,7 +281,7 @@ class ViewBaseTests(unittest.TestCase):
             rand = random.randint(0, 20000)
             value = {"name": doc_name, "age": rand}
             sum += rand
-            moxi.set(key, 0, 0, json.dumps(value))
+            smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_docs))
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
@@ -317,7 +318,7 @@ class ViewBaseTests(unittest.TestCase):
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
         rest.create_view(view_name, bucket, [View(view_name, map_fn)])
         self.created_views[view_name] = bucket
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
         updated_doc_names = []
         updated_num_docs = num_docs + 100
@@ -327,7 +328,7 @@ class ViewBaseTests(unittest.TestCase):
             key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
-            moxi.set(key, 0, 0, json.dumps(value))
+            smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_docs))
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         updated_view_prefix = "{0}-{1}-updated".format(view_name, prefix)
@@ -335,7 +336,7 @@ class ViewBaseTests(unittest.TestCase):
             key = updated_doc_name = "{0}-{1}-updated-{2}".format(view_name, prefix, i)
             updated_doc_names.append(updated_doc_name)
             value = {"name": updated_doc_name, "age": 1000}
-            moxi.set(key, 0, 0, json.dumps(value))
+            smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(updated_num_docs))
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + updated_view_prefix + "\") != -1) { emit(doc.name, doc);}}"
         rest.create_view(view_name, bucket, [View(view_name, map_fn)])
@@ -496,12 +497,13 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _insert_n_items(self, bucket, view_name, prefix, number_of_docs):
         doc_names = []
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        rest = RestConnection(self.servers[0])
+        smart = VBucketAwareMemcached(rest, bucket)
         for i in range(0, number_of_docs):
             key = doc_name = "{0}-{1}-{2}-{3}".format(view_name, prefix, i, str(uuid.uuid4()))
             value = {"name": doc_name, "age": 1100}
             try:
-                moxi.set(key, 0, 0, json.dumps(value))
+                smart.set(key, 0, 0, json.dumps(value))
                 doc_names.append(doc_name)
             except:
                 self.log.error("unable to set item , reinitialize the vbucket map")
@@ -676,7 +678,8 @@ class ViewBaseTests(unittest.TestCase):
         # timeout is the length of time that this function will accept failures
         # if no new items are set for timeout seconds, we abort
         self.docs_inserted = []
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        rest = RestConnection(self.servers[0])
+        smart = VBucketAwareMemcached(rest, bucket)
         inserted_index = []
         time_to_timeout = 0
         while not self.shutdown_load_data:
@@ -684,7 +687,7 @@ class ViewBaseTests(unittest.TestCase):
                 key = doc_name = "{0}-{1}-{2}".format(view_name, prefix, i)
                 value = {"name": doc_name, "age": 1100}
                 try:
-                    moxi.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value))
                     time_to_timeout = 0
                     if i not in inserted_index:
                         inserted_index.append(i)
@@ -712,43 +715,14 @@ class ViewBaseTests(unittest.TestCase):
     def _load_docs(self, num_docs, prefix, verify=True, bucket='default'):
         master = self.servers[0]
         rest = RestConnection(master)
-        command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [moxi], 20000)]."
-        moxis_restarted = rest.diag_eval(command)
-        self.assertTrue(moxis_restarted, "unable to restart moxi process through diag/eval")
-
-        while True:
-            try:
-                moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
-                break
-            except MemcachedError as e:
-                    fail_count += 1
-                    if (e.status == 54) and fail_count < 5:
-                            self.log.error("moxi is not ready, waiting 5 seconds. error {0}".format(e))
-                            time.sleep(5)
-                    else:
-                        raise e
+        smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
         for i in range(0, num_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": i}
+            smart.set(key, 0, 0, json.dumps(value))
             # loop till value is set
-            fail_count = 0
-            while True:
-                try:
-                    moxi.set(key, 0, 0, json.dumps(value))
-                    break
-                except MemcachedError as e:
-                    fail_count += 1
-                    if (e.status == 133 or e.status == 132) and fail_count < 60:
-                        if i == 0:
-                            self.log.error("moxi not fully restarted, waiting 5 seconds. error {0}".format(e))
-                            time.sleep(5)
-                        else:
-                            self.log.error(e)
-                            time.sleep(1)
-                    else:
-                        raise e
         RebalanceHelper.wait_for_persistence(master, bucket)
         self.log.info("inserted {0} json documents".format(num_docs))
         if verify:
@@ -759,7 +733,8 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _update_docs(self, num_docs, num_of_updated_docs, prefix):
         bucket = "default"
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        rest = RestConnection(master)
+        smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
         for i in range(0, num_docs):
             key = "{0}-{1}".format(prefix, i)
@@ -770,7 +745,7 @@ class ViewBaseTests(unittest.TestCase):
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": 1000}
             if i < num_of_updated_docs:
-                moxi.set(key, 0, 0, json.dumps(value))
+                smart.set(key, 0, 0, json.dumps(value))
         self.log.info("updated {0} json documents".format(num_of_updated_docs))
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
         return doc_names
@@ -778,12 +753,13 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _delete_docs(self, num_docs, num_of_deleted_docs, prefix):
         bucket = "default"
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        rest = RestConnection(master)
+        smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
         for i in range(0, num_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
             if i < num_of_deleted_docs:
-                moxi.delete(key)
+                smart.delete(key)
             else:
                 doc_names.append(doc_name)
         self.log.info("deleted {0} json documents".format(num_of_deleted_docs))
@@ -834,11 +810,12 @@ class ViewBaseTests(unittest.TestCase):
         self.assertTrue(end_index >= start_index, "Requested to delete documents over an invalid range")
 
         bucket = "default"
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        rest = RestConnection(self.servers[0])
+        smart = VBucketAwareMemcached(rest, bucket)
         delete_count = 0
         for i in range(start_index, end_index):
             key = "{0}-{1}".format(prefix, i)
-            moxi.delete(key)
+            smart.delete(key)
             delete_count+=1
         self.log.info("deleted {0} json documents".format(delete_count))
         expected_delete_count = end_index - start_index
@@ -950,7 +927,6 @@ class ViewBaseTests(unittest.TestCase):
             _name = _json["name"].encode("ascii", "ignore")
             del _json["_id"]
             smart.memcached(_id).set(_id, 0, 0, json.dumps(_json))
-#            print "id:", _id, "j:", json.dumps(_json)
             doc_names.append(_name)
         self.log.info("inserted {0} json documents".format(num_docs))
         if verify:
@@ -961,12 +937,13 @@ class ViewBaseTests(unittest.TestCase):
     # used to delete documents created by the DocumentGenerator class
     def _delete_complex_docs(self, num_docs, num_of_deleted_docs, prefix):
         bucket = "default"
-        moxi = MemcachedClientHelper.proxy_client(self.servers[0], bucket)
+        rest = RestConnection(self.servers[0])
+        smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
         for i in range(0, num_docs):
             key = doc_name = "{0}-{1}".format(i, prefix)
             if i < num_of_deleted_docs:
-                moxi.delete(key)
+                smart.delete(key)
             else:
                 doc_names.append(doc_name)
         self.log.info("deleted {0} json documents".format(num_of_deleted_docs))

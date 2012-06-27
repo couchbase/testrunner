@@ -913,7 +913,7 @@ class VBucketAwareMemcached(object):
                     backoff *= 2
                 else:
                     raise error
-            except socket.error, EOFError:
+            except EOFError, IOError:
                 raise MemcachedError(ERR_NOT_MY_VBUCKET, "Connection reset")
 
     def done(self):
