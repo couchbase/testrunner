@@ -85,6 +85,7 @@ class XPerfTest(EVPerfClient):
                 # 2nd test executor:
                 self.input.servers = self_copy.input.clusters[1]
                 self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
+                self.input.test_params['stats'] = 0
                 secondary = test(self, *args, **kargs)
 
                 primary.join()
