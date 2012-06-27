@@ -132,14 +132,21 @@ class XDCRBaseTest(unittest.TestCase):
         return XDCRBaseTest.poll_for_condition(verify, sleep, timeout)
 
     @staticmethod
+    def get_rev_info(rest_conn, bucket, keys):
+        vbmc = VBucketAwareMemcached(rest_conn,bucket)
+        ris = []
+        for k in keys:
+            mc = vbmc.memcached(k)
+            ri = mc.getRev(k)
+            ris.append(ri)
+        return ris
+
+    @staticmethod
     def verify_del_items(rest_conn_a, rest_conn_b, bucket, keys, sleep, timeout):
         def verify():
-            log = logger.Logger().get_logger()
-            keys_str = '{0}'.format(keys).replace( "'", "\"")
-            all_docs_resp_a = rest_conn_a.all_docs(bucket, {'keys' : keys_str})
-            all_docs_resp_b = rest_conn_b.all_docs(bucket, {'keys' : keys_str})
-            return all_docs_resp_a == all_docs_resp_b
-
+            rev_a = XDCRBaseTest.get_rev_info(rest_conn_a, bucket, keys)
+            rev_b = XDCRBaseTest.get_rev_info(rest_conn_b, bucket, keys)
+            return rev_a == rev_b
         return XDCRBaseTest.poll_for_condition(verify, sleep, timeout)
 
 

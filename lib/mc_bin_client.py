@@ -209,6 +209,30 @@ class MemcachedClient(object):
         parts=self._doCmd(memcacheConstants.CMD_GET_REPLICA, key, '')
         return self.__parseGet(parts, len(key))
 
+    def __parseMeta(self, data):
+        flags = struct.unpack('I', data[-1][0:4])[0]
+        meta_type = struct.unpack('B', data[-1][4])[0]
+        length = struct.unpack('B', data[-1][5])[0]
+        meta = data[-1][6:6 + length]
+        return (meta_type, flags, meta)
+
+    def getMeta(self, key, vbucket=-1):
+        """Get the metadata for a given key within the memcached server."""
+        self._set_vbucket(key, vbucket)
+        parts=self._doCmd(memcacheConstants.CMD_GET_META, key, '')
+        return self.__parseMeta(parts)
+
+    def getRev(self, key, vbucket=-1):
+        """Get the revision for a given key within the memcached server."""
+        (meta_type, flags, meta_data) = self.getMeta(key, vbucket=-1)
+        if meta_type != memcacheConstants.META_REVID:
+            raise ValueError("Invalid meta type %x" % meta_type)
+
+        seqno = struct.unpack('>I', meta_data[:4])[0]
+        revid = meta_data[4:]
+
+        return (seqno, revid)
+
     def cas(self, key, exp, flags, oldVal, val, vbucket=-1):
         """CAS in a new value for the given key and comparison value."""
         self._set_vbucket(key, vbucket)
