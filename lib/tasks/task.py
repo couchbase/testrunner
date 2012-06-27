@@ -681,6 +681,8 @@ class ViewQueryTask(Task):
                 (len(content['rows']), self.expected_rows))
 
             if len(content['rows']) == self.expected_rows:
+                self.log.info("expected number of rows: '{0}' was found for view query".format(self.
+                            expected_rows))
                 self.state = FINISHED
                 self.set_result(True)
             else:
@@ -691,9 +693,7 @@ class ViewQueryTask(Task):
 
                 # retry until expected results or task times out
                 task_manager.schedule(self, self.retry_time)
-
         except QueryViewException as e:
             # subsequent query failed! exit
             self.state = FINISHED
             self.set_exception(e)
-

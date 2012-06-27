@@ -16,8 +16,10 @@ class BaseTestCase(unittest.TestCase):
         self.cluster = Cluster()
         self.servers = self.input.servers
         self.buckets = {}
-
+        self.wait_timeout = self.input.param("wait_timeout", 60)
         self.default_bucket = self.input.param("default_bucket", True)
+        if self.default_bucket:
+            self.default_bucket_name = "default"
         self.standard_buckets = self.input.param("standard_buckets", 0)
         self.sasl_buckets = self.input.param("sasl_buckets", 0)
         self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets
@@ -38,7 +40,7 @@ class BaseTestCase(unittest.TestCase):
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         if self.default_bucket:
             self.cluster.create_default_bucket(self.servers[0], self.bucket_size, self.num_replicas)
-            self.buckets['default'] = {1 : KVStore()}
+            self.buckets[self.default_bucket_name] = {1 : KVStore()}
         self._create_sasl_buckets(self.servers[0], self.sasl_buckets)
         # TODO (Mike): Create Standard buckets
 
