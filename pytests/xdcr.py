@@ -9,6 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from rebalancingtests import RebalanceDataGenerator
 from memcached.helper.old_kvstore import ClientKeyValueStore
+from memcached.helper.data_helper import VBucketAwareMemcached
 
 class XDCRBaseTest(unittest.TestCase):
     @staticmethod
