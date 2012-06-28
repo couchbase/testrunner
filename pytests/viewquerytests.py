@@ -5,7 +5,7 @@ import unittest
 import json
 import sys
 import copy
-from threading import Thread
+from threading import Thread, Event
 from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper
 from viewtests import ViewBaseTests
@@ -15,6 +15,23 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from old_tasks import task, taskmanager
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from TestInput import TestInputSingleton
+
+class StoppableThread(Thread):
+    """Thread class with a stop() method. The thread itself has to check
+    regularly for the stopped() condition."""
+
+    def __init__(self, group=None, target=None, name=None,
+                 args=(), kwargs=None, verbose=None):
+        super(StoppableThread, self).__init__(group=group, target=target,
+                        name=name, args=args, kwargs=kwargs, verbose=verbose)
+        self._stop = Event()
+
+    def stop(self):
+        self._stop.set()
+        self._Thread__stop()
+
+    def stopped(self):
+        return self._stop.isSet()
 
 class ViewQueryTests(unittest.TestCase):
     skip_setup_failed  = False
@@ -28,6 +45,8 @@ class ViewQueryTests(unittest.TestCase):
             self.error = None
             self.task_manager = taskmanager.TaskManager()
             self.task_manager.start()
+            self.thread_crashed = Event()
+            self.thread_stopped = Event()
         except Exception as ex:
             skip_setup_failed = True
             self.fail(ex)
@@ -36,6 +55,7 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests.common_tearDown(self)
 
         self.task_manager.cancel()
+
 
     def test_simple_dataset_stale_queries(self):
         # init dataset for test
@@ -373,7 +393,7 @@ class ViewQueryTests(unittest.TestCase):
 
         if tm is None:
             # start loading data using old method
-            load_task = Thread(target=data_set.load,
+            load_task = StoppableThread(target=data_set.load,
                                name="load_data_set",
                                args=(self, views[0]))
             load_task.start()
@@ -383,6 +403,10 @@ class ViewQueryTests(unittest.TestCase):
 
         # run queries while loading data
         while(load_task.is_alive()):
+            if (self.thread_crashed.is_set()):
+                load_task.stop()
+                self._check_view_intergrity(views)
+                return
             self._query_all_views(views, False, limit=data_set.limit)
             time.sleep(5)
         if 'result' in dir(load_task):
@@ -404,13 +428,24 @@ class ViewQueryTests(unittest.TestCase):
 
         query_threads = []
         for view in views:
-            t = Thread(target=view.run_queries,
+            t = StoppableThread(target=view.run_queries,
                name="query-{0}".format(view.name),
                args=(self, verify_results, kv_store, limit))
             query_threads.append(t)
             t.start()
 
-        [t.join() for t in query_threads]
+        while True:
+            if not query_threads:
+                return
+            self.thread_stopped.wait(60)
+            if self.thread_crashed.is_set():
+                for t in query_threads:
+                    t.stop()
+                return
+            else:
+                query_threads = [d for d in query_threads if d.is_alive()]
+                self.thread_stopped.clear()
+#        [t.join() for t in query_threads]
 
         self._check_view_intergrity(views)
 
@@ -467,139 +502,147 @@ class QueryView:
 
     # query this view
     def run_queries(self, tc, verify_results = False, kv_store = None, limit=None):
-        rest = tc._rconn()
+        try:
+            rest = tc._rconn()
 
-        if not len(self.queries) > 0 :
-            self.log.info("No queries to run for this view")
-            return
+            if not len(self.queries) > 0 :
+                self.log.info("No queries to run for this view")
+                return
 
-        view_name = self.name
+            view_name = self.name
 
-        max_dupe_result_count = tc.input.param('max-dupe-result-count', 5)
+            max_dupe_result_count = tc.input.param('max-dupe-result-count', 5)
 
-        num_verified_docs = tc.input.param('num-verified-docs', 20)
+            num_verified_docs = tc.input.param('num-verified-docs', 20)
 
-        for query in self.queries:
-            params = query.params
+            for query in self.queries:
+                params = query.params
 
-            params["debug"] = "true"
+                params["debug"] = "true"
 
-            if self.reduce_fn is not None and "include_docs" in params:
-                del params["include_docs"]
+                if self.reduce_fn is not None and "include_docs" in params:
+                    del params["include_docs"]
 
-            expected_num_docs = query.expected_num_docs
-            num_keys = -1
+                expected_num_docs = query.expected_num_docs
+                num_keys = -1
 
-            if expected_num_docs is not None and verify_results:
+                if expected_num_docs is not None and verify_results:
 
-                attempt = 0
-                delay = 15
-                results = None
+                    attempt = 0
+                    delay = 15
+                    results = None
 
-                # first verify all doc_names get reported in the view
-                # for windows, we need more than 20+ times
-                result_count_stats = {}
-                while attempt < 15 and num_keys != expected_num_docs:
-                    if attempt > 11:
-                        params["stale"] = 'false'
+                    # first verify all doc_names get reported in the view
+                    # for windows, we need more than 20+ times
+                    result_count_stats = {}
+                    while attempt < 15 and num_keys != expected_num_docs:
+                        if attempt > 11:
+                            params["stale"] = 'false'
 
-                    self.log.info("Quering view {0} with params: {1}".format(view_name, params))
-                    results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
-                                                                  limit=limit, extra_params=params,
-                                                                  type_ = query.type_)
-                   # check if this is a reduced query using _count
-                    if self.reduce_fn and (not query.params.has_key("reduce") or query.params.has_key("reduce") and query.params["reduce"] == "true"):
-                        if self.reduce_fn == "_count":
-                            num_keys = self._verify_count_reduce_helper(query, results)
-                            keys = ["group", "group_level", "key", "start_key", "end_key"]
-                            if [key for key in keys if key in params]:
-                                self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
-                                    .format(view_name, attempt + 1, query.expected_num_groups,
-                                            num_keys, expected_num_docs))
-                            else:
-                                self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
-                                    .format(view_name, attempt + 1, query.expected_num_groups,
-                                            num_keys, self.index_size))
-                        if self.index_size !=  num_keys or expected_num_docs != num_keys:
-                            attempt += 1
-                            continue
-                        else:
-                            break
-                    else:
-
-                        num_keys = len(ViewBaseTests._get_keys(self, results))
-                        self.log.info("{0}: attempt {1} retrieved value {2} expected: {3}" \
-                            .format(view_name, attempt + 1, num_keys, expected_num_docs))
-
-                    attempt += 1
-                    if num_keys not in result_count_stats:
-                        result_count_stats[num_keys] = 1
-                    else:
-                        if result_count_stats[num_keys] == max_dupe_result_count:
-                            break
-                        else:
-                            result_count_stats[num_keys] += 1
-                    time.sleep(delay)
-
-                try:
-                    if(num_keys != expected_num_docs):
-                        # debug query results
-                        if self.reduce_fn is not None:
-                            # query again with reduce false
-                            params["reduce"] = "false"
-
-                            # remove any grouping
-                            if "group" in params:
-                                del params["group"]
-                            if "group_level" in params:
-                                del params["group_level"]
-                            if "key" in params and "limit" in params:
-                                expected_num_docs = min(expected_num_docs, limit)
-
-                            results = ViewBaseTests._get_view_results(tc, rest,
-                                                                      self.bucket,
-                                                                      view_name,
-                                                                      limit=limit,
-                                                                      extra_params=params,
+                        self.log.info("Quering view {0} with params: {1}".format(view_name, params))
+                        results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
+                                                                      limit=limit, extra_params=params,
                                                                       type_ = query.type_)
-
-                        # verify keys
-                        key_failures = QueryHelper.verify_query_keys(rest, query,
-                                                                     results, self.bucket,
-                                                                     num_verified_docs, limit=limit)
-                        msg = "unable to retrieve expected results: {0}".format(key_failures)
-                        tc.assertEquals(len(key_failures), 0, msg)
-
-                    # verify values for include_docs tests
-                    if('include_docs' in params):
-                        failures = QueryHelper.verify_query_values(rest, query, results, self.bucket)
-                        msg = "data integrity failed: {0}".format(failures)
-                        tc.assertEquals(len(failures), 0, msg)
-
-                except:
-                    self.log.error("Query failed: see test result logs for details")
-                    self.results.addFailure(tc, sys.exc_info())
-
-            else:
-                # query without verification
-                self.log.info("Quering view {0} with params: {1}".format(view_name, params));
-                try:
-                    results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
-                                                              limit=limit, extra_params=params,
-                                                              type_ = query.type_,
-                                                              invalid_results=query.error and True or False)
-                except Exception as ex:
-                        if query.error:
-                            if ex.message.find(query.error) > -1:
-                                self.log.info("View results contain '{0}' error as expected".format(query.error))
-                                return
+                       # check if this is a reduced query using _count
+                        if self.reduce_fn and (not query.params.has_key("reduce") or query.params.has_key("reduce") and query.params["reduce"] == "true"):
+                            if self.reduce_fn == "_count":
+                                num_keys = self._verify_count_reduce_helper(query, results)
+                                keys = ["group", "group_level", "key", "start_key", "end_key"]
+                                if [key for key in keys if key in params]:
+                                    self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
+                                        .format(view_name, attempt + 1, query.expected_num_groups,
+                                                num_keys, expected_num_docs))
+                                else:
+                                    self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
+                                        .format(view_name, attempt + 1, query.expected_num_groups,
+                                                num_keys, self.index_size))
+                            if self.index_size !=  num_keys or expected_num_docs != num_keys:
+                                attempt += 1
+                                continue
                             else:
-                                self.log.error("View results expect '{0}' error but {1} raised".format(query.error, ex.message))
-                                self.results.addFailure(tc,(type(ex), ex.message, sys.exc_info()[2]))
-                                return
-                if query.error:
-                    self.log.error("No error raised for negative case. Expected error '{0}'".format(query.error))
-                    self.results.addFailure(tc, (Exception, "No error raised for negative case", sys.exc_info()[2]))
+                                break
+                        else:
+
+                            num_keys = len(ViewBaseTests._get_keys(self, results))
+                            self.log.info("{0}: attempt {1} retrieved value {2} expected: {3}" \
+                                .format(view_name, attempt + 1, num_keys, expected_num_docs))
+
+                        attempt += 1
+                        if num_keys not in result_count_stats:
+                            result_count_stats[num_keys] = 1
+                        else:
+                            if result_count_stats[num_keys] == max_dupe_result_count:
+                                break
+                            else:
+                                result_count_stats[num_keys] += 1
+                        time.sleep(delay)
+
+                    try:
+                        if(num_keys != expected_num_docs):
+                            # debug query results
+                            if self.reduce_fn is not None:
+                                # query again with reduce false
+                                params["reduce"] = "false"
+
+                                # remove any grouping
+                                if "group" in params:
+                                    del params["group"]
+                                if "group_level" in params:
+                                    del params["group_level"]
+                                if "key" in params and "limit" in params:
+                                    expected_num_docs = min(expected_num_docs, limit)
+
+                                results = ViewBaseTests._get_view_results(tc, rest,
+                                                                          self.bucket,
+                                                                          view_name,
+                                                                          limit=limit,
+                                                                          extra_params=params,
+                                                                          type_ = query.type_)
+
+                            # verify keys
+                            key_failures = QueryHelper.verify_query_keys(rest, query,
+                                                                         results, self.bucket,
+                                                                         num_verified_docs, limit=limit)
+                            msg = "unable to retrieve expected results: {0}".format(key_failures)
+                            tc.assertEquals(len(key_failures), 0, msg)
+
+                        # verify values for include_docs tests
+                        if('include_docs' in params):
+                            failures = QueryHelper.verify_query_values(rest, query, results, self.bucket)
+                            msg = "data integrity failed: {0}".format(failures)
+                            tc.assertEquals(len(failures), 0, msg)
+
+                    except:
+                        self.log.error("Query failed: see test result logs for details")
+                        self.results.addFailure(tc, sys.exc_info())
+                        tc.log.error("Query data thread is crashed: " + sys.exc_info())
+                        tc.thread_crashed.set()
+
+                else:
+                    # query without verification
+                    self.log.info("Quering view {0} with params: {1}".format(view_name, params));
+                    try:
+                        results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
+                                                                  limit=limit, extra_params=params,
+                                                                  type_ = query.type_,
+                                                                  invalid_results=query.error and True or False)
+                    except Exception as ex:
+                            if query.error:
+                                if ex.message.find(query.error) > -1:
+                                    self.log.info("View results contain '{0}' error as expected".format(query.error))
+                                    return
+                                else:
+                                    self.log.error("View results expect '{0}' error but {1} raised".format(query.error, ex.message))
+                                    self.results.addFailure(tc,(type(ex), ex.message, sys.exc_info()[2]))
+                                    tc.thread_crashed.set()
+                                    return
+                    if query.error:
+                        self.log.error("No error raised for negative case. Expected error '{0}'".format(query.error))
+                        self.results.addFailure(tc, (Exception, "No error raised for negative case", sys.exc_info()[2]))
+                        tc.thread_crashed.set()
+        finally:
+            if not tc.thread_stopped.is_set():
+                tc.thread_stopped.set()
 
 
     """
@@ -988,14 +1031,22 @@ class EmployeeDataSet:
         for info in self.get_data_sets():
 
             self.doc_id_map.update({info['type'] : {"years" : self._doc_map_array()}})
-            t = Thread(target=self._iterative_load,
+            t = StoppableThread(target=self._iterative_load,
                        name="iterative_load",
                        args=(info, tc, view, self.docs_per_day, verify_docs_loaded))
             data_threads.append(t)
             t.start()
-
-        for t  in data_threads:
-            t.join()
+        while True:
+            if not data_threads:
+                return
+            tc.thread_stopped.wait(60)
+            if tc.thread_crashed.is_set():
+                for t in data_threads:
+                    t.stop()
+                return
+            else:
+                data_threads = [d for d in data_threads if d.is_alive()]
+                tc.thread_stopped.clear()
 
         self.preload_matching_query_keys()
 
@@ -1036,10 +1087,14 @@ class EmployeeDataSet:
                         doc_sets.append(docs)
                     # load docs
                     self._load_chunk(smart, doc_sets)
-
         except Exception as ex:
             view.results.addError(tc, sys.exc_info())
+            tc.log.error("Load data thread is crashed: " + ex)
+            tc.thread_crashed.set()
             raise ex
+        finally:
+            if not tc.thread_stopped.is_set():
+                tc.thread_stopped.set()
 
     def _load_chunk(self, smart, doc_sets):
 
