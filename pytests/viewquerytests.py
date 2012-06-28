@@ -1149,15 +1149,15 @@ class EmployeeDataSet:
         q_params = copy.deepcopy(query.params)
 
         if query.type_ == "all_docs":
-            if 'start_key' in q_params:
+            if 'start_key' in q_params and q_params['start_key']:
                 q_params['startkey_docid'] = q_params['start_key']
                 del q_params['start_key']
 
-            if 'end_key' in q_params:
+            if 'end_key' in q_params and q_params['end_key']:
                 q_params['endkey_docid'] = q_params['end_key']
                 del q_params['end_key']
 
-        if 'start_key' in q_params:
+        if 'start_key' in q_params  and q_params['start_key']:
             params = json.loads(q_params['start_key'])
             if params[0] and not None:
                 q_start_yr = params[0] - 2007
@@ -1166,7 +1166,7 @@ class EmployeeDataSet:
             if params[2] and not None:
                 q_start_day = params[2]
 
-        if 'end_key' in q_params:
+        if 'end_key' in q_params  and q_params['end_key']:
             params = json.loads(q_params['end_key'])
             if params[0] and not None:
                 q_end_yr = params[0] - 2007
@@ -1175,7 +1175,7 @@ class EmployeeDataSet:
             if params[2] and not None:
                 q_end_day = params[2]
 
-        if 'descending' in q_params:
+        if 'descending' in q_params  and q_params['descending']:
             descending = json.loads(q_params['descending'])
             if descending == True:
                 q_start_yr, q_end_yr = q_end_yr, q_start_yr
@@ -1183,7 +1183,7 @@ class EmployeeDataSet:
                 q_start_day, q_end_day = q_end_day, q_start_day
 
         # note: inclusive end check must occur after descending
-        if 'inclusive_end' in q_params:
+        if 'inclusive_end' in q_params  and q_params['inclusive_end']:
             inclusive_end = json.loads(q_params['inclusive_end'])
             if inclusive_end == False and 'endkey_docid' not in q_params:
                 if descending == False:
