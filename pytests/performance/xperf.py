@@ -157,3 +157,13 @@ class XPerfTest(EVPerfClient):
 
         # Run parent test
         super(XPerfTest, self).test_vperf2()
+
+    @xperf_manager()
+    def test_vperf2(self):
+        """1 design document, 8 views, no xdcr"""
+
+        # Disable XDCR
+        self.input.test_params['disable_xdcr'] = 1
+
+        # Run parent test
+        super(XPerfTest, self).test_vperf2()
