@@ -144,7 +144,13 @@ class PerfBase(unittest.TestCase):
     def reconfigure(self):
         """Customize basic Couchbase setup"""
 
-        # Set custom loglevel
+        self.set_loglevel()
+        self.set_max_concurrent_reps_per_doc()
+        self.set_auto_compaction()
+
+    def set_loglevel(self):
+        """Set custom loglevel"""
+
         loglevel = self.param('loglevel', None)
         if loglevel:
             if self.input.clusters:
@@ -155,7 +161,9 @@ class PerfBase(unittest.TestCase):
             else:
                 self.rest.set_global_loglevel(loglevel)
 
-        # Set custom MAX_CONCURRENT_REPS_PER_DOC
+    def set_max_concurrent_reps_per_doc(self):
+        """Set custom MAX_CONCURRENT_REPS_PER_DOC"""
+
         max_concurrent_reps_per_doc = self.param('max_concurrent_reps_per_doc',
                                                  None)
         if max_concurrent_reps_per_doc:
@@ -164,7 +172,9 @@ class PerfBase(unittest.TestCase):
                 rc.set_environment_variable('MAX_CONCURRENT_REPS_PER_DOC',
                                             max_concurrent_reps_per_doc)
 
-        # Set custom autocompaction settings
+    def set_auto_compaction(self):
+        """Set custom auto-compaction settings"""
+
         try:
             # Parallel database and view compaction
             parallel_compaction = self.param("parallel_compaction",
