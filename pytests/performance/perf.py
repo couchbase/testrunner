@@ -172,7 +172,7 @@ class PerfBase(unittest.TestCase):
                 rc.set_environment_variable('MAX_CONCURRENT_REPS_PER_DOC',
                                             max_concurrent_reps_per_doc)
 
-    def set_auto_compaction(self):
+    def set_auto_compaction(self, disable_view_compaction=False):
         """Set custom auto-compaction settings"""
 
         try:
@@ -183,8 +183,11 @@ class PerfBase(unittest.TestCase):
             db_compaction = self.parami("db_compaction",
                                         PerfDefaults.db_compaction)
             # View fragmentation threshold
-            view_compaction = self.parami("view_compaction",
-                                          PerfDefaults.view_compaction)
+            if disable_view_compaction:
+                view_compaction = 100
+            else:
+                view_compaction = self.parami("view_compaction",
+                                              PerfDefaults.view_compaction)
             # Set custom auto-compaction settings
             self.rest.set_auto_compaction(parallelDBAndVC=parallel_compaction,
                                           dbFragmentThresholdPercentage=db_compaction,
