@@ -1,6 +1,7 @@
 import logger
 import unittest
 import copy
+import datetime
 
 from couchbase.cluster import Cluster
 from TestInput import TestInputSingleton
@@ -17,6 +18,8 @@ class BaseTestCase(unittest.TestCase):
         self.servers = self.input.servers
         self.buckets = {}
         self.wait_timeout = self.input.param("wait_timeout", 60)
+        #number of case that is performed from testrunner( increment each time)
+        self.case_number = self.input.param("case_number", 0)
         self.default_bucket = self.input.param("default_bucket", True)
         if self.default_bucket:
             self.default_bucket_name = "default"
@@ -27,29 +30,52 @@ class BaseTestCase(unittest.TestCase):
         self.num_replicas = self.input.param("replicas", 1)
         self.num_items = self.input.param("items", 1000)
         self.dgm_run = self.input.param("dgm_run", False)
-
-        if not self.input.param("skip_cleanup", False):
-            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-            for server in self.servers:
-                ClusterOperationHelper.cleanup_cluster([server])
-            ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[0]], self)
-
+        self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
+                      .format(self.case_number, self._testMethodName))
+        #avoid clean up if the previous test has been tear down
+        if not self.input.param("skip_cleanup", True) or self.case_number == 1:
+            self.tearDown()
         self.quota = self._initialize_nodes(self.cluster, self.servers)
         if self.dgm_run:
             self.quota = 256
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+
         if self.default_bucket:
             self.cluster.create_default_bucket(self.servers[0], self.bucket_size, self.num_replicas)
             self.buckets[self.default_bucket_name] = {1 : KVStore()}
         self._create_sasl_buckets(self.servers[0], self.sasl_buckets)
+        self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
+                      .format(self.case_number, self._testMethodName))
         # TODO (Mike): Create Standard buckets
+        self._log_start(self)
 
     def tearDown(self):
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-        ClusterOperationHelper.cleanup_cluster(self.servers)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-        self.buckets = {}
-        self.cluster.shutdown()
+        if not self.input.param("skip_cleanup", False):
+            self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
+                          .format(self.case_number, self._testMethodName))
+            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+            ClusterOperationHelper.cleanup_cluster(self.servers)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+            self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
+                          .format(self.case_number, self._testMethodName))
+            #self.cluster.shutdown()
+            self._log_finish(self)
+
+    @staticmethod
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+    @staticmethod
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
 
     def _initialize_nodes(self, cluster, servers):
         quota = 0

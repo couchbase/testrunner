@@ -33,19 +33,17 @@ class ViewBaseTests(unittest.TestCase):
         self.num_design_docs = self.input.param("num-design-docs", 20)
         self.expiry_ratio = self.input.param("expiry-ratio", 0.1)
         self.num_buckets = self.input.param("num-buckets", 1)
+        self.case_number = self.input.param("case_number", 0)
 
-        # Clear the state from Previous invalid run
-        ViewBaseTests.common_tearDown(self)
+        #avoid clean up if the previous test has been tear down
+        if not self.input.param("skip_cleanup", True) or self.case_number == 1:
+            ViewBaseTests._common_clenup(self)
         master = self.servers[0]
         rest = RestConnection(master)
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         mem_quota = int(rest.get_nodes_self().mcdMemoryReserved * node_ram_ratio)
         rest.init_cluster(master.rest_username, master.rest_password)
         rest.init_cluster_memoryQuota(master.rest_username, master.rest_password, memoryQuota=mem_quota)
-        for server in self.servers:
-            ClusterOperationHelper.cleanup_cluster([server])
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([master], self)
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         if self.num_buckets==1:
             ViewBaseTests._create_default_bucket(self, replica=self.replica)
         else:
@@ -58,8 +56,9 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
-        master = self.servers[0]
-        if not "skip_cleanup" in TestInputSingleton.input.test_params:
+        #we don't need restart services if nodes were crashed, everything should be stable
+        '''if "restart_services" in TestInputSingleton.input.test_params:
+            master = self.servers[0]
             try:
                 RestConnection(master).stop_rebalance()
             except:
@@ -78,13 +77,17 @@ class ViewBaseTests(unittest.TestCase):
             for view in self.created_views:
                 bucket = self.created_views[view]
                 rest.delete_view(bucket, view)
-                self.log.info("deleted view {0} from bucket {1}".format(view, bucket))
-
-            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-
-            ClusterOperationHelper.cleanup_cluster(self.servers)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+                self.log.info("deleted view {0} from bucket {1}".format(view, bucket))'''
+        if not self.input.param("skip_cleanup", False):
+            ViewBaseTests._common_clenup(self)
         ViewBaseTests._log_finish(self)
+
+    @staticmethod
+    def _common_clenup(self):
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        for server in self.servers:
+            ClusterOperationHelper.cleanup_cluster([server])
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
     @staticmethod
     def _log_start(self):
