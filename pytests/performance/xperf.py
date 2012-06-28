@@ -69,7 +69,8 @@ class XPerfTest(EVPerfClient):
                 # load phase)
                 if (self.parami('prefix', -1) == 0 and
                     self.parami('load_phase', 0) and
-                    not self.parami('hot_load_phase', 0)):
+                    not self.parami('hot_load_phase', 0) and
+                    not self.parami('disable_xdcr', 0)):
                     master = self.input.clusters[0][0]
                     slave = self.input.clusters[1][0]
                     self.start_replication(master, slave, bidir=bidir)
