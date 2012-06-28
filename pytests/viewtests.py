@@ -733,6 +733,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _update_docs(self, num_docs, num_of_updated_docs, prefix):
         bucket = "default"
+        master = self.servers[0]
         rest = RestConnection(master)
         smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
@@ -753,6 +754,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _delete_docs(self, num_docs, num_of_deleted_docs, prefix):
         bucket = "default"
+        master = self.servers[0]
         rest = RestConnection(master)
         smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
@@ -808,8 +810,8 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _delete_doc_range(self, prefix, start_index, end_index):
         self.assertTrue(end_index >= start_index, "Requested to delete documents over an invalid range")
-
         bucket = "default"
+        master = self.servers[0]
         rest = RestConnection(self.servers[0])
         smart = VBucketAwareMemcached(rest, bucket)
         delete_count = 0
