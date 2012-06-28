@@ -85,7 +85,13 @@ class PerfBase(unittest.TestCase):
 
         self.set_up_proxy()
 
-        self.reconfigure()
+        if self.input.clusters:
+            for cluster in self.input.clusters.values():
+                master = cluster[0]
+                self.set_up_rest(master)
+                self.reconfigure()
+        else:
+            self.reconfigure()
 
         if self.parami("dgm", getattr(self, "dgm", 1)):
             self.set_up_dgm()
