@@ -146,7 +146,7 @@ class PerfBase(unittest.TestCase):
 
         self.set_loglevel()
         self.set_max_concurrent_reps_per_doc()
-        self.set_auto_compaction(disable_view_compaction=True)
+        self.set_autocompaction(disable_view_compaction=True)
 
     def set_loglevel(self):
         """Set custom loglevel"""
@@ -172,7 +172,7 @@ class PerfBase(unittest.TestCase):
                 rc.set_environment_variable('MAX_CONCURRENT_REPS_PER_DOC',
                                             max_concurrent_reps_per_doc)
 
-    def set_auto_compaction(self, disable_view_compaction=False):
+    def set_autocompaction(self, disable_view_compaction=False):
         """Set custom auto-compaction settings"""
 
         try:
