@@ -1047,8 +1047,8 @@ class EmployeeDataSet:
             else:
                 data_threads = [d for d in data_threads if d.is_alive()]
                 tc.thread_stopped.clear()
-
-        self.preload_matching_query_keys()
+        if not view.queries[0].error:
+            self.preload_matching_query_keys()
 
 
     # create new array with a None item at index 0 for
