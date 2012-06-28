@@ -146,7 +146,7 @@ class PerfBase(unittest.TestCase):
 
         self.set_loglevel()
         self.set_max_concurrent_reps_per_doc()
-        self.set_auto_compaction()
+        self.set_auto_compaction(disable_view_compaction=True)
 
     def set_loglevel(self):
         """Set custom loglevel"""
