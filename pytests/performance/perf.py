@@ -150,6 +150,8 @@ class PerfBase(unittest.TestCase):
     def reconfigure(self):
         """Customize basic Couchbase setup"""
 
+        print "[perf.setUp] Customizing setup"
+
         self.set_loglevel()
         self.set_max_concurrent_reps_per_doc()
         self.set_autocompaction(disable_view_compaction=True)
@@ -159,13 +161,7 @@ class PerfBase(unittest.TestCase):
 
         loglevel = self.param('loglevel', None)
         if loglevel:
-            if self.input.clusters:
-                for cluster in self.input.clusters.values():
-                    master = cluster[0]
-                    self.set_up_rest(master)
-                    self.rest.set_global_loglevel(loglevel)
-            else:
-                self.rest.set_global_loglevel(loglevel)
+            self.rest.set_global_loglevel(loglevel)
 
     def set_max_concurrent_reps_per_doc(self):
         """Set custom MAX_CONCURRENT_REPS_PER_DOC"""
