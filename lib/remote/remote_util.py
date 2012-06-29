@@ -1203,35 +1203,14 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if not is_linux_distro:
             arch = ''
             os_version = 'unknown windows'
-            #let's run 'systeminfo grep 'System Type:'
-            system_type_response, error = self.execute_command_raw("systeminfo | grep 'System Type:'")
-
-            if system_type_response and system_type_response[0].find('x64') != -1:
-                arch = 'x86_64'
-            else:
-                arch = 'x86'
-            os_name_response, error = self.execute_command_raw("systeminfo | grep 'OS Name: '")
-            os_name_type = os_name_response[0].split(" ")
-            for name in os_name_type:
-                if name == "2008":
-                    windows_name = "2k8"
-                    break
-                elif name == "7":
-                    windows_name = "7"
-                    break
-            if os_name_response:
-                log.info(os_name_response)
-                first_item = os_name_response[0]
-                if os_name_response[0].find('Microsoft') != -1:
-                    os_version = first_item[first_item.index('Microsoft'):]
-                #let's run 'systeminfo grep 'OS Name: '
+            win_info = self.find_windows_info()
             info = RemoteMachineInfo()
-            info.type = "Windows"
-            info.windows_name = windows_name
-            info.distribution_type = "Windows"
-            info.architecture_type = arch
+            info.type = win_info['os']
+            info.windows_name = win_info['os_name']
+            info.distribution_type = win_info['os']
+            info.architecture_type = win_info['os_arch']
             info.ip = self.ip
-            info.distribution_version = os_version
+            info.distribution_version = win_info['os']
             info.deliverable_type = 'exe'
             #TODO: For windows
             info.ram = ''
