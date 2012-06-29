@@ -724,7 +724,6 @@ class VBucketAwareMemcached(object):
         for vBucket in forward_map:
             if vBucketId == vBucket.id:
                 self.vBucketMap[vBucket.id] = vBucket.master
-                # it has changed , then to different server or a new server
                 masterIp = vBucket.master.split(":")[0]
                 masterPort = int(vBucket.master.split(":")[1])
                 if self.vBucketMap[vBucketId] not in self.memcacheds:
@@ -737,7 +736,6 @@ class VBucketAwareMemcached(object):
                     server.ip = masterIp
                     self.log.info("Recevied forward map, reset vbucket map, new direct_client")
                     self.memcacheds[vBucket.master] = MemcachedClientHelper.direct_client(server, self.bucket)
-                    return True
                 # if no one is using that memcached connection anymore just close the connection
                 used_nodes = set([self.vBucketMap[vb_name] for vb_name in self.vBucketMap])
                 rm_clients = []
@@ -747,7 +745,7 @@ class VBucketAwareMemcached(object):
                 for rm_cl in rm_clients:
                     self.memcacheds[rm_cl].close()
                     del self.memcacheds[rm_cl]
-        return False
+        return True
 
     def request_map(self, rest, bucket):
         memcacheds = {}
