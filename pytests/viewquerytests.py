@@ -459,6 +459,20 @@ class ViewQueryTests(unittest.TestCase):
 
         self._query_all_views(data_set.views)
 
+    def test_employee_dataset_startkey_endkey_queries_rebalance_incrementaly(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+        data_set.add_startkey_endkey_queries()
+        self._query_test_init(data_set, False)
+
+        # rebalance_in and verify loaded data
+        for i in xrange(1, len(self.servers)):
+                rebalance = self.cluster.async_rebalance(self.servers[:i + 1], [self.servers[i]], [])
+                self.server = self.servers[i]
+                self._query_all_views(data_set.views)
+                rebalance.result()
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
