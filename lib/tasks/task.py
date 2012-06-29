@@ -2,16 +2,18 @@ import time
 import logger
 import random
 import string
+import copy
+import json
+import re
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
 from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from memcached.helper.data_helper import KVStoreAwareSmartClient, VBucketAwareMemcached, MemcachedClientHelper
 from couchbase.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
-import json
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                         GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException
 
@@ -1188,3 +1190,325 @@ class FailoverTask(Task):
                 if server.ip == node.ip and int(server.port) == int(node.port):
                     self.log.info("Failing over {0}:{1}".format(node.ip, node.port))
                     rest.fail_over(node.id)
+
+class GenerateExpectedViewResultsTask(Task):
+
+    """
+        Task to produce the set of keys that are expected to be returned
+        by querying the provided <view>.  Results can be later passed to
+        ViewQueryVerificationTask and compared with actual results from
+        server.
+
+        Currently only views with map functions that emit a single string
+        or integer as keys are accepted.
+
+        Also NOTE, this task is to be used with doc_generators that
+        produce json like documentgenerator.DocumentGenerator
+    """
+    def __init__(self, doc_generators, view, query):
+        Task.__init__(self, "generate_view_query_results_task")
+        self.doc_generators = doc_generators
+        self.view = view
+        self.query = query
+        self.emitted_rows = []
+
+
+    def execute(self, task_manager):
+        self.generate_emitted_rows()
+        self.filter_emitted_rows()
+        self.log.info("Finished generating expected query results")
+        self.state = CHECKING
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result(self.emitted_rows)
+
+
+    def generate_emitted_rows(self):
+        for doc_gen in self.doc_generators:
+
+            query_doc_gen = copy.deepcopy(doc_gen)
+            while query_doc_gen.has_next():
+                emit_key = re.sub(r',.*', '', re.sub(r'.*emit\([ +]?doc\.', '', self.view.map_func))
+                _id, val = query_doc_gen.next()
+                val = json.loads(val)
+
+                val_emit_key = val[emit_key]
+                if isinstance(val_emit_key, unicode):
+                    val_emit_key = val_emit_key.encode('utf-8')
+                self.emitted_rows.append({'id' : _id, 'key' : val_emit_key})
+
+    def filter_emitted_rows(self):
+
+        query = self.query
+
+        # parse query flags
+        descending_set = 'descending' in query and query['descending'] == "true"
+        startkey_set, endkey_set = 'startkey' in query, 'endkey' in query
+        startkey_docid_set, endkey_docid_set =  'startkey_docid' in query, 'endkey_docid' in query
+        inclusive_end_false = 'inclusive_end' in query and query['inclusive_end'] == "false"
+        key_set = 'key' in query
+
+        # sort expected results to match view results
+        expected_rows = sorted(self.emitted_rows,
+                               cmp=GenerateExpectedViewResultsTask.cmp_result_rows,
+                               reverse = descending_set)
+
+        # filter rows according to query flags
+        if startkey_set:
+            start_key = query['startkey']
+        else:
+            start_key = expected_rows[0]['key']
+        if endkey_set:
+            end_key = query['endkey']
+        else:
+            end_key = expected_rows[-1]['key']
+
+        if descending_set:
+            start_key, end_key = end_key, start_key
+
+        if startkey_set or endkey_set:
+            if isinstance(start_key, str):
+                start_key = start_key.strip("\"")
+            if isinstance(end_key, str):
+                end_key = end_key.strip("\"")
+            expected_rows = [row for row in expected_rows if row['key'] >= start_key and row['key'] <= end_key]
+
+        if key_set:
+            key_ = query['key']
+            start_key, end_key = key_, key_
+            expected_rows = [row for row in expected_rows if row['key'] == key_]
+
+
+        if descending_set:
+            startkey_docid_set, endkey_docid_set = endkey_docid_set, startkey_docid_set
+
+        if startkey_docid_set:
+            if not startkey_set:
+                self.log.warn("Ignoring startkey_docid filter when startkey is not set")
+            else:
+                do_filter = False
+                if descending_set:
+                    if endkey_docid_set:
+                        startkey_docid = query['endkey_docid']
+                        do_filter = True
+                else:
+                    startkey_docid = query['startkey_docid']
+                    do_filter = True
+
+                if do_filter:
+                    expected_rows = \
+                        [row for row in expected_rows if row['id'] >= startkey_docid or row['key'] > start_key]
+
+        if endkey_docid_set:
+            if not endkey_set:
+                self.log.warn("Ignoring endkey_docid filter when endkey is not set")
+            else:
+                do_filter = False
+                if descending_set:
+                    if endkey_docid_set:
+                        endkey_docid = query['startkey_docid']
+                        do_filter = True
+                else:
+                    endkey_docid = query['endkey_docid']
+                    do_filter = True
+
+                if do_filter:
+                    expected_rows = \
+                        [row for row in expected_rows if row['id'] <= endkey_docid or row['key'] < end_key]
+
+
+        if inclusive_end_false:
+            if endkey_set and not endkey_docid_set:
+                # remove all keys that match endkey
+                expected_rows = [row for row in expected_rows['key'] if row['key'] != end_key]
+            else:
+                # remove last key
+                expected_rows = expected_rows[:-1]
+
+        self.emitted_rows = expected_rows
+
+    @staticmethod
+    def cmp_result_rows(x, y):
+        rc = cmp(x['key'], y['key'])
+        if rc == 0:
+            # sort by id is tie breaker
+            rc = cmp(x['id'], y['id'])
+        return rc
+
+class ViewQueryVerificationTask(Task):
+
+    """
+        * query with stale=false
+        * check for duplicates
+        * check for missing docs
+            * check memcached
+            * check couch
+    """
+    def __init__(self, server, design_doc_name, view_name, query, expected_rows,
+                num_verified_docs = 20, bucket = "default", query_timeout = 120):
+
+        Task.__init__(self, "view_query_verification_task")
+        self.server = server
+        self.design_doc_name = design_doc_name
+        self.view_name = view_name
+        self.query = query
+        self.expected_rows = expected_rows
+        self.num_verified_docs = num_verified_docs
+        self.bucket = bucket
+        self.query_timeout = query_timeout
+        self.results = None
+
+        for key in config:
+            self.config[key] = config[key]
+
+    def execute(self, task_manager):
+
+        rest = RestConnection(self.server)
+
+        try:
+            # query for full view results
+            self.query["stale"] = "false"
+            self.query["reduce"] = "false"
+            self.query["include_docs"] = "true"
+            self.results = rest.query_view(self.design_doc_name, self.view_name,
+                                           self.bucket, self.query, timeout=self.query_timeout)
+        except QueryViewException as e:
+            self.set_exception(e)
+            self.state = FINISHED
+
+
+        msg = "Checking view query results: (%d keys expected) vs (%d keys returned)" %\
+            (len(self.expected_rows), len(self.results['rows']))
+        self.log.info(msg)
+
+        self.state = CHECKING
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        err_infos = []
+        rc_status = {"passed" : False,
+                     "errors" : err_infos}  # array of dicts with keys 'msg' and 'details'
+
+        # create verification id lists
+        expected_ids = [row['id'] for row in self.expected_rows]
+        couch_ids = [str(row['id']) for row in self.results['rows']]
+
+        # check results
+        self.check_for_duplicate_ids(expected_ids, couch_ids, err_infos)
+        self.check_for_missing_ids(expected_ids, couch_ids, err_infos)
+        self.check_for_value_corruption(err_infos)
+
+        # check for errors
+        if len(rc_status["errors"]) == 0:
+           rc_status["passed"] = True
+
+        self.state = FINISHED
+        self.set_result(rc_status)
+
+    def check_for_duplicate_ids(self, expected_ids, couch_ids, err_infos):
+
+        extra_id_set = set(couch_ids) - set(expected_ids)
+
+        seen = set()
+        for id in couch_ids:
+            if id in seen and id not in extra_id_set:
+                extra_id_set.add(id)
+            else:
+                seen.add(id)
+
+        if len(extra_id_set) > 0:
+            # extra/duplicate id verification
+            dupe_rows = [row for row in self.results['rows'] if row['id'] in extra_id_set]
+            err = { "msg" : "duplicate rows found in query results",
+                    "details" : dupe_rows }
+            err_infos.append(err)
+
+    def check_for_missing_ids(self, expected_ids, couch_ids, err_infos):
+
+        missing_id_set = set(expected_ids) - set(couch_ids)
+
+        if len(missing_id_set) > 0:
+
+            missing_id_errors = self.debug_missing_items(missing_id_set)
+
+            if len(missing_id_errors) > 0:
+                err = { "msg" : "missing ids from memcached",
+                        "details" : missing_id_errors}
+                err_infos.append(err)
+
+
+    def check_for_value_corruption(self, err_infos):
+
+        if self.num_verified_docs > 0:
+
+            doc_integrity_errors = self.include_doc_integrity()
+
+            if len(doc_integrity_errors) > 0:
+                err = { "msg" : "missmatch in document values",
+                        "details" : doc_integrity_errors }
+                err_infos.append(err)
+
+
+    def debug_missing_items(self, missing_id_set):
+        rest = RestConnection(self.server)
+        client = KVStoreAwareSmartClient(rest, self.bucket)
+        missing_id_errors = []
+
+        # debug missing documents
+        for doc_id in list(missing_id_set)[:self.num_verified_docs]:
+
+            # attempt to retrieve doc from memcached
+            mc_item = client.mc_get_full(doc_id)
+            if mc_item == None:
+                missing_id_errors.append("document %s missing from memcached" % (doc_id))
+
+            # attempt to retrieve doc from disk
+            else:
+
+                num_vbuckets = len(rest.get_vbuckets(self.bucket))
+                doc_meta = client.get_doc_metadata(num_vbuckets, doc_id)
+
+                if(doc_meta != None):
+                    if (doc_meta['key_valid'] != 'valid'):
+                        msg = "Error expected in results for key with invalid state %s" % doc_meta
+                        missing_id_errors.append(msg)
+
+                else:
+                    msg = "query doc_id: %s doesn't exist in bucket: %s" % \
+                        (doc_id, self.bucket)
+                    missing_id_errors.append(msg)
+
+            if(len(missing_id_errors) == 0):
+                msg = "view engine failed to index doc [%s] in query: %s" % (doc_id, self.query)
+                missing_id_errors.append(msg)
+
+            return missing_id_errors
+
+    def include_doc_integrity(self):
+        rest = RestConnection(self.server)
+        client = KVStoreAwareSmartClient(rest, self.bucket)
+        doc_integrity_errors = []
+
+        exp_verify_set = [row['doc'] for row in\
+            self.results['rows'][:self.num_verified_docs]]
+
+        for view_doc in exp_verify_set:
+            doc_id = str(view_doc['_id'])
+            mc_item = client.mc_get_full(doc_id)
+
+            if mc_item is not None:
+                mc_doc = json.loads(mc_item["value"])
+
+                # compare doc content
+                for key in mc_doc.keys():
+                    if(mc_doc[key] != view_doc[key]):
+                        err_msg =\
+                            "error verifying document id %s: retrieved value %s expected %s \n" % \
+                                (doc_id, mc_doc[key], view_doc[key])
+                        doc_integrity_errors.append(err_msg)
+            else:
+                doc_integrity_errors.append("doc_id %s could not be retrieved for verification \n" % doc_id)
+
+        return doc_integrity_errors

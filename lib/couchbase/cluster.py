@@ -405,6 +405,75 @@ class Cluster(object):
                                              fragmentation_value, bucket)
         self.task_manager.schedule(_task)
         return _task
+    def async_generate_expected_view_results(self, doc_generators, view, query):
+        """Asynchronously generate expected view query results
+
+        Parameters:
+            doc_generators - Generators used for loading docs (DocumentGenerator[])
+            view - The view with map function (View)
+            query - Query params to filter docs from the generator. (dict)
+
+        Returns:
+            GenerateExpectedViewResultsTask - A task future that is a handle to the scheduled task."""
+
+        _task = GenerateExpectedViewResultsTask(doc_generators, view, query)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def generate_expected_view_query_results(self, doc_generators, view, query, timeout = None):
+        """Synchronously generate expected view query results
+
+        Parameters:
+            doc_generators - Generators used for loading docs (DocumentGenerator[])
+            view - The view with map function (View)
+            query - Query params to filter docs from the generator. (dict)
+
+        Returns:
+            list - A list of rows expected to be returned for given query"""
+
+        _task = self.async_generate_expected_view_results(doc_generators, view, query)
+        return _task.result(timeout)
+
+
+    def async_view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs = 20, bucket = "default", query_timeout = 20):
+        """Asynchronously query a views in a design doc and does full verification of results
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            design_doc_name - Design doc with view(s) being queried(String)
+            view_name - The view being queried (String)
+            query - Query params being used with the query. (dict)
+            expected_rows - The number of rows expected to be returned from the query (int)
+            num_verified_docs - The number of docs to verify that require memcached gets (int)
+            bucket - The name of the bucket containing items for this view. (String)
+            query_timeout - The time to allow a query with stale=false to run. (int)
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+
+        Returns:
+            ViewQueryVerificationTask - A task future that is a handle to the scheduled task."""
+        _task = ViewQueryVerificationTask(server, design_doc_name, view_name, query, expected_rows, num_verified_docs, bucket, query_timeout)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs = 20, bucket = "default", query_timeout = 20, timeout = None):
+        """Synchronously query a views in a design doc and does full verification of results
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            design_doc_name - Design doc with view(s) being queried(String)
+            view_name - The view being queried (String)
+            query - Query params being used with the query. (dict)
+            expected_rows - The number of rows expected to be returned from the query (int)
+            num_verified_docs - The number of docs to verify that require memcached gets (int)
+            bucket - The name of the bucket containing items for this view. (String)
+            query_timeout - The time to allow a query with stale=false to run. (int)
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+
+        Returns:
+            dict - An object with keys: passed = True or False
+                                        errors = reasons why verification failed """
+        _task = self.async_view_query_verification(server, design_doc_name, view_name, query, expected_rows, num_verified_docs, bucket, query_timeout)
+        return _task.result(timeout)
 
 
     def monitor_view_fragmentation(self, server,
