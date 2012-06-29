@@ -1282,7 +1282,7 @@ if (nrow(ns_server_data) > 0) {
 
     if(!is.null(ns_server_data$couch_views_fragmentation)) {
         cat("generating couch_docs_fragmentation \n")
-        p <- ggplot(ns_server_data, aes(row, docs_fragmentation, color=buildinfo.version, label=docs_fragmentation)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- ggplot(ns_server_data, aes(row, docs_fragmentation, color=buildinfo.version, label=docs_fragmentation)) + labs(x="----time (sec)--->", y="%")
         p <- p + geom_point()
         p <- addopts(p,"Docs fragmentation")
         print(p)
@@ -1293,7 +1293,7 @@ if (nrow(ns_server_data) > 0) {
                             sep="\n"))
 
         cat("generating couch_views_fragmentation \n")
-        p <- ggplot(ns_server_data, aes(row, views_fragmentation, color=buildinfo.version, label=views_fragmentation)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- ggplot(ns_server_data, aes(row, views_fragmentation, color=buildinfo.version, label=views_fragmentation)) + labs(x="----time (sec)--->", y="%")
         p <- p + geom_point()
         p <- addopts(p,"Views fragmentation")
         print(p)
