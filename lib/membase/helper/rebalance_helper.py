@@ -27,10 +27,14 @@ class RebalanceHelper():
             for node in nodes:
                 _server = {"ip": node.ip, "port": node.port, "username": master.rest_username,
                            "password": master.rest_password}
-                mc = MemcachedClientHelper.direct_client(_server, bucket)
-                n_stats = mc.stats("")
-                mc.close()
-                all_stats[node.id] = n_stats
+                #failed over node is part of node_statuses but since its failed over memcached connections
+                #to this node will fail
+                node_self = RestConnection(_server).get_nodes_self()
+                if node_self.clusterMembership == 'active':
+                    mc = MemcachedClientHelper.direct_client(_server, bucket)
+                    n_stats = mc.stats("")
+                    mc.close()
+                    all_stats[node.id] = n_stats
             actual_stat_value = -1
             for k in all_stats:
                 if all_stats[k] and stat_key in all_stats[k]:
