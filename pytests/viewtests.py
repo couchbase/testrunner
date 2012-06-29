@@ -1316,7 +1316,7 @@ class ViewFailoverTests(unittest.TestCase):
             view_names[prefix] = doc_names
 
         # Failover total-replica-1 (master) nodes
-        howmany = self.input.param("howmany", len(self.servers)- self.replica - 1)
+        howmany = self.replica
         selection = []
         for n in nodes:
             if n.id != master_node.id:
