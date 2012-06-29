@@ -434,7 +434,7 @@ class ViewBaseTests(unittest.TestCase):
             else:
                 all_valid = True
                 for vb in views_per_vbucket:
-                    view_definition = views_per_vbucket[vb]
+                    view_definition = views_per_vbucket[vb]["json"]
                     self.log.info(
                         "{0} {1}".format(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn))
                     if view_definition["views"][view_name]["map"].encode("ascii", "ignore") != map_fn:
@@ -452,8 +452,8 @@ class ViewBaseTests(unittest.TestCase):
         self.assertEquals(len(views_per_vbucket), len(rest.get_vbuckets(bucket))
                           , msg="view is not replicated to all vbuckets")
         for vb in views_per_vbucket:
-            view_definition = views_per_vbucket[vb]
-            self.assertEquals(view_definition["_id"], "_design/{0}".format(view_name))
+            view_definition = views_per_vbucket[vb]["json"]
+            self.assertEquals(views_per_vbucket[vb]["meta"]["id"], "_design/{0}".format(view_name))
             self.assertEquals(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn)
 
     @staticmethod
@@ -496,7 +496,7 @@ class ViewBaseTests(unittest.TestCase):
                         raise ex
                 self.log.error("view_results not ready yet , try again in {1} seconds... , error {0}".format(ex, timeout))
                 time.sleep(timeout)
-        if results.get(u'errors', []):
+        if results and results.get(u'errors', []):
             self.fail("unable to get view_results for {0} after {1} tries due to error {2}".format(view, num_tries, results.get(u'errors')))
         if results.get(u'error', ''):
             self.fail("unable to get view_results for {0} after {1} tries due to error {2}-{3}".format(view, num_tries, results.get(u'error'), results.get(u'reason')))
@@ -941,10 +941,9 @@ class ViewBaseTests(unittest.TestCase):
         for value in values:
             value = value.encode("ascii", "ignore")
             _json = json.loads(value, encoding="utf-8")
-            _id = _json["_id"].encode("ascii", "ignore")
-            _name = _json["name"].encode("ascii", "ignore")
-            del _json["_id"]
-            smart.memcached(_id).set(_id, 0, 0, json.dumps(_json))
+            _id = _json["meta"]["id"].encode("ascii", "ignore")
+            _name = _json["json"]["name"].encode("ascii", "ignore")
+            smart.memcached(_id).set(_id, 0, 0, json.dumps(_json["json"]))
             doc_names.append(_name)
         self.log.info("inserted {0} json documents".format(num_docs))
         if verify:
@@ -1053,7 +1052,7 @@ class ViewBasicTests(unittest.TestCase):
             self.created_views[view] = bucket
             response = rest.get_view(bucket, view)
             self.assertTrue(response)
-            self.assertEquals(response["_id"], "_design/{0}".format(view))
+            self.assertEquals(response["meta"]["id"], "_design/{0}".format(view))
             self.log.info(response)
             #            self._verify_views_replicated(bucket, view, map_fn)
 
@@ -1074,8 +1073,8 @@ class ViewBasicTests(unittest.TestCase):
             self.created_views[view] = bucket
             response = rest.get_view(bucket, view)
             self.assertTrue(response)
-            self.assertEquals(response["_id"], "_design/{0}".format(view))
-            self.assertEquals(response["views"][view]["map"].encode("ascii", "ignore"), map_fn)
+            self.assertEquals(response["meta"]["id"], "_design/{0}".format(view))
+            self.assertEquals(response["json"]["views"][view]["map"].encode("ascii", "ignore"), map_fn)
             #now let's update all those views ?
 
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
@@ -1085,8 +1084,8 @@ class ViewBasicTests(unittest.TestCase):
             self.created_views[view] = bucket
             response = rest.get_view(bucket, view)
             self.assertTrue(response)
-            self.assertEquals(response["_id"], "_design/{0}".format(view))
-            self.assertEquals(response["views"][view]["map"].encode("ascii", "ignore"), map_fn)
+            self.assertEquals(response["meta"]["id"], "_design/{0}".format(view))
+            self.assertEquals(response["json"]["views"][view]["map"].encode("ascii", "ignore"), map_fn)
             self.log.info(response)
 
     def test_create_view(self):

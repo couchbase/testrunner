@@ -69,7 +69,7 @@ class SpatialHelper:
 
     def create_index_fun(self, name, prefix='', fun=None):
         if fun is None:
-            fun = 'function (doc) {if(doc._id.indexOf("' + prefix + \
+            fun = 'function (doc, meta) {if(meta.id.indexOf("' + prefix + \
                 '") != -1) { emit(doc.geometry, doc);}}'
         function = self._create_function(name, fun)
         self.rest.create_spatial(self.bucket, name, function)
@@ -213,14 +213,7 @@ class SpatialHelper:
 
     def _create_function(self, name, function):
         #if this view already exist then get the rev and embed it here?
-        doc = {"language": "javascript",
-                "_id": "_design/{0}".format(name)}
-        try:
-            spatial_response = self.rest.get_spatial(self.bucket, name)
-            if spatial_response:
-                doc["_rev"] = spatial_response["_rev"]
-        except:
-            pass
+        doc = {"language": "javascript"}
         doc["spatial"] = {name: function}
         self.log.info("doc {0}".format(doc))
         return json.dumps(doc)

@@ -84,11 +84,6 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_all_query_sets()
         self._query_test_init(data_set)
 
-    def test_simple_dataset_include_queries(self):
-        data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
-        data_set.add_include_docs_queries([data_set.views[0]])
-        self._query_test_init(data_set, tm = self.task_manager)
-
     def test_simple_dataset_reduce_queries(self):
         data_set = SimpleDataSet(self._rconn(), self.num_docs,limit = self.limit,reduce_fn = self.reduce_fn)
         data_set.add_reduce_queries()
@@ -1841,6 +1836,7 @@ class EmployeeDataSet:
             for value in docs:
                 value = value.encode("utf-8", "ignore")
                 json_map = json.loads(value, encoding="utf-8")
+                json_map = json_map["json"]
                 type_ = json_map["type"]
                 year = json_map["join_yr"]
                 month = json_map["join_mo"]
@@ -1853,7 +1849,6 @@ class EmployeeDataSet:
                                                      str(month).rjust(2,'0'),
                                                      str(day).rjust(2,'0'))
 
-                del json_map["_id"]
                 smart.memcached(doc_id).set(doc_id, 0, 0, json.dumps(json_map))
                 doc_ids.append(doc_id)
 
@@ -2079,16 +2074,6 @@ class SimpleDataSet:
             limit = min(limit, view.index_size)
 
             view.queries += [QueryHelper({"skip" : skip, "limit" : str(limit)}, limit)]
-
-    def add_include_docs_queries(self, views=None, limit=None):
-        views = views or self.views
-        if limit is None:
-                limit = self.limit
-        for view in views:
-            if limit is not None:
-                view.queries += [QueryHelper({"include_docs" : "true", "limit" : limit}, limit>view.index_size and limit or view.index_size)]
-            else:
-                view.queries += [QueryHelper({"include_docs" : "true"}, view.index_size)]
 
     def add_startkey_endkey_queries(self, views=None, limit=None):
 
@@ -2458,13 +2443,13 @@ class QueryHelper:
         failures = []
         kv_client = KVStoreAwareSmartClient(rest, bucket)
 
-        if('include_docs' in query.params):
+        if('include_docs' in query.params): # include_docs is deprecated
             docs = [row['doc'] for row in results['rows']]
 
             # retrieve doc from view result and compare with memcached
             for view_doc in docs:
 
-                doc_id = str(view_doc['_id'])
+                doc_id = str(view_doc['meta']['id'])
                 mc_item = kv_client.mc_get_full(doc_id)
 
                 if mc_item is not None:
@@ -2472,10 +2457,10 @@ class QueryHelper:
 
                     # compare doc content
                     for key in mc_doc.keys():
-                        if(mc_doc[key] != view_doc[key]):
+                        if(mc_doc[key] != view_doc['json'][key]):
                             err_msg =\
                                 "error verifying document id %s: retrieved value %s expected %s \n" % \
-                                    (doc_id, mc_doc[key], view_doc[key])
+                                    (doc_id, mc_doc[key], view_doc['json'][key])
                             failures.append(err_msg)
                 else:
                     failures.append("doc_id %s could not be retrieved for verification \n" % doc_id)

@@ -652,9 +652,7 @@ class RestConnection(object):
 
 
     def stop_replication(self, database, rep_id):
-        (true, json_resp) = self._http_request(database + "/{0}".format(rep_id), 'GET', None, self._create_capi_headers())
-        resp = json.loads(json_resp)
-        self._http_request(database + "/{0}?rev={1}".format(rep_id, resp["_rev"]), 'DELETE', None, self._create_capi_headers())
+        self._http_request(database + "/{0}".format(rep_id), 'DELETE', None, self._create_capi_headers())
 
 
     #params serverIp : the server to add to this cluster

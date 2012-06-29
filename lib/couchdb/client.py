@@ -418,16 +418,14 @@ class Database(object):
         :return: (id, rev) tuple of the save document
         :rtype: `tuple`
         """
-        if '_id' in doc:
-            func = _doc_resource(self.resource, doc['_id']).put_json
+        if 'meta' in doc:
+            func = _doc_resource(self.resource, doc['meta']['id']).put_json
+            _, _, data = func(body=doc['json'], **options)
+            return doc['meta']['id']
         else:
             func = self.resource.post_json
-        _, _, data = func(body=doc, **options)
-        id, rev = data['id'], data.get('rev')
-        doc['_id'] = id
-        if rev is not None:  # Not present for batch='ok'
-            doc['_rev'] = rev
-        return id, rev
+            _, _, data = func(body=doc, **options)
+            return data['id']
 
     def cleanup(self):
         """Clean up old design document indexes.

@@ -227,12 +227,15 @@ class MemcachedClient(object):
         (meta_type, flags, meta_data) = self.getMeta(key, vbucket=-1)
         if meta_type != memcacheConstants.META_REVID:
             raise ValueError("Invalid meta type %x" % meta_type)
-
-        seqno = struct.unpack('>I', meta_data[:4])[0]
-        cas = struct.unpack('>Q', meta_data[4:12])[0]
-        exp_flags = struct.unpack('>I', meta_data[12:16])[0]
-        flags_other = struct.unpack('>I', meta_data[16:])[0]
-
+        try:
+            seqno = struct.unpack('>I', meta_data[:4])[0]
+            cas = struct.unpack('>Q', meta_data[4:12])[0]
+            exp_flags = struct.unpack('>I', meta_data[12:16])[0]
+            flags_other = False
+            flags_other = struct.unpack('>I', meta_data[16:])[0]
+        except Exception as ex:
+            print(
+                "Error unpacking rev: ({0}) Rev parts we have:: seqno: {1} cas: {2} exp: {3} flags_other: {4}".format(ex, seqno, cas, exp_flags, flags_other))
         return (seqno, cas, exp_flags, flags_other)
 
     def cas(self, key, exp, flags, oldVal, val, vbucket=-1):

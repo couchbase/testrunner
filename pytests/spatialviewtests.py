@@ -58,10 +58,11 @@ class SpatialViewTests(unittest.TestCase):
             # Verify that the function was really stored
             response = rest.get_spatial(bucket, design_name)
             self.assertTrue(response)
-            self.assertEquals(response["_id"],
+            self.assertEquals(response["meta"]["id"],
                               "_design/{0}".format(design_name))
             self.assertEquals(
-                response["spatial"][design_name].encode("ascii", "ignore"),
+                response["json"]["spatial"][design_name].encode("ascii",
+                                                                "ignore"),
                 fun)
 
 

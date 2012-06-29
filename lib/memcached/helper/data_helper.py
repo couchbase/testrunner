@@ -1181,7 +1181,7 @@ class GeneratedDocuments(object):
             raise StopIteration
         else:
             i = self._pointer
-            doc = {"_id": "{0}-{1}".format(i, self._options["seed"])}
+            doc = {"meta":{"id": "{0}-{1}".format(i, self._options["seed"])},"json":{}}
             for k in self._kv_template:
                 v = self._kv_template[k]
                 if isinstance(v, str) and v.find("${prefix}") != -1:
@@ -1191,7 +1191,7 @@ class GeneratedDocuments(object):
                     v = v.replace("${padding}", self._pad)
                 if isinstance(v, str) and v.find("${seed}") != -1:
                     v = v.replace("${seed}", "{0}".format(self._options["seed"]))
-                doc[k] = v
+                doc["json"][k] = v
         self._pointer += 1
         return json.dumps(doc)
 

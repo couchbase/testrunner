@@ -458,7 +458,6 @@ class EPerfMaster(perf.PerfBase):
             for ddoc_name, d in ddocs.items():
                 d = copy.copy(d)
                 d["language"] = "javascript"
-                d["_id"] = "_design/" + ddoc_name
                 d_json = json.dumps(d)
                 api = "{0}couchBase/{1}/_design/{2}".format(self.rest.baseUrl,
                                                             bucket, ddoc_name)
@@ -2071,8 +2070,8 @@ class ViewGen:
         """
 
         MAP_FUNCTION = """
-            function (doc) {
-                emit(doc._id, {"rev": doc._rev});
+            function (doc, meta) {
+                emit(meta.id, {"rev": meta.rev});
             }"""
 
         return {'all': {'views': {'docs': {'map': MAP_FUNCTION}}}}

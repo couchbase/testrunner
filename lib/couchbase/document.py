@@ -8,10 +8,7 @@ class DesignDocument():
 
     @classmethod
     def _init_from_json(ddoc_self, design_doc_name, json_object):
-
-        id_ = json_object['_id']
-        rev_ = json_object['_rev']
-        ddoc_self = DesignDocument(design_doc_name, [], rev = rev_)
+        ddoc_self = DesignDocument(design_doc_name, [])
 
         views_json = json_object['views']
         for view in views_json.items():
@@ -44,10 +41,7 @@ class DesignDocument():
         return view_deleted
 
     def as_json(self):
-        json_object = {'_id': self.id,
-                 'views': {}}
-        if self.rev is not None:
-            json_object['_rev'] = self.rev
+        json_object = {'views': {}}
         for view in self.views:
             json_object['views'][view.name] = view.as_json()[view.name]
         return json_object
@@ -59,7 +53,7 @@ class DesignDocument():
         return json.dumps(self.as_json())
 
 class View():
-    def __init__(self, name, map_func, red_func=None, dev_view = True):
+    def __init__(self, name, map_func, red_func=None, dev_view=True):
         self.name = name
         self.map_func = map_func
         self.red_func = red_func

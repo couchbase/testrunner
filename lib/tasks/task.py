@@ -632,7 +632,6 @@ class ViewCreateTask(Task):
             #if view is to be updated
             if self.view:
                 ddoc.add_view(self.view)
-            self.ddoc_rev_no = self._parse_revision(content['_rev'])
 
         except ReadDocumentException:
             # creating first view in design doc
@@ -686,25 +685,7 @@ class ViewCreateTask(Task):
             self.set_exception(e)
 
     def _check_ddoc_revision(self):
-        valid = False
-        rest = RestConnection(self.server)
-
-        try:
-            content = rest.get_ddoc(self.bucket, self.design_doc_name)
-            new_rev_id = self._parse_revision(content['_rev'])
-            if new_rev_id != self.ddoc_rev_no:
-                self.ddoc_rev_no = new_rev_id
-                valid = True
-        except ReadDocumentException:
-            pass
-
-        #catch and set all unexpected exceptions
-        except Exception as e:
-            self.state = FINISHED
-            self.log.info("Unexpected Exception Caught")
-            self.set_exception(e)
-
-        return valid
+        return True
 
     def _parse_revision(self, rev_string):
         return int(rev_string.split('-')[0])

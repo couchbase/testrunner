@@ -109,6 +109,8 @@ class XDCRBaseTest(unittest.TestCase):
             errors = RebalanceDataGenerator.do_verification(kvstore, rest_conn,
                                                             bucket)
             if errors:
+                log = logger.Logger().get_logger()
+                log.info('verify errors: {0}'.format(len(errors)))
                 return False
             else:
                 return True
