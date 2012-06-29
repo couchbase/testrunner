@@ -16,7 +16,7 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from membase.api.rest_client import RestConnection, RestHelper
-from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL
+from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL
 import json
 import sys
 sys.path.append('./pytests/performance/')
@@ -880,7 +880,7 @@ class VBucketAwareMemcached(object):
             try:
                 return self._send_op(self.memcached(key).delete, key)
             except MemcachedError as error:
-                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                if error.status in [ERR_NOT_MY_VBUCKET, ERR_EINVAL] and vb_error < 3:
                     self.reset_vbucket(self.rest, key)
                     vb_error += 1
                 else:
@@ -893,8 +893,8 @@ class VBucketAwareMemcached(object):
                     vb_error += 1
                 else:
                     raise error
-            except Exception as error:
-                if "moxi does not have a mc connection for server" in  error.message and vb_error < 3:
+            except BaseException as error:
+                if vb_error < 3:
                     self.reset_vbucket(self.rest, key)
                     vb_error += 1
                 else:
