@@ -47,6 +47,7 @@ class ViewQueryTests(unittest.TestCase):
             self.task_manager.start()
             self.thread_crashed = Event()
             self.thread_stopped = Event()
+            self.server = None
         except Exception as ex:
             skip_setup_failed = True
             self.fail(ex)
@@ -379,6 +380,36 @@ class ViewQueryTests(unittest.TestCase):
         # verify
         [self._query_all_views(ds.views) for ds in data_sets]
 
+    def test_employee_dataset_query_all_nodes(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set.add_startkey_endkey_queries()
+        self._query_test_init(data_set, False)
+
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
+        query_nodes_threads = []
+        for server in self.servers:
+            self.server = server
+            t = StoppableThread(target=self._query_all_views,
+               name="query-node-{0}".format(server.ip),
+               args=(data_set.views,))
+            query_nodes_threads.append(t)
+            t.start()
+
+        while True:
+            if not query_nodes_threads:
+                break
+            self.thread_stopped.wait(60)
+            if self.thread_crashed.is_set():
+                for t in query_nodes_threads:
+                    t.stop()
+                break
+            else:
+                query_nodes_threads = [d for d in query_nodes_threads if d.is_alive()]
+                self.thread_stopped.clear()
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
@@ -464,8 +495,10 @@ class ViewQueryTests(unittest.TestCase):
 
 
     # retrieve default rest connection associated with the master server
-    def _rconn(self):
-        return RestConnection(self.servers[0])
+    def _rconn(self, server=None):
+        if not server:
+            server = self.servers[0]
+        return RestConnection(server)
 
 class QueryView:
     def __init__(self, rest,
@@ -503,7 +536,7 @@ class QueryView:
     # query this view
     def run_queries(self, tc, verify_results = False, kv_store = None, limit=None):
         try:
-            rest = tc._rconn()
+            rest = tc._rconn(tc.server)
 
             if not len(self.queries) > 0 :
                 self.log.info("No queries to run for this view")
