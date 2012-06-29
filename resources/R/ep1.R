@@ -344,21 +344,25 @@ ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
 cat("generating system stats\n")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
-	url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","systemstats", sep='')
-	#cat(paste(url,"\n"))
-	doc_json <- fromJSON(file=url)
-	# cat(paste(builds_list[index,]$id,"\n"))
-	unlisted <- plyr::ldply(doc_json, unlist)
-	print(ncol(unlisted))
-	result <- rbind(result,unlisted)
+    tryCatch({
+        url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","systemstats", sep='')
+        #cat(paste(url,"\n"))
+        doc_json <- fromJSON(file=url)
+        # cat(paste(builds_list[index,]$id,"\n"))
+        unlisted <- plyr::ldply(doc_json, unlist)
+        print(ncol(unlisted))
+        result <- rbind(result,unlisted)
+    }, error=function(e) e)
 }
 cat("generated system stats data frame\n")
 cat(paste("result has ", nrow(result)," rows \n"))
 system_stats <- result
-system_stats = transform(system_stats,utime=as.numeric(utime),stime=as.numeric(stime),rss=(as.numeric(rss) * 4096) / (1024 * 1024))
-system_stats$row <- as.numeric(factor(system_stats$row))
-system_stats$nswap <- as.numeric(system_stats$nswap)
-system_stats$cnswap <- as.numeric(system_stats$cnswap)
+if (nrow(system_stats)) {
+    system_stats = transform(system_stats,utime=as.numeric(utime),stime=as.numeric(stime),rss=(as.numeric(rss) * 4096) / (1024 * 1024))
+    system_stats$row <- as.numeric(factor(system_stats$row))
+    system_stats$nswap <- as.numeric(system_stats$nswap)
+    system_stats$cnswap <- as.numeric(system_stats$cnswap)
+}
 
 
 # Get Latency-get
