@@ -20,10 +20,10 @@ from membase.api.exception import DesignDocCreationException, QueryViewException
 #stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
 
 
-PENDING='PENDING'
-EXECUTING='EXECUTING'
-CHECKING='CHECKING'
-FINISHED='FINISHED'
+PENDING = 'PENDING'
+EXECUTING = 'EXECUTING'
+CHECKING = 'CHECKING'
+FINISHED = 'FINISHED'
 
 class Task(Future):
     def __init__(self, name):
@@ -218,12 +218,12 @@ class RebalanceTask(Task):
             self.set_result(True)
 
 class StatsWaitTask(Task):
-    EQUAL='=='
-    NOT_EQUAL='!='
-    LESS_THAN='<'
-    LESS_THAN_EQ='<='
-    GREATER_THAN='>'
-    GREATER_THAN_EQ='>='
+    EQUAL = '=='
+    NOT_EQUAL = '!='
+    LESS_THAN = '<'
+    LESS_THAN_EQ = '<='
+    GREATER_THAN = '>'
+    GREATER_THAN_EQ = '>='
 
     def __init__(self, servers, bucket, param, stat, comparison, value):
         Task.__init__(self, "stats_wait_task")
@@ -325,7 +325,7 @@ class GenericLoadingTask(Thread, Task):
             value = json.dumps(value_json)
         except ValueError:
             index = random.choice(range(len(value)))
-            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index+1:]
+            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
 
         try:
             self.client.set(key, self.exp, 0, value)
@@ -354,7 +354,7 @@ class GenericLoadingTask(Thread, Task):
             value = json.dumps(value_json)
         except ValueError:
             index = random.choice(range(len(value)))
-            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index+1:]
+            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
 
         try:
             self.client.set(key, self.exp, 0, value)
@@ -418,7 +418,7 @@ class WorkloadTask(GenericLoadingTask):
 
     def next(self):
         self.itr += 1
-        rand = random.randint(1,  self.delete)
+        rand = random.randint(1, self.delete)
         if rand > 0 and rand <= self.create:
             self._create_random_key()
         elif rand > self.create and rand <= self.read:
@@ -544,12 +544,14 @@ class ValidateDataTask(GenericLoadingTask):
         self.kv_store.release_partition(key)
 
 class ViewCreateTask(Task):
-    def __init__(self, server, design_doc_name, view, bucket = "default"):
+    def __init__(self, server, design_doc_name, view, bucket="default"):
         Task.__init__(self, "create_view_task")
         self.server = server
         self.bucket = bucket
         self.view = view
-        prefix = ("","dev_")[self.view.dev_view]
+        prefix = ""
+        if self.view:
+            prefix = ("", "dev_")[self.view.dev_view]
         self.design_doc_name = prefix + design_doc_name
         self.ddoc_rev_no = 0
 
@@ -561,12 +563,18 @@ class ViewCreateTask(Task):
             # appending view to existing design doc
             content = rest.get_ddoc(self.bucket, self.design_doc_name)
             ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
-            ddoc.add_view(self.view)
+            #if view is to be updated
+            if self.view:
+                ddoc.add_view(self.view)
             self.ddoc_rev_no = self._parse_revision(content['_rev'])
 
         except ReadDocumentException:
             # creating first view in design doc
-            ddoc = DesignDocument(self.design_doc_name, [self.view])
+            if self.view:
+                ddoc = DesignDocument(self.design_doc_name, [self.view])
+            #create an empty design doc
+            else:
+                ddoc = DesignDocument(self.design_doc_name, [])
 
         try:
             rest.create_design_document(self.bucket, ddoc)
@@ -587,10 +595,16 @@ class ViewCreateTask(Task):
         rest = RestConnection(self.server)
 
         try:
-            query = {"stale" : "ok"}
-            content = \
-                rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
-            self.log.info("view : {0} was created successfully in ddoc: {1}".format(self.view.name, self.design_doc_name))
+            #only query if the DDoc has a view
+            if self.view:
+                query = {"stale" : "ok"}
+                content = \
+                    rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
+                self.log.info("view : {0} was created successfully in ddoc: {1}".format(self.view.name, self.design_doc_name))
+            else:
+                #if we have reached here, it means design doc was successfully updated
+                self.log.info("Design Document : {0} was updated successfully".format(self.design_doc_name))
+
             self.state = FINISHED
             if self._check_ddoc_revision():
                 self.set_result(self.ddoc_rev_no)
@@ -630,12 +644,14 @@ class ViewCreateTask(Task):
         return int(rev_string.split('-')[0])
 
 class ViewDeleteTask(Task):
-    def __init__(self, server, design_doc_name, view, bucket = "default"):
+    def __init__(self, server, design_doc_name, view, bucket="default"):
         Task.__init__(self, "delete_view_task")
         self.server = server
         self.bucket = bucket
         self.view = view
-        prefix = ("","dev_")[self.view.dev_view]
+        prefix = ""
+        if self.view:
+            prefix = ("", "dev_")[self.view.dev_view]
         self.design_doc_name = prefix + design_doc_name
 
     def execute(self, task_manager):
@@ -643,18 +659,25 @@ class ViewDeleteTask(Task):
         rest = RestConnection(self.server)
 
         try:
-            # remove view from existing design doc
-            content = rest.get_ddoc(self.bucket, self.design_doc_name)
-            ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
-            status = ddoc.delete_view(self.view)
-            if not status:
-                self.state = FINISHED
-                self.set_exception(Exception('View does not exist! %s' % (self.view.name)))
+            if self.view:
+                # remove view from existing design doc
+                content = rest.get_ddoc(self.bucket, self.design_doc_name)
+                ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
+                status = ddoc.delete_view(self.view)
+                if not status:
+                    self.state = FINISHED
+                    self.set_exception(Exception('View does not exist! %s' % (self.view.name)))
 
-            # update design doc
-            rest.create_design_document(self.bucket, ddoc)
-            self.state = CHECKING
-            task_manager.schedule(self, 2)
+                # update design doc
+                rest.create_design_document(self.bucket, ddoc)
+                self.state = CHECKING
+                task_manager.schedule(self, 2)
+            else:
+                #delete the design doc
+                rest.delete_view(self.bucket, self.design_doc_name)
+                self.log.info("Design Doc : {0} was successfully deleted".format(self.design_doc_name))
+                self.state = FINISHED
+                self.set_result(True)
 
         except (ValueError, ReadDocumentException, DesignDocCreationException) as e:
             self.state = FINISHED
@@ -689,8 +712,8 @@ class ViewDeleteTask(Task):
 
 class ViewQueryTask(Task):
     def __init__(self, server, design_doc_name, view_name,
-                 query, expected_rows = None,
-                 bucket = "default", retry_time = 2):
+                 query, expected_rows=None,
+                 bucket="default", retry_time=2):
         Task.__init__(self, "query_view_task")
         self.server = server
         self.bucket = bucket
@@ -706,7 +729,7 @@ class ViewQueryTask(Task):
 
         try:
             # make sure view can be queried
-            content =\
+            content = \
                 rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
 
             if self.expected_rows is None:
@@ -735,7 +758,7 @@ class ViewQueryTask(Task):
             content = \
                 rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
 
-            self.log.info("(%d rows) expected, (%d rows) returned" %\
+            self.log.info("(%d rows) expected, (%d rows) returned" % \
                 (len(content['rows']), self.expected_rows))
 
             if len(content['rows']) == self.expected_rows:
@@ -771,7 +794,7 @@ class ModifyFragmentationConfigTask(Task):
         a given <bucket>.
     """
 
-    def __init__(self, server, config = None, bucket = "default"):
+    def __init__(self, server, config=None, bucket="default"):
         Task.__init__(self, "modify_frag_config_task")
 
         self.server = server
@@ -795,17 +818,17 @@ class ModifyFragmentationConfigTask(Task):
         rest = RestConnection(self.server)
 
         try:
-            rest.set_auto_compaction(parallelDBAndVC = self.config["parallelDBAndVC"],
-                                     dbFragmentThreshold = self.config["dbFragmentThreshold"],
-                                     viewFragmntThreshold = self.config["viewFragmntThreshold"],
-                                     dbFragmentThresholdPercentage = self.config["dbFragmentThresholdPercentage"],
-                                     viewFragmntThresholdPercentage = self.config["viewFragmntThresholdPercentage"],
-                                     allowedTimePeriodFromHour = self.config["allowedTimePeriodFromHour"],
-                                     allowedTimePeriodFromMin = self.config["allowedTimePeriodFromMin"],
-                                     allowedTimePeriodToHour = self.config["allowedTimePeriodToHour"],
-                                     allowedTimePeriodToMin = self.config["allowedTimePeriodToMin"],
-                                     allowedTimePeriodAbort = self.config["allowedTimePeriodAbort"],
-                                     bucket = self.bucket)
+            rest.set_auto_compaction(parallelDBAndVC=self.config["parallelDBAndVC"],
+                                     dbFragmentThreshold=self.config["dbFragmentThreshold"],
+                                     viewFragmntThreshold=self.config["viewFragmntThreshold"],
+                                     dbFragmentThresholdPercentage=self.config["dbFragmentThresholdPercentage"],
+                                     viewFragmntThresholdPercentage=self.config["viewFragmntThresholdPercentage"],
+                                     allowedTimePeriodFromHour=self.config["allowedTimePeriodFromHour"],
+                                     allowedTimePeriodFromMin=self.config["allowedTimePeriodFromMin"],
+                                     allowedTimePeriodToHour=self.config["allowedTimePeriodToHour"],
+                                     allowedTimePeriodToMin=self.config["allowedTimePeriodToMin"],
+                                     allowedTimePeriodAbort=self.config["allowedTimePeriodAbort"],
+                                     bucket=self.bucket)
 
             self.state = CHECKING
             task_manager.schedule(self, 10)
@@ -853,7 +876,7 @@ class MonitorViewFragmentationTask(Task):
         it is best user to use lower value as this can lead to infinite monitoring.
     """
 
-    def __init__(self, server, design_doc_name, fragmentation_value = 10, bucket = "default"):
+    def __init__(self, server, design_doc_name, fragmentation_value=10, bucket="default"):
 
         Task.__init__(self, "monitor_frag_task")
         self.server = server
@@ -866,7 +889,7 @@ class MonitorViewFragmentationTask(Task):
 
         # sanity check of fragmentation value
         if  self.fragmentation_value < 0 or self.fragmentation_value > 100:
-            err_msg =\
+            err_msg = \
                 "Invalid value for fragmentation %d" % self.fragmentation_value
             self.state = FINISHED
             self.set_exception(Exception(err_msg))
@@ -897,12 +920,12 @@ class MonitorViewFragmentationTask(Task):
 
         content = rest.get_bucket_json(self.bucket)
         if content["autoCompactionSettings"] != False:
-            auto_compact_percentage =\
+            auto_compact_percentage = \
                 content["autoCompactionSettings"]["viewFragmentationThreshold"]["percentage"]
         else:
             # try to read cluster level compaction settings
             content = rest.cluster_status()
-            auto_compact_percentage =\
+            auto_compact_percentage = \
                 content["autoCompactionSettings"]["viewFragmentationThreshold"]["percentage"]
 
         return auto_compact_percentage
@@ -922,7 +945,7 @@ class MonitorViewFragmentationTask(Task):
             task_manager.schedule(self, 2)
 
     @staticmethod
-    def aggregate_ddoc_info(rest, design_doc_name, bucket = "default"):
+    def aggregate_ddoc_info(rest, design_doc_name, bucket="default"):
 
         nodes = rest.node_statuses()
         info = []
@@ -938,7 +961,7 @@ class MonitorViewFragmentationTask(Task):
 
         return info
     @staticmethod
-    def calc_ddoc_fragmentation(rest, design_doc_name, bucket = "default"):
+    def calc_ddoc_fragmentation(rest, design_doc_name, bucket="default"):
 
         total_disk_size = 0
         total_data_size = 0
@@ -952,8 +975,8 @@ class MonitorViewFragmentationTask(Task):
         total_data_size = sum([content['data_size'] for content in nodes_ddoc_info])
 
         if total_disk_size > 0 and total_data_size > 0:
-            total_fragmentation =\
-                (total_disk_size - total_data_size)/float(total_disk_size) * 100
+            total_fragmentation = \
+                (total_disk_size - total_data_size) / float(total_disk_size) * 100
 
         return total_fragmentation
 
@@ -966,13 +989,13 @@ class ViewCompactionTask(Task):
         history for design doc is incremented and if any work was really done.
     """
 
-    def __init__(self, server, design_doc_name, bucket = "default"):
+    def __init__(self, server, design_doc_name, bucket="default"):
 
         Task.__init__(self, "view_compaction_task")
         self.server = server
         self.bucket = bucket
         self.design_doc_name = design_doc_name
-        self.ddoc_id = "_design%2f"+design_doc_name
+        self.ddoc_id = "_design%2f" + design_doc_name
         self.num_of_compactions = 0
         self.precompacted_frag_val = 0
     def execute(self, task_manager):
@@ -1001,7 +1024,7 @@ class ViewCompactionTask(Task):
             new_compaction_count, compacted_frag_val = self._get_compaction_details()
             if new_compaction_count > self.num_of_compactions:
                 frag_val_diff = compacted_frag_val - self.precompacted_frag_val
-                self.log.info("fragmentation went from %d to %d" %\
+                self.log.info("fragmentation went from %d to %d" % \
                               (self.precompacted_frag_val, compacted_frag_val))
 
                 if frag_val_diff > 0:

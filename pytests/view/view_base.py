@@ -22,8 +22,11 @@ class ViewBaseTest(BaseTestCase):
         return tasks
 
     def create_views(self, server, design_doc_name, views, bucket = "default", timeout=None):
-        for view in views:
-            self.cluster.create_view(server, design_doc_name, view, bucket, timeout)
+        if len(views):
+            for view in views:
+                self.cluster.create_view(server, design_doc_name, view, bucket, timeout)
+        else:
+            self.cluster.create_view(server, design_doc_name, None, bucket, timeout)
 
     def make_default_views(self, prefix, count):
         ref_view = self.default_view
