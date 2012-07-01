@@ -841,8 +841,8 @@ class VBucketAwareMemcached(object):
                     vb_error += 1
                 else:
                     raise error
-            except Exception as error:
-                if "moxi does not have a mc connection for server" in  error.message and vb_error < 3:
+            except BaseException as error:
+                if vb_error < 3:
                     self.reset_vbucket(self.rest, key)
                     vb_error += 1
                 else:
@@ -867,8 +867,8 @@ class VBucketAwareMemcached(object):
                     vb_error += 1
                 else:
                     raise error
-            except Exception as error:
-                if "moxi does not have a mc connection for server" in  error.message and vb_error < 3:
+            except BaseException as error:
+                if vb_error < 3:
                     self.reset_vbucket(self.rest, key)
                     vb_error += 1
                 else:
