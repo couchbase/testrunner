@@ -503,6 +503,7 @@ class ViewQueryTests(unittest.TestCase):
             if self.thread_crashed.is_set():
                 for t in query_threads:
                     t.stop()
+                self._check_view_intergrity(views)
                 return
             else:
                 query_threads = [d for d in query_threads if d.is_alive()]
@@ -704,6 +705,10 @@ class QueryView:
                         self.log.error("No error raised for negative case. Expected error '{0}'".format(query.error))
                         self.results.addFailure(tc, (Exception, "No error raised for negative case", sys.exc_info()[2]))
                         tc.thread_crashed.set()
+        except Exception as ex:
+            self.log.error("Error {0} appeared during query run".format(ex))
+            self.results.addError(tc, (Exception, "{0}: {1}".format(ex, ex.message), sys.exc_info()[2]))
+            tc.thread_crashed.set()
         finally:
             if not tc.thread_stopped.is_set():
                 tc.thread_stopped.set()
@@ -1096,6 +1101,9 @@ class EmployeeDataSet:
                                              self.years * self.months),
                                  QueryHelper({"group_level" : "3"}, view.index_size,
                                              self.years * self.months * self.days)]
+            for q in view.queries:
+                if "group" in q.params and not "group_level" in q.params:
+                    q.expected_num_groups = 1
 
     def add_all_query_sets(self, views=None, limit=None):
         self.add_stale_queries(views, limit)
