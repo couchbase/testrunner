@@ -139,13 +139,18 @@ class PerfBase(unittest.TestCase):
 
         return buckets
 
+    def get_bucket_conf(self):
+        """ retrieve bucket configurations"""
+
+        num_buckets = self.parami('num_buckets', 1)
+        self.buckets = self._get_bucket_names(num_buckets)
+
     def set_up_buckets(self):
         """Set up data bucket(s)"""
 
         print "[perf.setUp] Setting up buckets"
 
-        num_buckets = self.parami('num_buckets', 1)
-        self.buckets = self._get_bucket_names(num_buckets)
+        self.get_bucket_conf()
 
         for bucket in self.buckets:
             bucket_ram_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
