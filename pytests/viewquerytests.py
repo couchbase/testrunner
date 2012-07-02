@@ -15,6 +15,7 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from old_tasks import task, taskmanager
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from TestInput import TestInputSingleton
+from couchbase.cluster import Cluster
 
 class StoppableThread(Thread):
     """Thread class with a stop() method. The thread itself has to check
@@ -48,6 +49,7 @@ class ViewQueryTests(unittest.TestCase):
             self.thread_crashed = Event()
             self.thread_stopped = Event()
             self.server = None
+            self.cluster = Cluster()
         except Exception as ex:
             skip_setup_failed = True
             self.fail(ex)
@@ -419,6 +421,25 @@ class ViewQueryTests(unittest.TestCase):
             else:
                 query_nodes_threads = [d for d in query_nodes_threads if d.is_alive()]
                 self.thread_stopped.clear()
+
+    def test_employee_dataset_query_add_nodes(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        how_many_add = self.input.param('how_many_add', 0)
+
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set.add_startkey_endkey_queries()
+        self._query_test_init(data_set, False)
+
+        rest = RestConnection(self.servers[0])
+
+        for server in self.servers[1:how_many_add + 1]:
+            self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
+            otpNode = rest.add_node(self.servers[0].rest_username, self.servers[0].rest_password,
+                                    server.ip, server.port)
+            msg = "unable to add node {0}:{1} to the cluster"
+            self.assertTrue(otpNode, msg.format(server.ip, server.port))
+
+        self._query_all_views(data_set.views)
 
     ###
     # load the data defined for this dataset.
