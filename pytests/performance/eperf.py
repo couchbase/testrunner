@@ -1484,6 +1484,7 @@ class EPerfClient(EPerfMaster):
         self.is_leader = self.parami("prefix", 0) == 0
         self.bg_max_ops_per_sec = 0
         self.fg_max_ops = 0
+        self.get_bucket_conf()
 
         pass  # Skip super's setUp().  The master should do the real work.
 
