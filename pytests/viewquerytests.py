@@ -16,6 +16,7 @@ from old_tasks import task, taskmanager
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from TestInput import TestInputSingleton
 from couchbase.cluster import Cluster
+from remote.remote_util import RemoteMachineShellConnection
 
 class StoppableThread(Thread):
     """Thread class with a stop() method. The thread itself has to check
@@ -156,73 +157,89 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_alldocs_failover_queries(self):
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
+        failover_nodes = []
+        try:
+            ViewBaseTests._begin_rebalance_in(self)
+            ViewBaseTests._end_rebalance(self)
 
-        docs_per_day = self.input.param('docs-per-day', 200)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+            docs_per_day = self.input.param('docs-per-day', 200)
+            data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
-        data_set.add_all_docs_queries()
-        self._query_test_init(data_set, False)
+            data_set.add_all_docs_queries()
+            self._query_test_init(data_set, False)
 
-        master = self.servers[0]
-        RebalanceHelper.wait_for_persistence(master, "default")
+            master = self.servers[0]
+            RebalanceHelper.wait_for_persistence(master, "default")
 
-        # failover and verify loaded data
-        failover_helper = FailoverHelper(self.servers, self)
-        failover_nodes = failover_helper.failover(self.failover_factor)
-        self.log.info("10 seconds sleep after failover before invoking rebalance...")
-        time.sleep(10)
-
-        rest=RestConnection(self.servers[0])
-        nodes = rest.node_statuses()
-        rest.rebalance(otpNodes=[node.id for node in nodes],
-                       ejectedNodes=[node.id for node in failover_nodes])
-
-        self._query_all_views(data_set.views)
-
-        msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
-        self.assertTrue(rest.monitorRebalance(), msg=msg)
-
-        #verify queries after failover
-        self._query_all_views(data_set.views)
-
-    def test_employee_dataset_alldocs_incremental_failover_queries(self):
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
-
-        docs_per_day = self.input.param('docs-per-day', 200)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
-
-        data_set.add_all_docs_queries()
-        self._query_test_init(data_set, False)
-
-        servers=self.servers;
-
-        # incrementaly failover nodes and verify loaded data
-        for i in range(self.failover_factor):
-            failover_helper = FailoverHelper(servers, self)
-            failover_nodes = failover_helper.failover(1)
+            # failover and verify loaded data
+            failover_helper = FailoverHelper(self.servers, self)
+            failover_nodes = failover_helper.failover(self.failover_factor)
             self.log.info("10 seconds sleep after failover before invoking rebalance...")
             time.sleep(10)
 
             rest=RestConnection(self.servers[0])
             nodes = rest.node_statuses()
             rest.rebalance(otpNodes=[node.id for node in nodes],
-                       ejectedNodes=[node.id for node in failover_nodes])
+                           ejectedNodes=[node.id for node in failover_nodes])
 
             self._query_all_views(data_set.views)
 
-            temp=[]
-            for server in servers:
-                rest = RestConnection(server)
-                if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=1):
-                    continue
-                temp.append(server)
-            servers=temp
-
             msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
-            self.assertTrue(RestConnection(self.servers[0]).monitorRebalance(), msg=msg)
+            self.assertTrue(rest.monitorRebalance(), msg=msg)
+
+            #verify queries after failover
+            self._query_all_views(data_set.views)
+        finally:
+            for server in [server for server in self.servers
+                           for node in failover_nodes
+                           if node.ip == server.ip and str(node.port) == server.port]:
+                shell = RemoteMachineShellConnection(server)
+                shell.start_couchbase()
+
+    def test_employee_dataset_alldocs_incremental_failover_queries(self):
+        failover_nodes = []
+        try:
+            ViewBaseTests._begin_rebalance_in(self)
+            ViewBaseTests._end_rebalance(self)
+
+            docs_per_day = self.input.param('docs-per-day', 200)
+            data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+            data_set.add_all_docs_queries()
+            self._query_test_init(data_set, False)
+
+            servers=self.servers;
+
+            # incrementaly failover nodes and verify loaded data
+            for i in range(self.failover_factor):
+                failover_helper = FailoverHelper(servers, self)
+                failover_nodes = failover_helper.failover(1)
+                self.log.info("10 seconds sleep after failover before invoking rebalance...")
+                time.sleep(10)
+
+                rest=RestConnection(self.servers[0])
+                nodes = rest.node_statuses()
+                rest.rebalance(otpNodes=[node.id for node in nodes],
+                           ejectedNodes=[node.id for node in failover_nodes])
+
+                self._query_all_views(data_set.views)
+
+                temp=[]
+                for server in servers:
+                    rest = RestConnection(server)
+                    if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=1):
+                        continue
+                    temp.append(server)
+                servers=temp
+
+                msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
+                self.assertTrue(RestConnection(self.servers[0]).monitorRebalance(), msg=msg)
+        finally:
+            for server in [server for server in self.servers
+                           for node in failover_nodes
+                           if node.ip == server.ip and str(node.port) == server.port]:
+                shell = RemoteMachineShellConnection(server)
+                shell.start_couchbase()
 
     def test_employee_dataset_alldocs_queries_start_stop_rebalance_in_incremental(self):
         docs_per_day = self.input.param('docs-per-day', 20)
