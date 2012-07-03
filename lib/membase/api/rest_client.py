@@ -1177,6 +1177,7 @@ class RestConnection(object):
         api = self.baseUrl + '/controller/stopRebalance'
 
         status, content = self._http_request(api, 'POST')
+        log.info("rebalance was stopped")
         return status
 
 
