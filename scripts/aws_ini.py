@@ -93,12 +93,13 @@ class AwsIni:
 
             for (i, server) in enumerate(servers[left_index:right_index],
                                          start=1):
-                print "{0}:{1}".format(i, server.private_ip_address)
+                print "{0}:{1}".format(i, server.public_dns_name)
 
     def _print_servers(self):
         print "\n[servers]"
         for (i, server) in enumerate(self._get_servers(kind='node'), start=1):
-            print "{0}:{1}".format(i, server.private_ip_address)
+            print "{0}:{1}".format(i, server.public_dns_name)
+            print "#{0}".format(server.private_ip_address)
 
     def _print_clients(self):
         print "\n[clients]"
@@ -106,7 +107,7 @@ class AwsIni:
             if i > self.options.clients:
                 break
             else:
-                print "{0}:{1}".format(i, client.private_ip_address)
+                print "{0}:{1}".format(i, client.public_dns_name)
 
     def _print_footer(self):
         print "\n[membase]\n" + \
