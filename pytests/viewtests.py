@@ -1019,7 +1019,7 @@ class ViewBasicTests(unittest.TestCase):
         status, content = rest._http_request(api, 'PUT', function, headers=rest._create_capi_headers())
         if not status:
             json_parsed = json.loads(content)
-            self.assertEquals("invalid_view" , json_parsed["reason"])
+            self.assertEquals(u"The field `views' is not a json object." , json_parsed["reason"])
         else:
             self.fail("should be error during creation view with the function : {0}".format(function))
         # try to load some documents to see if memcached is running
