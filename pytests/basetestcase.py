@@ -58,7 +58,9 @@ class BaseTestCase(unittest.TestCase):
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
             self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
-            #self.cluster.shutdown()
+            #stop all existing task manager threads( except first case)
+            if self.case_number > 1:
+                self.cluster.shutdown()
             self._log_finish(self)
 
     @staticmethod
