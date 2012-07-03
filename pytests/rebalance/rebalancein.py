@@ -72,7 +72,44 @@ class RebalanceInTests(RebalanceBaseTest):
             self._verify_all_buckets(self.servers[0])
             self._verify_stats_all_buckets(self.servers[:i+1])
 
-    """Rebalances nodes into a cluster during view queries.
+    """Rebalances nodes into a cluster  during view queries.
+
+    This test begins by loading a given number of items into the cluster.
+    It creates num_views in development/production view with default
+    map view funcs(is_dev_ddoc = True by default). It then adds nodes_in nodes
+    at a time and rebalances that node into the cluster. During the rebalancing
+    we perform view queries for all views and verify the expected number of docs for them.
+    Perform the same view queries after cluster has been completed. Then we wait for
+    the disk queues to drain, and then verify that there has been no data loss.
+    Once successful view queries the test is finished."""
+    def rebalance_in_with_queries(self):
+        num_views = self.input.param("num_views", 5)
+        is_dev_ddoc = self.input.param("is_dev_ddoc", True)
+        views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
+        ddoc_name = "ddoc1"
+        prefix = ("", "dev_")[is_dev_ddoc]
+
+        query = {}
+        query["connectionTimeout"] = 60000;
+        query["full_set"] = "true"
+        tasks = []
+        tasks = self.async_create_views(self.servers[0], ddoc_name, views, self.default_bucket_name)
+        for task in tasks:
+            task.result(self.wait_timeout * 2)
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+        servs_in=self.servers[1:self.nodes_in + 1]
+        rebalance = self.cluster.async_rebalance(self.servers[0], servs_in, [])
+        time.sleep(self.wait_timeout / 5)
+        #see that the result of view queries are the same as expected during the test
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+        #verify view queries results after rebalancing
+        rebalance.result()
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
+        self._verify_all_buckets(self.servers[0])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
+
+    """Rebalances nodes into a cluster incremental during view queries.
 
     This test begins by loading a given number of items into the cluster. It creates num_views in
     development/production view with default map view funcs(is_dev_ddoc = True by default).
