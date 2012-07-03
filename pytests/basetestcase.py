@@ -35,6 +35,7 @@ class BaseTestCase(unittest.TestCase):
         #avoid clean up if the previous test has been tear down
         if not self.input.param("skip_cleanup", True) or self.case_number == 1:
             self.tearDown()
+            self.cluster = Cluster()
         self.quota = self._initialize_nodes(self.cluster, self.servers)
         if self.dgm_run:
             self.quota = 256
@@ -58,9 +59,8 @@ class BaseTestCase(unittest.TestCase):
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
             self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
-            #stop all existing task manager threads( except first case)
-            if self.case_number > 1:
-                self.cluster.shutdown()
+            #stop all existing task manager threads
+            self.cluster.shutdown()
             self._log_finish(self)
 
     @staticmethod

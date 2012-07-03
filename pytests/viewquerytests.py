@@ -58,6 +58,7 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests.common_tearDown(self)
 
         self.task_manager.cancel()
+        self.cluster.shutdown()
 
 
     def test_simple_dataset_stale_queries(self):
