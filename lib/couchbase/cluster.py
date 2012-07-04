@@ -467,3 +467,27 @@ class Cluster(object):
         _task = self.async_compact_view(server, design_doc_name, bucket)
         return _task.result(timeout)
 
+    def async_failover(self, servers, to_failover):
+        """Asyncronously fails over nodes
+
+        Parameters:
+            servers - All servers participating in the failover ([TestInputServers])
+            to_failover - All servers being failed over ([TestInputServers])
+
+        Returns:
+            FailoverTask - A task future that is a handle to the scheduled task"""
+        _task = FailoverTask(servers, to_failover)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def failover(self, servers, to_failover, timeout=None):
+        """Syncronously fails over nodes
+
+        Parameters:
+            servers - All servers participating in the failover ([TestInputServers])
+            to_failover - All servers being failed over ([TestInputServers])
+
+        Returns:
+            boolean - Whether or not the failover was successful"""
+        _task = self.async_failover(servers, to_failover)
+        return _task.result(timeout)

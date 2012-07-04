@@ -13,7 +13,7 @@ from mc_bin_client import MemcachedError
 from tasks.future import Future
 import json
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
-                                        GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound
+                                        GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException
 
 #TODO: Setup stacktracer
 #TODO: Needs "easy_install pygments"
@@ -1140,3 +1140,39 @@ class ViewCompactionTask(Task):
         rest = RestConnection(self.server)
         status, content = rest.set_view_info(self.bucket, self.design_doc_name)
         return content["compact_running"] == True
+
+'''task class for failover. This task will only failover nodes but doesn't
+ rebalance as there is already a task to do that'''
+class FailoverTask(Task):
+    def __init__(self, servers, to_failover=[], wait_for_pending=20):
+        Task.__init__(self, "failover_task")
+        self.servers = servers
+        self.to_failover = to_failover
+        self.wait_for_pending = wait_for_pending
+
+    def execute(self, task_manager):
+        try:
+            self._failover_nodes(task_manager)
+            self.log.info("{0} seconds sleep after failover, for nodes to go pending....".format(self.wait_for_pending))
+            time.sleep(self.wait_for_pending)
+            self.state = FINISHED
+            self.set_result(True)
+
+        except FailoverFailedException as e:
+            self.state = FINISHED
+            self.set_exception(e)
+
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
+    def _failover_nodes(self, task_manager):
+        rest = RestConnection(self.servers[0])
+        #call REST fail_over for the nodes to be failed over
+        for server in self.to_failover:
+            for node in rest.node_statuses():
+                if server.ip == node.ip and int(server.port) == int(node.port):
+                    self.log.info("Failing over {0}:{1}".format(node.ip, node.port))
+                    rest.fail_over(node.id)
+
