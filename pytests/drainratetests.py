@@ -41,22 +41,23 @@ class DrainRateTests(unittest.TestCase):
         except:
             pass
 
-    def _create_default_bucket(self):
-        rest = RestConnection(self.master)
-        helper = RestHelper(RestConnection(self.master))
-        if not helper.bucket_exists(self.bucket):
-            node_ram_ratio = BucketOperationHelper.base_bucket_ratio([self.master])
+    def _create_default_bucket(self, replica=1):
+        name = "default"
+        master = self.input.servers[0]
+        rest = RestConnection(master)
+        helper = RestHelper(RestConnection(master))
+        if not helper.bucket_exists(name):
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.input.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
-            serverInfo = self.master
-            rest.init_cluster(username=serverInfo.rest_username,
-                              password=serverInfo.rest_password)
-            rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-            rest.create_bucket(bucket=self.bucket, ramQuotaMB=int(available_ram))
-            ready = BucketOperationHelper.wait_for_memcached(self.master, self.bucket)
+            if( available_ram < 256):
+                available_ram = 256
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
+            ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
-        self.assertTrue(helper.bucket_exists(self.bucket),
-                        msg="unable to create {0} bucket".format(self.bucket))
+        self.assertTrue(helper.bucket_exists(name),
+                        msg="unable to create {0} bucket".format(name))
+
 
     def _load_data_for_buckets(self):
         rest = RestConnection(self.master)
@@ -73,7 +74,7 @@ class DrainRateTests(unittest.TestCase):
                                                                   number_of_threads=1,
                                                                   number_of_items=self.number_of_items,
                                                                   write_only=True,
-                                                                  moxi=False)
+                                                                  moxi=True)
 
     def _parallel_read(self):
         rest = RestConnection(self.master)
