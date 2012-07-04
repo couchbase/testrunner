@@ -1211,7 +1211,7 @@ class EmployeeDataSet:
                     self._load_chunk(smart, doc_sets)
         except Exception as ex:
             view.results.addError(tc, sys.exc_info())
-            tc.log.error("Load data thread is crashed: " + ex)
+            tc.log.error("At least one of load data threads is crashed: {0}".format(ex))
             tc.thread_crashed.set()
             raise ex
         finally:
@@ -1423,8 +1423,17 @@ class SimpleDataSet:
         return [QueryView(rest, self.num_docs, fn_str=view_fn, reduce_fn=reduce)]
 
     def load(self, tc, view, verify_docs_loaded = True):
-        doc_names = ViewBaseTests._load_docs(tc, self.num_docs, view.prefix, verify_docs_loaded)
-        return doc_names
+        try:
+            doc_names = ViewBaseTests._load_docs(tc, self.num_docs, view.prefix, verify_docs_loaded)
+            return doc_names
+        except Exception as ex:
+            view.results.addError(tc, sys.exc_info())
+            tc.log.error("At least one of load data threads is crashed: {0}".format(ex))
+            tc.thread_crashed.set()
+            raise ex
+        finally:
+            if not tc.thread_stopped.is_set():
+                tc.thread_stopped.set()
 
     def load_with_tm(self, task_manager, rest,
                      bucket = "default",
