@@ -12,6 +12,7 @@ import threading
 
 sys.path.append("lib")
 sys.path.append(".")
+sys.path.append("pytests/performance/libobserve")
 
 try:
     import logging
@@ -37,6 +38,8 @@ from memcacheConstants import ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETM
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
 from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "ARPA"
+
+from obs_mcsoda import McsodaObserver
 
 LARGE_PRIME = 9576890767
 
@@ -152,6 +155,11 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
 
     heartbeat_last = t_last
 
+    if cfg.get('observe', 0):
+        observer = McsodaObserver(ctl, cfg, store)
+        observer.start()
+
+    obs_key = None
     while ctl.get('run_ok', True):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
@@ -167,7 +175,14 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             heartbeat_last += heartbeat_duration
             log.info("[mcsoda: %s] num_ops = %s. duration = %s" %(why, num_ops, heartbeat_duration))
 
-        flushed = store.command(next_cmd(cfg, cur, store))
+        command = next_cmd(cfg, cur, store)
+        if command[0] == 'set' and cfg.get('observe', 0):
+            obs_key = command[2]
+        flushed = store.command(command)
+        if flushed and cfg.get('observe', 0):
+            observer.load_keys(obs_key)
+            obs_key = None
+
         i += 1
 
         if report > 0 and i % report == 0:
