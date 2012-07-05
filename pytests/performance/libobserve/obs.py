@@ -66,17 +66,17 @@ class Observer:
 
         return True
 
-    def build_conns(self):
+    def _build_conns(self):
         raise NotImplementedError(
-            "<%s> build_conns() has not been implemented" % self.__class__.__name__)
+            "<%s> _build_conns() has not been implemented" % self.__class__.__name__)
 
     def _send(self):
         """send packets to servers"""
         raise NotImplementedError(
-            "<%s> send() has not been implemented" % self.__class__.__name__)
+            "<%s> _send() has not been implemented" % self.__class__.__name__)
 
     def _recv(self):
         """receive packets from servers"""
         raise NotImplementedError(
-            "<%s> recv() has not been implemented" % self.__class__.__name__)
+            "<%s> _recv() has not been implemented" % self.__class__.__name__)
 
