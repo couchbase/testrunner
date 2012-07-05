@@ -1379,6 +1379,33 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         time.sleep(30)
         shell.close()
 
+    def set_node_name(self, name):
+        """Edit couchbase-server shell script in place and set custom node name.
+        This is necessary for cloud installations where nodes have both
+        private and public addresses.
+
+        It only works on Unix-like OS.
+
+        Reference: http://bit.ly/couchbase-bestpractice-cloud-ip
+        """
+
+        # Stop server
+        self.stop_couchbase()
+
+        # Edit _start function
+        cmd = r"sed -i 's/\(.*\-run ns_bootstrap.*\)/\1\n\t-name ns_1@{0} \\/' \
+                /opt/couchbase/bin/couchbase-server".format(name)
+        self.execute_command(cmd)
+
+        # Cleanup
+        for cmd in ('rm -fr /opt/couchbase/var/lib/couchbase/data/*',
+                    'rm -fr /opt/couchbase/var/lib/couchbase/mnesia/*',
+                    'rm -f /opt/couchbase/var/lib/couchbase/config/config.dat'):
+            self.execute_command(cmd)
+
+        # Start server
+        self.start_couchbase()
+
 
 class RemoteUtilHelper(object):
 
