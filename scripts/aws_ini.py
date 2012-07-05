@@ -2,7 +2,7 @@
 import sys
 from optparse import OptionParser
 
-from boto.ec2.connection import EC2Connection
+from boto.ec2 import regions
 from boto.exception import NoAuthHandlerFound
 
 class AwsIni:
@@ -11,7 +11,7 @@ class AwsIni:
 
     def __init__(self):
         try:
-            self.conn = EC2Connection()
+            self.connections = [region.connect() for region in regions()]
         except NoAuthHandlerFound:
             print "ERROR: use environment variables to set credentials:\n" + \
                   "AWS_ACCESS_KEY_ID\nAWS_SECRET_ACCESS_KEY"
@@ -55,9 +55,10 @@ class AwsIni:
             sys.exit()
 
     def _get_instances(self):
-        for reservation in self.conn.get_all_instances():
-            for instance in reservation.instances:
-                yield instance
+        for connection in self.connections:
+            for reservation in connection.get_all_instances():
+                for instance in reservation.instances:
+                    yield instance
 
     def _get_servers(self, kind='node'):
         if kind == 'node':
