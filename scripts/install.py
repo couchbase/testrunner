@@ -303,29 +303,43 @@ class CouchbaseServerInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-#        log = logger.new_logger("Installer")
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]
         remote_client = RemoteMachineShellConnection(params["server"])
-        while time.time() < (start_time + (10 * 60)):
-            rest = RestConnection(server)
+        while time.time() < start_time + 10 * 60:
             try:
-                rest.init_cluster(username=server.rest_username, password=server.rest_password)
-                rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+                rest = RestConnection(server)
+
+                # Initialize cluster
+                rest.init_cluster(username=server.rest_username,
+                                  password=server.rest_password)
+                memory_quota = rest.get_nodes_self().mcdMemoryReserved
+                rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
+
+                # Make sure that data_path is writable by couchbase user
                 if server.data_path:
                     time.sleep(3)
-                    # Make sure that data_path is writable by couchbase user
-                    #remote_client.stop_couchbase()
-                    remote_client.execute_command('rm -rf {0}/*'.format(server.data_path))
-                    remote_client.execute_command("chown -R couchbase:couchbase {0}".format(server.data_path))
+
+                    for cmd in ("rm -rf {0}/*".format(server.data_path),
+                                "chown -R couchbase:couchbase {0}".format(server.data_path)):
+                        remote_client.execute_command(cmd)
                     rest.set_data_path(data_path=server.data_path)
-                    # Symlink data-dir to custom path
-                    #remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
-                    #remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
-                    #remote_client.execute_command("chown -h couchbase:couchbase /opt/couchbase/var")
-                    #remote_client.start_couchbase()
                     time.sleep(3)
+
+                # TODO: Symlink data-dir to custom path
+                #remote_client.stop_couchbase()
+                #remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
+                #remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
+                #remote_client.execute_command("chown -h couchbase:couchbase /opt/couchbase/var")
+                #remote_client.start_couchbase()
+
+                # Optionally disable consistency check
+                if params.get('disable_consistency', 0):
+                    rest.set_couchdb_option(section='couchdb',
+                                            option='consistency_check_ratio',
+                                            value='0.0')
+
                 cluster_initialized = True
                 break
             except ServerUnavailableException:
@@ -333,7 +347,7 @@ class CouchbaseServerInstaller(Installer):
             log.info('sleep for 5 seconds before trying again ...')
             time.sleep(5)
         if not cluster_initialized:
-            raise Exception("unable to initialize membase node")
+            raise Exception("unable to initialize couchbase node")
 
     def install(self, params):
 #        log = logger.new_logger("Installer")
@@ -362,12 +376,7 @@ class CouchbaseServerInstaller(Installer):
         if "rest_vbuckets" in params:
             rest_vbuckets = int(params["rest_vbuckets"])
             ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
-        # Optionally disable consistency check
-        if params.get('disable_consistency', 0):
-            rest = RestConnection(params['server'])
-            rest.set_couchdb_option(section='couchdb',
-                                    option='consistency_check_ratio',
-                                    value='0.0')
+
 
 class CouchbaseServerStandaloneInstaller(Installer):
     def __init__(self):
