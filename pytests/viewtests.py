@@ -15,7 +15,6 @@ from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached, DocumentGenerator
 from memcached.helper.data_helper import MemcachedError
-from remote.remote_util import RemoteMachineShellConnection
 
 class ViewBaseTests(unittest.TestCase):
 
@@ -486,7 +485,8 @@ class ViewBaseTests(unittest.TestCase):
                         raise ex
                 self.log.error("view_results not ready yet , try again in {1} seconds... , error {0}".format(ex, timeout))
                 time.sleep(timeout)
-
+        if results.get(u'errors', []):
+            self.fail("unable to get view_results for {0} after {1} tries due to error {2}".format(view, num_tries, results.get(u'errors')))
         self.fail("unable to get view_results for {0} after {1} tries".format(view, num_tries))
 
     @staticmethod

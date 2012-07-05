@@ -648,6 +648,32 @@ class ViewQueryTests(unittest.TestCase):
             task.result()
 
 
+    def test_employee_dataset_query_stop_master(self):
+        try:
+            docs_per_day = self.input.param('docs-per-day', 200)
+            error = self.input.param('error', None)
+            data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+            data_set.add_startkey_endkey_queries()
+            self._query_test_init(data_set, False)
+
+            ViewBaseTests._begin_rebalance_in(self)
+            ViewBaseTests._end_rebalance(self)
+
+            self.server = self.servers[-1]
+            shell = RemoteMachineShellConnection(self.servers[0])
+            self.log.info("Master Node is being stopped")
+            shell.stop_couchbase()
+            #error should be returned in results
+            for view in data_set.views:
+                for q in view.queries:
+                    q.error = error
+            time.sleep(20)
+            self._query_all_views(data_set.views, False)
+        finally:
+            shell = RemoteMachineShellConnection(self.servers[0])
+            shell.start_couchbase()
+
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
