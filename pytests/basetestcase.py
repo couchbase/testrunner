@@ -40,7 +40,8 @@ class BaseTestCase(unittest.TestCase):
         self.quota = self._initialize_nodes(self.cluster, self.servers)
         if self.dgm_run:
             self.quota = 256
-        self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+        if self.total_buckets > 0:
+            self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
@@ -93,7 +94,7 @@ class BaseTestCase(unittest.TestCase):
                 quota = node_quota
         return quota
 
-    def _get_bucket_size(self, quota, num_buckets, ratio=2.0/3.0):
+    def _get_bucket_size(self, quota, num_buckets, ratio=2.0 / 3.0):
         ip = self.servers[0]
         for server in self.servers:
             if server.ip == ip:
