@@ -2,7 +2,6 @@
 
 from sys import path
 from struct import calcsize
-from crc32 import crc32_hash
 
 path.append("lib")
 
@@ -23,12 +22,3 @@ class ObservePktFmt:
     OBS_RES_BODY_FMT = "!HH"
     OBS_RES_HDR_LEN = calcsize(OBS_RES_HDR_FMT)
     OBS_RES_BODY_LEN = calcsize(OBS_RES_BODY_FMT)
-
-class VbucketHelper:
-    #TODO move out
-    @staticmethod
-    def get_vbucket_id(key, num_vbuckets):
-        vbucketId = 0
-        if num_vbuckets > 0:
-            vbucketId = crc32_hash(key) & (num_vbuckets - 1)
-        return vbucketId

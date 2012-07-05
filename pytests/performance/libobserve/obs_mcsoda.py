@@ -7,7 +7,8 @@ from mc_bin_client import MemcachedClient
 from obs import Observer
 from obs_req import ObserveRequestKey, ObserveRequest
 from obs_res import ObserveResponse
-from obs_def import ObservePktFmt, VbucketHelper
+from obs_def import ObservePktFmt
+from obs_helper import VbucketHelper
 
 class McsodaObserver(Observer, Thread):
 
