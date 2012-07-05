@@ -309,6 +309,10 @@ class CouchbaseServerInstaller(Installer):
         remote_client = RemoteMachineShellConnection(params["server"])
         while time.time() < start_time + 10 * 60:
             try:
+                # Optionally change node name and restart server
+                if params.get('use_domain_names', 0):
+                    remote_client.set_node_name(server.ip)
+
                 rest = RestConnection(server)
 
                 # Initialize cluster
