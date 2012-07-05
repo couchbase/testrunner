@@ -18,7 +18,8 @@ class Observer:
 
         self._send()
         responses = self._recv()
-        self.cmp_rm_keys(responses, key_state)
+        if responses:
+            self.cmp_rm_keys(responses, key_state)
 
     def observe(self, key_state=ObserveKeyState.OBS_PERSISITED, blocking=True):
         if blocking:
@@ -45,6 +46,10 @@ class Observer:
         remove keys based on (@param: responses),
         using key_state as filter
         """
+        if not responses:
+            print "<%s> empty responses" % self.__class__.__name__
+            return True
+
         for res in responses:
             if res.__class__.__name__ != "ObserveResponse":
                 print "<%s> invalid response" % self.__class__.__name__
@@ -58,6 +63,8 @@ class Observer:
                    obs_key.key in self._keys.queue:
                     with self._keys.mutex:
                         self._keys.queue.remove(obs_key.key)
+
+        return True
 
     def build_conns(self):
         raise NotImplementedError(

@@ -104,7 +104,9 @@ class McsodaObserver(Observer, Thread):
                     print "<%s> failed to recv observe pkt: %s" % (self.__class__.__name__, e)
                     return None
             res = ObserveResponse()
-            res.unpack_hdr(hdr)
+
+            if not res.unpack_hdr(hdr):
+                return None
 
             # TODO measure server/client side latency
 

@@ -2,7 +2,7 @@
 
 import struct
 from obs_def import ObserveKeyState, ObservePktFmt, OBS_OPCODE
-from memcacheConstants import REQ_MAGIC_BYTE
+from memcacheConstants import RES_MAGIC_BYTE
 
 class ObserveResponseKey:
     vbucket = 0x0000
@@ -33,7 +33,7 @@ class ObserveResponseKey:
         return 13 + self.key_len
 
 class ObserveResponse:
-    magic = REQ_MAGIC_BYTE
+    magic = RES_MAGIC_BYTE
     opcode = OBS_OPCODE
     key_len = 0x0000
     extra_len = 0x00
@@ -57,10 +57,31 @@ class ObserveResponse:
     def __str__(self):
         return self.__repr__()
 
+    def _check_hdr(self):
+        """@throws AssertionError"""
+        assert self.magic == RES_MAGIC_BYTE
+        assert self.opcode == OBS_OPCODE
+
     def unpack_hdr(self, hdr):
         self.magic, self.opcode, self.key_len, self.extra_len,\
         self.data_type, self.status, self.body_len, self.opaque,\
         self.persist_stat, self.repl_stat = struct.unpack(ObservePktFmt.OBS_RES_HDR_FMT, hdr)
+
+        try:
+            self._check_hdr()
+        except AssertionError as e:
+            print "<%s> AsseritionError: %s" % (self.__class__.__name__, e)
+            return False
+
+        if self.status:
+            # TODO: observe opcode 0x96 collides with memcached CMD_SYNC
+            #       for backward compatibility, we are supposed to receive
+            #       ERR_UNKNOWN_CMD = 0x81 if we send OBSERVE to a 1.8 server
+            #       http://www.couchbase.com/issues/browse/MB-5805
+            print "<%s> server error: %d " % (self.__class__.__name__, self.status)
+            return False
+
+        return True
 
     def unpack_body(self, body):
         # TODO: chunk read, & simplify
