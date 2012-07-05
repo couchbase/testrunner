@@ -128,9 +128,8 @@ class McsodaObserver(Observer, Thread):
         if self.awareness:
             server = self.awareness.vBucketMap[vbucketid]
             return server
-        else:
-            if len(self.conns):
-                return self.conns.iterkeys().next()
+        elif len(self.conns):
+            return self.conns.iterkeys().next()
 
         return None
 
