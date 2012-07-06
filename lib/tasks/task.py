@@ -576,6 +576,12 @@ class ViewCreateTask(Task):
             self.state = FINISHED
             self.set_exception(e)
 
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
     def check(self, task_manager):
         rest = RestConnection(self.server)
 
@@ -592,6 +598,11 @@ class ViewCreateTask(Task):
         except QueryViewException as e:
             task_manager.schedule(self, 2)
 
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
 
     def _check_ddoc_revision(self):
         valid = False
@@ -605,6 +616,12 @@ class ViewCreateTask(Task):
                 valid = True
         except ReadDocumentException:
             pass
+
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
 
         return valid
 
@@ -642,6 +659,12 @@ class ViewDeleteTask(Task):
             self.state = FINISHED
             self.set_exception(e)
 
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
     def check(self, task_manager):
         rest = RestConnection(self.server)
 
@@ -656,6 +679,12 @@ class ViewDeleteTask(Task):
             self.log.info("view : {0} was successfully deleted in ddoc: {1}".format(self.view.name, self.design_doc_name))
             self.state = FINISHED
             self.set_result(True)
+
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
 
 class ViewQueryTask(Task):
     def __init__(self, server, design_doc_name, view_name,
@@ -691,6 +720,12 @@ class ViewQueryTask(Task):
             # initial query failed, try again
             task_manager.schedule(self, self.retry_time)
 
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
     def check(self, task_manager):
         rest = RestConnection(self.server)
 
@@ -718,4 +753,10 @@ class ViewQueryTask(Task):
         except QueryViewException as e:
             # subsequent query failed! exit
             self.state = FINISHED
+            self.set_exception(e)
+
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
             self.set_exception(e)
