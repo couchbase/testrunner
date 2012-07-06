@@ -4,7 +4,6 @@ from builds.build_query import BuildQuery
 import logger
 import ConfigParser
 import os
-import collections
 
 #class to parse the inputs either from command line or from a ini file
 #command line supports a subset of
@@ -22,7 +21,7 @@ class TestInput(object):
     def __init__(self):
         self.servers = []
         self.moxis = []
-        self.clusters = collections.OrderedDict()
+        self.clusters = {}
         self.membase_settings = None
         self.test_params = {}
         #servers , each server can have u,p,port,directory
@@ -67,14 +66,12 @@ class TestInputServer(object):
         self.data_path = ''
 
     def __str__(self):
-        #ip_str = "ip:{0}".format(self.ip)
-        ip_str = "ip:{0} port:{1}".format(self.ip, self.port)
+        ip_str = "ip:{0}".format(self.ip)
         ssh_username_str = "ssh_username:{0}".format(self.ssh_username)
         return "{0} {1}".format(ip_str, ssh_username_str)
 
     def __repr__(self):
-        #ip_str = "ip:{0}".format(self.ip)
-        ip_str = "ip:{0} port:{1}".format(self.ip, self.port)
+        ip_str = "ip:{0}".format(self.ip)
         ssh_username_str = "ssh_username:{0}".format(self.ssh_username)
         return "{0} {1}".format(ip_str, ssh_username_str)
 
@@ -200,7 +197,7 @@ class TestInputParser():
         for key, value in clusters.items():
             end += value
             input.clusters[key] = servers[start:end]
-            start += value
+            start = value
 
         # Setting up 'servers' tag
         servers = []
