@@ -14,12 +14,12 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.performance.stats import StatsCollector
 from remote.remote_util import RemoteMachineShellConnection
-from cbsoda import StoreCouchbase
+from perf_engines.cbsoda import StoreCouchbase
 
 # testrunner imports
 from TestInput import TestInputSingleton
 from perf_defaults import PerfDefaults
-import mcsoda
+from perf_engines import mcsoda
 import testconstants
 
 def TODO():

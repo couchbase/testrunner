@@ -19,8 +19,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL
 import json
 import sys
-sys.path.append('./pytests/performance/')
-import mcsoda
+from perf_engines import mcsoda
 
 
 class MemcachedClientHelperExcetion(Exception):

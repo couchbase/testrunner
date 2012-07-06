@@ -8,7 +8,6 @@ import json
 import os
 import gzip
 import copy
-import mcsoda
 import threading
 import socket
 
@@ -22,10 +21,11 @@ from remote.remote_util import RemoteMachineShellConnection
 from TestInput import TestInputSingleton
 from perf_defaults import PerfDefaults
 from performance import perf
-
+from perf_engines.cbsoda import StoreCouchbase
+from perf_engines import mcsoda
 from scripts.perf.rel_cri_stats import CBStatsCollector
 
-from lib.cbkarma.rest_client import CbKarmaClient
+from cbkarma.rest_client import CbKarmaClient
 
 class EPerfMaster(perf.PerfBase):
     specURL = "http://hub.internal.couchbase.org/confluence/pages/viewpage.action?pageId=1901816"
@@ -1850,8 +1850,6 @@ class EVPerfClient(EPerfClient):
             self.bg_thread_cfg['queries'] = self.param("bg_queries", "")
             self.bg_thread_cur = copy.deepcopy(cur)
             self.bg_thread_ctl = { 'run_ok': True }
-
-            from cbsoda import StoreCouchbase
 
             self.bg_stores = [StoreCouchbase()]
 

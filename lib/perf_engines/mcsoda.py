@@ -12,7 +12,6 @@ import threading
 
 sys.path.append("lib")
 sys.path.append(".")
-sys.path.append("pytests/performance/libobserve")
 
 try:
     import logging
@@ -39,7 +38,7 @@ from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
 from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "ARPA"
 
-from obs_mcsoda import McsodaObserver
+from libobserve.obs_mcsoda import McsodaObserver
 
 LARGE_PRIME = 9576890767
 

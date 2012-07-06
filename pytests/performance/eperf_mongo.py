@@ -2,8 +2,8 @@
 
 import pymongo
 import eperf
-import mcsoda
-import mcsoda_mongo
+from perf_engines import mcsoda
+from perf_engines import mcsoda_mongo
 
 CONFIGSVR_PORT = 27019 # Needs to match the ports defined by scripts/install.py
 SHARDSVR_PORT  = 27018
