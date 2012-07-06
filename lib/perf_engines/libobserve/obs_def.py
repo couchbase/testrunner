@@ -15,6 +15,12 @@ class ObserveKeyState:
     OBS_PERSISITED = 0x01
     OBS_IMPOSSIBLE = 0x81
 
+class ObserveStatus:
+    OBS_SUCCESS = 0x00
+    OBS_MODIFIED = 0x01
+    OBS_TIMEDOUT = 0x02
+    OBS_UNKNOWN = 0xff
+
 class ObservePktFmt:
     OBS_REQ_HDR_FMT = REQ_PKT_FMT
     OBS_REQ_BODY_FMT = "!HH"
