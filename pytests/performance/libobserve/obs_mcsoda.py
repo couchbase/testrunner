@@ -108,14 +108,16 @@ class McsodaObserver(Observer, Thread):
             if not res.unpack_hdr(hdr):
                 return None
 
-            # TODO measure server/client side latency
-
             body = ''
             while len(body) < res.body_len:
                 body += self.conns[server].s.recv(res.body_len)
             res.unpack_body(body)
 
             # TODO: error check
+
+            self.save_latency_stats(res.persist_stat/1000)
+
+            # TODO: measure client side latency
 
             print "res::<%s>" % server
             print res
@@ -136,10 +138,16 @@ class McsodaObserver(Observer, Thread):
     def _reconn(self):
         pass
 
-        #    def save_obs_latency(self, latency):
-        #        if not latency:
-        #            return
-        #        print " persist msec: {0}".format(latency)
-        #        self.store.add_timing_sample("observe", float(latency))
-        #        if self.store.sc:
-        #            self.store.save_stats()
+    def save_latency_stats(self, latency, server=True):
+        if not latency:
+            return False    # TODO: simply skip 0
+
+        if server:
+            self.store.add_timing_sample("observe-server", float(latency))
+        else:
+            self.store.add_timing_sample("observe-client", float(latency))
+
+        if self.store.sc:
+            self.store.save_stats()
+
+        return True
