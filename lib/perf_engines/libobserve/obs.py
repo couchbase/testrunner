@@ -1,8 +1,33 @@
 #!/usr/bin/env python
 
+import time
 from Queue import Queue
 
 from obs_def import ObserveKeyState
+
+class Observable:
+    key = ""
+    cas = 0x0000000000000000
+    status = ObserveStatus.OBS_UNKNOWN
+    start_time = 0
+    end_time = 0
+
+    def __init__(self, key, cas, start_time=0):
+        self.key = key
+        self.cas = cas
+        if start_time:
+            self.start_time = start_time
+        else:
+            self.start_time = time.time()
+
+    def __repr__(self):
+        return "<%s> key: %s, cas: %x, status: %x, "\
+               "start_time: %d, end_time: %d \n" %\
+               (self.__class__.__name__, self.key, self.cas,
+                self.status, self.start_time, self.end_time)
+
+    def __str__(self):
+        return self.__repr__()
 
 class Observer:
     #TODO: logging
