@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import time
-from Queue import Queue
 
-from obs_def import ObserveKeyState
+from obs_def import ObserveKeyState, ObserveStatus
+from obs_helper import SyncDict
 
 class Observable:
     key = ""
@@ -32,19 +32,20 @@ class Observable:
 class Observer:
     #TODO: logging
 
-    _keys = Queue()     # keys to be observed, key = [:string]
+    # {key_str: Observable}
+    _observables = SyncDict()
 
     def _observe_blocking(self, key_state):
-        if self._keys.empty():
-            print "<%s> empty keys" % self.__class__.__name__
+        if self._observables.empty():
+            print "<%s> empty observables" % self.__class__.__name__
             return
 
-        print "<%s> self._keys %s" % (self.__class__.__name__, self._keys.queue)
+        print "<%s> self._observables %s" % (self.__class__.__name__, self._observables)
 
         self._send()
         responses = self._recv()
         if responses:
-            self.cmp_rm_keys(responses, key_state)
+            self.update_observables(responses, key_state)
 
     def observe(self, key_state=ObserveKeyState.OBS_PERSISITED, blocking=True):
         if blocking:
@@ -53,43 +54,68 @@ class Observer:
             raise NotImplementedError("<%s> unblocking observe has not been implemented"
                 % self.__class__.__name__ )
 
-    def load_keys(self, keys):
-        if not keys:
-            print "<%s> invalid argument key: %s" % (self.__class__.__name__, keys)
+    def load_observables(self, observables):
+        """
+        Load observables into cache for observation.
+        @param observables must be a iterable collections of Observable
+        """
+        if not observables:
+            print "<%s> invalid argument observables: %s" \
+                    % (self.__class__.__name__, observables)
             return
 
-        if self._keys.empty():
-            print "<%s> load_keys = %s" % (self.__class__.__name__, keys)
-            self._keys.put(keys)
+        if self._observables.empty():
+            print "<%s> load observables = %s" % (self.__class__.__name__, observables)
+            for obs in observables:
+                self._observables.put(obs.key, obs)
 
-    def clear_keys(self):
-        with self._keys.mutex:
-            self._keys.queue.clear()
+    def clear_observables(self):
+        print "clear observables : %s" % self._observables
+        self._observables.clear()
 
-    def cmp_rm_keys(self, responses, key_state):
+    def update_observables(self, responses, key_state):
         """
-        remove keys based on (@param: responses),
+        Update observables based on (@param: responses),
         using key_state as filter
         """
         if not responses:
             print "<%s> empty responses" % self.__class__.__name__
             return True
 
-        for res in responses:
-            if res.__class__.__name__ != "ObserveResponse":
-                print "<%s> invalid response" % self.__class__.__name__
-                return False
+        if self._observables.empty():
+            return True
 
-            if self._keys.empty():
-                return True
+        res_keys = self.reskey_generator(responses)
 
-            for obs_key in res.keys:
-                if obs_key.key_state == key_state and\
-                   obs_key.key in self._keys.queue:
-                    with self._keys.mutex:
-                        self._keys.queue.remove(obs_key.key)
+        for res_key in res_keys:
+            obs = self._observables.get(res_key.key)
+            if not obs:
+                continue
+            elif obs.cas == res_key.cas:
+                # TODO: race cond?
+                if res_key.key_state == key_state :
+                    obs.status = ObserveStatus.OBS_SUCCESS
+            else:
+                obs.status = ObserveStatus.OBS_MODIFIED
+            obs.end_time = time.time()
+            self._observables.put(obs.key, obs)
 
         return True
+
+    def reskey_generator(self, responses):
+        for res in responses:
+            for res_key in res.keys:
+                if res.__class__.__name__ == "ObserveResponse":
+                    yield res_key
+
+    def observable_filter(self, status):
+        """
+        Generate observables, using status as filter
+        not thread safe.
+        """
+        for obs in self._observables.dict.itervalues():
+            if obs.status == status:
+                yield obs
 
     def _build_conns(self):
         raise NotImplementedError(
