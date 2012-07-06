@@ -105,6 +105,11 @@ class BucketCreateTask(Task):
         except BucketCreationException as e:
             self.state = FINISHED
             self.set_exception(e)
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
 
     def check(self, task_manager):
         try:
@@ -129,21 +134,33 @@ class BucketDeleteTask(Task):
 
     def execute(self, task_manager):
         rest = RestConnection(self.server)
-        if rest.delete_bucket(self.bucket):
-            self.state = CHECKING
-            task_manager.schedule(self)
-        else:
+        try:
+            if rest.delete_bucket(self.bucket):
+                self.state = CHECKING
+                task_manager.schedule(self)
+            else:
+                self.state = FINISHED
+                self.set_result(False)
+        #catch and set all unexpected exceptions
+        except Exception as e:
             self.state = FINISHED
-            self.set_result(False)
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
 
     def check(self, task_manager):
         rest = RestConnection(self.server)
-        if BucketOperationHelper.wait_for_bucket_deletion(self.bucket, rest, 200):
-            self.set_result(True)
-        else:
-            self.set_result(False)
-        self.state = FINISHED
-
+        try:
+            if BucketOperationHelper.wait_for_bucket_deletion(self.bucket, rest, 200):
+                self.set_result(True)
+            else:
+                self.set_result(False)
+            self.state = FINISHED
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
 
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[], do_stop=False, progress=30):
@@ -187,6 +204,11 @@ class RebalanceTask(Task):
         except RebalanceFailedException as ex:
             self.state = FINISHED
             self.set_exception(ex)
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
         if progress != -1 and progress != 100:
             task_manager.schedule(self, 10)
         else:
