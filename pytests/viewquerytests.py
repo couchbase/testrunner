@@ -519,6 +519,42 @@ class ViewQueryTests(unittest.TestCase):
         self.log.info("run queries after compaction")
         self._query_all_views(data_set.views)
 
+    def test_employee_dataset_failover_pending_queries(self):
+        failover_nodes = []
+        try:
+            ViewBaseTests._begin_rebalance_in(self)
+            ViewBaseTests._end_rebalance(self)
+
+            docs_per_day = self.input.param('docs-per-day', 200)
+            data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+
+            data_set.add_startkey_endkey_queries()
+            self._query_test_init(data_set, False)
+
+            master = self.servers[0]
+            RebalanceHelper.wait_for_persistence(master, "default")
+
+            # failover and verify loaded data
+            failover_helper = FailoverHelper(self.servers, self)
+            failover_nodes = failover_helper.failover(self.failover_factor)
+            self.log.info("5 seconds sleep after failover ...")
+            time.sleep(5)
+
+            rest=RestConnection(master)
+            nodes = rest.node_statuses()
+
+            self._query_all_views(data_set.views)
+        finally:
+            stopped_servers = []
+            for node in failover_nodes:
+                for server in self.servers:
+                    if node.ip == server.ip and str(node.port) == server.port:
+                        stopped_servers.append(server)
+                        break
+                for server in stopped_servers:
+                    shell = RemoteMachineShellConnection(server)
+                    shell.start_couchbase()
+                    shell.disconnect()
 
     ###
     # load the data defined for this dataset.
