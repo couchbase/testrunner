@@ -696,12 +696,12 @@ class StoreMemcachedBinary(Store):
                 self.save_stats()
                 print "[mcsoda %s] save_stats : %s" %(self.why, latency_cmd)
 
-    def save_stats(self):
+    def save_stats(self, cur_time=0):
         for key in self.cur:
             if key.startswith('latency-'):
                 histo = self.cur.get(key, None)
                 if histo:
-                    self.sc.latency_stats(key, histo)
+                    self.sc.latency_stats(key, histo, cur_time)
                     if key.endswith('-recent'):
                         self.cur[key] = {}
         self.sc.sample(self.cur)

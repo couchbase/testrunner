@@ -253,11 +253,12 @@ class StatsCollector(object):
 
         #if self._task["ops"] has more than 1000 elements try to aggregate them ?
 
-    def latency_stats(self, latency_cmd, latency_stat):
+    def latency_stats(self, latency_cmd, latency_stat, cur_time=0):
         if self._task["latency"].get(latency_cmd) is None:
             self._task["latency"][latency_cmd] = []
         temp_latency_stat = latency_stat.copy()
-        cur_time = time.time()
+        if not cur_time:
+            cur_time = time.time()
         temp_latency_stat['time'] = int(cur_time)
         temp_latency_stat['delta'] = cur_time - self._task['time']
         self._task["latency"][latency_cmd].append(temp_latency_stat)

@@ -142,7 +142,7 @@ class McsodaObserver(Observer, Thread):
     def _reconn(self):
         pass
 
-    def save_latency_stats(self, latency, server=True):
+    def save_latency_stats(self, latency, time=0, server=True):
         if not latency:
             return False    # TODO: simply skip 0
 
@@ -152,6 +152,6 @@ class McsodaObserver(Observer, Thread):
             self.store.add_timing_sample("observe-client", float(latency))
 
         if self.store.sc:
-            self.store.save_stats()
+            self.store.save_stats(time)
 
         return True
