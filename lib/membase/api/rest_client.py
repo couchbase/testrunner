@@ -1237,7 +1237,7 @@ class RestConnection(object):
             api = self.baseUrl + "couchBase/{0}%2F{1}".format(bucket, i)
             status, content = httplib2.Http().request(api, "GET")
             data = json.loads(content)
-            if data["compact_running"]:
+            if "compact_running" in data and data["compact_running"]:
                 return True, i
         return False, i
 

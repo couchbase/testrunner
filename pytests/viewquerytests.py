@@ -17,6 +17,7 @@ from memcached.helper.old_kvstore import ClientKeyValueStore
 from TestInput import TestInputSingleton
 from couchbase.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
+from autocompaction import AutoCompactionTests
 
 class StoppableThread(Thread):
     """Thread class with a stop() method. The thread itself has to check
@@ -472,6 +473,52 @@ class ViewQueryTests(unittest.TestCase):
                 self.server = self.servers[i]
                 self._query_all_views(data_set.views)
                 rebalance.result()
+
+    def test_employee_dataset_startkey_compaction_queries(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        percent_threshold = self.input.param('percent_compaction', 10)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set.add_startkey_endkey_queries()
+
+        self._query_test_init(data_set, False)
+
+        bucket_name = "default"
+        timeout = 180
+        item_size = 1024
+        from membase.helper.bucket_helper import BucketOperationHelper
+        node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
+        rest = RestConnection(self.servers[0])
+        info = rest.get_nodes_self()
+        available_ram = info.memoryQuota * (node_ram_ratio) / 2
+        items = (int(available_ram * 1000) / 2)/item_size
+        update_item_size = item_size * ((float(97 - percent_threshold)) / 100)
+
+        self.log.info("set compaction to {0} %".format(percent_threshold))
+        rest.set_auto_compaction("false", dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=percent_threshold)
+
+        self.log.info("start inserting keys for compaction")
+        AutoCompactionTests.insert_key(self.servers[0], bucket_name, items, item_size)
+        time.sleep(10)
+
+        self.log.info("start updating keys for compaction")
+        AutoCompactionTests.insert_key(self.servers[0], bucket_name, items, int(update_item_size))
+
+        end_time = time.time() + timeout
+        compaction_started = False
+        while time.time() < end_time:
+            status, _ = rest.check_compaction_status(bucket_name)
+            if status:
+                self._query_all_views(data_set.views)
+                compaction_started = True
+            elif compaction_started:
+                self.log.info("compaction is finished")
+                break
+            else:
+                self.log.info("auto compaction is not started yet.")
+        self.assertTrue(compaction_started, "auto compaction is not started in {0} sec. Queries were not run".format(timeout))
+        self.log.info("run queries after compaction")
+        self._query_all_views(data_set.views)
+
 
     ###
     # load the data defined for this dataset.

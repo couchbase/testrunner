@@ -26,7 +26,8 @@ class AutoCompactionTests(unittest.TestCase):
         self.autocompaction_value = TestInputSingleton.input.param("autocompaction_value", 0)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers,self)
 
-    def insert_key(self, serverInfo, bucket_name, count, size):
+    @staticmethod
+    def insert_key(serverInfo, bucket_name, count, size):
         client = MemcachedClientHelper.proxy_client(serverInfo, bucket_name)
         value = MemcachedClientHelper.create_value("*", size)
         for i in range(count*1000):
