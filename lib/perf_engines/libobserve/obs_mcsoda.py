@@ -7,7 +7,7 @@ from mc_bin_client import MemcachedClient
 from obs import Observer
 from obs_req import ObserveRequestKey, ObserveRequest
 from obs_res import ObserveResponse
-from obs_def import ObservePktFmt
+from obs_def import ObservePktFmt, ObserveStatus
 from obs_helper import VbucketHelper
 
 class McsodaObserver(Observer, Thread):
@@ -24,7 +24,6 @@ class McsodaObserver(Observer, Thread):
     #TODO: socket timeout, fine-grained exceptions
     #TODO: network helper
     #TODO: remove hard-coded freq
-    #TODO: CAS
 
     def __init__(self, ctl, cfg, store):
         self.ctl = ctl
@@ -36,6 +35,10 @@ class McsodaObserver(Observer, Thread):
     def run(self):
         while self.ctl['run_ok']:
             self.observe()
+            try:
+                self.observable_filter(ObserveStatus.OBS_UNKNOWN).next()
+            except StopIteration:
+                self.clear_observables()
             print "<%s> sleep for %d seconds" % (self.__class__.__name__, self.freq)
             sleep(self.freq)
         print "<%s> stopped running" % (self.__class__.__name__)
@@ -67,10 +70,11 @@ class McsodaObserver(Observer, Thread):
     def _send(self):
         self.obs_keys.clear()   # {server: [keys]}
 
-        with self._keys.mutex:
-            for key in self._keys.queue:
-                vbucketid = VbucketHelper.get_vbucket_id(key, self.cfg.get("vbuckets", 0))
-                obs_key = ObserveRequestKey(key, vbucketid)
+        observables = self.observable_filter(ObserveStatus.OBS_UNKNOWN)
+        with self._observables.mutex:
+            for obs in observables:
+                vbucketid = VbucketHelper.get_vbucket_id(obs.key, self.cfg.get("vbuckets", 0))
+                obs_key = ObserveRequestKey(obs.key, vbucketid)
                 server = self._get_server_str(vbucketid)
                 vals = self.obs_keys.get(server, [])
                 vals.append(obs_key)
