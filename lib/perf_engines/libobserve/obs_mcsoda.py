@@ -38,6 +38,7 @@ class McsodaObserver(Observer, Thread):
             try:
                 self.observable_filter(ObserveStatus.OBS_UNKNOWN).next()
             except StopIteration:
+                self.measure_client_latency()
                 self.clear_observables()
             print "<%s> sleep for %d seconds" % (self.__class__.__name__, self.freq)
             sleep(self.freq)
@@ -141,6 +142,12 @@ class McsodaObserver(Observer, Thread):
 
     def _reconn(self):
         pass
+
+    def measure_client_latency(self):
+        observables = self.observable_filter(ObserveStatus.OBS_SUCCESS)
+        for obs in observables:
+            self.save_latency_stats(obs.end_time-obs.start_time,
+                                    obs.start_time, False)
 
     def save_latency_stats(self, latency, time=0, server=True):
         if not latency:
