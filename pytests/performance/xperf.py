@@ -1,6 +1,8 @@
 import functools
 import time
 import copy
+import httplib2
+import socket
 from threading import Thread
 from multiprocessing import Process
 
@@ -143,6 +145,24 @@ class XPerfTest(EVPerfClient):
         # Stop general stats collector
         ops = {'start-time': start_time, 'end-time': end_time}
         self.end_stats(sc, ops, 'load')
+
+    @staticmethod
+    def get_ec2_region():
+        """Try to identify public hostname and return corresponding EC2 region.
+
+        Reference: http://bit.ly/instancedata
+        """
+
+        try:
+            uri = 'http://169.254.169.254/latest/meta-data/public-ipv4'
+            http = httplib2.Http(timeout=5)
+            host = http.request(uri)
+            if 'west' in host:
+                return 'west'
+            else:
+                return 'east'
+        except socket.timeout:
+            return
 
     @benchmark_manager
     def test_eperf_mixed(self, save_snapshot=False):
