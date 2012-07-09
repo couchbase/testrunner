@@ -252,7 +252,7 @@ class BuildQuery(object):
 
 
     def _product_toy(self, build_id):
-        r = re.search("[^_]+_toy-([^-]*)-x86",build_id)
+        r = re.search("[^_]+_toy-([\w-]*)-x86", build_id)
         if r:
             return r.group(1)
         return ''
