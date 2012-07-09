@@ -7,7 +7,7 @@ path.append("lib")
 
 from memcacheConstants import REQ_PKT_FMT
 
-OBS_OPCODE = 0x96
+OBS_OPCODE = 0x92
 
 class ObserveKeyState:
     OBS_NOT_FOUND = 0x80
