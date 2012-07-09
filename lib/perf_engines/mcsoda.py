@@ -39,6 +39,7 @@ from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
 from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "ARPA"
 
 from libobserve.obs_mcsoda import McsodaObserver
+from libobserve.obs import Observable
 
 LARGE_PRIME = 9576890767
 
@@ -158,7 +159,6 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
         observer = McsodaObserver(ctl, cfg, store)
         observer.start()
 
-    obs_key = None
     while ctl.get('run_ok', True):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
@@ -175,12 +175,15 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             log.info("[mcsoda: %s] num_ops = %s. duration = %s" %(why, num_ops, heartbeat_duration))
 
         command = next_cmd(cfg, cur, store)
-        if command[0] == 'set' and cfg.get('observe', 0):
-            obs_key = command[2]
         flushed = store.command(command)
         if flushed and cfg.get('observe', 0):
-            observer.load_keys(obs_key)
-            obs_key = None
+            if store.key_cas and not observer.num_observables():
+                observables = []
+                for key_num, cas in store.key_cas.iteritems():
+                    obs = Observable(prepare_key(key_num, cfg.get('prefix', '')),
+                                     cas)
+                    observables.append(obs)
+                observer.load_observables(observables)
 
         i += 1
 
@@ -529,6 +532,7 @@ class StoreMemcachedBinary(Store):
                       (CMD_PREPEND, False) ]
         self.xfer_sent = 0
         self.xfer_recv = 0
+        self.key_cas = {} # {key_num: cas} pair
 
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
         self.conn = mc_bin_client.MemcachedClient(host, port)
@@ -732,7 +736,7 @@ class StoreMemcachedBinary(Store):
                 curr_extra = ''
 
         hdr, vbucketId = self.header(curr_cmd, key_str, data,
-                                     extra=curr_extra, opaque=self.cmds)
+                                     extra=curr_extra, opaque=key_num)
         m = self.inflight_append_buffer(grp, vbucketId, curr_cmd, self.cmds)
         m.append(hdr)
         if curr_extra:
@@ -754,6 +758,8 @@ class StoreMemcachedBinary(Store):
             raise Exception("Unexpected recvMsg magic: " + str(magic))
         val, buf = self.readbytes(sock, datalen, buf)
         self.buf = buf
+        if not self.key_cas and cmd == CMD_SET:
+            self.key_cas[opaque] = cas  # opaque is the key_num
         return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
 
 
@@ -902,6 +908,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
             struct.unpack(RES_PKT_FMT, pkt)
         if magic != RES_MAGIC_BYTE:
             raise Exception("Unexpected recvMsg magic: " + str(magic))
+        if not self.key_cas and cmd == CMD_SET:
+            self.key_cas[opaque] = cas  # opaque is the key_num
         val, buf = self.readbytes(sock, datalen, buf)
         return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
 
