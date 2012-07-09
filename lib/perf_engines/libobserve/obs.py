@@ -102,6 +102,9 @@ class Observer:
 
         return True
 
+    def num_observables(self):
+        return self._observables.size()
+
     def reskey_generator(self, responses):
         for res in responses:
             for res_key in res.keys:
