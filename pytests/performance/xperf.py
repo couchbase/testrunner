@@ -78,21 +78,31 @@ class XPerfTest(EVPerfClient):
                     self.start_replication(master, slave, bidir=bidir)
 
                 # Execute performance test
-                # 1st test executor:
-                self_copy = copy.copy(self)
-                self_copy.input.servers = self_copy.input.clusters[0]
-                self_copy.input.test_params['bucket'] = self.get_buckets()[0]
-                primary = Process(target=test, args=(self_copy, ))
-                primary.start()
+                region = XPerfTest.get_ec2_region()
+                if region == 'east':
+                    self.input.servers = self_copy.input.clusters[0]
+                    self.input.test_params['bucket'] = self.get_buckets()[0]
+                    return test(self, *args, **kargs)
+                elif region == 'west':
+                    self.input.servers = self_copy.input.clusters[1]
+                    self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
+                    return test(self, *args, **kargs)
+                else:
+                    # 1st test executor:
+                    self_copy = copy.copy(self)
+                    self_copy.input.servers = self_copy.input.clusters[0]
+                    self_copy.input.test_params['bucket'] = self.get_buckets()[0]
+                    primary = Process(target=test, args=(self_copy, ))
+                    primary.start()
 
-                # 2nd test executor:
-                self.input.servers = self_copy.input.clusters[1]
-                self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
-                self.input.test_params['stats'] = 0
-                secondary = test(self, *args, **kargs)
+                    # 2nd test executor:
+                    self.input.servers = self_copy.input.clusters[1]
+                    self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
+                    self.input.test_params['stats'] = 0
+                    secondary = test(self, *args, **kargs)
 
-                primary.join()
-                return secondary
+                    primary.join()
+                    return secondary
             return wrapper
         return decorator
 
