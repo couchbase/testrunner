@@ -458,9 +458,6 @@ class EPerfMaster(perf.PerfBase):
             if self.parami('wait_for_indexer', 1):
                 ClusterOperationHelper.wait_for_completion(self.rest, 'indexer')
 
-            # Enable view compaction
-            self.set_autocompaction(disable_view_compaction=False)
-
             # Wait until there are no active view compaction tasks
             if self.parami('wait_for_compaction', 1):
                 ClusterOperationHelper.wait_for_completion(self.rest, 'view_compaction')
