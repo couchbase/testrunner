@@ -128,6 +128,17 @@ def histo_percentile(histo, percentiles):
 
 MIN_VALUE_SIZE = [10]
 
+def obs_cb(store):
+    """
+    callback for observe thread.
+    """
+    if not store:
+        print "[mcsoda] obs_cb is broken"
+        return
+
+    print "[mcsoda] obs_cb: clear key_cas %s" % store.key_cas
+    store.key_cas.clear()
+
 def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     i = 0
     t_last_flush = time.time()
@@ -156,7 +167,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     heartbeat_last = t_last
 
     if cfg.get('observe', 0):
-        observer = McsodaObserver(ctl, cfg, store)
+        observer = McsodaObserver(ctl, cfg, store, obs_cb)
         observer.start()
 
     while ctl.get('run_ok', True):

@@ -19,16 +19,18 @@ class McsodaObserver(Observer, Thread):
     conns = {}
     freq = 3
     obs_keys = {}   # {server: [keys]}
+    callback = None
 
     #TODO: topology change
     #TODO: socket timeout, fine-grained exceptions
     #TODO: network helper
     #TODO: remove hard-coded freq
 
-    def __init__(self, ctl, cfg, store):
+    def __init__(self, ctl, cfg, store, callback):
         self.ctl = ctl
         self.cfg = cfg
         self.store = store
+        self.callback = callback
         self._build_conns()
         super(McsodaObserver, self).__init__()
 
@@ -40,6 +42,8 @@ class McsodaObserver(Observer, Thread):
             except StopIteration:
                 self.measure_client_latency()
                 self.clear_observables()
+                if self.callback:
+                    self.callback(self.store)
             print "<%s> sleep for %d seconds" % (self.__class__.__name__, self.freq)
             sleep(self.freq)
         print "<%s> stopped running" % (self.__class__.__name__)
