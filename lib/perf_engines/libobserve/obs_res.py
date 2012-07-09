@@ -5,11 +5,6 @@ from obs_def import ObserveKeyState, ObservePktFmt, OBS_OPCODE
 from memcacheConstants import RES_MAGIC_BYTE
 
 class ObserveResponseKey:
-    vbucket = 0x0000
-    key_len = 0x0000
-    key = ""
-    key_state = ObserveKeyState.OBS_IMPOSSIBLE
-    cas = 0x0000000000000000
 
     def __init__(self, key, vbucket=0x0000,
                  key_state=ObserveKeyState.OBS_IMPOSSIBLE,
@@ -33,17 +28,19 @@ class ObserveResponseKey:
         return 13 + self.key_len
 
 class ObserveResponse:
-    magic = RES_MAGIC_BYTE
-    opcode = OBS_OPCODE
-    key_len = 0x0000
-    extra_len = 0x00
-    data_type = 0x00
-    status = 0x0000
-    body_len = 0x00000000
-    opaque = 0x00000000
-    persist_stat = 0x00000000
-    repl_stat = 0x00000000
-    keys = []       # [:ObserveResponseKey]
+
+    def __init__(self):
+        self.magic = RES_MAGIC_BYTE
+        self.opcode = OBS_OPCODE
+        self.key_len = 0x0000
+        self.extra_len = 0x00
+        self.data_type = 0x00
+        self.status = 0x0000
+        self.body_len = 0x00000000
+        self.opaque = 0x00000000
+        self.persist_stat = 0x00000000
+        self.repl_stat = 0x00000000
+        self.keys = []       # [:ObserveResponseKey]
 
     def __repr__(self):
         repr = "<%s> magic: %x, opcode: %x, key_len: %d, extra_len: %x, data_type: %x,"\
