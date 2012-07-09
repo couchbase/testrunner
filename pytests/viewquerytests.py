@@ -385,6 +385,17 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_all_query_sets()
         self._query_test_init(data_set)
 
+    def test_employee_dataset_skip_queries(self):
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
+        docs_per_day = self.input.param('docs-per-day', 200)
+        skip = self.input.param('skip', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
+
+        data_set.add_skip_queries(skip)
+        self._query_test_init(data_set)
+
     def test_all_datasets_all_queries(self):
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -967,6 +978,19 @@ class EmployeeDataSet:
                 for query in view.queries:
                     query.params["limit"] = limit
 
+    def add_skip_queries(self, skip, limit=None, views=None):
+        if views is None:
+            views = self.views
+
+        for view in views:
+            limit = self.limit or 1
+            limit = min(limit, view.index_size)
+
+            #empty results will be returned
+            if view.reduce_fn and skip > limit:
+                views.remove(view)
+
+            view.queries += [QueryHelper({"skip" : skip, "limit" : str(limit)}, limit)]
 
     def add_key_queries(self, views=None, limit=None):
         if views is None:
@@ -1502,7 +1526,8 @@ class EmployeeDataSet:
                 pass
             if inclusive_end == False:
                 query.expected_keys = query.expected_keys[:-1]
-
+        if 'skip' in q_params:
+            query.expected_keys = query.expected_keys[int(q_params['skip']) + 1:]
 
 
 class SimpleDataSet:
