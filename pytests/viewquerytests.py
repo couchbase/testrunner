@@ -567,6 +567,33 @@ class ViewQueryTests(unittest.TestCase):
                     shell.start_couchbase()
                     shell.disconnect()
 
+    def test_employee_dataset_query_one_nodes_different_threads(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        num_threads = self.input.param('num_threads', 2)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set.add_startkey_endkey_queries()
+        self._query_test_init(data_set, False)
+
+        query_nodes_threads = []
+        for i in xrange(num_threads):
+            t = StoppableThread(target=self._query_all_views,
+                   name="query-node-1",
+                   args=(data_set.views,))
+            query_nodes_threads.append(t)
+            t.start()
+
+        while True:
+            if not query_nodes_threads:
+                break
+            self.thread_stopped.wait(60)
+            if self.thread_crashed.is_set():
+                for t in query_nodes_threads:
+                    t.stop()
+                break
+            else:
+                query_nodes_threads = [d for d in query_nodes_threads if d.is_alive()]
+                self.thread_stopped.clear()
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
