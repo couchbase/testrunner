@@ -1210,6 +1210,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
             log.info("    mcsoda is running with %s threads" % len(threads))
         threads = [t for t in threads if t.isAlive()]
 
+    ctl['run_ok'] = False
     log.info("[mcsoda: %s] stopped running." %why)
     return cur, t_start, t_end
 
