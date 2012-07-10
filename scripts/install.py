@@ -344,6 +344,12 @@ class CouchbaseServerInstaller(Installer):
                                             option='consistency_check_ratio',
                                             value='0.0')
 
+                # memcached env variable
+                mem_req_tap_env = params.get('MEMCACHED_REQS_TAP_EVENT', 0)
+                if mem_req_tap_env:
+                    remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
+                                                           mem_req_tap_env)
+
                 cluster_initialized = True
                 break
             except ServerUnavailableException:
