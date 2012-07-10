@@ -29,7 +29,8 @@ class XDCRBaseTest(unittest.TestCase):
             XDCRBaseTest.create_buckets(servers, testcase, howmany=1)
 
         #temp fix to rebalance-in the nodes for each cluster
-        XDCRBaseTest.cluster_rebalance_in(testcase, servers, monitor=True)
+        if testcase._initialRebalance:
+            XDCRBaseTest.cluster_rebalance_in(testcase, servers, monitor=True)
 
     @staticmethod
     def common_tearDown(servers, testcase):
@@ -158,6 +159,7 @@ class XDCRTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._clusters = self._input.clusters
         self._buckets = ["bucket-0"]
+        self._initialRebalance = TestInputSingleton.input.param("initRebalance", True)
         self._num_items = TestInputSingleton.input.param("num_items", 100000)
         self._failover_factor = TestInputSingleton.input.param("failover-factor", 1)
         self._fail_orchestrator_a = TestInputSingleton.input.param("fail-orchestrator-a", False)
@@ -640,11 +642,15 @@ class XDCRTests(unittest.TestCase):
 
 
     # --------------------------------------------------------------------------#
-    # ----                 TEST CASES WITH REBALANCE                        --- #
+    # ----          TEST CASES WITH REBALANCE (SOURCE)                      --- #
     # --------------------------------------------------------------------------#
-    def test_rebalance_in_continuous_bidirectional_sets_deletes(self):
-        # Setup bi-directional continuous replication
+    def test_rebalance_in_source_sets(self):
+        # This test starts with a 1-1 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger rebalace-in on source
+        # cluster a, to create a 2-1 replication. After all loading finish,
+        # verify data and rev on both clusters.
         replication_type = "continuous"
+        self.log.info("No initial rebalance.")
 
         cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
@@ -654,22 +660,16 @@ class XDCRTests(unittest.TestCase):
         master_b = self._input.clusters.get(1)[0]
         rest_conn_b = RestConnection(master_b)
 
-        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
-            master_b.rest_username,
-            master_b.rest_password, cluster_ref_b)
-        rest_conn_b.add_remote_cluster(master_a.ip, master_a.port,
-            master_a.rest_username,
-            master_a.rest_password, cluster_ref_a)
-
         self.log.info("START XDC replication...")
-        (rep_database_a, rep_id_a) = rest_conn_a.start_replication(
-            replication_type, self._buckets[0],
-            cluster_ref_b)
-        (rep_database_b, rep_id_b) = rest_conn_b.start_replication(
-            replication_type, self._buckets[0],
-            cluster_ref_a)
-        self._state.append((rest_conn_a, cluster_ref_b, rep_database_a, rep_id_a))
-        self._state.append((rest_conn_b, cluster_ref_a, rep_database_b, rep_id_b))
+
+        # Start replication
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
 
         # Start load
         self.log.info("START loading data...")
@@ -681,40 +681,105 @@ class XDCRTests(unittest.TestCase):
             self._buckets[0],
             task_def, kvstore)
         load_thread.start()
-        load_thread.join()
 
-        # Do some deletes
-        self.log.info("LOADING data is done, now delete some of them...")
-        self._params["ops"] = "delete"
-        self._params["count"] = self._num_items/5
+        # Trigger rebalance on both source and destination clusters
+        self.log.info("DURING replication, start rebalancing...")
+        servers_a = self._input.clusters.get(0)
+        self.log.info("REBALANCING IN Cluster A ...")
+        RebalanceHelper.rebalance_in(servers_a, len(servers_a)-1, monitor=False)
+        self.assertTrue(rest_conn_a.monitorRebalance(),
+            msg="rebalance operation on cluster {0}".format(servers_a))
+
+        self.log.info("ALL rebalancing done...")
+
+        # Wait for loading to finish
+        load_thread.join()
+        self.log.info("All deleting threads finished")
+
+        # Verify replication
+        self.log.info("START data verification at cluster A...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_a,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START data verification at cluster B...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START revision verification on both clusters...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+            rest_conn_b,
+            self._buckets[0],
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated revisions failed")
+
+    def test_rebalance_out_source_sets(self):
+        # This test starts with a 2-2 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger rebalace-out on source
+        # cluster a by evicting node 1 from cluster a, and create a 1-2 replication.
+        # After all loading finish, verify data and rev on both clusters.
+        replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
+
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        self.log.info("START XDC replication...")
+
+        # Start replication
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        # Start load
+        self.log.info("START loading data...")
+        load_thread_list = []
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
         load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
             self._buckets[0],
             task_def, kvstore)
-        load_thread_list.append(load_thread)
+        load_thread.start()
 
-        # Start all loads concurrently
-        for lt in load_thread_list:
-            lt.start()
+        # sleep a while to allow more data loaded
+        time.sleep(5)
 
-        # Trigger rebalance on both source and destination clusters
-        self.log.info("DURING ongoing deletion, start rebalancing...")
-        servers_a = self._input.clusters.get(0)
-        servers_b = self._input.clusters.get(1)
-        self.log.info("REBALANCING IN Cluster A ...")
-        RebalanceHelper.rebalance_in(servers_a, len(servers_a)-1, monitor=False)
-        self.log.info("REBALANCING IN Cluster B ...")
-        RebalanceHelper.rebalance_in(servers_b, len(servers_b)-1, monitor=False)
-
-        self.assertTrue(rest_conn_a.monitorRebalance(),
-            msg="rebalance operation on cluster {0}".format(servers_a))
-        self.assertTrue(rest_conn_b.monitorRebalance(),
-            msg="rebalance operation on cluster {0}".format(servers_b))
+        # Trigger rebalance
+        self.log.info("DURING replication, start rebalancing...")
+        self.log.info("REBALANCING OUT Cluster A ...")
+        nodes_a = rest_conn_a.node_statuses()
+        while len(nodes_a) > 1:
+            toBeEjectedNode = RebalanceHelper.pick_node(master_a)
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master_a)))
+            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+            rest_conn_a.rebalance(otpNodes=[node.id for node in rest_conn_a.node_statuses()], \
+                ejectedNodes=[toBeEjectedNode.id])
+            self.assertTrue(rest_conn_a.monitorRebalance(),
+                msg="rebalance operation failed after removing node {0}".format(toBeEjectedNode.id))
+            nodes_a = rest_conn_a.node_statuses()
 
         self.log.info("ALL rebalancing done...")
-        # Wait for loading threads to finish
-        for lt in load_thread_list:
-            lt.join()
+
+        # Wait for loading to finish
+        load_thread.join()
         self.log.info("All deleting threads finished")
 
         # Verify replication
@@ -743,9 +808,20 @@ class XDCRTests(unittest.TestCase):
             "Verification of replicated revisions failed")
 
 
-    def test_incremental_rebalance_in_continuous_bidirectional_sets_deletes(self):
-        # Setup bi-directional continuous replication
+
+    # --------------------------------------------------------------------------#
+    # ----           TEST CASES WITH FAILOVER (SOURCE)                      --- #
+    # --------------------------------------------------------------------------#
+    def test_failover_source_sets(self):
         replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
+
+        # This test starts with a 2-2 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger failover of one node
+        # on source cluster , resulting a  1-2 replication.
+        # After all loading finish, verify data and rev on both clusters.
+        replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
 
         cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
@@ -755,21 +831,16 @@ class XDCRTests(unittest.TestCase):
         master_b = self._input.clusters.get(1)[0]
         rest_conn_b = RestConnection(master_b)
 
-        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
-            master_b.rest_username,
-            master_b.rest_password, cluster_ref_b)
-        rest_conn_b.add_remote_cluster(master_a.ip, master_a.port,
-            master_a.rest_username,
-            master_a.rest_password, cluster_ref_a)
         self.log.info("START XDC replication...")
-        (rep_database_a, rep_id_a) = rest_conn_a.start_replication(
-            replication_type, self._buckets[0],
-            cluster_ref_b)
-        (rep_database_b, rep_id_b) = rest_conn_b.start_replication(
-            replication_type, self._buckets[0],
-            cluster_ref_a)
-        self._state.append((rest_conn_a, cluster_ref_b, rep_database_a, rep_id_a))
-        self._state.append((rest_conn_b, cluster_ref_a, rep_database_b, rep_id_b))
+
+        # Start replication
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
 
         # Start load
         self.log.info("START loading data...")
@@ -781,182 +852,27 @@ class XDCRTests(unittest.TestCase):
             self._buckets[0],
             task_def, kvstore)
         load_thread.start()
-        load_thread.join()
+        # sleep a while to allow more data loaded
+        time.sleep(5)
 
-        # Do some deletes
-        self.log.info("LOADING data is done, now delete some of them...")
-        self._params["ops"] = "delete"
-        self._params["count"] = self._num_items/5
-        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
-            self._buckets[0],
-            task_def, kvstore)
-        load_thread_list.append(load_thread)
+        self.log.info("current nodes on source cluster: {0}".format(RebalanceHelper.getOtpNodeIds(master_a)))
 
-        # Start all loads concurrently
-        for lt in load_thread_list:
-            lt.start()
-
-        # Trigger rebalance on both source and destination clusters
-        self.log.info("DURING ongoing deletion, start rebalancing...")
-        servers_a = self._input.clusters.get(0)
-        servers_b = self._input.clusters.get(1)
+        # Trigger failover, we fail over one node each time until there is only one node remaining
+        self.log.info("DURING replication, start failover...")
+        self.log.info("FAILOVER nodes on Cluster A ...")
         nodes_a = rest_conn_a.node_statuses()
-        nodes_b = rest_conn_b.node_statuses()
-        rebalanced_servers_a = [master_a]
-        rebalanced_servers_b = [master_b]
-        which_servers_a = []
-        which_servers_b = []
-
-        # Incremental rebalance in one node in cluster_a, then cluster_b
-        self.log.info("rebalance-in cluster A...")
-        while len(nodes_a) < len(servers_a):
-            self.log.info("current nodes : {0}".format([node.id for node in rest_conn_a.node_statuses()]))
-            rebalanced_in, which_servers_a = RebalanceHelper.rebalance_in(servers_a, 1, monitor=False)
-            self.assertTrue(rebalanced_in, msg="unable to add and rebalance more nodes")
-            self.assertTrue(rest_conn_a.monitorRebalance(),
-                msg="rebalance operation on cluster {0}".format(nodes_a))
-            rebalanced_servers_a.extend(which_servers_a)
-            nodes_a = rest_conn_a.node_statuses()
-
-        self.log.info("rebalance-in cluster B...")
-        while len(nodes_b) < len(servers_b):
-            self.log.info("current nodes : {0}".format([node.id for node in rest_conn_b.node_statuses()]))
-            rebalanced_in, which_servers_b = RebalanceHelper.rebalance_in(servers_b, 1, monitor=False)
-            self.assertTrue(rebalanced_in, msg="unable to add and rebalance more nodes")
-            self.assertTrue(rest_conn_b.monitorRebalance(),
-                msg="rebalance operation on cluster {0}".format(nodes_b))
-            rebalanced_servers_b.extend(which_servers_b)
-            nodes_b = rest_conn_b.node_statuses()
-
-        # Wait for loading threads to finish
-        for lt in load_thread_list:
-            lt.join()
-        self.log.info("All loading threads finished")
-
-        # Verify replication
-        self.log.info("START data verification at cluster A...")
-        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
-            rest_conn_b,
-            self._buckets[0],
-            self._poll_sleep,
-            self._poll_timeout),
-            "Verification of replicated revisions failed")
-
-        self.log.info("START data verification at cluster B...")
-        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
-            self._buckets[0],
-            kvstore,
-            self._poll_sleep,
-            self._poll_timeout),
-            "Verification of replicated data failed")
-
-    def test_incremental_rebalance_out_continuous_bidirectional_sets_deletes(self):
-        # Setup bi-directional continuous replication
-        replication_type = "continuous"
-
-        cluster_ref_a = "cluster_ref_a"
-        master_a = self._input.clusters.get(0)[0]
-        rest_conn_a = RestConnection(master_a)
-
-        cluster_ref_b = "cluster_ref_b"
-        master_b = self._input.clusters.get(1)[0]
-        rest_conn_b = RestConnection(master_b)
-
-        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
-            master_b.rest_username,
-            master_b.rest_password, cluster_ref_b)
-        rest_conn_b.add_remote_cluster(master_a.ip, master_a.port,
-            master_a.rest_username,
-            master_a.rest_password, cluster_ref_a)
-        self.log.info("START XDC replication...")
-        (rep_database_a, rep_id_a) = rest_conn_a.start_replication(
-            replication_type, self._buckets[0],
-            cluster_ref_b)
-        (rep_database_b, rep_id_b) = rest_conn_b.start_replication(
-            replication_type, self._buckets[0],
-            cluster_ref_a)
-        self._state.append((rest_conn_a, cluster_ref_b, rep_database_a, rep_id_a))
-        self._state.append((rest_conn_b, cluster_ref_a, rep_database_b, rep_id_b))
-
-        # Start load
-        self.log.info("START loading data...")
-        load_thread_list = []
-        kvstore = ClientKeyValueStore()
-        self._params["ops"] = "set"
-        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
-            self._buckets[0],
-            task_def, kvstore)
-        load_thread.start()
-        load_thread.join()
-
-        # Do some deletes
-        self.log.info("LOADING data is done, now delete some of them...")
-        self._params["ops"] = "delete"
-        self._params["count"] = self._num_items/5
-        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
-            self._buckets[0],
-            task_def, kvstore)
-        load_thread_list.append(load_thread)
-        # Start all loads concurrently
-        for lt in load_thread_list:
-            lt.start()
-
-        # Trigger rebalance on both source and destination clusters
-        self.log.info("DURING ongoing deletion, start rebalancing...")
-        servers_a = self._input.clusters.get(0)
-        servers_b = self._input.clusters.get(1)
-        nodes_a = rest_conn_a.node_statuses()
-        nodes_b = rest_conn_b.node_statuses()
-        rebalanced_servers_a = [master_a]
-        rebalanced_servers_b = [master_b]
-
-        # Rebalance all the nodes together
-        RebalanceHelper.rebalance_in(servers_a, len(servers_a)-1)
-        RebalanceHelper.rebalance_in(servers_b, len(servers_b)-1)
-        rebalanced_servers_a.extend(servers_a)
-        rebalanced_servers_b.extend(servers_b)
-        nodes_a = rest_conn_a.node_statuses()
-        nodes_b = rest_conn_b.node_statuses()
-
-        # Incremental rebalance out one node in cluster_a, then cluster_b
-        self.log.info("START rebalance-out cluster A...")
         while len(nodes_a) > 1:
-            toBeEjectedNode = RebalanceHelper.pick_node(master_a)
-            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master_a)))
-            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+            toBeFailedOverNode = RebalanceHelper.pick_node(master_a)
+            self.log.info("failover node {0}".format(toBeFailedOverNode.id))
+            rest_conn_a.fail_over(toBeFailedOverNode)
+            self.log.info("rebalance after failover")
             rest_conn_a.rebalance(otpNodes=[node.id for node in rest_conn_a.node_statuses()], \
-                ejectedNodes=[toBeEjectedNode.id])
+                ejectedNodes=[toBeFailedOverNode.id])
             self.assertTrue(rest_conn_a.monitorRebalance(),
-                msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
-            # rebuild cluster a
-            for node in nodes_a:
-                for rebalanced_server in rebalanced_servers_a:
-                    if rebalanced_server.ip.find(node.ip) != -1:
-                        rebalanced_servers_a.remove(rebalanced_server)
-                        break
-
+                msg="rebalance operation failed after removing node {0}".format(toBeFailedOverNode.id))
             nodes_a = rest_conn_a.node_statuses()
 
-        self.log.info("START rebalance-out cluster B...")
-        while len(nodes_b) > 1:
-            toBeEjectedNode = RebalanceHelper.pick_node(master_b)
-            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master_b)))
-            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
-            rest_conn_b.rebalance(otpNodes=[node.id for node in rest_conn_b.node_statuses()],\
-                ejectedNodes=[toBeEjectedNode.id])
-            self.assertTrue(rest_conn_b.monitorRebalance(),
-                msg="rebalance operation failed after adding node {0}".format(toBeEjectedNode.id))
-            # rebuild cluster b
-            for node in nodes_b:
-                for rebalanced_server in rebalanced_servers_b:
-                    if rebalanced_server.ip.find(node.ip) != -1:
-                        rebalanced_servers_b.remove(rebalanced_server)
-                        break
-            nodes_b = rest_conn_a.node_statuses()
-
+        self.log.info("ALL failed over done...")
 
         # Wait for loading threads to finish
         for lt in load_thread_list:
@@ -980,7 +896,7 @@ class XDCRTests(unittest.TestCase):
             self._poll_timeout),
             "Verification of replicated data failed")
 
-        self.log.info("START rev verification on both clusters...")
+        self.log.info("START revision verification on both clusters...")
         self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
             rest_conn_b,
             self._buckets[0],
@@ -989,10 +905,20 @@ class XDCRTests(unittest.TestCase):
             "Verification of replicated revisions failed")
 
 
+#-------------------EVERYTHING BELOW THIS LINE DOES NOT WORK ----------------#
+
+
     # --------------------------------------------------------------------------#
-    # ----                 TEST CASES WITH FAILOVER                         --- #
+    # ----           TEST CASES WITH REBALANCE (DESTINATION)                --- #
     # --------------------------------------------------------------------------#
-    def test_failover_continuous_bidirectional_sets_deletes(self):
+    ### JUNYI: failed. seem it is testrunner issue
+    def test_rebalance_in_dest_sets(self):
+        # This test starts with a 1-1 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger rebalace-in on dest
+        # cluster b, to create a 1-2 replication. After all loading finish,
+        # verify data and rev on both clusters.
+        replication_type = "continuous"
+
         cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
@@ -1001,123 +927,65 @@ class XDCRTests(unittest.TestCase):
         master_b = self._input.clusters.get(1)[0]
         rest_conn_b = RestConnection(master_b)
 
-        # Rebalance all the nodes together
-        servers_a = self._input.clusters.get(0)
-        servers_b = self._input.clusters.get(1)
-        rebalanced_servers_a = []
-        rebalanced_servers_b = []
+        self.log.info("START XDC replication...")
 
-        RebalanceHelper.rebalance_in(servers_a, len(servers_a)-1)
-        RebalanceHelper.rebalance_in(servers_b, len(servers_b)-1)
-        rebalanced_servers_a.extend(servers_a)
-        rebalanced_servers_b.extend(servers_b)
-
-        # Setup bi-directional continuous replication
-        replication_type = "continuous"
-
+        # Start replication
         rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
-            master_b.rest_username,
-            master_b.rest_password, cluster_ref_b)
-        rest_conn_b.add_remote_cluster(master_a.ip, master_a.port,
-            master_a.rest_username,
-            master_a.rest_password, cluster_ref_a)
-        (rep_database_a, rep_id_a) = rest_conn_a.start_replication(
-            replication_type, self._buckets[0],
-            cluster_ref_b)
-        (rep_database_b, rep_id_b) = rest_conn_b.start_replication(
-            replication_type, self._buckets[0],
-            cluster_ref_a)
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
 
-        load_thread_list = []
         # Start load
+        self.log.info("START loading data...")
+        load_thread_list = []
         kvstore = ClientKeyValueStore()
-
         self._params["ops"] = "set"
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
         load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
             self._buckets[0],
             task_def, kvstore)
         load_thread.start()
-        load_thread.join()
-        RebalanceHelper.wait_for_persistence(master_a, self._buckets[0])
 
-        # Do some deletes
-        self._params["ops"] = "delete"
-        self._params["count"] = self._num_items/5
-        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
-        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
-            self._buckets[0],
-            task_def, kvstore)
-        load_thread_list.append(load_thread)
-
-        # Start all loads concurrently
-        for lt in load_thread_list:
-            lt.start()
-
-        # Do the failover of nodes on both clusters
-        self.log.info("Failing over nodes")
-        self.log.info("current nodes on cluster 1: {0}".format(RebalanceHelper.getOtpNodeIds(master_a)))
-        self.log.info("current nodes on cluster 2: {0}".format(RebalanceHelper.getOtpNodeIds(master_b)))
-
-        # Find nodes to be failed_over
-        toBeEjectedNodes = RebalanceHelper.pick_nodes(master_a, howmany=self._failover_factor)
-        optNodesIds_a = [node.id for node in toBeEjectedNodes]
-        if self._fail_orchestrator_a:
-            status, content = ClusterOperationHelper.find_orchestrator(master_a)
-            self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
-            format(status, content))
-            optNodesIds_a[0] = content
-            master_a = self._input.clusters.get(0)[-1]
-            rest_conn_a = RestConnection(master_a)
-
-        #Failover selected nodes
-        for node in optNodesIds_a:
-            self.log.info("failover node {0} and rebalance afterwards".format(node))
-            rest_conn_a.fail_over(node)
-
-        toBeEjectedNodes = RebalanceHelper.pick_nodes(master_b, howmany=self._failover_factor)
-        optNodesIds_b = [node.id for node in toBeEjectedNodes]
-        if self._fail_orchestrator_b:
-            status, content = ClusterOperationHelper.find_orchestrator(master_b)
-            self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
-            format(status, content))
-            optNodesIds_b[0] = content
-            master_b = self._input.clusters.get(1)[-1]
-            rest_conn_b = RestConnection(master_b)
-
-        self._state.append((rest_conn_a, cluster_ref_b, rep_database_a, rep_id_a))
-        self._state.append((rest_conn_b, cluster_ref_a, rep_database_b, rep_id_b))
-
-        #Failover selected nodes
-        for node in optNodesIds_b:
-            self.log.info("failover node {0} and rebalance afterwards".format(node))
-            rest_conn_b.fail_over(node)
-
-        rest_conn_a.rebalance(otpNodes=[node.id for node in rest_conn_a.node_statuses()],\
-            ejectedNodes=optNodesIds_a)
-        rest_conn_b.rebalance(otpNodes=[node.id for node in rest_conn_b.node_statuses()],\
-            ejectedNodes=optNodesIds_b)
-
-        self.assertTrue(rest_conn_a.monitorRebalance(),
-            msg="rebalance operation failed after adding node on cluster 1")
+        # Trigger rebalance
+        self.log.info("DURING replication, start rebalancing...")
+        servers_a = self._input.clusters.get(0)
+        self.log.info("REBALANCING IN Cluster B ...")
+        RebalanceHelper.rebalance_in(servers_b, len(servers_b)-1, monitor=False)
         self.assertTrue(rest_conn_b.monitorRebalance(),
-            msg="rebalance operation failed after adding node on cluster 2")
+            msg="rebalance operation on cluster {0}".format(servers_b))
 
-        # Wait for loading threads to finish
-        for lt in load_thread_list:
-            lt.join()
-        self.log.info("All loading threads finished")
+        self.log.info("ALL rebalancing done...")
+
+        # Wait for loading to finish
+        load_thread.join()
+        self.log.info("All deleting threads finished")
 
         # Verify replication
+        self.log.info("START data verification at cluster A...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_a,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START data verification at cluster B...")
         self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
             self._buckets[0],
             kvstore,
             self._poll_sleep,
             self._poll_timeout),
             "Verification of replicated data failed")
+
+        self.log.info("START revision verification on both clusters...")
         self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
             rest_conn_b,
             self._buckets[0],
             self._poll_sleep,
             self._poll_timeout),
             "Verification of replicated revisions failed")
+
+
