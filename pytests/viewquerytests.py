@@ -531,6 +531,47 @@ class ViewQueryTests(unittest.TestCase):
                 self.server = self.servers[i]
                 self._query_all_views(data_set.views)
                 rebalance.result()
+    '''
+    Test verifies querying when other thread is adding/updating/deleting other view
+    Parameters:
+        num-views-to-modify - number of views to add/edit/delete
+        action - can be create/update/delete
+    '''
+    def test_employee_dataset_query_during_modifying_other_views(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        views_num = self.input.param('num-views-to-modify', 1)
+        action = self.input.param('action', 'create')
+        ddoc_name = "view_ddoc"
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set.add_startkey_endkey_queries()
+        self._query_test_init(data_set, False)
+
+        view_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
+        views = [View("view_name_" + str(i), view_map_func, None, True)for i in xrange(views_num)]
+
+        tasks = []
+        for view in views:
+            tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name, view))
+
+        if action in ['update', 'delete']:
+            for task in tasks:
+                task.result()
+            tasks = []
+            #update/delete
+            if action == 'update':
+                view_map_func_new = "function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}"
+                views = [View("view_name_" + str(i), view_map_func_new, None, True)for i in xrange(views_num)]
+                for view in views:
+                    tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name, view))
+            if action == 'delete':
+                for view in views:
+                    tasks.append(self.cluster.async_delete_view(self.servers[0], ddoc_name, view))
+
+        self._query_all_views(data_set.views)
+
+        for task in tasks:
+                task.result()
+
 
     def test_employee_dataset_startkey_compaction_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
