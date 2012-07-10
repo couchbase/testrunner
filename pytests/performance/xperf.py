@@ -80,23 +80,23 @@ class XPerfTest(EVPerfClient):
                 # Execute performance test
                 region = XPerfTest.get_ec2_region()
                 if region == 'east':
-                    self.input.servers = self_copy.input.clusters[0]
+                    self.input.servers = self.input.clusters[0]
                     self.input.test_params['bucket'] = self.get_buckets()[0]
                     return test(self, *args, **kargs)
                 elif region == 'west':
-                    self.input.servers = self_copy.input.clusters[1]
+                    self.input.servers = self.input.clusters[1]
                     self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
                     return test(self, *args, **kargs)
                 else:
                     # 1st test executor:
                     self_copy = copy.copy(self)
                     self_copy.input.servers = self_copy.input.clusters[0]
-                    self_copy.input.test_params['bucket'] = self.get_buckets()[0]
+                    self_copy.input.test_params['bucket'] = self_copy.get_buckets()[0]
                     primary = Process(target=test, args=(self_copy, ))
                     primary.start()
 
                     # 2nd test executor:
-                    self.input.servers = self_copy.input.clusters[1]
+                    self.input.servers = self.input.clusters[1]
                     self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
                     self.input.test_params['stats'] = 0
                     secondary = test(self, *args, **kargs)
