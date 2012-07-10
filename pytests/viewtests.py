@@ -177,7 +177,7 @@ class ViewBaseTests(unittest.TestCase):
             value = {"name": doc_name, "age": 1000}
             smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(len(doc_names)))
-        time.sleep(5)
+        time.sleep(10)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
         view_time = results['view_time']
 
