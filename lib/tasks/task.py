@@ -758,8 +758,8 @@ class ViewQueryTask(Task):
             content = \
                 rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
 
-            self.log.info("(%d rows) expected, (%d rows) returned" % \
-                (len(content['rows']), self.expected_rows))
+            self.log.info("(%d rows) expected, (%d rows) returned" %\
+                          (self.expected_rows, len(content['rows'])))
 
             if len(content['rows']) == self.expected_rows:
                 self.log.info("expected number of rows: '{0}' was found for view query".format(self.

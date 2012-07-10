@@ -123,26 +123,27 @@ class RebalanceOutTests(RebalanceBaseTest):
     def incremental_rebalance_out_with_queries(self):
         num_views = self.input.param("num_views", 5)
         is_dev_ddoc = self.input.param("is_dev_ddoc", True)
-        views = self.make_default_views("views", num_views, is_dev_ddoc)
+        views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
-
+        #inrease timout for big data
+        timeout = max(self.wait_timeout * 3, self.wait_timeout * self.num_items / 100000)
         query = {}
         query["connectionTimeout"] = 60000;
-
-        tasks = self.async_create_views(self.servers[0], ddoc_name, views, "default")
+        query["full_set"] = "true"
+        tasks = self.async_create_views(self.servers[0], ddoc_name, views, self.default_bucket_name)
         for task in tasks:
             task.result(self.wait_timeout)
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
         for i in reversed(range(self.num_servers)[1:]):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
             time.sleep(self.wait_timeout / 5)
             #see that the result of view queries are the same as expected during the test
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
             #verify view queries results after rebalancing
             rebalance.result()
             tasks = []
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
             self._wait_for_stats_all_buckets(self.servers[:i])
             self._verify_all_buckets(self.servers[0])
             self._verify_stats_all_buckets(self.servers[:i])
