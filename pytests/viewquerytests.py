@@ -778,6 +778,34 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_skip_queries(skip, limit=self.limit)
         self._query_all_views(data_set.views)
 
+    def test_employee_dataset_query_different_buckets(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        data_sets = []
+        for i in xrange(self.num_buckets):
+            data_sets.append(EmployeeDataSet(self._rconn(), docs_per_day, bucket="bucket-{0}".format(i)))
+        for data_set in data_sets:
+            data_set.add_startkey_endkey_queries()
+            self._query_test_init(data_set, False)
+
+        query_bucket_threads = []
+        for data_set in data_sets:
+            t = StoppableThread(target=self._query_all_views,
+                                name="query-bucket-{0}".format(data_set.bucket),
+                                args=(data_set.views,))
+            query_bucket_threads.append(t)
+            t.start()
+
+        while True:
+            if not query_bucket_threads:
+                break
+            self.thread_stopped.wait(60)
+            if self.thread_crashed.is_set():
+                for t in query_bucket_threads:
+                    t.stop()
+                break
+            else:
+                query_bucket_threads = [d for d in query_bucket_threads if d.is_alive()]
+                self.thread_stopped.clear()
 
     ###
     # load the data defined for this dataset.
@@ -1086,8 +1114,8 @@ class EmployeeDataSet:
         self.senior_arch_info = {"title" : "Senior Architect",
                                "desc" : "As a Member of Technical Staff, Senior Architect, you will design and implement cutting-edge distributed, scale-out data infrastructure software systems, which is a pillar for the growing cloud infrastructure. More specifically, you will bring Unix systems and server tech kung-fu to the team.",
                                "type" : "arch"}
-        self.views = self.create_views(rest)
         self.bucket = bucket
+        self.views = self.create_views(rest, bucket=self.bucket)
         self.rest = rest
         self.name = "employee_dataset"
         self.kv_store = None
@@ -1463,7 +1491,7 @@ class EmployeeDataSet:
         self.add_group_count_queries(views)
 
     # views for this dataset
-    def create_views(self, rest):
+    def create_views(self, rest, bucket="default"):
         vfn1 = 'function (doc) { if(doc.job_title !== undefined) { var myregexp = new RegExp("^UI "); if(doc.job_title.match(myregexp)){ emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}}'
         vfn2 = 'function (doc) { if(doc.job_title !== undefined) { var myregexp = new RegExp("^System "); if(doc.job_title.match(myregexp)){ emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}}'
         vfn3 = 'function (doc) { if(doc.job_title !== undefined) { var myregexp = new RegExp("^Senior "); if(doc.job_title.match(myregexp)){ emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}}'
@@ -1472,11 +1500,11 @@ class EmployeeDataSet:
         full_index_size = self.calc_total_doc_count()
         partial_index_size = full_index_size/3
 
-        return [QueryView(rest, full_index_size,    fn_str = vfn4),
-                QueryView(rest, partial_index_size, fn_str = vfn1, type_filter = "ui"),
-                QueryView(rest, partial_index_size, fn_str = vfn2, type_filter = "admin"),
-                QueryView(rest, partial_index_size, fn_str = vfn3, type_filter = "arch"),
-                QueryView(rest, full_index_size,    fn_str = vfn4, reduce_fn="_count")]
+        return [QueryView(rest, full_index_size,    bucket=bucket, fn_str = vfn4),
+                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn1, type_filter = "ui"),
+                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn2, type_filter = "admin"),
+                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn3, type_filter = "arch"),
+                QueryView(rest, full_index_size,    bucket=bucket, fn_str = vfn4, reduce_fn="_count")]
 
     def get_data_sets(self):
         return [self.sys_admin_info, self.ui_eng_info, self.senior_arch_info]

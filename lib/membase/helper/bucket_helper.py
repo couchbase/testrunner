@@ -35,7 +35,7 @@ class BucketOperationHelper():
         return ratio
 
     @staticmethod
-    def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0), howmany=3, sasl=True):
+    def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0), howmany=3, sasl=True, saslPassword='password'):
         success = True
         log = logger.Logger.get_logger()
         rest = RestConnection(server)
@@ -58,7 +58,7 @@ class BucketOperationHelper():
                                        ramQuotaMB=bucket_ram,
                                        replicaNumber=replica,
                                        authType="sasl",
-                                       saslPassword="password",
+                                       saslPassword=saslPassword,
                                        proxyPort=port)
                 else:
                     rest.create_bucket(bucket=name,

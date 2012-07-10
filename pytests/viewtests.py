@@ -126,7 +126,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _create_multiple_buckets(self, replica=1):
         master = self.servers[0]
-        created = BucketOperationHelper.create_multiple_buckets(master, replica, howmany=self.num_buckets)
+        created = BucketOperationHelper.create_multiple_buckets(master, replica, howmany=self.num_buckets,saslPassword="")
         self.assertTrue(created, "unable to create multiple buckets")
 
         rest = RestConnection(master)
