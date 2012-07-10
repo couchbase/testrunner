@@ -11,6 +11,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from memcached.helper.data_helper import MemcachedError
+import memcacheConstants
 
 
 # The SpatialHelper operates on a single bucket over a single RestConnection
@@ -132,7 +133,7 @@ class SpatialHelper:
                 moxi.delete(key)
             except MemcachedError as e:
                 # Don't care if we try to delete a document that doesn't exist
-                if e.args[0].startswith("Memcached error #1:  Not found"):
+                if e.status == memcacheConstants.ERR_NOT_FOUND:
                     continue
                 else:
                     raise
