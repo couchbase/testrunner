@@ -240,11 +240,11 @@ class ViewBaseTests(unittest.TestCase):
         attempt = 0
         delay = 10
         num_of_results_without_reduce = len(ViewBaseTests._get_keys(self, results_without_reduce))
-        while attempt < 6 and value != num_docs:
-            msg = "reduce returned {0}, expected to return {1}"
-            self.log.info(msg.format(value, len(doc_names)))
+        msg = "reduce returned {0}, expected to return {1}"
+        self.log.info(msg.format(value, len(doc_names)))
+        while attempt < 6 and (value != num_docs or num_of_results_without_reduce != num_docs):
             self.log.info("trying again in {0} seconds".format(delay))
-            time.sleep(10)
+            time.sleep(delay)
             attempt += 1
             #get the results without reduce ?
             results_without_reduce = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs,
