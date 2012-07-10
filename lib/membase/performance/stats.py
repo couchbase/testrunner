@@ -154,6 +154,12 @@ class StatsCollector(object):
                "latency-query-histogram":self._task["latency"].get("latency-query-histogram", []),
                "latency-query":self._task["latency"].get('percentile-latency-query', []),
                "latency-query-recent":self._task["latency"].get('percentile-latency-query-recent', []),
+               "latency-observe-server-histogram":self._task["latency"].get("latency-observe-server-histogram", []),
+               "latency-observe-server":self._task["latency"].get('percentile-latency-observe-server', []),
+               "latency-observe-server-recent":self._task["latency"].get('percentile-latency-observe-server-recent', []),
+               "latency-observe-client-histogram":self._task["latency"].get("latency-observe-client-histogram", []),
+               "latency-observe-client":self._task["latency"].get('percentile-latency-observe-client', []),
+               "latency-observe-client-recent":self._task["latency"].get('percentile-latency-observe-client-recent', [])
                }
 
         if self.client_id:
