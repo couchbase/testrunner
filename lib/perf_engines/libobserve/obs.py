@@ -36,9 +36,7 @@ class Observer:
     _observables = SyncDict()
 
     def _observe_blocking(self, key_state):
-        if self._observables.empty():
-            print "<%s> empty observables" % self.__class__.__name__
-            return
+        self._observables.wait_not_empty()
 
         print "<%s> self._observables %s" % (self.__class__.__name__, self._observables)
 

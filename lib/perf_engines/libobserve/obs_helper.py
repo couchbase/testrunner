@@ -21,8 +21,9 @@ class SyncDict:
     Synchronized dict wrapper with basic atomic operations.
     """
     def __init__(self):
-        self.mutex = _threading.Lock()
         self.dict = {}
+        self.mutex = _threading.Lock()
+        self.not_empty = _threading.Condition(self.mutex)
 
     def __repr__(self):
         return "<%s> dict: %s" % (self.__class__.__name__, self.dict)
@@ -30,6 +31,7 @@ class SyncDict:
     def put(self, key, value):
         with self.mutex:
             self.dict[key] = value
+            self.not_empty.notify()
 
     def get(self, key):
         with self.mutex:
@@ -58,6 +60,18 @@ class SyncDict:
                     % (self.__class__.__name__, key, e)
                 return False
         return True
+
+    def wait_not_empty(self):
+        """
+        Wait until an item becomes available.
+
+        @caution: Not a traditional pro/con call.
+                  To minimize locking scope,
+                  items won't be consumed here.
+        """
+        with self.mutex:
+            while not self._size():
+                self.not_empty.wait()
 
     def clear(self):
         with self.mutex:
