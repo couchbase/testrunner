@@ -10,6 +10,8 @@ import gzip
 import copy
 import threading
 import socket
+import functools
+from multiprocessing import Process
 
 # membase imports
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -49,6 +51,42 @@ class EPerfMaster(perf.PerfBase):
 
     def superTearDown(self):
         super(EPerfMaster, self).tearDown()
+
+    def multiplier(test):
+        @functools.wraps(test)
+        def wrapper(self, *args, **kargs):
+            """This wrapper allows to launch multiple tests on the same
+            client. Number of concurrent processes depends on phase and
+            "total_clients" parameter in *.conf file.
+
+            There is no need to specify "prefix" and "num_clients".
+
+            Processes don't share memory. However they share stdour/stderr.
+            """
+            total_clients = self.parami('total_clients', 1)
+            self.input.test_params['num_clients'] = total_clients
+
+            if self.parami('index_phase', 0) or self.parami('hot_load_phase', 0):
+                # Single-threaded tasks (hot load phase, index phase)
+                self.input.test_params['prefix'] = 0
+                return test(self, *args, **kargs)
+            else:
+                # Concurrent tasks (load_phase, access phase)
+                executors = list()
+
+                for prefix in range(1, total_clients):
+                    self.input.test_params['prefix'] = prefix
+                    executors.append(Process(target=test, args=(self, )))
+                    executors[-1].start()
+
+                self.input.test_params['prefix'] = 0
+                main_executor = test(self, *args, **kargs)
+
+                for executor in executors:
+                    executor.join()
+
+                return main_executor
+        return wrapper
 
     def get_all_stats(self):
         # One node, the 'master', should aggregate stats from client and server nodes
