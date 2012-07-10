@@ -167,7 +167,7 @@ class XPerfTest(EVPerfClient):
         """
 
         try:
-            uri = 'http://169.254.169.254/latest/meta-data/public-ipv4'
+            uri = 'http://169.254.169.254/latest/meta-data/public-hostname'
             http = httplib2.Http(timeout=5)
             host = http.request(uri)
             if 'west' in host:
