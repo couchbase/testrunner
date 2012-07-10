@@ -75,7 +75,10 @@ class XPerfTest(EVPerfClient):
                     not self.parami('disable_xdcr', 0)):
                     master = self.input.clusters[0][0]
                     slave = self.input.clusters[1][0]
-                    self.start_replication(master, slave, bidir=bidir)
+                    try:
+                        self.start_replication(master, slave, bidir=bidir)
+                    except Exception:
+                        pass
 
                 # Execute performance test
                 region = XPerfTest.get_ec2_region()
