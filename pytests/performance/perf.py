@@ -755,7 +755,8 @@ class PerfBase(unittest.TestCase):
                 'queries': queries,
                 'report': report,
                 'hot-shift': hot_shift,
-                'cluster_name': self.param("cluster_name", "")
+                'cluster_name': self.param("cluster_name", ""),
+                'observe': self.param("observe", PerfDefaults.observe)
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
