@@ -23,7 +23,9 @@ class McsodaObserver(Observer, Thread):
     #TODO: topology change
     #TODO: socket timeout, fine-grained exceptions
     #TODO: network helper
-    #TODO: remove hard-coded freq
+    #TODO: wait call timeout
+    #TODO: Performance - although we don't sleep,\
+    #      may need to back off if there are too many obs commands.
 
     def __init__(self, ctl, cfg, store, callback):
         self.ctl = ctl
@@ -122,8 +124,6 @@ class McsodaObserver(Observer, Thread):
             # TODO: error check
 
             self.save_latency_stats(res.persist_stat/1000)
-
-            # TODO: measure client side latency
 
             print "res::<%s>" % server
             print res
