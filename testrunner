@@ -65,6 +65,8 @@ def parse_args(argv):
     if not options.ini:
         parser.error("please specify an .ini file (-i)")
         parser.print_help()
+    else:
+        test_params['ini'] = options.ini
 
     test_params['cluster_name'] = splitext(os.path.basename(options.ini))[0]
 
