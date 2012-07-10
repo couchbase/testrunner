@@ -17,7 +17,6 @@ class McsodaObserver(Observer, Thread):
     store = None
     awareness = None
     conns = {}
-    freq = 3
     obs_keys = {}   # {server: [keys]}
     callback = None
 
@@ -44,8 +43,6 @@ class McsodaObserver(Observer, Thread):
                 self.clear_observables()
                 if self.callback:
                     self.callback(self.store)
-            print "<%s> sleep for %d seconds" % (self.__class__.__name__, self.freq)
-            sleep(self.freq)
         print "<%s> stopped running" % (self.__class__.__name__)
 
     def _build_conns(self):
