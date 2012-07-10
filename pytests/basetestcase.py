@@ -17,6 +17,7 @@ class BaseTestCase(unittest.TestCase):
         self.cluster = Cluster()
         self.servers = self.input.servers
         self.buckets = {}
+        self.master = self.servers[0]
         self.wait_timeout = self.input.param("wait_timeout", 60)
         #number of case that is performed from testrunner( increment each time)
         self.case_number = self.input.param("case_number", 0)
@@ -42,9 +43,9 @@ class BaseTestCase(unittest.TestCase):
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
 
         if self.default_bucket:
-            self.cluster.create_default_bucket(self.servers[0], self.bucket_size, self.num_replicas)
+            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
             self.buckets[self.default_bucket_name] = {1 : KVStore()}
-        self._create_sasl_buckets(self.servers[0], self.sasl_buckets)
+        self._create_sasl_buckets(self.master, self.sasl_buckets)
         self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
         # TODO (Mike): Create Standard buckets
