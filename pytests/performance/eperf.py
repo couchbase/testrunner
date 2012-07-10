@@ -252,6 +252,8 @@ class EPerfMaster(perf.PerfBase):
                     build = build.replace('-enterprise', '')
                     build = build.replace('-community', '')
                     spec = self.param('spec', 'unknown')
+                    ini_filename = self.param('ini', 'unknown')
+                    ini = os.path.basename(ini_filename).split('.')[0]
                     if self.parami('hot_load_phase', 0):
                         prefix = 'hot_'
                     else:
@@ -261,7 +263,7 @@ class EPerfMaster(perf.PerfBase):
                     # Change status to 'started'
                     if self.parami(phase + "_phase", 0):
                         self.cbkarma_client.update(self.test_id, build=build,
-                                                   spec=spec,
+                                                   spec=spec, ini=ini,
                                                    phase=client_phase,
                                                    status='started')
 
@@ -271,7 +273,7 @@ class EPerfMaster(perf.PerfBase):
                     # Change status to 'done'
                     if self.parami(phase + "_phase", 0):
                         self.cbkarma_client.update(self.test_id, build=build,
-                                                   spec=spec,
+                                                   spec=spec, ini=ini,
                                                    phase=client_phase,
                                                    status='done')
 
