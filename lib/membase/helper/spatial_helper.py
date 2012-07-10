@@ -290,7 +290,11 @@ class SpatialHelper:
 
             results_collapsed = []
             for row in results['rows']:
-                del row['bbox']
+                # Delete all top level key-values that are not part of the
+                # inserted_expanded list
+                del_keys = set(row.keys()) - set(['id', 'geometry', 'value'])
+                for key in del_keys:
+                    del row[key]
                 # Delete all special values inserted by CouchDB or Couchbase
                 for key in row['value'].keys():
                     if key.startswith('_') or key.startswith('$'):
