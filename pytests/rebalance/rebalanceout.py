@@ -2,6 +2,7 @@ import time
 
 from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase.documentgenerator import BlobGenerator
+from remote.remote_util import RemoteMachineShellConnection
 
 class RebalanceOutTests(RebalanceBaseTest):
 
@@ -25,7 +26,7 @@ class RebalanceOutTests(RebalanceBaseTest):
     def rebalance_out_with_ops(self):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items *3 / 2)
-        servs_out=[self.servers[self.num_servers -i -1] for i in range(self.nodes_out)]
+        servs_out = [self.servers[self.num_servers -i -1] for i in range(self.nodes_out)]
         rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
         # define which doc's ops will be performed during rebalancing
         # allows multiple of them but one by one
@@ -169,6 +170,32 @@ class RebalanceOutTests(RebalanceBaseTest):
             self._wait_for_stats_all_buckets(self.servers[:i])
             self._verify_all_buckets(self.servers[0])
             self._verify_stats_all_buckets(self.servers[:i])
+
+    """Rebalances nodes into a cluster when one node is warming up.
+
+    This test begins with loads a user defined number of items into the cluster
+    and all servers clustered together. Next steps are: stop defined
+    node(master_restart = False by default), wait 20 sec and start the stopped node.
+    Without waiting for the node to start up completely, rebalance out servs_out servers.
+    Once the cluster has been rebalanced we wait for the disk queues to drain,
+    and then verify that there has been no data loss."""
+    def rebalance_out_with_warming_up(self):
+        master_restart = self.input.param("master_restart", False)
+        if master_restart:
+            warmup_node = self.master
+        else:
+            warmup_node = self.servers[len(self.servers) - self.nodes_out -1]
+        servs_out = self.servers[len(self.servers) - self.nodes_out:]
+        shell = RemoteMachineShellConnection(warmup_node)
+        shell.stop_couchbase()
+        time.sleep(20)
+        shell.start_couchbase()
+        shell.disconnect()
+        rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
+        rebalance.result()
+        self._wait_for_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
+        self._verify_all_buckets(self.master)
+        self._verify_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
 
     """Rebalances nodes out of a cluster while doing mutations and expirations.
 

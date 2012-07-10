@@ -200,6 +200,7 @@ class RebalanceTask(Task):
 
     def check(self, task_manager):
         rest = RestConnection(self.servers[0])
+        progress = -100
         try:
             progress = rest._rebalance_progress()
         except RebalanceFailedException as ex:
