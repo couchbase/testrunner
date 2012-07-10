@@ -261,7 +261,7 @@ class EPerfMaster(perf.PerfBase):
                     # Change status to 'started'
                     if self.parami(phase + "_phase", 0):
                         self.cbkarma_client.update(self.test_id, build=build,
-                                                   spec=spec, description='',
+                                                   spec=spec,
                                                    phase=client_phase,
                                                    status='started')
 
@@ -271,7 +271,7 @@ class EPerfMaster(perf.PerfBase):
                     # Change status to 'done'
                     if self.parami(phase + "_phase", 0):
                         self.cbkarma_client.update(self.test_id, build=build,
-                                                   spec=spec, description='',
+                                                   spec=spec,
                                                    phase=client_phase,
                                                    status='done')
 

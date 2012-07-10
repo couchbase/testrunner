@@ -32,8 +32,7 @@ class CbKarmaClient(RestConnection):
             print "Dashboard is not available... bypassing."
             return (False, None)
 
-    def update(self, id=None, build='', spec='', description='', phase='',
-               status=''):
+    def update(self, id=None, build='', spec='', phase='', status=''):
         """Post test progress updates.
 
         Keyword arguments:
@@ -42,7 +41,6 @@ class CbKarmaClient(RestConnection):
         spec -- configuration filename
         phase -- phase name
         status -- latest phase status ('started' or 'done')
-        description -- optional test description
 
         Return tuple with status and test id.
         """
@@ -52,7 +50,6 @@ class CbKarmaClient(RestConnection):
         params = {'phase': phase,
                   'build': build,
                   'spec': spec,
-                  'description': description,
                   'status': status}
         if id:
             params['id'] = id
