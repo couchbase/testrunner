@@ -46,7 +46,7 @@ class AutoCompactionTests(unittest.TestCase):
         rest = RestConnection(serverInfo)
         remote_client = RemoteMachineShellConnection(serverInfo)
 
-        output, rq_content = rest.set_auto_compaction("false", dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=100,log_error=True)
+        output, rq_content = rest.set_auto_compaction("false", dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=100)
 
         if not output and (percent_threshold <= MIN_COMPACTION_THRESHOLD or percent_threshold >= MAX_COMPACTION_THRESHOLD):
             self.assertFalse(output, "it should be  impossible to set compaction value = {0}%".format(percent_threshold))
