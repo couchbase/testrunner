@@ -64,6 +64,9 @@ class EPerfMaster(perf.PerfBase):
             Processes don't share memory. However they share stdour/stderr.
             """
             total_clients = self.parami('total_clients', 1)
+            # Limit number of workers during load phase
+            if self.parami('load_phase', 0):
+                    total_clients = min(4, total_clients)
             self.input.test_params['num_clients'] = total_clients
 
             if self.parami('index_phase', 0) or self.parami('hot_load_phase', 0):
