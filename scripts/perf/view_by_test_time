@@ -8,31 +8,40 @@ function(doc) {
     arr[3] = doc.time;
     arr[4] = doc.info.json;
 
-    if (doc.info && doc.info.reb_dur)
+    if (doc.info && doc.info.reb_start)
     {
-        arr[5] = doc.info.reb_dur
+        arr[5] = doc.info.reb_start
     }
     else
     {
         arr[5] = 0
     }
 
-    if (doc.info && doc.info.testrunner)
+    if (doc.info && doc.info.reb_dur)
     {
-        arr[6] = doc.info.testrunner
+        arr[6] = doc.info.reb_dur
     }
     else
     {
-        arr[6] = "unknown version"
+        arr[6] = 0
+    }
+
+    if (doc.info && doc.info.testrunner)
+    {
+        arr[7] = doc.info.testrunner
+    }
+    else
+    {
+        arr[7] = "unknown version"
     }
 
     if (doc.info && doc.info.cluster_name)
     {
-        arr[7] = doc.info.cluster_name
+        arr[8] = doc.info.cluster_name
     }
     else
     {
-        arr[7] = ""
+        arr[8] = ""
     }
-    emit(arr,doc.info.test_time);
+   emit(arr,doc.info.test_time);
 }
