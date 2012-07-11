@@ -106,6 +106,7 @@ class RemoteMachineShellConnection:
            self.use_sudo = False
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
+        self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         msg = 'connecting to {0} with username : {1} password : {2} ssh_key: {3}'
         log.info(msg.format(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password, serverInfo.ssh_key))
@@ -1405,6 +1406,41 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
         # Start server
         self.start_couchbase()
+
+    def execute_cluster_backup(self, backup_location, command_options):
+        self.delete_backupFile(backup_location)
+        self.create_directory(backup_location)
+
+        backup_command = testconstants.LINUX_CBBACKUP_COMMAND_PATH
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            backup_command = testconstants.WIN_CBBACKUP_COMMAND_PATH
+
+        command_options_string = ""
+        if command_options is not None:
+            command_options_string = ' '.join(command_options)
+
+        command = "{0} {1}{2}:{3} {4} {5}".format(backup_command, "http://",self.ip, self.port, backup_location, command_options_string)
+        output, error = self.execute_command(command.format(command))
+        self.log_command_output(output, error)
+
+    def restore_backupFile(self, backup_location, buckets):
+        restore_command = testconstants.LINUX_CBRESTORE_COMMAND_PATH
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            restore_command = WIN_CBRESTORE_COMMAND_PATH
+
+        for bucket in buckets.iterkeys():
+            command = "{0} {1} {2}{3}:{4} {5} {6}".format(restore_command, backup_location, "http://", self.ip, self.port, "-b", bucket)
+            output, error = self.execute_command(command.format(command))
+            self.log_command_output(output, error)
+
+    def delete_backupFile(self, backup_location):
+        command = "{0}{1}".format("rm -r ", backup_location)
+        output, error = self.execute_command(command.format(command))
+        self.log_command_output(output, error)
 
 
 class RemoteUtilHelper(object):
