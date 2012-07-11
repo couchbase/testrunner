@@ -472,6 +472,43 @@ if (nrow(latency_query) > 0) {
     latency_query <- result
 }
 
+# Get Latency-observe-client
+cat("generating latency-observe-client\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-observe-client", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-observe-client"))
+}
+latency_obs_client <- result
+if (nrow(latency_obs_client) > 0) {
+
+    latency_obs_client$row <- as.numeric(latency_obs_client$row)
+    latency_obs_client$mystery <- as.numeric(latency_obs_client$mystery)
+    if (length(latency_obs_client$percentile_999th)) {
+        latency_obs_client$percentile_999th <- as.numeric(latency_obs_client$percentile_999th)
+    }
+    latency_obs_client$percentile_99th <- as.numeric(latency_obs_client$percentile_99th)
+    latency_obs_client$percentile_95th <- as.numeric(latency_obs_client$percentile_95th)
+    latency_obs_client$percentile_90th <- as.numeric(latency_obs_client$percentile_90th)
+
+    all_builds = factor(latency_obs_client$buildinfo.version)
+    result <- data.frame()
+    for(a_build in levels(all_builds)) {
+        tt <- latency_obs_client[latency_obs_client $buildinfo.version==a_build,]
+        tt$mystery <- as.numeric(tt$mystery)
+        min_myst = min(tt$mystery)
+        filtered = transform(tt,row=mystery-min_myst)
+        result <- rbind(result,filtered)
+    }
+    latency_obs_client <- result
+}
+
 # Get average query throughput
 cat("generating average query throughput\n")
 avg_qps <- c()
@@ -570,6 +607,23 @@ for(index in 1:nrow(builds_list)) {
 latency_query_histo <- result
 latency_query_histo$time <- as.numeric(latency_query_histo$time) * 1000
 latency_query_histo$count <- as.numeric(latency_query_histo$count)
+
+# Get latency_obs_client histogram
+cat("generating latency_obs_client histogram")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-observe-client-histogram", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-observe-client histogram"))
+}
+latency_obs_client_histo <- result
+latency_obs_client_histo$time <- as.numeric(latency_obs_client_histo$time)
+latency_obs_client_histo$count <- as.numeric(latency_obs_client_histo$count)
 
 # Get Data size on disk
 cat("generating disk usage over time")
@@ -1457,6 +1511,17 @@ if (nrow(latency_query_histo) > 0) {
     makeMetricDef("Final latency histogram for query commands")
 }
 
+if (nrow(latency_obs_client_histo) > 0) {
+    cat("plotting latency_obs_client histogram \n")
+    latency_obs_client_histo = latency_obs_client_histo[!is.na(latency_obs_client_histo$time), ]
+    p <- ggplot(latency_obs_client_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (sec)--->", y="count")
+    p <- p + geom_point()
+    p <- addopts(p,"Client side observe latency histogram")
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef("Client side latency histogram for observe commands")
+}
+
 if (nrow(latency_get) > 0) {
     cat("Latency-get 90th\n")
     temp <- latency_get[latency_get$client_id ==0,]
@@ -1661,6 +1726,32 @@ if (nrow(latency_query) > 0) {
         print(p)
         makeFootnote(footnote)
     }
+
+}
+
+if (nrow(latency_obs_client) > 0) {
+
+    cat("Latency-obs-client 90th\n")
+    temp <- latency_obs_client[latency_obs_client$client_id ==0,]
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-obs-client 90th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-obs-client 95th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-obs-client 95th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-obs-client 99th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-obs-client 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
 
 }
 
