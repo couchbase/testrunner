@@ -765,7 +765,7 @@ class RestConnection(object):
         retry = 0
         same_progress_count=0
         previous_progress=0
-        while progress != -1 and progress != 100 and retry < 20:
+        while progress != -1 and (progress != 100 or self._rebalance_progress_status() == 'running') and retry < 20:
             #-1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
             if progress == -100:
@@ -797,6 +797,17 @@ class RestConnection(object):
             time.sleep(10)
             return True
 
+    def _rebalance_progress_status(self):
+        api = self.baseUrl + "pools/default/rebalanceProgress"
+
+        status, content = self._http_request(api)
+
+        json_parsed = json.loads(content)
+        if status:
+            if "status" in json_parsed:
+                return json_parsed['status']
+        else:
+            return None
 
     def _rebalance_progress(self):
         avg_percentage = -1
@@ -824,8 +835,7 @@ class RestConnection(object):
                         avg_percentage = (total_percentage/count)
                     else:
                         avg_percentage = 0
-                    if avg_percentage != 100:
-                        log.info('rebalance percentage : {0} %' .format(avg_percentage))
+                    log.info('rebalance percentage : {0} %' .format(avg_percentage))
                 else:
                     avg_percentage = 100
         else:
