@@ -396,6 +396,26 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_skip_queries(skip)
         self._query_test_init(data_set)
 
+    def test_employee_dataset_skip_incremental_queries(self):
+        ViewBaseTests._begin_rebalance_in(self)
+        ViewBaseTests._end_rebalance(self)
+
+        docs_per_day = self.input.param('docs-per-day', 200)
+        skip = 0
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
+        data_set.load(self, data_set.views[0], True)
+
+        for view in data_set.views:
+            if view.reduce_fn:
+                data_set.views.remove(view)
+
+        while data_set.views:
+            for view in data_set.views:
+                data_set.add_skip_queries(skip, limit=self.limit)
+            self._query_all_views(data_set.views)
+            skip +=self.limit
+            data_set.views = [view for view in data_set.views if skip < view.index_size]
+
     def test_all_datasets_all_queries(self):
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
