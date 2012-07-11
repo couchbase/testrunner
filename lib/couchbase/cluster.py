@@ -169,7 +169,7 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the bucket was created."""
-        _task = async_create_sasl_bucket(server, name, password, replicas, size)
+        _task = self.async_create_sasl_bucket(server, name, password, replicas, size)
         self.task_manager.schedule(_task)
         return _task.result(timeout)
 
