@@ -760,6 +760,25 @@ class ViewQueryTests(unittest.TestCase):
             shell.start_couchbase()
 
 
+    '''
+    load documents, run a view query with 1M results
+    limit =1000 , skip = 0 -> 200 and then 200->0
+    '''
+    def test_employee_dataset_skip_bidirection_queries(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        skip = self.input.param('skip', 200)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
+
+        data_set.add_skip_queries(skip, limit=self.limit)
+        data_set.add_skip_queries(skip)
+        self._query_test_init(data_set)
+
+        for view in data_set.views:
+            view.queries = []
+        data_set.add_skip_queries(skip, limit=self.limit)
+        self._query_all_views(data_set.views)
+
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
