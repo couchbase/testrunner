@@ -572,6 +572,7 @@ class PerfBase(unittest.TestCase):
             cur['cur-items'] = start_at
             cur['cur-gets'] = start_at
             cur['cur-sets'] = start_at
+            cur['cur-ops'] = cur['cur-gets'] + cur['cur-sets']
             cur['cur-creates'] = start_at
             cfg['max-creates'] = start_at + num_items
             cfg['max-items'] = cfg['max-creates']
