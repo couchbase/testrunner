@@ -816,6 +816,49 @@ class ViewQueryTests(unittest.TestCase):
                 query_bucket_threads = [d for d in query_bucket_threads if d.is_alive()]
                 self.thread_stopped.clear()
 
+    '''
+     Test verifies querying when other thread is adding/updating/deleting other view
+     Parameters:
+         num-ddocs-to-modify - number of views to add/edit/delete
+         action - can be create/update/delete
+    '''
+    def test_simple_dataset_query_during_modifying_other_ddoc(self):
+        ddoc_num = self.input.param('num-ddocs-to-modify', 1)
+        action = self.input.param('action', 'create')
+        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set.add_startkey_endkey_queries()
+        self._query_test_init(data_set, False)
+
+        #create ddoc
+        view_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
+        ddoc_name = "ddoc_test"
+        view = View(ddoc_name, view_map_func, None, True)
+
+        tasks = []
+        for i in xrange(ddoc_num):
+            tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name + str(i), view))
+
+        #update/delete
+        if action in ['update', 'delete']:
+            for task in tasks:
+                task.result()
+            tasks = []
+            #update/delete
+            if action == 'update':
+                view_map_func_new = "function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}"
+                view = View(ddoc_name, view_map_func_new, None, True)
+                for i in xrange(ddoc_num):
+                    tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name + str(i), view))
+            if action == 'delete':
+                for i in xrange(ddoc_num):
+                    tasks.append(self.cluster.delete_view(self.servers[0], ddoc_name + str(i), None))
+
+        self._query_all_views(data_set.views)
+
+        for task in tasks:
+            task.result()
+
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
