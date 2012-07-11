@@ -682,7 +682,7 @@ class XDCRTests(unittest.TestCase):
             task_def, kvstore)
         load_thread.start()
 
-        # Trigger rebalance on both source and destination clusters
+        # Trigger rebalance
         self.log.info("DURING replication, start rebalancing...")
         servers_a = self._input.clusters.get(0)
         self.log.info("REBALANCING IN Cluster A ...")
@@ -695,6 +695,11 @@ class XDCRTests(unittest.TestCase):
         # Wait for loading to finish
         load_thread.join()
         self.log.info("All deleting threads finished")
+
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
 
         # Verify replication
         self.log.info("START data verification at cluster A...")
@@ -781,6 +786,11 @@ class XDCRTests(unittest.TestCase):
         # Wait for loading to finish
         load_thread.join()
         self.log.info("All deleting threads finished")
+
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
 
         # Verify replication
         self.log.info("START data verification at cluster A...")
@@ -879,6 +889,11 @@ class XDCRTests(unittest.TestCase):
             lt.join()
         self.log.info("All loading threads finished")
 
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
+
         # Verify replication
         self.log.info("START data verification at cluster A...")
         self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_a,
@@ -905,19 +920,17 @@ class XDCRTests(unittest.TestCase):
             "Verification of replicated revisions failed")
 
 
-#-------------------EVERYTHING BELOW THIS LINE DOES NOT WORK ----------------#
-
 
     # --------------------------------------------------------------------------#
     # ----           TEST CASES WITH REBALANCE (DESTINATION)                --- #
     # --------------------------------------------------------------------------#
-    ### JUNYI: failed. seem it is testrunner issue
     def test_rebalance_in_dest_sets(self):
         # This test starts with a 1-1 unidirectional replication from cluster a
-        # to cluster b; during the replication, we trigger rebalace-in on dest
-        # cluster b, to create a 1-2 replication. After all loading finish,
-        # verify data and rev on both clusters.
+        # to cluster b; during the replication, we trigger rebalace-in on the
+        # destination cluster b, to create a 1-2 replication. After all loading
+        # finish, verify data and rev on both clusters.
         replication_type = "continuous"
+        self.log.info("No initial rebalance.")
 
         cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
@@ -951,7 +964,7 @@ class XDCRTests(unittest.TestCase):
 
         # Trigger rebalance
         self.log.info("DURING replication, start rebalancing...")
-        servers_a = self._input.clusters.get(0)
+        servers_b = self._input.clusters.get(1)
         self.log.info("REBALANCING IN Cluster B ...")
         RebalanceHelper.rebalance_in(servers_b, len(servers_b)-1, monitor=False)
         self.assertTrue(rest_conn_b.monitorRebalance(),
@@ -962,6 +975,11 @@ class XDCRTests(unittest.TestCase):
         # Wait for loading to finish
         load_thread.join()
         self.log.info("All deleting threads finished")
+
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
 
         # Verify replication
         self.log.info("START data verification at cluster A...")
@@ -988,4 +1006,515 @@ class XDCRTests(unittest.TestCase):
             self._poll_timeout),
             "Verification of replicated revisions failed")
 
+    def test_rebalance_out_dest_sets(self):
+        # This test starts with a 2-2 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger rebalace-out on the
+        # destination cluster by evicting node 1, and create a 2-1 replication.
+        # After all loading finish, verify data and rev on both clusters.
+        replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
+
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        self.log.info("START XDC replication...")
+
+        # Start replication
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        # Start load
+        self.log.info("START loading data...")
+        load_thread_list = []
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+            self._buckets[0],
+            task_def, kvstore)
+        load_thread.start()
+
+        # sleep a while to allow more data loaded
+        time.sleep(5)
+
+        # Trigger rebalance
+        self.log.info("DURING replication, start rebalancing...")
+        self.log.info("REBALANCING OUT Cluster B ...")
+        nodes_b = rest_conn_b.node_statuses()
+
+        # kick out one NON-master node in cluster
+        while len(nodes_b) > 1:
+            victim_b = self._input.clusters.get(1)[0]
+            toBeEjectedNode = RebalanceHelper.pick_node(victim_b)
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(victim_b)))
+            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+            rest_conn_b.rebalance(otpNodes=[node.id for node in rest_conn_b.node_statuses()], \
+                ejectedNodes=[toBeEjectedNode.id])
+            self.assertTrue(rest_conn_b.monitorRebalance(),
+                msg="rebalance operation failed after removing node {0}".format(toBeEjectedNode.id))
+            nodes_b = rest_conn_b.node_statuses()
+
+        self.log.info("ALL rebalancing done...")
+
+        # Wait for loading to finish
+        load_thread.join()
+        self.log.info("All deleting threads finished")
+
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
+
+        # Verify replication
+        self.log.info("START data verification at cluster A...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_a,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START data verification at cluster B...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START revision verification on both clusters...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+            rest_conn_b,
+            self._buckets[0],
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated revisions failed")
+
+
+    # --------------------------------------------------------------------------#
+    # ----           TEST CASES WITH FAILOVER (DESTINATION)                 --- #
+    # --------------------------------------------------------------------------#
+    def test_failover_dest_sets(self):
+        replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
+
+        # This test starts with a 2-2 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger failover of one node
+        # on source cluster , resulting a  1-2 replication.
+        # After all loading finish, verify data and rev on both clusters.
+        replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
+
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        self.log.info("START XDC replication...")
+
+        # Start replication
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        # Start load
+        self.log.info("START loading data...")
+        load_thread_list = []
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+            self._buckets[0],
+            task_def, kvstore)
+        load_thread.start()
+        # sleep a while to allow more data loaded
+        time.sleep(5)
+
+        self.log.info("current nodes on source cluster: {0}".format(RebalanceHelper.getOtpNodeIds(master_a)))
+
+        # Trigger failover, we fail over one node each time until there is only one node remaining
+        self.log.info("DURING replication, start failover...")
+        self.log.info("FAILOVER non-master nodes on Cluster B ...")
+        nodes = rest_conn_b.node_statuses()
+        while len(nodes) > 1:
+            victim = self._input.clusters.get(1)[0]
+            toBeFailedOverNode = RebalanceHelper.pick_node(victim)
+            self.log.info("failover node {0}".format(toBeFailedOverNode.id))
+            rest_conn_b.fail_over(toBeFailedOverNode)
+            self.log.info("rebalance after failover")
+            rest_conn_b.rebalance(otpNodes=[node.id for node in rest_conn_b.node_statuses()], \
+                ejectedNodes=[toBeFailedOverNode.id])
+            self.assertTrue(rest_conn_b.monitorRebalance(),
+                msg="rebalance operation failed after removing node {0}".format(toBeFailedOverNode.id))
+            nodes = rest_conn_b.node_statuses()
+
+        self.log.info("ALL failed over done...")
+
+        # Wait for loading threads to finish
+        for lt in load_thread_list:
+            lt.join()
+        self.log.info("All loading threads finished")
+
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
+
+        # Verify replication
+        self.log.info("START data verification at cluster A...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_a,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START data verification at cluster B...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START revision verification on both clusters...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+            rest_conn_b,
+            self._buckets[0],
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated revisions failed")
+
+
+    # -----------------------------------------------------------#
+    # ---- TEST CASES WITH REBALANCE (SOURCE AND DESTINATION) -- #
+    # -----------------------------------------------------------#
+    def test_rebalance_in_source_dest_sets(self):
+        # This test starts with a 1-1 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger rebalace-in on both
+        # source and destination clusters, to create a 2-2 replication.
+        # After all loading finish, verify data and rev on both clusters.
+        replication_type = "continuous"
+        self.log.info("No initial rebalance.")
+
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        self.log.info("START XDC replication...")
+
+        # Start replication
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        # Start load
+        self.log.info("START loading data...")
+        load_thread_list = []
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+            self._buckets[0],
+            task_def, kvstore)
+        load_thread.start()
+
+        # Trigger rebalance
+        self.log.info("DURING replication, start rebalancing in on both clusters...")
+        servers_a = self._input.clusters.get(0)
+        self.log.info("REBALANCING IN Cluster A ...")
+        RebalanceHelper.rebalance_in(servers_a, len(servers_a)-1, monitor=False)
+        self.assertTrue(rest_conn_a.monitorRebalance(),
+            msg="rebalance operation on cluster {0}".format(servers_a))
+        self.log.info("REBALANCING IN Cluster A done ...")
+
+        servers_b = self._input.clusters.get(1)
+        self.log.info("REBALANCING IN Cluster B ...")
+        RebalanceHelper.rebalance_in(servers_b, len(servers_b)-1, monitor=False)
+        self.assertTrue(rest_conn_b.monitorRebalance(),
+            msg="rebalance operation on cluster {0}".format(servers_b))
+
+        self.log.info("ALL rebalancing done...")
+
+        # Wait for loading to finish
+        load_thread.join()
+        self.log.info("All deleting threads finished")
+
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
+
+        # Verify replication
+        self.log.info("START data verification at cluster A...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_a,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START data verification at cluster B...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START revision verification on both clusters...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+            rest_conn_b,
+            self._buckets[0],
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated revisions failed")
+
+    def test_rebalance_out_source_dest_sets(self):
+        # This test starts with a 2-2 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger rebalace-out on the
+        # both source and destination clusters, and create a 1-1 replication.
+        # After all loading finish, verify data and rev on both clusters.
+        replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
+
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        self.log.info("START XDC replication...")
+
+        # Start replication
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        # Start load
+        self.log.info("START loading data...")
+        load_thread_list = []
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+            self._buckets[0],
+            task_def, kvstore)
+        load_thread.start()
+
+        # sleep a while to allow more data loaded
+        time.sleep(5)
+
+        # Trigger rebalance
+        self.log.info("DURING replication, start rebalancing out on both clusters...")
+        self.log.info("REBALANCING OUT Cluster A ...")
+        nodes_a = rest_conn_a.node_statuses()
+        while len(nodes_a) > 1:
+            toBeEjectedNode = RebalanceHelper.pick_node(master_a)
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(master_a)))
+            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+            rest_conn_a.rebalance(otpNodes=[node.id for node in rest_conn_a.node_statuses()], \
+                ejectedNodes=[toBeEjectedNode.id])
+            self.assertTrue(rest_conn_a.monitorRebalance(),
+                msg="rebalance operation failed after removing node {0}".format(toBeEjectedNode.id))
+            nodes_a = rest_conn_a.node_statuses()
+
+        self.log.info("rebalance-out on cluster A is done")
+        self.log.info("REBALANCING OUT Cluster B ...")
+        nodes_b = rest_conn_b.node_statuses()
+        # kick out NON-master node in dest cluster
+        while len(nodes_b) > 1:
+            victim_b = self._input.clusters.get(1)[0]
+            toBeEjectedNode = RebalanceHelper.pick_node(victim_b)
+            self.log.info("current nodes : {0}".format(RebalanceHelper.getOtpNodeIds(victim_b)))
+            self.log.info("removing node {0} and rebalance afterwards".format(toBeEjectedNode.id))
+            rest_conn_b.rebalance(otpNodes=[node.id for node in rest_conn_b.node_statuses()], \
+                ejectedNodes=[toBeEjectedNode.id])
+            self.assertTrue(rest_conn_b.monitorRebalance(),
+                msg="rebalance operation failed after removing node {0}".format(toBeEjectedNode.id))
+            nodes_b = rest_conn_b.node_statuses()
+
+        self.log.info("ALL rebalancing done...")
+
+        # Wait for loading to finish
+        load_thread.join()
+        self.log.info("All deleting threads finished")
+
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
+
+        # Verify replication
+        self.log.info("START data verification at cluster A...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_a,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START data verification at cluster B...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START revision verification on both clusters...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+            rest_conn_b,
+            self._buckets[0],
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated revisions failed")
+
+    # ----------------------------------------------------------------#
+    # ----   TEST CASES WITH FAILOVER (SOURCE AND DESTINATION)    --- #
+    # ----------------------------------------------------------------#
+    def test_failover_source_dest_sets(self):
+        replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
+
+        # This test starts with a 2-2 unidirectional replication from cluster a
+        # to cluster b; during the replication, we trigger failover for both
+        # clusters, resulting a  1-1 replication.
+        # After all loading finish, verify data and rev on both clusters.
+        replication_type = "continuous"
+        self.log.info("Force initial rebalance.")
+
+        cluster_ref_a = "cluster_ref_a"
+        master_a = self._input.clusters.get(0)[0]
+        rest_conn_a = RestConnection(master_a)
+
+        cluster_ref_b = "cluster_ref_b"
+        master_b = self._input.clusters.get(1)[0]
+        rest_conn_b = RestConnection(master_b)
+
+        self.log.info("START XDC replication...")
+
+        # Start replication
+        rest_conn_a.add_remote_cluster(master_b.ip, master_b.port,
+                                       master_b.rest_username,
+                                       master_b.rest_password, cluster_ref_b)
+        (rep_database, rep_id) = rest_conn_a.start_replication(replication_type,
+                                                               self._buckets[0],
+                                                               cluster_ref_b)
+        self._state.append((rest_conn_a, cluster_ref_b, rep_database, rep_id))
+
+        # Start load
+        self.log.info("START loading data...")
+        load_thread_list = []
+        kvstore = ClientKeyValueStore()
+        self._params["ops"] = "set"
+        task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
+        load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
+            self._buckets[0],
+            task_def, kvstore)
+        load_thread.start()
+        # sleep a while to allow more data loaded
+        time.sleep(5)
+
+        self.log.info("current nodes on source cluster: {0}".format(RebalanceHelper.getOtpNodeIds(master_a)))
+
+        # Trigger failover, we fail over one node each time until there is only one node remaining
+        self.log.info("DURING replication, start failover on both clusters...")
+
+        self.log.info("FAILOVER nodes on Cluster A ...")
+        nodes_a = rest_conn_a.node_statuses()
+        while len(nodes_a) > 1:
+            toBeFailedOverNode = RebalanceHelper.pick_node(master_a)
+            self.log.info("failover node {0}".format(toBeFailedOverNode.id))
+            rest_conn_a.fail_over(toBeFailedOverNode)
+            self.log.info("rebalance after failover")
+            rest_conn_a.rebalance(otpNodes=[node.id for node in rest_conn_a.node_statuses()], \
+                ejectedNodes=[toBeFailedOverNode.id])
+            self.assertTrue(rest_conn_a.monitorRebalance(),
+                msg="rebalance operation failed after removing node {0}".format(toBeFailedOverNode.id))
+            nodes_a = rest_conn_a.node_statuses()
+
+        self.log.info("FAILOVER of cluster A is done ...")
+
+        self.log.info("FAILOVER non-master nodes on Cluster B ...")
+        nodes = rest_conn_b.node_statuses()
+        while len(nodes) > 1:
+            victim = self._input.clusters.get(1)[0]
+            toBeFailedOverNode = RebalanceHelper.pick_node(victim)
+            self.log.info("failover node {0}".format(toBeFailedOverNode.id))
+            rest_conn_b.fail_over(toBeFailedOverNode)
+            self.log.info("rebalance after failover")
+            rest_conn_b.rebalance(otpNodes=[node.id for node in rest_conn_b.node_statuses()], \
+                ejectedNodes=[toBeFailedOverNode.id])
+            self.assertTrue(rest_conn_b.monitorRebalance(),
+                msg="rebalance operation failed after removing node {0}".format(toBeFailedOverNode.id))
+            nodes = rest_conn_b.node_statuses()
+
+        self.log.info("ALL failed over done...")
+
+        # Wait for loading threads to finish
+        for lt in load_thread_list:
+            lt.join()
+        self.log.info("All loading threads finished")
+
+        # sleep a while, start verification too early will slow down the replication
+        sleep_time = 60
+        self.log.info("sleep for {0} seconds before verification...".format(sleep_time))
+        time.sleep(sleep_time)
+
+        # Verify replication
+        self.log.info("START data verification at cluster A...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_a,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START data verification at cluster B...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_data(rest_conn_b,
+            self._buckets[0],
+            kvstore,
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated data failed")
+
+        self.log.info("START revision verification on both clusters...")
+        self.assertTrue(XDCRBaseTest.verify_replicated_revs(rest_conn_a,
+            rest_conn_b,
+            self._buckets[0],
+            self._poll_sleep,
+            self._poll_timeout),
+            "Verification of replicated revisions failed")
 
