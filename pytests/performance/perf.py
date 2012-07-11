@@ -671,7 +671,7 @@ class PerfBase(unittest.TestCase):
         start_time = time.time()
         RebalanceHelper.rebalance_in(servers, num_nodes - 1)
         end_time = time.time()
-        sc.reb_stats(end_time - start_time)
+        sc.reb_stats(start_time, end_time - start_time)
 
     def delayed_rebalance(self, num_nodes, delay_seconds=10):
         t = threading.Thread(target=PerfBase.delayed_rebalance_worker,

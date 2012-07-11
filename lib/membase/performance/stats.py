@@ -303,8 +303,10 @@ class StatsCollector(object):
         machine_stats = StatUtil.machine_info(nodes[0])
         self._task["machinestats"] = machine_stats
 
-    def reb_stats(self, dur):
-        print "[reb_stats] recording reb duration = {0}".format(dur)
+    def reb_stats(self, start, dur):
+        print "[reb_stats] recording reb start = {0}, reb duration = {1}"\
+            .format(start, dur)
+        self._reb_stats["reb_start"] = start
         self._reb_stats["reb_dur"] = dur
 
     def _extract_proc_info(self, shell, pid):
