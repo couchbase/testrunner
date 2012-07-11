@@ -1620,6 +1620,7 @@ function(doc) {
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
 
+    @multiplier
     def test_evperf2(self):
         """3 design documents, 8 views per design document"""
 
