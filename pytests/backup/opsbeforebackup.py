@@ -65,7 +65,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
                                                                       self.num_replicas))
             for task in standard_bucket_tasks:
                 task.result()
-        self.shell.restore_backupFile(self.backup_location)
+        self.shell.restore_backupFile(self.backup_location, self.buckets)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.master)
@@ -119,7 +119,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
                                                                       self.num_replicas))
             for task in standard_bucket_tasks:
                 task.result()
-        self.shell.restore_backupFile(self.backup_location)
+        self.shell.restore_backupFile(self.backup_location, self.buckets)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.master)
