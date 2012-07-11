@@ -767,7 +767,8 @@ class ViewBaseTests(unittest.TestCase):
             else:
                 doc_names.append(doc_name)
         self.log.info("deleted {0} json documents".format(num_of_deleted_docs))
-        ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
+        if not self.__class__.__name__ == 'ViewQueryTests':
+            ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
         return doc_names
 
     @staticmethod

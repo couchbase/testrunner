@@ -647,6 +647,25 @@ class ViewQueryTests(unittest.TestCase):
         for task in tasks:
             task.result()
 
+    def test_simple_dataset_queries_during_modifying_docs(self):
+        skip = 0
+        action = self.input.param('action', 'recreate')
+        data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
+
+        data_set.add_skip_queries(skip, limit=self.limit)
+        data_set.load(self, data_set.views[0], True)
+
+        if action == 'recreate':
+            data_set.load(self, data_set.views[0], True)
+        if action == 'delete':
+            ViewBaseTests._delete_docs(self, self.num_docs, self.num_docs / 2, data_set.views[0].prefix)
+            for view in data_set.views:
+                for q in view.queries:
+                    q.expected_num_docs = min(self.num_docs / 2, data_set.limit)
+
+        self._query_all_views(data_set.views, limit=data_set.limit)
+
+
 
     def test_employee_dataset_query_stop_master(self):
         try:
@@ -1681,6 +1700,16 @@ class SimpleDataSet:
         views = views or self.views
         for view in views:
             view.queries += [QueryHelper({query_param : value}, None, error=error)]
+
+    def add_skip_queries(self, skip, limit=None, views=None):
+        if views is None:
+            views = self.views
+
+        for view in views:
+            limit = self.limit or 1
+            limit = min(limit, view.index_size)
+
+            view.queries += [QueryHelper({"skip" : skip, "limit" : str(limit)}, limit)]
 
     def add_include_docs_queries(self, views=None, limit=None):
         views = views or self.views
