@@ -858,6 +858,37 @@ class ViewQueryTests(unittest.TestCase):
         for task in tasks:
             task.result()
 
+    '''
+    Test verifies querying when other thread is updating/deleting its ddoc
+    Parameters:
+        action - can be create/update/delete
+        error - expected error message for queries
+    '''
+    def test_simple_dataset_query_during_modifying_its_ddoc(self):
+        action = self.input.param('action', 'update')
+        error = self.input.param('error', None)
+        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set.add_startkey_endkey_queries()
+        self._query_test_init(data_set, False)
+
+        tasks = []
+        #update/delete
+        if action == 'update':
+            view_map_func_new = "function (doc) {if(doc.age !== undefined) { emit(doc.age);}}"
+            views = [View(view.name, view_map_func_new, None, True) for view in data_set.views]
+            for view in views:
+                tasks.append(self.cluster.async_create_view(self.servers[0], view.name[4:], view))
+                self._query_all_views(data_set.views)
+        if action == 'delete':
+            for view in data_set.views:
+                tasks.append(self.cluster.delete_view(self.servers[0], view.name[4:], None))
+                time.sleep(1)
+            for view in data_set.views:
+                for q in view.queries:
+                    q.error = error
+            self._query_all_views(data_set.views, False)
+        for task in tasks:
+            task.result()
 
     ###
     # load the data defined for this dataset.
