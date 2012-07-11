@@ -204,7 +204,7 @@ createProcessUsageDataFrame <- function(bb,process) {
 builds_json <- fromJSON(file=paste("http://",dbip,":5984/",dbname,"/","/_design/data/_view/by_test_time", sep=''))$rows
 builds_list <- plyr::ldply(builds_json, unlist)
 
-names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','is_json', 'reb_dur',  'testrunner', 'cluster_name', 'test_time')
+names(builds_list) <- c('id', 'build', 'test_name', 'test_spec_name','runtime','is_json', 'reb_start', 'reb_dur',  'testrunner', 'cluster_name', 'test_time')
 
  # Pick the latest stats doc for a given test on a given build
  (fbl <- builds_list[FALSE, ])
@@ -223,6 +223,10 @@ builds_list <- builds_list[builds_list$build %in% i_builds & builds_list$test_na
 print(builds_list)
 # Following metrics are to be fetch from CouchDB and plotted
 metric_list = c('ns_server_data', 'systemstats', 'latency-get','latency-set') #unused
+
+# Get relative rebalance start time
+builds_list$reb_start = as.numeric(builds_list$reb_start) - as.numeric(builds_list$test_time)
+builds_list$reb_end = builds_list$reb_start + as.numeric(builds_list$reb_dur)
 
 # Get ns_server_data
 
