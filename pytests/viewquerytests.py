@@ -245,7 +245,7 @@ class ViewQueryTests(unittest.TestCase):
 
     def test_employee_dataset_alldocs_queries_start_stop_rebalance_in_incremental(self):
         docs_per_day = self.input.param('docs-per-day', 20)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_all_docs_queries()
         self._query_test_init(data_set, False)
@@ -253,7 +253,7 @@ class ViewQueryTests(unittest.TestCase):
         master = self.servers[0]
         RebalanceHelper.wait_for_persistence(master, "default")
 
-        rest=RestConnection(self.servers[0])
+        rest = RestConnection(self.servers[0])
         nodes = rest.node_statuses()
 
         for server in self.servers[1:]:
@@ -264,18 +264,17 @@ class ViewQueryTests(unittest.TestCase):
             self.assertTrue(otpNode, msg.format(server.ip, server.port))
 
             # Just doing 2 iterations
-            for i in [1, 2]:
+            for expected_progress in [30, 60]:
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
-                expected_progress = 30*i
                 reached = RestHelper(rest).rebalance_reached(expected_progress)
                 self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
                 stopped = rest.stop_rebalance()
                 self.assertTrue(stopped, msg="unable to stop rebalance")
-                self._query_all_views(data_set.views)
+                self._query_all_views(data_set.views, limit=data_set.limit)
 
-                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
-                self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
-                self._query_all_views(data_set.views)
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+            self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
+            self._query_all_views(data_set.views, limit=data_set.limit)
 
             self.assertTrue(len(rest.node_statuses()) -len(nodes)==1, msg="number of cluster's nodes is not correct")
             nodes = rest.node_statuses()
@@ -285,7 +284,7 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
 
         docs_per_day = self.input.param('docs-per-day', 20)
-        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_all_docs_queries()
         self._query_test_init(data_set, False)
@@ -305,18 +304,17 @@ class ViewQueryTests(unittest.TestCase):
                     break
 
             # Just doing 2 iterations
-            for i in [1, 2]:
+            for expected_progress in [30, 60]:
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
-                expected_progress = 30*i
                 reached = RestHelper(rest).rebalance_reached(expected_progress)
                 self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
                 stopped = rest.stop_rebalance()
                 self.assertTrue(stopped, msg="unable to stop rebalance")
-                self._query_all_views(data_set.views)
-
+                self._query_all_views(data_set.views, limit=self.limit)
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
-                self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
-                self._query_all_views(data_set.views)
+
+            self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
+            self._query_all_views(data_set.views, limit=self.limit)
 
             self.assertTrue(len(nodes) - len(rest.node_statuses()) == 1, msg="number of cluster's nodes is not correct")
             nodes = rest.node_statuses()
@@ -1256,7 +1254,7 @@ class EmployeeDataSet:
                 view.queries += [QueryHelper({"key" : "[2008,7,1]"},
                                              expected_num_docs)]
 
-    def add_all_docs_queries(self, views = None):
+    def add_all_docs_queries(self, views=None, limit=None):
 
         if views is None:
             views = []
@@ -1274,20 +1272,35 @@ class EmployeeDataSet:
 
             section_size = index_size/len(self.get_data_sets())
 
-            view.queries += [QueryHelper({"start_key": '"arch0000-2008_10_01"'},
-                                         index_size - section_size - self.days*9),
-                             QueryHelper({"start_key" : '"ui0000-2008_10_01"'},
-                                         index_size  - section_size*2 - self.days*9),
+            limit = limit or self.limit
+
+            if limit:
+                view.queries += [QueryHelper({"start_key" : '"arch0000-2008_10_01"',
+                                              "limit" : limit},
+                                             min(limit, index_size - section_size - self.days * 9)),
+                             QueryHelper({"start_key" : '"ui0000-2008_10_01"',
+                                          "limit" : limit},
+                                         min(limit, index_size  - section_size * 2 - self.days * 9)),
                              QueryHelper({"start_key" : '"arch0000-2008_10_01"',
                                           "end_key"   : '"ui0000-2008_10_01"',
-                                          "inclusive_end" : "false"},
-                                         index_size - section_size*2)]
-                             # test design docs are included when start_key not specified
-                             # TODO: cannot verify this query unless we store view names in
-                             #       doc_id_map
-                             #QueryHelper({"end_key" : '"ui0000-2008_10_01"',
-                             #             "inclusive_end" : "false"},
-                             #             index_size - section_size + 9*self.days + len(self.views))]
+                                          "inclusive_end" : "false",
+                                          "limit" : limit},
+                                         min(limit, index_size - section_size * 2))]
+            else:
+                view.queries += [QueryHelper({"start_key": '"arch0000-2008_10_01"'},
+                                             index_size - section_size - self.days * 9),
+                                 QueryHelper({"start_key" : '"ui0000-2008_10_01"'},
+                                             index_size  - section_size * 2 - self.days * 9),
+                                 QueryHelper({"start_key" : '"arch0000-2008_10_01"',
+                                              "end_key"   : '"ui0000-2008_10_01"',
+                                              "inclusive_end" : "false"},
+                                             index_size - section_size * 2)]
+                                 # test design docs are included when start_key not specified
+                                 # TODO: cannot verify this query unless we store view names in
+                                 #       doc_id_map
+                                 #QueryHelper({"end_key" : '"ui0000-2008_10_01"',
+                                 #             "inclusive_end" : "false"},
+                                 #             index_size - section_size + 9*self.days + len(self.views))]
 
             # set all_docs flag
             for query in view.queries:
