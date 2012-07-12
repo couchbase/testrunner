@@ -83,6 +83,10 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _common_clenup(self):
+        rest = RestConnection(self.servers[0])
+        if rest._rebalance_progress_status() == 'running':
+            stopped = rest.stop_rebalance()
+            self.assertTrue(stopped, msg="unable to stop rebalance")
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
