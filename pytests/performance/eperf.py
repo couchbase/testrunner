@@ -1392,6 +1392,7 @@ function(doc) {
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
 
+    @multiplier
     def test_vperf2(self):
         """1 design document, 8 views"""
 
