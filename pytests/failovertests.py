@@ -201,7 +201,7 @@ class FailoverTests(unittest.TestCase):
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=[node.id for node in chosen])
             msg = "rebalance failed while removing failover nodes {0}".format(chosen)
-            self.assertTrue(rest.monitorRebalance(), msg=msg)
+            self.assertTrue(rest.monitorRebalance(stop_if_loop=True), msg=msg)
             FailoverBaseTest.replication_verification(master, bucket, replica, inserted_count, self)
 
             nodes = rest.node_statuses()
