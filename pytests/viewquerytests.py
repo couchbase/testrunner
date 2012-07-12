@@ -165,7 +165,7 @@ class ViewQueryTests(unittest.TestCase):
             ViewBaseTests._end_rebalance(self)
 
             docs_per_day = self.input.param('docs-per-day', 200)
-            data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+            data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
             data_set.add_all_docs_queries()
             self._query_test_init(data_set, False)
@@ -184,13 +184,13 @@ class ViewQueryTests(unittest.TestCase):
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=[node.id for node in failover_nodes])
 
-            self._query_all_views(data_set.views)
+            self._query_all_views(data_set.views, limit=data_set.limit)
 
             msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
 
             #verify queries after failover
-            self._query_all_views(data_set.views)
+            self._query_all_views(data_set.views, limit=data_set.limit)
         finally:
             for server in [server for server in self.servers
                            for node in failover_nodes
