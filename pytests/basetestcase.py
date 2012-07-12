@@ -46,9 +46,9 @@ class BaseTestCase(unittest.TestCase):
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
             self.buckets[self.default_bucket_name] = {1 : KVStore()}
         self._create_sasl_buckets(self.master, self.sasl_buckets)
+        self._create_strandard_buckets(self.master, self.standard_buckets)
         self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
-        # TODO (Mike): Create Standard buckets
         self._log_start(self)
 
     def tearDown(self):
@@ -108,6 +108,26 @@ class BaseTestCase(unittest.TestCase):
                                                                       self.num_replicas))
             self.buckets[name] = {1 : KVStore()}
         for task in bucket_tasks:
+            task.result()
+
+    def _create_strandard_buckets(self, server, num_buckets):
+        bucket_tasks = []
+        for i in range(num_buckets):
+            name = 'standard_bucket' + str(i)
+            bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
+                                                                          11212,
+                                                                          self.bucket_size,
+                                                                          self.num_replicas))
+            self.buckets[name] = {1 : KVStore()}
+        for task in bucket_tasks:
+            task.result()
+
+    def _all_buckets_delete(self, server):
+        delete_tasks = []
+        for bucket in self.buckets.iterkeys():
+            delete_tasks.append(self.cluster.async_bucket_delete(server, bucket))
+
+        for task in delete_tasks:
             task.result()
 
     def _verify_stats_all_buckets(self, servers):
