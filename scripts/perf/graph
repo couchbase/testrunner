@@ -2,7 +2,7 @@
 
 git clean -dfx
 cd resources/R/
-Rscript ep1.R ${baseline_build} ${target_build} ${test_case}.loop couchdb2.couchbaseqe.com eperf ${run_id} ${filename}
+Rscript ep1.R ${baseline_build} ${target_build} ${test_case}.loop 10.5.2.41 eperf ${run_id} ${filename}
 
 if [ -n ${filename} ]; then
   filename=`ls | grep pdf`
