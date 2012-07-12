@@ -689,6 +689,8 @@ if (reb) {
     latency_obs_client = rebFilter(latency_obs_client, builds_list)
     throughput_query = rebFilter(throughput_query, builds_list)
     disk_data = rebFilter(disk_data, builds_list)
+
+    builds_list$runtime = builds_list$reb_dur
 }
 
 builds_list$runtime = as.numeric(builds_list$runtime)
