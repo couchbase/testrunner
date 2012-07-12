@@ -53,16 +53,18 @@ class BaseTestCase(unittest.TestCase):
 
     def tearDown(self):
         if not self.input.param("skip_cleanup", False):
-            self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
+            try:
+                self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
-            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-            ClusterOperationHelper.cleanup_cluster(self.servers)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-            self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
+                BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+                ClusterOperationHelper.cleanup_cluster(self.servers)
+                ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+                self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
-            #stop all existing task manager threads
-            self.cluster.shutdown()
-            self._log_finish(self)
+            finally:
+                #stop all existing task manager threads
+                self.cluster.shutdown()
+                self._log_finish(self)
 
     @staticmethod
     def _log_start(self):
