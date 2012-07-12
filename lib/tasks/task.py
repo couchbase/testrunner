@@ -542,6 +542,44 @@ class ValidateDataTask(GenericLoadingTask):
                 self.state = FINISHED
                 self.set_exception(error)
         self.kv_store.release_partition(key)
+class verifyRevIdTask(GenericLoadingTask):
+    def __init__(self, src_server, dest_server, bucket, kv_store):
+        GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
+        self.client2 = VBucketAwareMemcached(RestConnection(dest_server), bucket)
+
+        self.valid_keys, self.deleted_keys = kv_store.key_set()
+        self.num_valid_keys = len(self.valid_keys)
+        self.num_deleted_keys = len(self.deleted_keys)
+        self.itr = 0
+
+    def has_next(self):
+        if self.itr < self.num_deleted_keys:
+            return True
+        return False
+
+    def next(self):
+        if self.itr < self.num_deleted_keys:
+            self._check_deleted_key_revId(self.deleted_keys[self.itr])
+        self.itr += 1
+
+    def _check_deleted_key_revId(self, key):
+        try:
+            mc = self.client.memcached(key)
+            mc2 = self.client2.memcached(key)
+            seqno, revid, cas, exp_flags, flags_other = mc.getRev(key)
+            seqno2, revid2, cas2, exp_flags2, flags_other2 = mc2.getRev(key)
+            self.log.info("Source-key is {0} and cas {1} and exp_flags{2} and other_flags{3} and key-count{4}".format(key, cas,exp_flags, flags_other,self.itr))
+            self.log.info("Destination-key is {0} and cas {1} and exp_flags{2} and other_flags{3} and key-count{4}".format(key, cas2,exp_flags2, flags_other2,self.itr))
+            if revid != revid2:
+                self.log.info("******MISMATCH ON REVISION IDS ********** \nSOURCE-{0} \n DESTINATION-{1} ".format(revid, revid2))
+            #                self.state = FINISHED
+            #                self.set_exception(Exception('Exception! Revision Ids mismatch error'))
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
 
 class ViewCreateTask(Task):
     def __init__(self, server, design_doc_name, view, bucket="default"):

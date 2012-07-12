@@ -107,6 +107,11 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_verify_revid(self, src_server, dest_server, bucket, kv_store):
+        _task = verifyRevIdTask(src_server, dest_server, bucket, kv_store)
+        self.task_manager.schedule(_task)
+        return _task
+
     def async_rebalance(self, servers, to_add, to_remove):
         """Asyncronously rebalances a cluster
 

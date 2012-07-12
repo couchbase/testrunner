@@ -229,9 +229,12 @@ class MemcachedClient(object):
             raise ValueError("Invalid meta type %x" % meta_type)
 
         seqno = struct.unpack('>I', meta_data[:4])[0]
-        revid = meta_data[4:]
+        revid = struct.unpack('>QII', meta_data[4:])
+        cas = struct.unpack('>Q', meta_data[4:12])[0]
+        exp_flags = struct.unpack('>I', meta_data[12:16])[0]
+        flags_other = struct.unpack('>I', meta_data[16:])[0]
 
-        return (seqno, revid)
+        return (seqno, revid, cas, exp_flags, flags_other)
 
     def cas(self, key, exp, flags, oldVal, val, vbucket=-1):
         """CAS in a new value for the given key and comparison value."""
