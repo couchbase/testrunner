@@ -14,3 +14,8 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
 VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 2
 MAX_COMPACTION_THRESHOLD = 100
+LINUX_CBBACKUP_COMMAND_PATH = "/opt/couchbase/bin/cbbackup"
+WIN_CBBACKUP_COMMAND_PATH = "C:\program files\couchbase\server\bin\cbbackup.exe"
+LINUX_CBRESTORE_COMMAND_PATH = "/opt/couchbase/bin/cbrestore"
+WIN_CBRESTORE_COMMAND_PATH = "C:\program files\couchbase\server\bin\cbrestore.exe"
+#cbbackup cbrestore is not working for windows yet.
