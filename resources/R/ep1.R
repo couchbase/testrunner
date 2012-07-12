@@ -40,7 +40,7 @@ if (unlist(strsplit(run_id, "-"))[1] == "reb") {
     reb = FALSE
 }
 
-if (length(pdfname) == 0) {
+if (is.na(pdfname) | length(pdfname) == 0) {
     pdfname = paste(test_name,
                     baseline_build,
                     new_build,
