@@ -10,6 +10,9 @@ from obs_res import ObserveResponse
 from obs_def import ObservePktFmt, ObserveStatus
 from obs_helper import VbucketHelper
 
+BACKOFF = 0.2       # TODO: configurable
+MAX_BACKOFF = 1
+
 class McsodaObserver(Observer, Thread):
 
     ctl = None
@@ -24,8 +27,6 @@ class McsodaObserver(Observer, Thread):
     #TODO: socket timeout, fine-grained exceptions
     #TODO: network helper
     #TODO: wait call timeout
-    #TODO: Performance - although we don't sleep,\
-    #      may need to back off if there are too many obs commands.
 
     def __init__(self, ctl, cfg, store, callback):
         self.ctl = ctl
@@ -33,6 +34,7 @@ class McsodaObserver(Observer, Thread):
         self.store = store
         self.callback = callback
         self._build_conns()
+        self.backoff = BACKOFF
         super(McsodaObserver, self).__init__()
 
     def run(self):
@@ -40,11 +42,15 @@ class McsodaObserver(Observer, Thread):
             self.observe()
             try:
                 self.observable_filter(ObserveStatus.OBS_UNKNOWN).next()
+                print "<%s> sleep for %f seconds" % (self.__class__.__name__, self.backoff)
+                sleep(self.backoff)
+                self.backoff = min(self.backoff * 2, MAX_BACKOFF)
             except StopIteration:
                 self.measure_client_latency()
                 self.clear_observables()
                 if self.callback:
                     self.callback(self.store)
+                self.backoff = BACKOFF
         print "<%s> stopped running" % (self.__class__.__name__)
 
     def _build_conns(self):
@@ -147,8 +153,10 @@ class McsodaObserver(Observer, Thread):
     def measure_client_latency(self):
         observables = self.observable_filter(ObserveStatus.OBS_SUCCESS)
         for obs in observables:
-            self.save_latency_stats(obs.end_time-obs.start_time,
-                                    obs.start_time, False)
+            obs_dur = obs.end_time - obs.start_time
+            print "<%s> saving client latency, key: %s, cas: %s, time: %f"\
+                % (self.__class__.__name__, obs.key, obs.cas, obs_dur)
+            self.save_latency_stats(obs_dur, obs.start_time, False)
 
     def save_latency_stats(self, latency, time=0, server=True):
         if not latency:
