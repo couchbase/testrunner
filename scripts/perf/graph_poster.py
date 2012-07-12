@@ -6,6 +6,11 @@ import time
 from os import path
 from couchdbkit import Server
 from optparse import OptionParser
+import sys
+
+sys.path.append("../../lib")
+
+from cbkarma.rest_client import CbKarmaClient
 
 class DocGenerator:
 
@@ -65,16 +70,25 @@ class GraphPoster:
 
     def post_to_couchdb(self, filename):
 
-        doc = DocGenerator().create_doc(filename)
+        self.doc = DocGenerator().create_doc(filename)
 
-        if doc:
-            res = self._db.save_doc(doc, force_update=True)
-            if res:
+        if self.doc:
+            self.res = self._db.save_doc(self.doc, force_update=True)
+            if self.res:
                 print "posted pdf to couchdb : filename = {0}, doc_id = {1}, rev = {2} "\
-                    .format(filename, res["id"], res["rev"])
+                    .format(filename, self.res["id"], self.res["rev"])
 
             with open(filename, 'r') as f:
-                self._db.put_attachment(doc, f, filename, "application/pdf")
+                self._db.put_attachment(self.doc, f, filename, "application/pdf")
+
+    def post_to_dashboard(self, node, test_id=None):
+        """Share link on performance dashboard"""
+
+        if test_id and test_id != 'unknown':
+            cbkarma = CbKarmaClient('dashboard.hq.couchbase.com', '80')
+            url = '/'.join((node, self.doc['category'], self.res['id'],
+                            self.doc['filename']))
+            cbkarma.report(test_id, self.doc['filename'], url)
 
 if __name__ == "__main__":
 
@@ -87,7 +101,9 @@ if __name__ == "__main__":
     parser.add_option("-f", "--filename",
                       dest="filename", help="pdf file to be posted to couchdb",
                       default="test.pdf")
+    parser.add_option("-t", "--test_id", dest="test_id", help="unique test id")
     options, args = parser.parse_args()
 
     poster = GraphPoster(options.node, options.db)
     poster.post_to_couchdb(options.filename)
+    poster.post_to_dashboard(options.node, options.test_id)

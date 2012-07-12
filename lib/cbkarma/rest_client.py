@@ -1,8 +1,8 @@
 import json
 import urllib
 
-from lib.membase.api.rest_client import RestConnection
-from lib.membase.api.exception import ServerUnavailableException
+from membase.api.rest_client import RestConnection
+from membase.api.exception import ServerUnavailableException
 
 class CbKarmaClient(RestConnection):
     """Performance dashboard (cbkarma) REST API"""
@@ -72,6 +72,18 @@ class CbKarmaClient(RestConnection):
                   'attachment': attachment}
         if id:
             params['id'] = id
+
+        try:
+            return self._http_request(api, 'POST', urllib.urlencode(params),
+                                      timeout=30)
+        except ServerUnavailableException:
+            print "Dashboard is not available... bypassing."
+
+    def report(self, id, filename, url):
+        """Sumbit link to pdf report"""
+        api = self.baseUrl + 'report'
+
+        params = {'test_id': id, 'description': filename, 'url': url}
 
         try:
             return self._http_request(api, 'POST', urllib.urlencode(params),

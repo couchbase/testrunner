@@ -9,4 +9,9 @@ if [ -n ${filename} ]; then
   fi
 
 dbname=`echo $filename | cut -d - -f1`
-../../scripts/perf/graph_poster.py -n http://10.5.2.41:5984 -d ${dbname} -f ${filename}
+
+if [ -z ${test_id} ]; then
+    test_id='unknown'
+fi
+
+../../scripts/perf/graph_poster.py -n http://10.5.2.41:5984 -d ${dbname} -f ${filename} -t ${test_id}
