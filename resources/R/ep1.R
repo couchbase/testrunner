@@ -185,6 +185,31 @@ ggplotAllProcessesCpuUsageWithFacets <- function(df,title) {
 #    }
 }
 
+rebFilter <- function(data, builds_list) {
+    # filter data to only include results during rebalance
+
+    if (length(data) == 0) {
+        print("cannot apply rebalance filter: invalid data frame")
+        return
+    }
+
+    if (length(builds_list) == 0) {
+        print("cannot apply rebalance filter: invalid build list")
+        return
+    }
+
+    temp_data_frame <- data.frame()
+    for (index in 1:nrow(builds_list)) {
+        build = builds_list[index,]
+        temp_data_frame <- rbind(temp_data_frame,
+                                 data[data$buildinfo.version == build$build
+                                      & data$row < build$reb_end
+                                      & data$row > build$reb_start,])
+    }
+
+    return(temp_data_frame)
+}
+
 createProcessUsageDataFrame <- function(bb,process) {
  	(temp_data_frame <- bb[FALSE, ])
 	builds = factor(bb$buildinfo.version)
@@ -655,6 +680,16 @@ disk_data$row <- as.numeric(disk_data$row)
 disk_data$size <- as.numeric(disk_data$size)
 disk_data$row <- as.numeric(factor(disk_data$row)) * 10
 
+# apply rebalance filter
+if (reb) {
+    ns_server_data = rebFilter(ns_server_data, builds_list)
+    latency_get = rebFilter(latency_get, builds_list)
+    latency_set = rebFilter(latency_set, builds_list)
+    latency_query = rebFilter(latency_query, builds_list)
+    latency_obs_client = rebFilter(latency_obs_client, builds_list)
+    throughput_query = rebFilter(throughput_query, builds_list)
+    disk_data = rebFilter(disk_data, builds_list)
+}
 
 builds_list$runtime = as.numeric(builds_list$runtime)
 #baseline= c("1.7.2r-22-geaf53ef")
