@@ -736,7 +736,7 @@ class ViewQueryTests(unittest.TestCase):
         try:
             docs_per_day = self.input.param('docs-per-day', 200)
             error = self.input.param('error', None)
-            data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+            data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
             data_set.add_startkey_endkey_queries()
             self._query_test_init(data_set, False)
 
@@ -752,7 +752,7 @@ class ViewQueryTests(unittest.TestCase):
                 for q in view.queries:
                     q.error = error
             time.sleep(20)
-            self._query_all_views(data_set.views, False)
+            self._query_all_views(data_set.views, False, limit=data_set.limit)
         finally:
             shell = RemoteMachineShellConnection(self.servers[0])
             shell.start_couchbase()
