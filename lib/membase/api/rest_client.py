@@ -1283,8 +1283,9 @@ class RestConnection(object):
             # overriding per/bucket compaction setting
             api = api + "pools/default/buckets/" + bucket
             params["autoCompactionDefined"] = "true"
-            # reuse current ram quota in mb
-            quota = self.get_bucket_json(bucket)["quota"]["ram"]/1048576
+            # reuse current ram quota in mb per node
+            num_nodes = len(self.node_statuses())
+            quota = self.get_bucket_json(bucket)["quota"]["ram"] /(1048576 * num_nodes)
             params["ramQuotaMB"] = quota
 
         params["parallelDBAndViewCompaction"] =  parallelDBAndVC
