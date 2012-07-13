@@ -15,6 +15,7 @@ from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached, DocumentGenerator
 from memcached.helper.data_helper import MemcachedError
+from remote.remote_util import RemoteMachineShellConnection
 
 class ViewBaseTests(unittest.TestCase):
 
