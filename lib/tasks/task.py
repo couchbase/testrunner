@@ -1036,6 +1036,7 @@ class ViewCompactionTask(Task):
         self.ddoc_id = "_design%2f" + design_doc_name
         self.num_of_compactions = 0
         self.precompacted_frag_val = 0
+
     def execute(self, task_manager):
         rest = RestConnection(self.server)
 
@@ -1060,7 +1061,12 @@ class ViewCompactionTask(Task):
 
         try:
             new_compaction_count, compacted_frag_val = self._get_compaction_details()
-            if new_compaction_count > self.num_of_compactions:
+            if new_compaction_count == self.num_of_compactions and self._is_compacting():
+                # compaction ran sucessfully but compactions was not changed
+                # perhaps we are still compacting
+                self.log.info("design doc {0} is compacting".format(self.design_doc_name))
+                task_manager.schedule(self, 2)
+            elif new_compaction_count > self.num_of_compactions:
                 frag_val_diff = compacted_frag_val - self.precompacted_frag_val
                 self.log.info("fragmentation went from %d to %d" % \
                               (self.precompacted_frag_val, compacted_frag_val))
@@ -1076,8 +1082,14 @@ class ViewCompactionTask(Task):
                     self.set_result(False)
                 else:
                     self.set_result(True)
+                    self.state = FINISHED
             else:
-                self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
+                #Sometimes the compacting is not started immediately
+                time.sleep(5)
+                if self._is_compacting():
+                    task_manager.schedule(self, 2)
+                else:
+                    self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
 
         except (SetViewInfoNotFound) as ex:
             self.state = FINISHED
@@ -1087,8 +1099,6 @@ class ViewCompactionTask(Task):
             self.state = FINISHED
             self.log.info("Unexpected Exception Caught")
             self.set_exception(e)
-
-        self.state = FINISHED
 
     def _get_compaction_details(self):
         rest = RestConnection(self.server)
@@ -1101,4 +1111,4 @@ class ViewCompactionTask(Task):
     def _is_compacting(self):
         rest = RestConnection(self.server)
         status, content = rest.set_view_info(self.bucket, self.design_doc_name)
-        return content["compact_running"] == "true"
+        return content["compact_running"] == True
