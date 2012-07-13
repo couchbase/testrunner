@@ -111,8 +111,25 @@ class OpsDuringBackupTests(BackupBaseTest):
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        self._create_strandard_buckets(self.master, self.standard_buckets)
+        sasl_bucket_tasks = []
+        for i in range(self.sasl_buckets):
+            name = 'bucket' + str(i)
+            sasl_bucket_tasks.append(self.cluster.async_create_sasl_bucket(self.master, name,
+                                                                      'password',
+                                                                      self.bucket_size,
+                                                                      self.num_replicas))
+        for task in sasl_bucket_tasks:
+            task.result()
+
+        standard_bucket_tasks = []
+        for i in range(self.standard_buckets):
+            name = 'standard_bucket' + str(i)
+            standard_bucket_tasks.append(self.cluster.async_create_standard_bucket(self.master, name,
+                                                                      11212,
+                                                                      self.bucket_size,
+                                                                      self.num_replicas))
+            for task in standard_bucket_tasks:
+                task.result()
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])

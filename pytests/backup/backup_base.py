@@ -4,6 +4,7 @@ from memcached.helper.kvstore import KVStore
 
 class BackupBaseTest(BaseTestCase):
     def setUp(self):
+        self.times_teardown_called = 1
         super(BackupBaseTest, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
         self.value_size = self.input.param("value_size", 256)
@@ -22,5 +23,12 @@ class BackupBaseTest(BaseTestCase):
 
     def tearDown(self):
         super(BackupBaseTest, self).tearDown()
-        self.shell.delete_backupFile(self.backup_location)
-        self.shell.disconnect()
+        if not self.input.param("skip_cleanup", True):
+            if times_tear_down_called > 1 :
+                self.shell.delete_backupFile(self.backup_location)
+                self.shell.disconnect()
+        if self.input.param("skip_cleanup", True):
+            if self.case_number > 1 or self.times_teardown_called >1:
+                self.shell.delete_backupFile(self.backup_location)
+                self.shell.disconnect()
+        self.times_teardown_called +=1
