@@ -731,7 +731,6 @@ class ViewQueryTests(unittest.TestCase):
         self._query_all_views(data_set.views, limit=data_set.limit)
 
 
-
     def test_employee_dataset_query_stop_master(self):
         try:
             docs_per_day = self.input.param('docs-per-day', 200)
@@ -756,6 +755,13 @@ class ViewQueryTests(unittest.TestCase):
         finally:
             shell = RemoteMachineShellConnection(self.servers[0])
             shell.start_couchbase()
+
+    def test_start_end_key_docid_extra_params(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        extra_params = self.input.param('extra_params', None)
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day)
+        data_set.add_startkey_endkey_docid_queries_extra_params(extra_params=extra_params)
+        self._query_test_init(data_set)
 
 
     '''
@@ -895,6 +901,13 @@ class ViewQueryTests(unittest.TestCase):
         if not server:
             server = self.servers[0]
         return RestConnection(server)
+
+    @staticmethod
+    def parse_string_to_dict(string_to_parse, separator_items=';', seprator_value='-'):
+        if string_to_parse.find(separator_items) < 0:
+            return dict([string_to_parse.split(seprator_value)] )
+        else:
+            return dict(item.split(seprator_value) for item in string_to_parse.split(separator_items))
 
 class QueryView:
     def __init__(self, rest,
@@ -1159,6 +1172,57 @@ class EmployeeDataSet:
             else:
                 query_params_dict = invalid_query_params_dict
             view.queries += [QueryHelper(query_params_dict, expected_docs)]
+
+    def add_startkey_endkey_docid_queries_extra_params(self, views=None, extra_params=None):
+        # only select views that will index entire dataset
+        views = views or [view for view in self.views
+                          if view.index_size == self.calc_total_doc_count()]
+        extra_params_dict = {}
+        import types
+        if extra_params and type(extra_params) != types.DictType:
+            extra_params_dict = ViewQueryTests.parse_string_to_dict(extra_params)
+
+        for view in views:
+
+            # pre-calculating expected key size of query between
+            # [2008,2,20] and [2008,7,1] with descending set
+            # based on dataset
+            all_docs_per_day = len(self.get_data_sets()) * self.docs_per_day
+            expected_num_keys = 9 * all_docs_per_day + 4 * self.days * all_docs_per_day - self.docs_per_day + 1
+
+            startkey = "[2008,2,20]"
+            endkey = "[2008,7,1]"
+            startkey_docid = "arch0000-2008_02_20"
+            endkey_docid = "admin0000-2008_07_01"
+
+            if 'limit' in extra_params_dict:
+                expected_num_keys = view.reduce_fn and expected_num_keys or min(int(extra_params_dict['limit']), expected_num_keys)
+
+            if 'descending' in extra_params_dict and \
+                extra_params_dict['descending'] == 'true':
+                tmp = endkey
+                endkey = startkey
+                startkey = tmp
+                tmp = endkey_docid
+                endkey_docid = startkey_docid
+                startkey_docid = tmp
+
+            if 'inclusive_end' in extra_params_dict and \
+                extra_params_dict['inclusive_end'] == 'false':
+                expected_num_keys -= 1
+
+            if 'skip' in extra_params_dict:
+                if view.reduce_fn:
+                    self.views.remove(view)
+
+            view.queries += [QueryHelper({"start_key" : startkey,
+                                          "startkey_docid" : startkey_docid,
+                                          "end_key"   : endkey,
+                                          "endkey_docid"   : endkey_docid},
+                                         expected_num_keys)]
+            if extra_params_dict:
+                for q in view.queries:
+                    q.params.update(extra_params_dict)
 
     def add_startkey_endkey_queries(self, views=None, limit=None):
         if views is None:
