@@ -31,7 +31,7 @@ class OpsDuringBackupTests(BackupBaseTest):
 
         backup_thread = Thread(target=self.shell.execute_cluster_backup,
                                name="backup",
-                               args=(self.backup_location, self.command_options))
+                               args=(self.couchbase_login_info, self.backup_location, self.command_options))
 
         backup_thread.start()
         data_load_thread.start()
@@ -62,7 +62,7 @@ class OpsDuringBackupTests(BackupBaseTest):
                                                                       self.num_replicas))
             for task in standard_bucket_tasks:
                 task.result()
-        self.shell.restore_backupFile(self.backup_location, self.buckets)
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
 
         for bucket, kvstores in self.buckets.items():
             del kvstores[1]
@@ -101,7 +101,7 @@ class OpsDuringBackupTests(BackupBaseTest):
 
         first_backup_thread = Thread(target=self.shell.execute_cluster_backup,
                                      name="backup",
-                                     args=(self.backup_location, self.command_options))
+                                     args=(self.couchbase_login_info, self.backup_location, self.command_options))
         first_backup_thread.start()
         first_backup_thread.join()
         for t in mutate_threads:
@@ -113,7 +113,7 @@ class OpsDuringBackupTests(BackupBaseTest):
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_strandard_buckets(self.master, self.standard_buckets)
-        self.shell.restore_backupFile(self.backup_location, self.buckets)
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         #TODO implement verification for this test case

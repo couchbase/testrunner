@@ -41,7 +41,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
                 self._load_all_buckets(self.master, gen_delete, "delete", 0)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
-        self.shell.execute_cluster_backup(self.backup_location, self.command_options)
+        self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
 
         self._all_buckets_delete(self.master)
         if self.default_bucket:
@@ -65,7 +65,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
                                                                       self.num_replicas))
             for task in standard_bucket_tasks:
                 task.result()
-        self.shell.restore_backupFile(self.backup_location, self.buckets)
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.master)
@@ -95,7 +95,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
                 time.sleep(5)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
-        self.shell.execute_cluster_backup(self.backup_location, self.command_options)
+        self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
 
         self._all_buckets_delete(self.master)
         if self.default_bucket:
@@ -119,7 +119,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
                                                                       self.num_replicas))
             for task in standard_bucket_tasks:
                 task.result()
-        self.shell.restore_backupFile(self.backup_location, self.buckets)
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.master)
