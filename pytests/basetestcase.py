@@ -47,7 +47,7 @@ class BaseTestCase(unittest.TestCase):
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
             self.buckets[self.default_bucket_name] = {1 : KVStore()}
         self._create_sasl_buckets(self.master, self.sasl_buckets)
-        self._create_strandard_buckets(self.master, self.standard_buckets)
+        self._create_standard_buckets(self.master, self.standard_buckets)
         self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
         self._log_start(self)
@@ -113,7 +113,7 @@ class BaseTestCase(unittest.TestCase):
         for task in bucket_tasks:
             task.result()
 
-    def _create_strandard_buckets(self, server, num_buckets):
+    def _create_standard_buckets(self, server, num_buckets):
         bucket_tasks = []
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
