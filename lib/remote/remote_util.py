@@ -1407,7 +1407,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         # Start server
         self.start_couchbase()
 
-    def execute_cluster_backup(self, backup_location, command_options):
+    def execute_cluster_backup(self, login_info, backup_location, command_options):
         self.delete_backupFile(backup_location)
         self.create_directory(backup_location)
 
@@ -1421,11 +1421,12 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if command_options is not None:
             command_options_string = ' '.join(command_options)
 
-        command = "{0} {1}{2}:{3} {4} {5}".format(backup_command, "http://",self.ip, self.port, backup_location, command_options_string)
+        command = "{0} {1}{2}@{3}:{4} {5} {6}".format(backup_command, "http://", login_info,
+                                                      self.ip, self.port, backup_location, command_options_string)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
-    def restore_backupFile(self, backup_location, buckets):
+    def restore_backupFile(self, login_info, backup_location, buckets):
         restore_command = testconstants.LINUX_CBRESTORE_COMMAND_PATH
         info = self.extract_remote_info()
         type = info.type.lower()
@@ -1433,7 +1434,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             restore_command = WIN_CBRESTORE_COMMAND_PATH
 
         for bucket in buckets.iterkeys():
-            command = "{0} {1} {2}{3}:{4} {5} {6}".format(restore_command, backup_location, "http://", self.ip, self.port, "-b", bucket)
+            command = "{0} {1} {2}{3}@{4}:{5} {6} {7}".format(restore_command, backup_location, "http://",
+                                                              login_info, self.ip, self.port, "-b", bucket)
             output, error = self.execute_command(command.format(command))
             self.log_command_output(output, error)
 
