@@ -75,9 +75,12 @@ class RebalanceOutTests(RebalanceBaseTest):
             self._verify_all_buckets(self.servers[0])
             self._verify_stats_all_buckets(self.servers[:i])
 
+
+
     """Rebalances nodes out of a cluster during view queries.
 
-    This test begins by loading a given number of items into the cluster. It creates num_views in
+    This test begins with all servers clustered together and loads a user defined
+    number of items into the cluster. It creates num_views as
     development/production view with default map view funcs(is_dev_ddoc = True by default).
     It then removes nodes_out nodes at a time and rebalances that node from the cluster.
     During the rebalancing we perform view queries for all views and verify the expected number
@@ -114,7 +117,7 @@ class RebalanceOutTests(RebalanceBaseTest):
     """Rebalances nodes out of a cluster during view queries incrementally.
 
     This test begins with all servers clustered together and  loading a given number of items
-    into the cluster. It creates num_views in development/production view with
+    into the cluster. It creates num_views as development/production view with
     default map view funcs(is_dev_ddoc = True by default).  It then adds one node at a time and
     rebalances that node into the cluster. During the rebalancing we perform view queries
     for all views and verify the expected number of docs for them.
@@ -149,28 +152,6 @@ class RebalanceOutTests(RebalanceBaseTest):
             self._verify_all_buckets(self.servers[0])
             self._verify_stats_all_buckets(self.servers[:i])
 
-    """Rebalances nodes out of a cluster while doing mutations and deletions.
-
-    This test begins with all servers clustered together and loads a user defined
-    number of items into the cluster. It then removes one node at a time from the
-    cluster and rebalances. During the rebalance we update half of the items in the
-    cluster and delete the other half. Once the cluster has been rebalanced the test
-    recreates all of the deleted items, waits for the disk queues to drain, and then
-    verifies that there has been no data loss. Once all nodes have been rebalanced out
-    of the cluster the test finishes."""
-    def incremental_rebalance_out_with_mutation_and_deletion(self):
-        gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
-                              end=self.num_items)
-        for i in reversed(range(self.num_servers)[1:]):
-            rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
-            self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
-            self._load_all_buckets(self.servers[0], gen_2, "delete", 0)
-            rebalance.result()
-            self._load_all_buckets(self.servers[0], gen_2, "create", 0)
-            self._wait_for_stats_all_buckets(self.servers[:i])
-            self._verify_all_buckets(self.servers[0])
-            self._verify_stats_all_buckets(self.servers[:i])
-
     """Rebalances nodes into a cluster when one node is warming up.
 
     This test begins with loads a user defined number of items into the cluster
@@ -196,6 +177,80 @@ class RebalanceOutTests(RebalanceBaseTest):
         self._wait_for_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
         self._verify_all_buckets(self.master)
         self._verify_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
+
+    """Rebalances nodes out of cluster  during ddoc compaction.
+
+    This test begins with all servers clustered together and loads a user defined
+    number of items into the cluster. It creates num_views as development/production
+    view with default map view funcs(is_dev_ddoc = True by default).
+    Then we disabled compaction for ddoc. While we don't reach expected fragmentation
+    for ddoc we update docs and perform view queries. We rebalance in  nodes_in nodes
+    and start compation when fragmentation was reached fragmentation_value.
+    During the rebalancing we wait while compaction will be completed.
+    After rebalancing and compaction we wait for the disk queues to drain,
+    and then verify that there has been no data loss."""
+    def rebalance_out_with_ddoc_compaction(self):
+        num_views = self.input.param("num_views", 5)
+        fragmentation_value = self.input.param("fragmentation_value", 80)
+        is_dev_ddoc = self.input.param("is_dev_ddoc", True)
+        views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
+        ddoc_name = "ddoc1"
+        prefix = ("", "dev_")[is_dev_ddoc]
+
+        query = {}
+        query["connectionTimeout"] = 60000;
+        query["full_set"] = "true"
+        tasks = []
+        tasks = self.async_create_views(self.servers[0], ddoc_name, views, self.default_bucket_name)
+        for task in tasks:
+            task.result(self.wait_timeout * 2)
+        self.disable_compaction()
+        fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.servers[0],
+                         prefix + ddoc_name, fragmentation_value, self.default_bucket_name, timeout=20)
+        # generate load until fragmentation reached
+        while fragmentation_monitor.state != "FINISHED":
+            # update docs to create fragmentation
+            self._load_all_buckets(self.master, self.gen_update, "update", 0)
+            for view in views:
+                # run queries to create indexes
+                query = {"stale" : "false"}
+                self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+        fragmentation_monitor.result()
+
+        compaction_task = self.cluster.async_compact_view(self.servers[0], prefix + ddoc_name, self.default_bucket_name)
+
+        servs_out=self.servers[-self.nodes_out:]
+        rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
+        result = compaction_task.result()
+        self.assertTrue(result)
+        rebalance.result()
+        self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
+        self._verify_all_buckets(self.master)
+        self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
+
+
+
+    """Rebalances nodes out of a cluster while doing mutations and deletions.
+
+    This test begins with all servers clustered together and loads a user defined
+    number of items into the cluster. It then removes one node at a time from the
+    cluster and rebalances. During the rebalance we update half of the items in the
+    cluster and delete the other half. Once the cluster has been rebalanced the test
+    recreates all of the deleted items, waits for the disk queues to drain, and then
+    verifies that there has been no data loss. Once all nodes have been rebalanced out
+    of the cluster the test finishes."""
+    def incremental_rebalance_out_with_mutation_and_deletion(self):
+        gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
+                              end=self.num_items)
+        for i in reversed(range(self.num_servers)[1:]):
+            rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
+            self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
+            self._load_all_buckets(self.servers[0], gen_2, "delete", 0)
+            rebalance.result()
+            self._load_all_buckets(self.servers[0], gen_2, "create", 0)
+            self._wait_for_stats_all_buckets(self.servers[:i])
+            self._verify_all_buckets(self.servers[0])
+            self._verify_stats_all_buckets(self.servers[:i])
 
     """Rebalances nodes out of a cluster while doing mutations and expirations.
 

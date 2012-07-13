@@ -74,7 +74,7 @@ class RebalanceInTests(RebalanceBaseTest):
     """Rebalances nodes into a cluster  during view queries.
 
     This test begins by loading a given number of items into the cluster.
-    It creates num_views in development/production view with default
+    It creates num_views as development/production views with default
     map view funcs(is_dev_ddoc = True by default). It then adds nodes_in nodes
     at a time and rebalances that node into the cluster. During the rebalancing
     we perform view queries for all views and verify the expected number of docs for them.
@@ -110,7 +110,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
     """Rebalances nodes into a cluster incremental during view queries.
 
-    This test begins by loading a given number of items into the cluster. It creates num_views in
+    This test begins by loading a given number of items into the cluster. It creates num_views as
     development/production view with default map view funcs(is_dev_ddoc = True by default).
     It then adds one node at a time and rebalances that node into the cluster. During the rebalancing
     we perform view queries for all views and verify the expected number of docs for them.
@@ -171,6 +171,55 @@ class RebalanceInTests(RebalanceBaseTest):
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
         self._verify_all_buckets(self.master)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
+
+    """Rebalances nodes into a cluster during ddoc compaction.
+
+    This test begins by loading a given number of items into the cluster.
+    It creates num_views as development/production view with default
+    map view funcs(is_dev_ddoc = True by default). Then we disabled compaction for
+    ddoc. While we don't reach expected fragmentation for ddoc we update docs and perform
+    view queries. We rebalance in  nodes_in nodes and start compation when fragmentation
+    was reached fragmentation_value. During the rebalancing we wait
+    while compaction will be completed. After rebalancing and compaction we wait for
+    the disk queues to drain, and then verify that there has been no data loss."""
+    def rebalance_in_with_ddoc_compaction(self):
+        num_views = self.input.param("num_views", 5)
+        fragmentation_value = self.input.param("fragmentation_value", 80)
+        is_dev_ddoc = self.input.param("is_dev_ddoc", True)
+        views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
+        ddoc_name = "ddoc1"
+        prefix = ("", "dev_")[is_dev_ddoc]
+
+        query = {}
+        query["connectionTimeout"] = 60000;
+        query["full_set"] = "true"
+        tasks = []
+        tasks = self.async_create_views(self.servers[0], ddoc_name, views, self.default_bucket_name)
+        for task in tasks:
+            task.result(self.wait_timeout * 2)
+        self.disable_compaction()
+        fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.servers[0],
+                         prefix + ddoc_name, fragmentation_value, self.default_bucket_name, timeout=20)
+        # generate load until fragmentation reached
+        while fragmentation_monitor.state != "FINISHED":
+            # update docs to create fragmentation
+            self._load_all_buckets(self.master, self.gen_update, "update", 0)
+            for view in views:
+                # run queries to create indexes
+                query = {"stale" : "false"}
+                self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+        fragmentation_monitor.result()
+
+        compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name, self.default_bucket_name)
+
+        servs_in=self.servers[1:self.nodes_in + 1]
+        rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
+        result = compaction_task.result()
+        self.assertTrue(result)
+        rebalance.result()
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
+        self._verify_all_buckets(self.master)
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
 
 
     """Rebalances nodes into a cluster while doing mutations and deletions.
