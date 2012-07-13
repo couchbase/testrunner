@@ -5,6 +5,7 @@ import datetime
 
 from couchbase.cluster import Cluster
 from TestInput import TestInputSingleton
+from membase.api.rest_client import RestConnection
 from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -57,6 +58,11 @@ class BaseTestCase(unittest.TestCase):
             try:
                 self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
+                rest = RestConnection(self.master)
+                if rest._rebalance_progress_status() == 'running':
+                    self.log.warning("rebalancing is still running, test should be verified")
+                    stopped = rest.stop_rebalance()
+                    self.assertTrue(stopped, msg="unable to stop rebalance")
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
                 ClusterOperationHelper.cleanup_cluster(self.servers)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
