@@ -233,3 +233,11 @@ class BaseTestCase(unittest.TestCase):
         for task in tasks:
             task.result()
 
+    def disable_compaction(self, server = None, bucket = "default"):
+
+        server = server or self.servers[0]
+        new_config = {"viewFragmntThresholdPercentage" : None,
+                      "dbFragmentThresholdPercentage" :  None,
+                      "dbFragmentThreshold" : None,
+                      "viewFragmntThreshold" : None}
+        self.cluster.modify_fragmentation_config(server, new_config, bucket)
