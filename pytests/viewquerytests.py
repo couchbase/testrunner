@@ -92,12 +92,11 @@ class ViewQueryTests(unittest.TestCase):
 
     def test_simple_dataset_negative_queries(self):
         # init dataset for test
-        query_param = TestInputSingleton.input.param("query_param", None)
-        value = TestInputSingleton.input.param("value", None)
+        query_params = TestInputSingleton.input.param("query_params", None)
         error = TestInputSingleton.input.param("error", None)
 
         data_set = SimpleDataSet(self._rconn(), self.num_docs)
-        data_set.add_negative_query(query_param, value, error)
+        data_set.add_negative_query(query_params, error)
         self._query_test_init(data_set)
 
     def test_employee_dataset_startkey_endkey_queries(self):
@@ -123,13 +122,12 @@ class ViewQueryTests(unittest.TestCase):
 
     def test_employee_dataset_negative_queries(self):
         # init dataset for test
-        query_param = TestInputSingleton.input.param("query_param", None)
-        value = TestInputSingleton.input.param("value", None)
+        query_params = TestInputSingleton.input.param("query_params", None)
         error = TestInputSingleton.input.param("error", None)
         docs_per_day = self.input.param('docs-per-day', 20)
 
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
-        data_set.add_negative_query(query_param, value, error)
+        data_set.add_negative_query(query_params, error)
         self._query_test_init(data_set)
 
     def test_employee_dataset_invalid_startkey_docid_endkey_docid_queries(self):
@@ -1136,10 +1134,11 @@ class EmployeeDataSet:
     def calc_total_doc_count(self):
         return self.years * self.months * self.days * self.docs_per_day * len(self.get_data_sets())
 
-    def add_negative_query(self, query_param, value, error, views=None):
+    def add_negative_query(self, query_params, error, views=None):
         views = views or self.views
+        query_params_dict = ViewQueryTests.parse_string_to_dict(query_params, seprator_value='~')
         for view in views:
-            view.queries += [QueryHelper({query_param : value}, None, error=error)]
+            view.queries += [QueryHelper(query_params_dict, None, error=error)]
 
     def add_query_invalid_startkey_endkey_docid(self, valid_query_params, invalid_query_params, views=None):
         views = views or self.views
@@ -1887,10 +1886,11 @@ class SimpleDataSet:
                                             seed = seed,
                                             monitor = monitor)
 
-    def add_negative_query(self, query_param, value, error, views=None):
+    def add_negative_query(self, query_params, error, views=None):
         views = views or self.views
+        query_params_dict = ViewQueryTests.parse_string_to_dict(query_params, seprator_value='~')
         for view in views:
-            view.queries += [QueryHelper({query_param : value}, None, error=error)]
+            view.queries += [QueryHelper(query_params_dict, None, error=error)]
 
     def add_skip_queries(self, skip, limit=None, views=None):
         if views is None:
