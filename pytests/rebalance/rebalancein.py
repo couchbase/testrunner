@@ -125,12 +125,12 @@ class RebalanceInTests(RebalanceBaseTest):
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
         #inrease timout for big data
-        timeout = max(self.wait_timeout * 3, self.wait_timeout * self.num_items / 100000)
+        timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items / 100000)
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
         tasks = []
-        tasks = self.async_create_views(self.servers[0], ddoc_name, views, self.default_bucket_name)
+        tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
         for task in tasks:
             task.result(self.wait_timeout * 2)
         self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
