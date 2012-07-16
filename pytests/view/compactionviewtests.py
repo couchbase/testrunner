@@ -9,6 +9,7 @@ class CompactionViewTests(ViewBaseTest):
     def setUp(self):
         super(CompactionViewTests, self).setUp()
         self.value_size = self.input.param("value_size", 256)
+        self.fragmentation_value = self.input.param("fragmentation_value", 80)
 
     def tearDown(self):
         super(CompactionViewTests, self).tearDown()
@@ -37,7 +38,8 @@ class CompactionViewTests(ViewBaseTest):
         fragmentation_monitor = \
             self.cluster.async_monitor_view_fragmentation(server,
                                                           ddoc_name,
-                                                          fragmentation_value=80)
+                                                          self.fragmentation_value,
+                                                          timeout = 20)
 
         # generate load until fragmentation reached
         while fragmentation_monitor.state != "FINISHED":
