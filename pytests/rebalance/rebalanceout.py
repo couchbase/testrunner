@@ -94,12 +94,12 @@ class RebalanceOutTests(RebalanceBaseTest):
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
         tasks = []
-        tasks = self.async_create_views(self.servers[0], ddoc_name, views, self.default_bucket_name)
+        tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
         for task in tasks:
             task.result(self.wait_timeout * 2)
         self.perform_verify_queries(num_views, prefix, ddoc_name, query)
         servs_out=self.servers[-self.nodes_out:]
-        rebalance = self.cluster.async_rebalance(self.servers[0], [], servs_out)
+        rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
         time.sleep(self.wait_timeout / 5)
         #see that the result of view queries are the same as expected during the test
         self.perform_verify_queries(num_views, prefix, ddoc_name, query)
@@ -107,7 +107,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         rebalance.result()
         self.perform_verify_queries(num_views, prefix, ddoc_name, query)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
-        self._verify_all_buckets(self.servers[0])
+        self._verify_all_buckets(self.master)
         self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
 
     """Rebalances nodes out of a cluster during view queries incrementally.
