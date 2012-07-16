@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from crc32 import crc32_hash
+from functools import wraps
 
 try:
     import threading as _threading
@@ -87,3 +88,19 @@ class SyncDict:
 
     def _size(self):
         return len(self.dict)
+
+def synchronized(lock_name):
+    """synchronized access to class method"""
+    def _outer(func):
+        @wraps(func)
+        def _inner(self, *args, **kwargs):
+            try:
+                lock = self.__getattribute__(lock_name)
+            except AttributeError:
+                print "<synchronized> cannot find lock: %s" % lock_name
+                return _inner
+            with lock:
+                return func(self, *args, **kwargs)
+        return _inner
+    return _outer
+

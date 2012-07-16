@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from threading import Thread
+from threading import Thread, RLock
 from time import sleep
 
 from mc_bin_client import MemcachedClient
@@ -8,7 +8,7 @@ from obs import Observer
 from obs_req import ObserveRequestKey, ObserveRequest
 from obs_res import ObserveResponse
 from obs_def import ObservePktFmt, ObserveStatus
-from obs_helper import VbucketHelper
+from obs_helper import VbucketHelper, synchronized
 
 BACKOFF = 0.2       # TODO: configurable
 MAX_BACKOFF = 1
@@ -32,6 +32,7 @@ class McsodaObserver(Observer, Thread):
         self.cfg = cfg
         self.store = store
         self.callback = callback
+        self.conn_lock = RLock()
         self._build_conns()
         self.backoff = BACKOFF
         super(McsodaObserver, self).__init__()
@@ -52,11 +53,12 @@ class McsodaObserver(Observer, Thread):
                 self.backoff = BACKOFF
         print "<%s> stopped running" % (self.__class__.__name__)
 
+    @synchronized("conn_lock")
     def _build_conns(self):
         """build separate connections based on store"""
         if not self.store:
             print "<%s> failed to build connections, invalid store object"\
-            % self.__class__.__name__
+                % self.__class__.__name__
             return False
 
         if self.store.__class__.__name__ == "StoreMemcachedBinary":
@@ -76,6 +78,7 @@ class McsodaObserver(Observer, Thread):
 
         return True
 
+    @synchronized("conn_lock")
     def _refresh_conns(self):
         """blocking call to refresh connections based on topology change"""
         if not self.store:
@@ -103,6 +106,7 @@ class McsodaObserver(Observer, Thread):
 
         return True
 
+    @synchronized("conn_lock")
     def _add_conn(self, server):
         if not self.store:
             print "<%s> failed to add conn, invalid store object"\
