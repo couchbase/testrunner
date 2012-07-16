@@ -1459,6 +1459,7 @@ function(doc) {
         # Access phase
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
+        bucket = self.params('bucket', 'default')
         queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
                                             use_all_docs=False)
 
@@ -1505,6 +1506,7 @@ function(doc) {
         # Access phase
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
+        bucket = self.params('bucket', 'default')
         queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
                                             use_all_docs=False,
                                             use_reduce=False)
@@ -1551,7 +1553,9 @@ function(doc) {
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
         view_gen = ViewGen()
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs=None)
+        bucket = self.params('bucket', 'default')
+        queries = view_gen.generate_queries(limit, query_suffix, bucket,
+                                            ddocs=None)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
@@ -1597,6 +1601,7 @@ function(doc) {
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
         view_gen = ViewGen()
+        bucket = self.params('bucket', 'default')
         queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
                                             pseudo=True)
 
@@ -1648,6 +1653,7 @@ function(doc) {
         # Access phase
         limit = self.parami('limit', PerfDefaults.limit)
         query_suffix = self.param("query_suffix", "")
+        bucket = self.params('bucket', 'default')
         queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
                                             use_all_docs=False, extend=True)
 
