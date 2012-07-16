@@ -15,10 +15,10 @@ class BaseTestCase(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
-        self.cluster = Cluster()
         self.servers = self.input.servers
         self.buckets = {}
         self.master = self.servers[0]
+        self.cluster = Cluster()
         self.wait_timeout = self.input.param("wait_timeout", 60)
         #number of case that is performed from testrunner( increment each time)
         self.case_number = self.input.param("case_number", 0)
