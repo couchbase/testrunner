@@ -40,7 +40,9 @@ class Observer:
 
         print "<%s> self._observables %s" % (self.__class__.__name__, self._observables)
 
-        self._send()
+        if not self._send():
+            return False
+
         responses = self._recv()
         if responses:
             self.update_observables(responses, key_state)

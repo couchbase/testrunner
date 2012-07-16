@@ -23,7 +23,6 @@ class McsodaObserver(Observer, Thread):
     obs_keys = {}   # {server: [keys]}
     callback = None
 
-    #TODO: topology change
     #TODO: socket timeout, fine-grained exceptions
     #TODO: network helper
     #TODO: wait call timeout
@@ -77,6 +76,48 @@ class McsodaObserver(Observer, Thread):
 
         return True
 
+    def _refresh_conns(self):
+        """blocking call to refresh connections based on topology change"""
+        if not self.store:
+            print "<%s> failed to refresh connections, invalid store object"\
+                % self.__class__.__name__
+            return False
+
+        print "<%s> refreshing connections" % self.__class__.__name__
+
+        if self.store.__class__.__name__ == "StoreMembaseBinary":
+            old_keys = set(self.conns)
+            new_keys = set(self.store.awareness.memcacheds)
+
+            for del_server in old_keys.difference(new_keys):
+                print "<%s> _refresh_conns: delete server: %s" \
+                    % (self.__class__.__name__, del_server)
+                del self.conns[del_server]
+
+            for add_server in new_keys.difference(old_keys):
+                print "<%s> _refresh_conns: add server: %s" \
+                    % (self.__class__.__name__, add_server)
+                self._add_conn(add_server)
+
+            self.awareness = self.store.awareness
+
+        return True
+
+    def _add_conn(self, server):
+        if not self.store:
+            print "<%s> failed to add conn, invalid store object"\
+                % self.__class__.__name__
+            return False
+
+        if self.store.__class__.__name__ == "StoreMembaseBinary":
+            print "<%s> _add_conn: %s"\
+                % (self.__class__.__name__, server)
+            host, port = server.split(":")
+            conn = MemcachedClient(host, int(port))
+            self.conns[server] = conn
+
+        return True
+
     def _send(self):
         self.obs_keys.clear()   # {server: [keys]}
 
@@ -96,8 +137,13 @@ class McsodaObserver(Observer, Thread):
             pkt = req.pack()
             try:
                 self.conns[server].s.send(pkt)
+            except KeyError as e:
+                print "<%s> failed to send observe pkt : %s" % (self.__class__.__name__, e)
+                self._add_conn(server)
+                return None
             except Exception as e:
                 print "<%s> failed to send observe pkt : %s" % (self.__class__.__name__, e)
+                self._refresh_conns()
                 return None
             reqs.append(req)
 
@@ -114,12 +160,19 @@ class McsodaObserver(Observer, Thread):
             while len(hdr) < ObservePktFmt.OBS_RES_HDR_LEN:
                 try:
                     hdr += self.conns[server].s.recv(ObservePktFmt.OBS_RES_HDR_LEN)
+                except KeyError as e:
+                    print "<%s> failed to recv observe pkt : %s" % (self.__class__.__name__, e)
+                    self._add_conn(server)
+                    return None
                 except Exception as e:
                     print "<%s> failed to recv observe pkt: %s" % (self.__class__.__name__, e)
+                    self._refresh_conns()
                     return None
             res = ObserveResponse()
 
             if not res.unpack_hdr(hdr):
+                if res.status == ERR_NOT_MY_VBUCKET:
+                    self._refresh_conns()
                 return None
 
             body = ''
