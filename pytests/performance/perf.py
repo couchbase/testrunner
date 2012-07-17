@@ -757,7 +757,8 @@ class PerfBase(unittest.TestCase):
                 'report': report,
                 'hot-shift': hot_shift,
                 'cluster_name': self.param("cluster_name", ""),
-                'observe': self.param("observe", PerfDefaults.observe)
+                'observe': self.param("observe", PerfDefaults.observe),
+                'obs-max-backoff': self.parami('obs_max_backoff', PerfDefaults.obs_max_backoff)
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()

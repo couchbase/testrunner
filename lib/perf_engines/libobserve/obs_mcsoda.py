@@ -10,7 +10,7 @@ from obs_res import ObserveResponse
 from obs_def import ObservePktFmt, ObserveStatus
 from obs_helper import VbucketHelper, synchronized
 
-BACKOFF = 0.2       # TODO: configurable
+BACKOFF = 0.2
 MAX_BACKOFF = 1
 
 class McsodaObserver(Observer, Thread):
@@ -35,6 +35,7 @@ class McsodaObserver(Observer, Thread):
         self.conn_lock = RLock()
         self._build_conns()
         self.backoff = BACKOFF
+        self.max_backoff = self.cfg.get('obs-max-backoff', MAX_BACKOFF)
         super(McsodaObserver, self).__init__()
 
     def run(self):
@@ -44,7 +45,7 @@ class McsodaObserver(Observer, Thread):
                 self.observable_filter(ObserveStatus.OBS_UNKNOWN).next()
                 print "<%s> sleep for %f seconds" % (self.__class__.__name__, self.backoff)
                 sleep(self.backoff)
-                self.backoff = min(self.backoff * 2, MAX_BACKOFF)
+                self.backoff = min(self.backoff * 2, self.max_backoff)
             except StopIteration:
                 self.measure_client_latency()
                 self.clear_observables()
