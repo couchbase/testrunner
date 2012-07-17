@@ -12,7 +12,7 @@ class WarmUpTests(BaseTestCase):
         self.timeout = 120
         self.bucket_name = self.input.param("bucket", "default")
         self.bucket_size = 256
-        self.nodes_in = self.input.param("nodes_in", 1)
+        self.nodes_in = self.input.param("nodes_in", 0)
         servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
         rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
         rebalance.result()
@@ -49,16 +49,25 @@ class WarmUpTests(BaseTestCase):
             self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)] = {}
             for stat_to_monitor in self.stats_monitor:
                 self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)][stat_to_monitor] = mc_conn.stats("")[stat_to_monitor]
-                self.log.info("memcached {0}:{1} has {2} value {3}".format(server.ip, server.port, stat_to_monitor , mc_conn.stats("")[stat_to_monitor]))
+                self.log.info("memcached %s:%s has %s value %s" % (server.ip, server.port, stat_to_monitor , mc_conn.stats("")[stat_to_monitor]))
             mc_conn.close()
 
-    def _restart_memcache(self):
-        rest = RestConnection(self.servers[0])
-        nodes = rest.node_statuses()
-        for node in nodes:
+    def _kill_nodes(self, nodes):
+        is_partial = self.input.param("is_partial", "True")
+        _nodes = []
+        if len(self.servers) > 1 :
+            skip = 2
+        else:
+            skip = 1
+        if is_partial:
+            _nodes = nodes[0:len(nodes):skip]
+        else:
+            _nodes = nodes
+        for node in _nodes:
             _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
                      "password": self.servers[0].rest_password}
             _mc = MemcachedClientHelper.direct_client(_node, self.bucket_name)
+            self.log.info("restarted the node %s:%s" % (node.ip, node.port))
             pid = _mc.stats()["pid"]
             node_rest = RestConnection(_node)
             command = "os:cmd(\"kill -9 {0} \")".format(pid)
@@ -67,6 +76,10 @@ class WarmUpTests(BaseTestCase):
             self.log.info("killed ??  {0} ".format(killed))
             _mc.close()
 
+    def _restart_memcache(self):
+        rest = RestConnection(self.servers[0])
+        nodes = rest.node_statuses()
+        self._kill_nodes(nodes)
         start = time.time()
         memcached_restarted = False
         for server in self.servers:
@@ -76,17 +89,17 @@ class WarmUpTests(BaseTestCase):
                     mc = MemcachedClientHelper.direct_client(server, self.bucket_name)
                     stats = mc.stats()
                     new_uptime = int(stats["uptime"])
-                    if new_uptime < self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)]["uptime"]:
+                    if new_uptime < self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["uptime"]:
                         self.log.info("memcached restarted...")
                         memcached_restarted = True
                         break;
                 except Exception:
-                    self.log.error("unable to connect to {0}:{1}".format(server.ip, server.port))
+                    self.log.error("unable to connect to %s:%s" % (server.ip, server.port))
                     if mc:
                         mc.close()
                     time.sleep(1)
             if not memcached_restarted:
-                self.fail("memcached did not start {0}:{1}".format(server.ip, server.port))
+                self.fail("memcached did not start %s:%s" % (server.ip, server.port))
 
     def _wait_for_stats_all_buckets(self, servers):
         tasks = []
@@ -117,7 +130,7 @@ class WarmUpTests(BaseTestCase):
                         warmup_time = int(stats["ep_warmup_time"])
                         self.log.info("ep_warmup_time is %s " % warmup_time)
                         self.log.info(
-                            "Collected the stats {0} for server {1}:{2}".format(stats["ep_warmup_time"], server.ip,
+                            "Collected the stats %s for server %s:%s" % (stats["ep_warmup_time"], server.ip,
                                 server.port))
                         break
                     else:
@@ -125,11 +138,11 @@ class WarmUpTests(BaseTestCase):
                         time.sleep(2)
                 except Exception as e:
                     self.log.error(
-                        "Could not get warmup_time stats from server {0}:{1}, exception {2}".format(server.ip,
+                        "Could not get warmup_time stats from server %s:%s, exception %s" % (server.ip,
                             server.port, e))
             else:
                 self.fail(
-                    "Fail! Unable to get the warmup-stats from server {0}:{1} after trying for {2} seconds.".format(
+                    "Fail! Unable to get the warmup-stats from server %s:%s after trying for %s seconds." % (
                         server.ip, server.port, wait_time))
 
             # Waiting for warm-up
@@ -137,16 +150,16 @@ class WarmUpTests(BaseTestCase):
             warmed_up = False
             while time.time() - start < self.timeout and not warmed_up:
                 if mc.stats()["ep_warmup_thread"] == "complete":
-                    self.log.info("warmup completed, awesome!!! Warmed up. {0} items ".format(mc.stats()["curr_items_tot"]))
+                    self.log.info("warmup completed, awesome!!! Warmed up. %s items " % (mc.stats()["curr_items_tot"]))
                     time.sleep(5)
-                    if mc.stats()["curr_items_tot"] == self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)]["curr_items_tot"]:
+                    if mc.stats()["curr_items_tot"] == self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["curr_items_tot"]:
                         self._stats_report(server, mc.stats())
                         warmed_up = True
                     else:
                         continue
                 elif mc.stats()["ep_warmup_thread"] == "running":
                     self.log.info(
-                                "still warming up .... curr_items_tot : {0}".format(mc.stats()["curr_items_tot"]))
+                                "still warming up .... curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
                 else:
                     self.fail("Value of ep warmup thread does not exist, exiting from this server")
                 time.sleep(5)
@@ -159,33 +172,34 @@ class WarmUpTests(BaseTestCase):
     def _stats_report(self, server, after_warmup_stat):
         self.log.info("******** Stats before Warmup **********")
         for stat_to_monitor in self.stats_monitor:
-            self.log.info("{0} on, {1}:{2} is {3}".\
-                           format(stat_to_monitor, server.ip, server.port, self.pre_warmup_stats["{0}:{1}".\
-                           format(server.ip, server.port)][stat_to_monitor]))
+            self.log.info("%s on, %s:%s is %s" % \
+                           (stat_to_monitor, server.ip, server.port, self.pre_warmup_stats["%s:%s" % \
+                           (server.ip, server.port)][stat_to_monitor]))
         self.log.info("******** Stats after Warmup **********")
         for stat_to_monitor in self.stats_monitor:
-                self.log.info("{0} on, {1}:{2} is {3}".\
-                               format(stat_to_monitor, server.ip, server.port, after_warmup_stat[stat_to_monitor]))
+                self.log.info("%s on, %s:%s is %s" % \
+                               (stat_to_monitor, server.ip, server.port, after_warmup_stat[stat_to_monitor]))
 
     def test_warmup(self):
         ep_threshold = self.input.param("ep_threshold", "ep_mem_low_wat")
+        active_resident_threshold = int(self.input.param("active_resident_threshold", 110))
         mc = MemcachedClientHelper.direct_client(self.servers[0], self.bucket_name)
         stats = mc.stats()
-        threshold = self.input.param('threshold', stats[ep_threshold])
+        threshold = int(self.input.param('threshold', stats[ep_threshold]))
         threshold_reached = False
-        i = 1
         self.num_items = self.input.param("items", 200)
         self._load_doc_data_all_buckets('create')
-        #load items till reached threshold or mem-ratio is less than 100
+        #load items till reached threshold or mem-ratio is less than resident ratio threshold
         while not threshold_reached :
-            mem_used = stats["mem_used"]
-            if mem_used < threshold or stats["vb_active_perc_mem_resident"] == 100:
+            mem_used = int(mc.stats()["mem_used"])
+            if mem_used < threshold or int(mc.stats()["vb_active_perc_mem_resident"]) >= active_resident_threshold:
+                self.log.info("mem_used and vb_active_perc_mem_resident_ratio reached at %s/%s and %s " % (mem_used, threshold, mc.stats()["vb_active_perc_mem_resident"]))
                 items = self.num_items
                 self.num_items += self.num_items
-                self._load_doc_data_all_buckets('create', items * i)
-                i += 1
+                self._load_doc_data_all_buckets('create', items)
             else:
                 threshold_reached = True
+                self.log.info("DGM state achieved!!!!")
         #parallel load of data
         tasks = self._async_load_doc_data_all_buckets('create', self.num_items)
         #wait for draining of data before restart and warm up
