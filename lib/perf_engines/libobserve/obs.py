@@ -35,7 +35,7 @@ class Observer:
     # {key_str: Observable}
     _observables = SyncDict()
 
-    def _observe_blocking(self, key_state):
+    def _observe_blocking(self):
         self._observables.wait_not_empty()
 
         print "<%s> self._observables %s" % (self.__class__.__name__, self._observables)
@@ -45,11 +45,11 @@ class Observer:
 
         responses = self._recv()
         if responses:
-            self.update_observables(responses, key_state)
+            self.update_observables(responses)
 
-    def observe(self, key_state=ObserveKeyState.OBS_PERSISITED, blocking=True):
+    def observe(self, blocking=True):
         if blocking:
-            self._observe_blocking(key_state)
+            self._observe_blocking()
         else:
             raise NotImplementedError("<%s> unblocking observe has not been implemented"
                 % self.__class__.__name__ )
@@ -73,7 +73,7 @@ class Observer:
         print "clear observables : %s" % self._observables
         self._observables.clear()
 
-    def update_observables(self, responses, key_state):
+    def update_observables(self, responses):
         """
         Update observables based on (@param: responses),
         using key_state as filter
@@ -93,7 +93,7 @@ class Observer:
                 continue
             elif obs.cas == res_key.cas:
                 # TODO: race cond?
-                if res_key.key_state == key_state :
+                if res_key.key_state == ObserveKeyState.OBS_PERSISITED:
                     obs.status = ObserveStatus.OBS_SUCCESS
             else:
                 obs.status = ObserveStatus.OBS_MODIFIED
