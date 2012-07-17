@@ -492,6 +492,8 @@ class ViewBaseTests(unittest.TestCase):
                 time.sleep(timeout)
         if results.get(u'errors', []):
             self.fail("unable to get view_results for {0} after {1} tries due to error {2}".format(view, num_tries, results.get(u'errors')))
+        if results.get(u'error', ''):
+            self.fail("unable to get view_results for {0} after {1} tries due to error {2}-{3}".format(view, num_tries, results.get(u'error'), results.get(u'reason')))
         self.fail("unable to get view_results for {0} after {1} tries".format(view, num_tries))
 
     @staticmethod
