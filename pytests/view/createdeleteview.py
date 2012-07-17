@@ -620,6 +620,7 @@ class CreateDeleteViewTests(ViewBaseTest):
 
         #update the server list as master is no longer there
         self.servers = self.servers[1:]
+        self.master = self.servers[1]
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
             self._verify_ddoc_data_all_buckets()
