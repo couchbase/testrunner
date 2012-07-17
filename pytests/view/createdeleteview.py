@@ -5,7 +5,6 @@ from couchbase.document import DesignDocument, View
 from membase.api.rest_client import RestConnection
 from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
-from couchbase.documentgenerator import DocumentGenerator
 
 class CreateDeleteViewTests(ViewBaseTest):
 
@@ -48,17 +47,6 @@ class CreateDeleteViewTests(ViewBaseTest):
         for i in range(0, num_ddocs):
             design_docs.append(self.default_design_doc_name + str(i))
         return design_docs
-
-    def _load_doc_data_all_buckets(self, data_op="create"):
-
-        #initialize the template for document generator
-        age = range(5)
-        first = ['james', 'sharon']
-        template = '{{ "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
-
-        self.log.info("load document data")
-        self._load_all_buckets(self.master, gen_load, data_op, 0)
 
     """Synchronously execute create/update/delete operations on a bucket and
     create an internal dictionary of the objects created. For update/delete operation,

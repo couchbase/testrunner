@@ -17,8 +17,8 @@ class BackupBaseTest(BaseTestCase):
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
         servers_in = [self.servers[i+1] for i in range(self.num_servers-1)]
-        for bucket, kvstores in self.buckets.items():
-            self.buckets[bucket][2] = KVStore()
+        for bucket in self.buckets:
+            bucket.kvs[2]= KVStore()
         self.cluster.rebalance(self.servers[:1], servers_in, [])
 
     def tearDown(self):

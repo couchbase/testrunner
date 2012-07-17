@@ -144,26 +144,39 @@ class RebalanceInTests(RebalanceBaseTest):
     def rebalance_in_with_queries(self):
         num_views = self.input.param("num_views", 5)
         is_dev_ddoc = self.input.param("is_dev_ddoc", True)
-        views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
 
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
+
+        views = []
         tasks = []
-        tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
+        for bucket in self.buckets:
+            temp = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
+            temp_tasks = self.async_create_views(self.master, ddoc_name, temp, bucket)
+            views += temp
+            tasks += temp_tasks
+
+        timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items / 50000)
+
         for task in tasks:
-            task.result(self.wait_timeout * 2)
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+            task.result(self.wait_timeout * 20)
+
+        for bucket in self.buckets:
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout)
+
         servs_in=self.servers[1:self.nodes_in + 1]
         rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         time.sleep(self.wait_timeout / 5)
         #see that the result of view queries are the same as expected during the test
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+        for bucket in self.buckets:
+           self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout)
         #verify view queries results after rebalancing
         rebalance.result()
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+        for bucket in self.buckets:
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
         self._verify_all_buckets(self.master)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
@@ -184,7 +197,7 @@ class RebalanceInTests(RebalanceBaseTest):
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
         #inrease timout for big data
-        timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items / 100000)
+        timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items / 25000)
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"

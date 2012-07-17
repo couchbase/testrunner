@@ -1,5 +1,5 @@
 import time
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 from couchbase.documentgenerator import DocumentGenerator
 from memcached.helper.data_helper import MemcachedClientHelper
 from basetestcase import BaseTestCase
@@ -21,11 +21,11 @@ class WarmUpTests(BaseTestCase):
         rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in, [])
         rebalance.result()
         self.cluster.create_default_bucket(self.servers[0], self.bucket_size, self.num_replicas)
-        self.buckets[self.bucket_name] = {1 : KVStore()}
+        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+             num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
     def tearDown(self):
         super(WarmUpTests, self).tearDown()
-        #pass
 
     def _load_doc_data_all_buckets(self, op_type='create', start=0):
         loaded = False

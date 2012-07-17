@@ -1,6 +1,6 @@
 from basetestcase import BaseTestCase
 from couchbase.document import View
-from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase.documentgenerator import BlobGenerator
 
 class RebalanceBaseTest(BaseTestCase):
 
@@ -31,31 +31,10 @@ class RebalanceBaseTest(BaseTestCase):
     def tearDown(self):
         super(RebalanceBaseTest, self).tearDown()
 
-    def _load_doc_data_all_buckets(self):
-        age = range(5)
-        first = ['james', 'sharon']
-        template = '{{ "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
-        self._load_all_buckets(self.servers[0], gen_load,'create', 0)
-
-    def make_default_views(self, prefix, count, is_dev_ddoc=True):
-        ref_view = self.default_view
-        ref_view.name = (prefix, ref_view.name)[prefix is None]
-        return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
-
-    def async_create_views(self, server, design_doc_name, views, bucket=None):
-        if not bucket:
-            bucket=self.default_bucket_name
-        tasks = []
-        for view in views:
-            t_ = self.cluster.async_create_view(server, design_doc_name, view, bucket)
-            tasks.append(t_)
-        return tasks
-
-    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120):
+    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120, bucket="default"):
         tasks = []
         for i in xrange(num_views):
-            tasks.append(self.cluster.async_query_view(self.servers[0], prefix + ddoc_name, self.default_view_name + str(i), query, self.num_items, self.default_bucket_name))
+            tasks.append(self.cluster.async_query_view(self.servers[0], prefix + ddoc_name, self.default_view_name + str(i), query, self.num_items, bucket))
         try:
             for task in tasks:
                 task.result(wait_time)

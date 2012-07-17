@@ -2,6 +2,7 @@ import time
 from threading import Thread
 from backup.backup_base import BackupBaseTest
 from couchbase.documentgenerator import BlobGenerator
+from membase.api.rest_client import Bucket
 from remote.remote_util import RemoteMachineShellConnection
 
 class OpsDuringBackupTests(BackupBaseTest):
@@ -40,34 +41,29 @@ class OpsDuringBackupTests(BackupBaseTest):
         data_load_thread.join()
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
+        kvs_before = {}
+        for bucket in self.buckets:
+            kvs_before[bucket.name] = bucket.kvs[2]
+
         self._all_buckets_delete(self.master)
+
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-        sasl_bucket_tasks = []
-        for i in range(self.sasl_buckets):
-            name = 'bucket' + str(i)
-            sasl_bucket_tasks.append(self.cluster.async_create_sasl_bucket(self.master, name,
-                                                                      'password',
-                                                                      self.bucket_size,
-                                                                      self.num_replicas))
-        for task in sasl_bucket_tasks:
-            task.result()
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
-        standard_bucket_tasks = []
-        for i in range(self.standard_buckets):
-            name = 'standard_bucket' + str(i)
-            standard_bucket_tasks.append(self.cluster.async_create_standard_bucket(self.master, name,
-                                                                      11212,
-                                                                      self.bucket_size,
-                                                                      self.num_replicas))
-            for task in standard_bucket_tasks:
-                task.result()
-        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
+        self._create_sasl_buckets(self.master, self.sasl_buckets)
+        self._create_standard_buckets(self.master, self.standard_buckets)
 
-        for bucket, kvstores in self.buckets.items():
-            del kvstores[1]
+        for bucket in self.buckets:
+            bucket.kvs[2] = kvs_before[bucket.name]
+
+        bucket_names = [bucket.name for bucket in self.buckets]
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+
+        for bucket in self.buckets:
+            del bucket.kvs[1]
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-        self._verify_all_buckets(self.master, 2) #do verification only with kvstores[2]
+        self._verify_all_buckets(self.master, 2, timeout=self.wait_timeout*4) #do verification only with kvstores[2]
 
     def CreateUpdateDeleteExpireDuringBackup(self):
         """Backup the items during mutation on existing items is running.
@@ -107,30 +103,23 @@ class OpsDuringBackupTests(BackupBaseTest):
         for t in mutate_threads:
             t.join()
 
+        kvs_before = {}
+        for bucket in self.buckets:
+            kvs_before[bucket.name] = bucket.kvs[1]
+
         self._all_buckets_delete(self.master)
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-        sasl_bucket_tasks = []
-        for i in range(self.sasl_buckets):
-            name = 'bucket' + str(i)
-            sasl_bucket_tasks.append(self.cluster.async_create_sasl_bucket(self.master, name,
-                                                                      'password',
-                                                                      self.bucket_size,
-                                                                      self.num_replicas))
-        for task in sasl_bucket_tasks:
-            task.result()
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
-        standard_bucket_tasks = []
-        for i in range(self.standard_buckets):
-            name = 'standard_bucket' + str(i)
-            standard_bucket_tasks.append(self.cluster.async_create_standard_bucket(self.master, name,
-                                                                      11212,
-                                                                      self.bucket_size,
-                                                                      self.num_replicas))
-            for task in standard_bucket_tasks:
-                task.result()
-        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
+        self._create_sasl_buckets(self.master, self.sasl_buckets)
+        self._create_standard_buckets(self.master, self.standard_buckets)
+
+        for bucket in self.buckets:
+            bucket.kvs[1] = kvs_before[bucket.name]
+        bucket_names = [bucket.name for bucket in self.buckets]
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         #TODO implement verification for this test case

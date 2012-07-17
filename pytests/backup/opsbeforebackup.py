@@ -4,7 +4,7 @@ import crc32
 from backup.backup_base import BackupBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 from memcached.helper.data_helper import VBucketAwareMemcached
 
 class OpsBeforeBackupTests(BackupBaseTest):
@@ -43,29 +43,22 @@ class OpsBeforeBackupTests(BackupBaseTest):
 
         self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
 
+        kvs_before = {}
+        for bucket in self.buckets:
+            kvs_before[bucket.name] = bucket.kvs[1]
+        bucket_names = [bucket.name for bucket in self.buckets]
         self._all_buckets_delete(self.master)
+
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-        sasl_bucket_tasks = []
-        for i in range(self.sasl_buckets):
-            name = 'bucket' + str(i)
-            sasl_bucket_tasks.append(self.cluster.async_create_sasl_bucket(self.master, name,
-                                                                      'password',
-                                                                      self.bucket_size,
-                                                                      self.num_replicas))
-        for task in sasl_bucket_tasks:
-            task.result()
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
-        standard_bucket_tasks = []
-        for i in range(self.standard_buckets):
-            name = 'standard_bucket' + str(i)
-            standard_bucket_tasks.append(self.cluster.async_create_standard_bucket(self.master, name,
-                                                                      11212,
-                                                                      self.bucket_size,
-                                                                      self.num_replicas))
-            for task in standard_bucket_tasks:
-                task.result()
-        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
+        self._create_sasl_buckets(self.master, self.sasl_buckets)
+        self._create_standard_buckets(self.master, self.standard_buckets)
+
+        for bucket in self.buckets:
+            bucket.kvs[1] = kvs_before[bucket.name]
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.master)
@@ -98,29 +91,23 @@ class OpsBeforeBackupTests(BackupBaseTest):
 
         self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
 
+        kvs_before = {}
+        for bucket in self.buckets:
+            kvs_before[bucket.name] = bucket.kvs[1]
+
         self._all_buckets_delete(self.master)
+
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-        sasl_bucket_tasks = []
-        for i in range(self.sasl_buckets):
-            name = 'bucket' + str(i)
-            sasl_bucket_tasks.append(self.cluster.async_create_sasl_bucket(self.master, name,
-                                                                      'password',
-                                                                      self.bucket_size,
-                                                                      self.num_replicas))
-        for task in sasl_bucket_tasks:
-            task.result()
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
-        standard_bucket_tasks = []
-        for i in range(self.standard_buckets):
-            name = 'standard_bucket' + str(i)
-            standard_bucket_tasks.append(self.cluster.async_create_standard_bucket(self.master, name,
-                                                                      11212,
-                                                                      self.bucket_size,
-                                                                      self.num_replicas))
-            for task in standard_bucket_tasks:
-                task.result()
-        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, self.buckets)
+        self._create_sasl_buckets(self.master, self.sasl_buckets)
+        self._create_standard_buckets(self.master, self.standard_buckets)
+
+        for bucket in self.buckets:
+            bucket.kvs[1] = kvs_before[bucket.name]
+        bucket_names = [bucket.name for bucket in self.buckets]
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.master)
@@ -151,20 +138,19 @@ class OpsBeforeBackupTests(BackupBaseTest):
                 if "--single-node" in self.command_options:
                     single_node_flag = True
 
-        for bucket, kvstores in self.buckets.items():
-            if bucket_name is not None and bucket != bucket_name:
-                del self.buckets[bucket]  #we delete the buckets whose name does not match the name assigned to -b in KVStore
-            if key_name is not None:
-                valid_keys, deleted_keys = kvstores[kv_store].key_set()
+        #we delete the buckets whose name does not match the name assigned to -b in KVStore
+        self.buckets = [bucket for bucket in self.buckets if bucket_name is None or bucket.name == bucket_name]
+        for bucket in self.buckets:
+             if key_name is not None:
+                valid_keys, deleted_keys = bucket.kvs[kv_store].key_set()
                 for key in valid_keys:
                     matchObj = re.search(key_name, key, re.M|re.S) #use regex match to find out keys we need to verify
                     if matchObj is None:
-                        partition = kvstores[kv_store].acquire_partition(key)
+                        partition = bucket.kvs[kv_store].acquire_partition(key)
                         partition.delete(key)  #we delete keys whose prefix does not match the value assigned to -k in KVStore
-                        kvstores[kv_store].release_partition(key)
-
+                        bucket.kvs[kv_store].release_partition(key)
         if single_node_flag is False:
-            self._verify_all_buckets(server)
+            self._verify_all_buckets(server, timeout=self.wait_timeout*4)
         else:
             self.verify_single_node(server)
 
@@ -182,18 +168,18 @@ class OpsBeforeBackupTests(BackupBaseTest):
         If yes, keep it. Otherwise delete it."""
 
         rest = RestConnection(server)
-        for bucket, kvstores in self.buckets.items():
-            VBucketAware = VBucketAwareMemcached(rest, bucket)
-            memcacheds, vBucketMap, vBucketMapReplica = VBucketAware.request_map(rest, bucket)
-            valid_keys, deleted_keys = kvstores[kv_store].key_set()
+        for bucket in self.buckets:
+            VBucketAware = VBucketAwareMemcached(rest, bucket.name)
+            memcacheds, vBucketMap, vBucketMapReplica = VBucketAware.request_map(rest, bucket.name)
+            valid_keys, deleted_keys = bucket.kvs[kv_store].key_set()
             for key in valid_keys:
                 vBucketId = crc32.crc32_hash(key) & (len(vBucketMap) - 1)
                 which_server = vBucketMap[vBucketId]
                 sub = which_server.find(":")
                 which_server_ip = which_server[:sub]
                 if which_server_ip != server.ip:
-                    partition = kvstores[kv_store].acquire_partition(key)
+                    partition = bucket.kvs[kv_store].acquire_partition(key)
                     partition.delete(key)
-                    kvstores[kv_store].release_partition(key)
+                    bucket.kvs[kv_store].release_partition(key)
 
-        self._verify_all_buckets(server)
+        self._verify_all_buckets(server, timeout=self.wait_timeout*4)

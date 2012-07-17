@@ -5,8 +5,10 @@ import datetime
 import time
 
 from couchbase.cluster import Cluster
+from couchbase.document import View
+from couchbase.documentgenerator import DocumentGenerator
 from TestInput import TestInputSingleton
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -17,7 +19,7 @@ class BaseTestCase(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
-        self.buckets = {}
+        self.buckets = []
         self.master = self.servers[0]
         self.cluster = Cluster()
         self.wait_timeout = self.input.param("wait_timeout", 60)
@@ -47,7 +49,9 @@ class BaseTestCase(unittest.TestCase):
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-            self.buckets[self.default_bucket_name] = {1 : KVStore()}
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
         self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
@@ -117,7 +121,8 @@ class BaseTestCase(unittest.TestCase):
                                                                       'password',
                                                                       self.bucket_size,
                                                                       self.num_replicas))
-            self.buckets[name] = {1 : KVStore()}
+            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword='password',
+                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size));
         for task in bucket_tasks:
             task.result()
 
@@ -126,25 +131,28 @@ class BaseTestCase(unittest.TestCase):
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
             bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
-                                                                          11212,
+                                                                          11214 + i,
                                                                           self.bucket_size,
                                                                           self.num_replicas))
-            self.buckets[name] = {1 : KVStore()}
+
+            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
+                                       bucket_size=self.bucket_size, port=11214 + i));
         for task in bucket_tasks:
             task.result()
 
     def _all_buckets_delete(self, server):
         delete_tasks = []
-        for bucket in self.buckets.iterkeys():
+        for bucket in self.buckets:
             delete_tasks.append(self.cluster.async_bucket_delete(server, bucket))
 
         for task in delete_tasks:
             task.result()
+        self.buckets = []
 
     def _verify_stats_all_buckets(self, servers):
         stats_tasks = []
-        for bucket, kv_stores in self.buckets.items():
-            items = sum([len(kv_store) for kv_store in kv_stores.values()])
+        for bucket in self.buckets:
+            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                                'curr_items', '==', items))
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
@@ -166,7 +174,9 @@ class BaseTestCase(unittest.TestCase):
 
 
     """Asynchronously applys load generation to all bucekts in the cluster.
-
+ bucket.name, gen,
+                                                          bucket.kvs[kv_store],
+                                                          op_type, exp
     Args:
         server - A server in the cluster. (TestInputServer)
         kv_gen - The generator to use to generate load. (DocumentGenerator)
@@ -179,10 +189,10 @@ class BaseTestCase(unittest.TestCase):
     """
     def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1):
         tasks = []
-        for bucket, kv_stores in self.buckets.items():
+        for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
-            tasks.append(self.cluster.async_load_gen_docs(server, bucket, gen,
-                                                          kv_stores[kv_store],
+            tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                          bucket.kvs[kv_store],
                                                           op_type, exp))
         return tasks
 
@@ -228,12 +238,13 @@ class BaseTestCase(unittest.TestCase):
         server - A server in the cluster. (TestInputServer)
         kv_store - The kv store index to check. (int)
     """
-    def _verify_all_buckets(self, server, kv_store=1):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=120):
         tasks = []
-        for bucket, kv_stores in self.buckets.items():
-            tasks.append(self.cluster.async_verify_data(server, bucket, kv_stores[kv_store]))
+        for bucket in self.buckets:
+            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store]))
         for task in tasks:
-            task.result()
+            task.result(timeout)
+
 
     def disable_compaction(self, server = None, bucket = "default"):
 
@@ -243,3 +254,36 @@ class BaseTestCase(unittest.TestCase):
                       "dbFragmentThreshold" : None,
                       "viewFragmntThreshold" : None}
         self.cluster.modify_fragmentation_config(server, new_config, bucket)
+
+    def async_create_views(self, server, design_doc_name, views, bucket="default"):
+        tasks = []
+        if len(views):
+            for view in views:
+                t_ = self.cluster.async_create_view(server, design_doc_name, view, bucket)
+                tasks.append(t_)
+        else:
+            t_ = self.cluster.async_create_view(server, design_doc_name, None, bucket)
+            tasks.append(t_)
+        return tasks
+
+    def create_views(self, server, design_doc_name, views, bucket="default", timeout=None):
+        if len(views):
+            for view in views:
+                self.cluster.create_view(server, design_doc_name, view, bucket, timeout)
+        else:
+            self.cluster.create_view(server, design_doc_name, None, bucket, timeout)
+
+    def make_default_views(self, prefix, count, is_dev_ddoc=False):
+        ref_view = self.default_view
+        ref_view.name = (prefix, ref_view.name)[prefix is None]
+        return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
+
+    def _load_doc_data_all_buckets(self, data_op="create"):
+        #initialize the template for document generator
+        age = range(5)
+        first = ['james', 'sharon']
+        template = '{{ "age": {0}, "first_name": "{1}" }}'
+        gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
+
+        self.log.info("load document data")
+        self._load_all_buckets(self.master, gen_load, data_op, 0)
