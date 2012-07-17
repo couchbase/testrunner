@@ -51,6 +51,7 @@ class RebalanceBaseTest(unittest.TestCase):
         self.checkResidentRatio = self.input.param("checkResidentRatio", False)
         self.activeRatio = self.input.param("activeRatio", 50)
         self.replicaRatio = self.input.param("replicaRatio", 50)
+        self.case_number = self.input.param("case_number", 0)
 
         self.log.info('picking server : {0} as the master'.format(master))
 
@@ -72,14 +73,23 @@ class RebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
+        self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
+                          .format(self.case_number, self._testMethodName))
         if self.task_manager is not None:
             self.task_manager.cancel()
             self.task_manager.join()
         if not self.skip_cleanup:
             RebalanceBaseTest.reset(self)
+        self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
+                          .format(self.case_number, self._testMethodName))
 
     @staticmethod
     def reset(self):
+        rest = RestConnection(self.servers[0])
+        if rest._rebalance_progress_status() == 'running':
+            self.log.warning("rebalancing is still running, test should be verified")
+            stopped = rest.stop_rebalance()
+            self.assertTrue(stopped, msg="unable to stop rebalance")
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
