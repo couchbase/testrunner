@@ -10,9 +10,10 @@ import ctypes
 from membase.api.rest_client import RestConnection, RestHelper
 import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from mc_bin_client import MemcachedClient
 from threading import Thread
 import Queue
-
+from collections import defaultdict
 
 class BucketOperationHelper():
 
@@ -189,22 +190,40 @@ class BucketOperationHelper():
         end_time = start_time + timeout_in_seconds
         ready_vbuckets = {}
         rest = RestConnection(node)
+        servers = rest.get_nodes()
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vbucket_count = len(rest.get_vbuckets(bucket))
-        client = MemcachedClientHelper.direct_client(node, bucket)
+        vbuckets = rest.get_vbuckets(bucket)
+        obj = VBucketAwareMemcached(rest, bucket)
+        memcacheds, vbucket_map, vbucket_map_replica = obj.request_map(rest, bucket)
+        #Create dictionary with key:"ip:port" and value: a list of vbuckets
+        server_dict = defaultdict(list)
+        for everyID in range(0, vbucket_count):
+            memcached_ip_port = str(vbucket_map[everyID])
+            server_dict[memcached_ip_port].append(everyID)
         while time.time() < end_time and len(ready_vbuckets) < vbucket_count:
-            for i in range(0, vbucket_count):
-                try:
-                    (a, b, c) = client.get_vbucket_state(i)
-                except mc_bin_client.MemcachedError as e:
-                    log.error(e)
-                    break
-                if c.find("\x01") > 0 or c.find("\x02") > 0:
-                    ready_vbuckets[i] = True
-                elif i in ready_vbuckets:
-                    log.warning("vbucket state changed from active to {0}".format(c))
-                    del ready_vbuckets[i]
+            for every_ip_port in server_dict:
+                #Retrieve memcached ip and port
+                ip, port = every_ip_port.split(":")
+                client = MemcachedClient(ip, int(port), timeout=30)
+                client.vbucket_count = len(vbuckets)
+                bucket_info = rest.get_bucket(bucket)
+                client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                                    bucket_info.saslPassword.encode('ascii'))
+                for i in server_dict[every_ip_port]:
+                    try:
+                        (a, b, c) = client.get_vbucket_state(i)
+                    except mc_bin_client.MemcachedError as e:
+                        log.error(e)
+                        continue
+                    if c.find("\x01") > 0 or c.find("\x02") > 0:
+                        ready_vbuckets[i] = True
+                    elif i in ready_vbuckets:
+                        log.warning("vbucket state changed from active to {0}".format(c))
+                        del ready_vbuckets[i]
+                client.close()
         return len(ready_vbuckets) == vbucket_count
+
 
     #try to insert key in all vbuckets before returning from this function
     #bucket { 'name' : 90,'password':,'port':1211'}
@@ -213,44 +232,6 @@ class BucketOperationHelper():
         log = logger.Logger.get_logger()
         msg = "waiting for memcached bucket : {0} in {1} to accept set ops"
         log.info(msg.format(bucket, node.ip))
-        start_time = time.time()
-        end_time = start_time + timeout_in_seconds
-        client = None
-        keys = {}
-        rest = RestConnection(node)
-        RestHelper(rest).vbucket_map_ready(bucket, 60)
-        vbucket_count = len(rest.get_vbuckets(bucket))
-        '''
-        while len(keys) < vbucket_count:
-            key = str(uuid.uuid4())
-            vBucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
-            keys[vBucketId] = {'key': key, 'inserted': False}
-        counter = 0
-        while time.time() < end_time and counter < (vbucket_count - 1):
-            try:
-                if not client:
-                    client = MemcachedClientHelper.direct_client(node, bucket)
-                for vBucketId in keys:
-                    if not keys[vBucketId]["inserted"]:
-                        client.set(keys[vBucketId]['key'], 0, 0, str(uuid.uuid4()))
-                        keys[vBucketId]["inserted"] = True
-                        counter += 1
-            except mc_bin_client.MemcachedError as error:
-                msg = "(memcachedError {0} - {1} when invoking set or get)"
-                log.error(msg.format(error.status, error.msg))
-            except Exception as ex:
-                log.error("{0} while setting key ".format(ex))
-            if client:
-                try:
-                    client.flush(5)
-                    client.stats('reset')
-                except Exception:
-                    pass
-                client.close()
-                client = None
-            time.sleep(5)
-        '''
-        time.sleep(10)
         all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
                                                                                  bucket, timeout_in_seconds)
         #return (counter == vbucket_count) and all_vbuckets_ready
