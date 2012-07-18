@@ -44,7 +44,7 @@ class ObserveResponse:
 
     def __repr__(self):
         repr = "<%s> magic: %x, opcode: %x, key_len: %d, extra_len: %x, data_type: %x,"\
-               " status: %d, body_len: %d, opaque: %s, persist_stats: %x, repl_stat: %x\n" %\
+               " status: %d, body_len: %d, opaque: %s, persist_stats: %f, repl_stat: %f\n" %\
                (self.__class__.__name__, self.magic, self.opcode, self.key_len, self.extra_len,
                 self.data_type, self.status, self.body_len, self.opaque, self.persist_stat, self.repl_stat)
         for key in self.keys:
