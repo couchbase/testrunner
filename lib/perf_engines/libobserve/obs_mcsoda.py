@@ -159,7 +159,7 @@ class McsodaObserver(Observer, Thread):
     def _recv(self):
         print "<%s> observe receive responses" % self.__class__.__name__
 
-        responses = []
+        responses = {}      # {server: [responses]}
         for server in self.obs_keys.iterkeys():
             hdr = ''
             while len(hdr) < ObservePktFmt.OBS_RES_HDR_LEN:
@@ -191,7 +191,9 @@ class McsodaObserver(Observer, Thread):
 
             print "res::<%s>" % server
             print res
-            responses.append(res)
+            vals = responses.get(server, [])
+            vals.append(res)
+            responses[server] = vals
 
         return responses
 

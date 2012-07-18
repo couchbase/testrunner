@@ -91,7 +91,7 @@ class Observer:
 
         res_keys = self.reskey_generator(responses)
 
-        for res_key in res_keys:
+        for server, res_key in res_keys:
             obs = self._observables.get(res_key.key)
             if not obs:
                 continue
@@ -110,10 +110,11 @@ class Observer:
         return self._observables.size()
 
     def reskey_generator(self, responses):
-        for res in responses:
-            for res_key in res.keys:
+        for server, reses in responses.iteritems():
+            for res in reses:
                 if res.__class__.__name__ == "ObserveResponse":
-                    yield res_key
+                    for res_key in res.keys:
+                        yield (server, res_key)
 
     def observable_filter(self, status):
         """
