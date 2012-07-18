@@ -23,6 +23,7 @@ class McsodaObserver(Observer, Thread):
     obs_keys = {}   # {server: [keys]}
     callback = None
 
+    #TODO: handle persist_count != 1
     #TODO: socket timeout, fine-grained exceptions
     #TODO: network helper
     #TODO: wait call timeout
@@ -131,10 +132,29 @@ class McsodaObserver(Observer, Thread):
             for obs in observables:
                 vbucketid = VbucketHelper.get_vbucket_id(obs.key, self.cfg.get("vbuckets", 0))
                 obs_key = ObserveRequestKey(obs.key, vbucketid)
-                server = self._get_server_str(vbucketid)
-                vals = self.obs_keys.get(server, [])
-                vals.append(obs_key)
-                self.obs_keys[server] = vals
+                if obs.persist_count > 0:
+                    persist_server = self._get_server_str(vbucketid)
+                    vals = self.obs_keys.get(persist_server, [])
+                    vals.append(obs_key)
+                    self.obs_keys[persist_server] = vals
+                    if not obs.persist_servers:
+                        obs.persist_servers.add(persist_server)
+                        self._observables.put(obs.key, obs)
+                if obs.repl_count > 0:
+                    repl_servers = self._get_server_str(vbucketid, repl=True)
+                    if len(repl_servers) < obs.repl_count:
+                        print "<%s> not enough number of replication servers to observe"\
+                            % self.__class__.__name__
+                        obs.status = ObserveStatus.OBS_ERROR # mark out this key
+                        self._observables.put(obs.key, obs)
+                        continue
+                    if not obs.repl_servers:
+                        obs.repl_servers.update(repl_servers)
+                        self._observables.put(obs.key, obs)
+                    for server in obs.repl_servers:
+                        vals = self.obs_keys.get(server, [])
+                        vals.append(obs_key)
+                        self.obs_keys[server] = vals
 
         reqs = []
         for server, keys in self.obs_keys.iteritems():
@@ -157,7 +177,6 @@ class McsodaObserver(Observer, Thread):
         return reqs
 
     def _recv(self):
-        print "<%s> observe receive responses" % self.__class__.__name__
 
         responses = {}      # {server: [responses]}
         for server in self.obs_keys.iterkeys():
