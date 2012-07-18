@@ -108,7 +108,7 @@ class Cluster(object):
         return _task
 
     def async_verify_revid(self, src_server, dest_server, bucket, kv_store):
-        _task = verifyRevIdTask(src_server, dest_server, bucket, kv_store)
+        _task = VerifyRevIdTask(src_server, dest_server, bucket, kv_store)
         self.task_manager.schedule(_task)
         return _task
 

@@ -297,7 +297,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     'ep_flusher_todo', '==', 0))
                 #TODO - add ack_log_size and idle stats check from TAP
         for task in tasks:
-            task.result(30)
+            task.result(self._timeout)
 
     def _verify_all_buckets(self, server, kv_store=1):
         for bucket, kv_stores in self._buckets.items():

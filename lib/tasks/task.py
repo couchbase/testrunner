@@ -543,15 +543,18 @@ class ValidateDataTask(GenericLoadingTask):
                 self.state = FINISHED
                 self.set_exception(error)
         self.kv_store.release_partition(key)
-class verifyRevIdTask(GenericLoadingTask):
+
+
+class VerifyRevIdTask(GenericLoadingTask):
     def __init__(self, src_server, dest_server, bucket, kv_store):
         GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
-        self.client2 = VBucketAwareMemcached(RestConnection(dest_server), bucket)
+        self.client_dest = VBucketAwareMemcached(RestConnection(dest_server), bucket)
 
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
+        self.err_count = 0
 
     def has_next(self):
         if self.itr < self.num_deleted_keys:
@@ -565,18 +568,41 @@ class verifyRevIdTask(GenericLoadingTask):
 
     def _check_deleted_key_revId(self, key):
         try:
-            mc = self.client.memcached(key)
-            mc2 = self.client2.memcached(key)
-            seqno, revid, cas, exp_flags, flags_other = mc.getRev(key)
-            seqno2, revid2, cas2, exp_flags2, flags_other2 = mc2.getRev(key)
-            self.log.info("Source-key is {0} and cas {1} and exp_flags{2} and other_flags{3} and key-count{4}".format(key, cas,exp_flags, flags_other,self.itr))
-            self.log.info("Destination-key is {0} and cas {1} and exp_flags{2} and other_flags{3} and key-count{4}".format(key, cas2,exp_flags2, flags_other2,self.itr))
-            if revid != revid2:
-                self.log.info("******MISMATCH ON REVISION IDS ********** \nSOURCE-{0} \n DESTINATION-{1} ".format(revid, revid2))
-            #                self.state = FINISHED
-            #                self.set_exception(Exception('Exception! Revision Ids mismatch error'))
+            src = self.client.memcached(key)
+            dest = self.client_dest.memcached(key)
+            seqno_src, cas_src, exp_src, flags_src = src.getRev(key)
+            seqno_dest, cas_dest, exp_dest, flags_dest = dest.getRev(key)
+
+            if seqno_src != seqno_dest:
+                self.err_count += 1
+
+                self.log.error(
+                    "Mismatch on sequence numbers for key {0}\t Source Sequence Num:{1}\t Destination Sequence Num:{2}\tError Count{3}".format(
+                        key, seqno_src, seqno_dest, self.err_count))
+                self.state = FINISHED
+            elif cas_src != cas_dest:
+                self.err_count += 1
+                self.log.error(
+                    "Mismatch on CAS for key {0}\t Source CAS:{1}\t Destination CAS:{2}\tError Count{3}".format(key,
+                        cas_src,
+                        cas_dest, self.err_count))
+                self.state = FINISHED
+            elif exp_src != exp_dest:
+                self.err_count += 1
+                self.log.error(
+                    "Mismatch on Expiry Flags for key {0}\t Source Expiry Flags:{1}\t Destination Expiry Flags:{2}\tError Count{3}".format(
+                        key,
+                        exp_src, exp_dest, self.err_count))
+                self.state = FINISHED
+            elif flags_src != flags_dest:
+                self.err_count += 1
+                self.log.error(
+                    "Mismatch on Flags for key {0}\t Source Flags:{1}\t Destination Flags:{2}\tError Count{3}".format(
+                        key,
+                        flags_src, flags_dest, self.err_count))
+                self.state = FINISHED
         except MemcachedError as error:
-            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+            if error.status == ERR_NOT_FOUND:
                 pass
             else:
                 self.state = FINISHED

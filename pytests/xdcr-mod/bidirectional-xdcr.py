@@ -48,7 +48,6 @@ class bidirectionalReplication(XDCRReplicationBaseTest):
         # Setting up doc_ops_dest at destination nodes
         if (self._doc_ops_dest is not None):
         # allows multiple of them but one by one
-            print"dest doc ops {0}".format(self._doc_ops_dest)
             if "create" in self._doc_ops_dest:
                 self._load_all_buckets(dest_master, gen_create2, "create", expires)
             if "update" in self._doc_ops_dest:
@@ -67,7 +66,7 @@ class bidirectionalReplication(XDCRReplicationBaseTest):
             dest_master = dest_nodes[0]
 
             # temp fix
-            if self._num_items >= 100000:
+            if self._num_items >= 25000:
                 self._timeout = 300
 
             self._log.info(
@@ -88,7 +87,6 @@ class bidirectionalReplication(XDCRReplicationBaseTest):
             self._verify_stats_all_buckets(dest_nodes)
 
             if "delete" in self._doc_ops or "delete" in self._doc_ops_dest:
-                print"Delete rev id checking here"
                 self._verify_revIds_deletes(src_master, dest_master)
             dest_key_index += 1
 
@@ -124,33 +122,16 @@ class bidirectionalReplication(XDCRReplicationBaseTest):
             self._load_all_buckets(dest_master, gen_create2, "create", expires)
 
         tasks = []
-        print"dest doc ops {0}".format(self._doc_ops_dest)
         #Setting up doc-ops at source nodes
         if (self._doc_ops is not None or self._doc_ops_dest is not None):
             # allows multiple of them but one by one on either of the clusters
             if "update" in self._doc_ops:
-                print "update 1"
-                if not tasks:
-                    tasks = self._async_load_all_buckets(src_master, gen_update, "update", expires)
-                else:
                     tasks.extend(self._async_load_all_buckets(src_master, gen_update, "update", expires))
             if "update" in self._doc_ops_dest:
-                print "update 2"
-                if not tasks:
-                    tasks = self._async_load_all_buckets(dest_master, gen_update2, "update", expires)
-                else:
                     tasks.extend(self._async_load_all_buckets(dest_master, gen_update2, "update", expires))
             if "delete" in self._doc_ops:
-                print "delete 1"
-                if not tasks:
-                    tasks = self._async_load_all_buckets(src_master, gen_delete, "delete", expires)
-                else:
                     tasks.extend(self._async_load_all_buckets(src_master, gen_delete, "delete", expires))
             if "delete" in self._doc_ops_dest:
-                print "delete 2"
-                if not tasks:
-                    tasks = self._async_load_all_buckets(dest_master, gen_delete2, "delete", expires)
-                else:
                     tasks.extend(self._async_load_all_buckets(dest_master, gen_delete2, "delete", expires))
             time.sleep(5)
             for task in tasks:
@@ -166,7 +147,7 @@ class bidirectionalReplication(XDCRReplicationBaseTest):
             dest_master = dest_nodes[0]
 
             # temp fix
-            if self._num_items >= 100000:
+            if self._num_items >= 25000:
                 self._timeout = 300
 
             self._log.info(
@@ -180,7 +161,7 @@ class bidirectionalReplication(XDCRReplicationBaseTest):
                 self._expiry_pager(dest_master)
 
             # CHecking stats only on source-1 , since that has the last update
-            print"Waiting for replication to catch-up!"
+            self._log("Waiting for replication to catch-up!")
             self._verify_stats_all_buckets(src_nodes)
             self._verify_all_buckets(src_master)
 
@@ -188,7 +169,6 @@ class bidirectionalReplication(XDCRReplicationBaseTest):
             self._verify_all_buckets(dest_master)
 
             if "delete" in self._doc_ops or "delete" in self._doc_ops_dest:
-                print"Delete rev id checking here"
                 self._verify_revIds_deletes(src_master, dest_master)
             dest_key_index += 1
 
