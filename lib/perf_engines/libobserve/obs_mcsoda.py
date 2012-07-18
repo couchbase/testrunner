@@ -216,12 +216,15 @@ class McsodaObserver(Observer, Thread):
 
         return responses
 
-    def _get_server_str(self, vbucketid):
+    def _get_server_str(self, vbucketid, repl=False):
         """retrieve server string {ip:port} based on vbucketid"""
         if self.awareness:
-            server = self.awareness.vBucketMap[vbucketid]
+            if repl:
+                server = self.awareness.vBucketMapReplica[vbucketid]
+            else:
+                server = self.awareness.vBucketMap[vbucketid]
             return server
-        elif len(self.conns):
+        elif len(self.conns) and not repl:
             return self.conns.iterkeys().next()
 
         return None
@@ -232,19 +235,30 @@ class McsodaObserver(Observer, Thread):
     def measure_client_latency(self):
         observables = self.observable_filter(ObserveStatus.OBS_SUCCESS)
         for obs in observables:
-            obs_dur = obs.end_time - obs.start_time
-            print "<%s> saving client latency, key: %s, cas: %s, time: %f"\
-                % (self.__class__.__name__, obs.key, obs.cas, obs_dur)
-            self.save_latency_stats(obs_dur, obs.start_time, False)
+            persist_dur = obs.persist_end_time - obs.start_time
+            repl_dur = obs.repl_end_time - obs.start_time
+            print "<%s> saving client latency, "\
+                  "key: %s, cas: %s, persist_dur: %f, repl_dur: %f"\
+                  % (self.__class__.__name__, obs.key, obs.cas,
+                     persist_dur, repl_dur)
+            if persist_dur > 0:
+                self.save_latency_stats(persist_dur, obs.start_time, False)
+            if repl_dur > 0:
+                self.save_latency_stats(persist_dur, obs.start_time,
+                                        server=False, repl=True)
 
-    def save_latency_stats(self, latency, time=0, server=True):
+    def save_latency_stats(self, latency, time=0, server=True, repl=False):
         if not latency:
             return False    # TODO: simply skip 0
 
         if server:
-            self.store.add_timing_sample("observe-server", float(latency))
+            self.store.add_timing_sample("obs-persist-server", float(latency))
         else:
-            self.store.add_timing_sample("observe-client", float(latency))
+            if repl:
+                cmd = "obs-repl-client" # TODO: # of replicas
+            else:
+                cmd = "obs-persist-client"
+            self.store.add_timing_sample(cmd, float(latency))
 
         if self.store.sc:
             self.store.save_stats(time)
