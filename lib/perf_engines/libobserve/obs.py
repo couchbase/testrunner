@@ -6,25 +6,29 @@ from obs_def import ObserveKeyState, ObserveStatus
 from obs_helper import SyncDict
 
 class Observable:
-    key = ""
-    cas = 0x0000000000000000
-    status = ObserveStatus.OBS_UNKNOWN
-    start_time = 0
-    end_time = 0
 
-    def __init__(self, key, cas, start_time=0):
+    def __init__(self, key="", cas=0x0000000000000000,
+                 start_time=0, persist_count=1, repl_count=0):
         self.key = key
         self.cas = cas
+        self.status = ObserveStatus.OBS_UNKNOWN
         if start_time:
             self.start_time = start_time
         else:
             self.start_time = time.time()
+        self.end_time = 0
+        self.persist_count = int(persist_count)
+        self.persist_servers = set()
+        self.repl_count = int(repl_count)
+        self.repl_servers = set()
 
     def __repr__(self):
-        return "<%s> key: %s, cas: %x, status: %x, "\
-               "start_time: %d, end_time: %d \n" %\
-               (self.__class__.__name__, self.key, self.cas,
-                self.status, self.start_time, self.end_time)
+        return "<%s> key: %s, cas: %x, status: %x, start_time: %d, "\
+               "end_time: %d , persist_count = %d, persist_servers = %s, "\
+               "repl_count: %d, repl_servers: %s\n" %\
+               (self.__class__.__name__, self.key, self.cas, self.status,
+                self.start_time, self.end_time, self.persist_count,
+                self.persist_servers, self.repl_count, self.repl_servers)
 
     def __str__(self):
         return self.__repr__()
