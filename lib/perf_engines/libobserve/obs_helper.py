@@ -23,7 +23,7 @@ class SyncDict:
     """
     def __init__(self):
         self.dict = {}
-        self.mutex = _threading.Lock()
+        self.mutex = _threading.RLock()
         self.not_empty = _threading.Condition(self.mutex)
 
     def __repr__(self):
@@ -103,4 +103,3 @@ def synchronized(lock_name):
                 return func(self, *args, **kwargs)
         return _inner
     return _outer
-
