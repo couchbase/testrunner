@@ -236,10 +236,20 @@ if __name__ == "__main__":
 
     results = []
     case_number = 1
+    if "GROUP" in test_params:
+        print "Only cases in GROUPs '{0}' will be executed".format(test_params["GROUP"])
+
     for name in names:
         start_time = time.time()
         argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", name)[1:]]
         params = dict(zip(argument_split[::2], argument_split[1::2]))
+
+        if "GROUP" in test_params:
+            #determine if the test relates to the specified group(can be separated by ';')
+            if not ("GROUP" in params and len(set(test_params["GROUP"].split(";")) & set(params["GROUP"].split(";")))):
+                print "test '{0}' was skipped".format(name)
+                continue
+
         log_config_filename = ""
         if params:
             log_name = os.path.join(logs_folder_abspath, name + ".log")
@@ -306,5 +316,3 @@ if __name__ == "__main__":
                print result["name"]," pass"
         if fail_count > 0:
             sys.exit(1)
-
-
