@@ -68,6 +68,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.log.info("adding nodes {0} to cluster".format(servs_in))
         self.log.info("removing nodes {0} from cluster".format(servs_out))
         add_in_once = extra_servs_in
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
         #the latest iteration will be with i=5, for this case rebalance should be completed, that also is verified and tracked
         for i in range(1, 6):
             if i==1:
@@ -75,6 +76,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             else:
                 self.cluster.async_rebalance(servs_init[:nodes_init] + servs_in, add_in_once, servs_out + extra_servs_out)
                 add_in_once = []
+                result_nodes = set(servs_init + servs_in + extra_servs_in) - set(servs_out + extra_servs_out)
             time.sleep(5)
             expected_progress = 20 * i
             reached = RestHelper(rest).rebalance_reached(expected_progress)
@@ -83,9 +85,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.assertTrue(stopped, msg="unable to stop rebalance")
 
             if RestHelper(rest).is_cluster_rebalanced():
-                self._wait_for_stats_all_buckets(set(servs_init + servs_in + extra_servs_in) - set(servs_out + extra_servs_out))
+                self._wait_for_stats_all_buckets(result_nodes)
                 self._verify_all_buckets(self.master)
-                self._verify_stats_all_buckets(set(servs_init + servs_in + extra_servs_in) - set(servs_out + extra_servs_out))
+                self._verify_stats_all_buckets(result_nodes)
                 self.log.info("rebalance was completed when tried to stop rebalance on {0}%".format(str(expected_progress)))
                 break
             else:
@@ -113,7 +115,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
 
             self.cluster.rebalance(self.servers[:self.num_servers], self.servers[init_num_nodes:init_num_nodes + i + 1], [])
-            time.sleep(5)
+            time.sleep(10)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    [], self.servers[init_num_nodes:init_num_nodes + i + 1])
             for task in tasks:
@@ -145,7 +147,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            time.sleep(5)
+            time.sleep(10)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             for task in tasks:
