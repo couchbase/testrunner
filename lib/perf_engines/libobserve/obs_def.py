@@ -20,6 +20,7 @@ class ObserveStatus:
     OBS_MODIFIED = 0x01
     OBS_TIMEDOUT = 0x02
     OBS_UNKNOWN = 0xff
+    OBS_ERROR = 0xee
 
 class ObservePktFmt:
     OBS_REQ_HDR_FMT = REQ_PKT_FMT
