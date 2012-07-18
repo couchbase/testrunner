@@ -334,7 +334,7 @@ class ViewQueryTests(unittest.TestCase):
 
     def test_employee_dataset_startkey_endkey_queries_rebalance_in(self):
         docs_per_day = self.input.param('docs-per-day', 200)
-        num_nodes_to_add = self.input.param('num_nodes_to_add',0)
+        num_nodes_to_add = self.input.param('num_nodes_to_add', 1)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_startkey_endkey_queries(limit=self.limit)
@@ -350,7 +350,7 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
 
         docs_per_day = self.input.param('docs-per-day', 200)
-        num_nodes_to_add = self.input.param('num_nodes_to_add',0)
+        num_nodes_to_rem = self.input.param('num_nodes_to_rem', 1)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
 
@@ -358,7 +358,7 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set, False)
 
         # rebalance_out and verify loaded data
-        ViewBaseTests._begin_rebalance_out(self, howmany=num_nodes_to_add + 1)
+        ViewBaseTests._begin_rebalance_out(self, howmany=num_nodes_to_rem + 1)
         self._query_all_views(data_set.views, limit=data_set.limit)
         ViewBaseTests._end_rebalance(self)
 
