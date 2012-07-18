@@ -8,7 +8,7 @@ from obs_helper import SyncDict
 class Observable:
 
     def __init__(self, key="", cas=0x0000000000000000,
-                 start_time=0, persist_count=1, repl_count=0):
+                 start_time=0, persist_count=1, repl_count=1):
         self.key = key
         self.cas = cas
         self.status = ObserveStatus.OBS_UNKNOWN
@@ -16,19 +16,39 @@ class Observable:
             self.start_time = start_time
         else:
             self.start_time = time.time()
-        self.end_time = 0
+        self.persist_end_time = 0
         self.persist_count = int(persist_count)
         self.persist_servers = set()
+        self.repl_end_time = 0
         self.repl_count = int(repl_count)
         self.repl_servers = set()
 
+    def remove_server(self, server, repl=False):
+        """ remove server from checklist, decrement counter
+            and record finish time if necessary
+        """
+        if repl:
+            if server in self.repl_servers:
+                self.repl_servers.remove(server)
+                self.repl_count -= 1
+                if not self.repl_count:
+                    self.repl_end_time = time.time()
+        else:
+            if server in self.persist_servers:
+                self.persist_servers.remove(server)
+                self.persist_count -= 1
+                if not self.persist_count:
+                    self.persist_end_time = time.time()
+
     def __repr__(self):
         return "<%s> key: %s, cas: %x, status: %x, start_time: %d, "\
-               "end_time: %d , persist_count = %d, persist_servers = %s, "\
+               "persist_end_time: %d ,repl_end_time: %d, "\
+               "persist_count = %d, persist_servers = %s, "\
                "repl_count: %d, repl_servers: %s\n" %\
                (self.__class__.__name__, self.key, self.cas, self.status,
-                self.start_time, self.end_time, self.persist_count,
-                self.persist_servers, self.repl_count, self.repl_servers)
+                self.start_time, self.persist_end_time,self.repl_end_time,
+                self.persist_count, self.persist_servers,
+                self.repl_count, self.repl_servers)
 
     def __str__(self):
         return self.__repr__()
@@ -93,17 +113,23 @@ class Observer:
 
         for server, res_key in res_keys:
             obs = self._observables.get(res_key.key)
+
             if not obs:
                 continue
             elif obs.cas == res_key.cas:
                 # TODO: race cond?
                 if res_key.key_state == ObserveKeyState.OBS_PERSISITED:
+                    obs.remove_server(server, repl=False)
+                    obs.remove_server(server, repl=True)
+                elif res_key.key_state == ObserveKeyState.OBS_FOUND:
+                    obs.remove_server(server, repl=True)
+                if obs.persist_count <= 0 and\
+                    obs.repl_count <= 0:
                     obs.status = ObserveStatus.OBS_SUCCESS
             else:
+                # TODO: repl may have old cas value
                 obs.status = ObserveStatus.OBS_MODIFIED
-            obs.end_time = time.time()
             self._observables.put(obs.key, obs)
-
         return True
 
     def num_observables(self):
