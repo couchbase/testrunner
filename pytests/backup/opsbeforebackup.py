@@ -78,20 +78,21 @@ class OpsBeforeBackupTests(BackupBaseTest):
         on those extra items. After these mutations, we backup all the items and restore them for verification """
 
         gen_load = BlobGenerator('mysql', 'mysql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('couchdb', 'couchdb-', self.value_size, end=self.num_mutate_items)
-        gen_expire = BlobGenerator('couchdb', 'couchdb-', self.value_size, end=self.num_mutate_items)
-        gen_delete = BlobGenerator('couchdb', 'couchdb-', self.value_size, end=self.num_mutate_items)
-        gen_create = BlobGenerator('couchdb', 'couchdb-', self.value_size, end=self.num_mutate_items)
+        gen_extra = BlobGenerator('couchdb', 'couchdb-', self.value_size, end=self.num_mutate_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
+        extra_items_deleted_flag = 0
 
         if(self.doc_ops is not None):
-            self._load_all_buckets(self.master, gen_create, "create", 0)
+            self._load_all_buckets(self.master, gen_extra, "create", 0)
             if("update" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_update, "update", 0)
+                self._load_all_buckets(self.master, gen_extra, "update", 0)
             if("delete" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_delete, "delete", 0)
+                self._load_all_buckets(self.master, gen_extra, "delete", 0)
+                extra_items_deleted_flag = 1
             if("expire" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_expire, "update", 5)
+                if extra_items_deleted_flag == 1:
+                    self._load_all_buckets(self.master, gen_extra, "create", 0)
+                self._load_all_buckets(self.master, gen_extra, "update", 5)
                 time.sleep(5)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
