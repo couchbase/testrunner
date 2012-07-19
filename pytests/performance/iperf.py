@@ -146,6 +146,20 @@ class PerfWrapper(object):
             return wrapper
         return decorator
 
+    @staticmethod
+    def rebalance(test):
+        @functools.wraps(test)
+        def wrapper(self, *args, **kargs):
+            """Trigger cluster rebalance (in and out) when ~half of queries
+            reached the goal.
+            """
+            total_clients = self.parami('total_clients', 1)
+            rebalance_after = self.parami('rebalance_after', 0) / total_clients
+            self.level_callbacks = [('cur-queries', rebalance_after,
+                                     self.latched_rebalance)]
+            return test(self, *args, **kargs)
+        return wrapper
+
 
 class MultiClientTests(EVPerfClient):
 
@@ -242,3 +256,13 @@ class XPerfTests(EVPerfClient):
     @PerfWrapper.xperf()
     def test_vperf_unidir(self):
         super(XPerfTests, self).test_vperf2()
+
+
+class RebalanceTests(EVPerfClient):
+
+    """Performance tests with rebalance during test execution.
+    """
+
+    @PerfWrapper.rebalance
+    def test_view_rebalance_1(self):
+        super(RebalanceTests, self).test_vperf2()
