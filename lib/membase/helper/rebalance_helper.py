@@ -298,10 +298,10 @@ class RebalanceHelper():
                     break
 
     @staticmethod
-    def verify_items_count(master, bucket):
+    def verify_items_count(master, bucket, num_attempt=3, timeout=2):
         #get the #of buckets from rest
         rest = RestConnection(master)
-        bucket_info = rest.get_bucket(bucket)
+        bucket_info = rest.get_bucket(bucket, num_attempt, timeout)
         replica_factor = bucket_info.numReplicas
         vbucket_active_sum = 0
         vbucket_replica_sum = 0

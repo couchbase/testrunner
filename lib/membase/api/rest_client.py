@@ -1061,16 +1061,19 @@ class RestConnection(object):
 
         return json.loads(content)
 
-    def get_bucket(self, bucket='default'):
+    def get_bucket(self, bucket='default', num_attempt=1, timeout=1):
         bucketInfo = None
-        api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
+        api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
 
         status, content = self._http_request(api)
-
+        num = 1
+        while not status and num_attempt > num:
+            log.info("try again after {0} sec".format(timeout))
+            time.sleep(timeout)
+            status, content = self._http_request(api)
+            num += 1
         if status:
             bucketInfo = RestParser().parse_get_bucket_response(content)
-            # log.debug('set stats to {0}'.format(bucketInfo.stats.ram))
-
         return bucketInfo
 
 
