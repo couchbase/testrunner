@@ -5,6 +5,9 @@ import unittest
 import json
 import sys
 import copy
+import random
+import types
+import math
 from threading import Thread, Event
 from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper
@@ -913,6 +916,19 @@ class ViewQueryTests(unittest.TestCase):
         for task in tasks:
             task.result()
 
+    def test_sales_dataset_query_reduce(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        params = self.input.param('query_params', {})
+        nodes_num_to_add = self.input.param('nodes_to_add', 0)
+        if nodes_num_to_add:
+            rebalance = self.cluster.async_rebalance(self.servers[:nodes_num_to_add + 1], [self.servers[1 : nodes_num_to_add + 1]], [])
+            rebalance.result()
+        data_set = SalesDataSet(self._rconn(), docs_per_day, limit=self.limit)
+        data_set.load(self, data_set.views[0], docs_per_day)
+        data_set.add_reduce_queries(params)
+        self._query_all_views(data_set.views, limit=self.limit)
+
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
@@ -1100,11 +1116,22 @@ class QueryView:
                                     self.log.info("{0}: attempt {1} reduced {2} group(s) to value {3} expected: {4}" \
                                         .format(view_name, attempt + 1, query.expected_num_groups,
                                                 num_keys, self.index_size))
-                            if self.index_size !=  num_keys or expected_num_docs != num_keys:
-                                attempt += 1
-                                continue
-                            else:
-                                break
+                                if self.index_size !=  num_keys or expected_num_docs != num_keys:
+                                    attempt += 1
+                                    continue
+                                else:
+                                    break
+                            elif self.reduce_fn in ("_sum","_stats"):
+                                try:
+                                    num_keys = self._verify_count_reduce_helper(query, results, reduce_fn=self.reduce_fn)
+                                except Exception as ex:
+                                    attempt += 1
+                                    if attempt == 15:
+                                        raise Exception("After 14 attemps expected number of groups {0} is not reached. {1}".format(query.expected_num_groups, ex))
+                                    else:
+                                        continue
+                                else:
+                                    break
                         else:
 
                             num_keys = len(ViewBaseTests._get_keys(self, results))
@@ -1202,14 +1229,42 @@ class QueryView:
 
         TODO: _sum,_stats? :)
     """
-    def _verify_count_reduce_helper(self, query, results):
+    def _verify_count_reduce_helper(self, query, results, reduce_fn='_count'):
 
         num_keys = 0
-
-        for i in xrange(query.expected_num_groups):
-            if i <= len(results["rows"]):
-                num_keys += results["rows"][i]["value"]
-
+        if reduce_fn in ('_count'):
+            for i in xrange(query.expected_num_groups):
+                if i < len(results["rows"]):
+                    num_keys += results["rows"][i]["value"]
+        stats = query.expected_statistics
+        if reduce_fn == '_sum':
+            num_keys = len(results["rows"])
+            for i in xrange(query.expected_num_groups):
+                if i < len(results["rows"]):
+                    if str(results["rows"][i]["key"]) not in stats:
+                        raise Exception("key {0} is not expected".format(results["rows"][i]["key"]))
+                    if stats[str(results["rows"][i]["key"])]["sum"] != results["rows"][i]["value"]:
+                       raise Exception("Value for key '{0}' is {1}, expected is {2}".format(results["rows"][i]["key"],
+                                                                                            results["rows"][i]["value"],
+                                                                                            stats[str(results["rows"][i]["key"])]["sum"]))
+                    self.log.info("Sum for key {0} is verified and matches expected: {1}".format(results["rows"][i]["key"],
+                                                                                                 results["rows"][i]["value"]))
+        if reduce_fn == '_stats':
+            num_keys = len(results["rows"])
+            expected_fn = ("sum", "count", "min", "max", "sumsqr")
+            for i in xrange(query.expected_num_groups):
+                if i < len(results["rows"]):
+                    if str(results["rows"][i]["key"]) not in stats:
+                            raise Exception("key {0} is not expected".format(results["rows"][i]["key"]))
+                    for fn in expected_fn:
+                        if stats[str(results["rows"][i]["key"])][fn] != results["rows"][i]["value"][fn]:
+                           raise Exception("{3} for key '{0}' is {1}, expected is {2}".format(results["rows"][i]["key"],
+                                                                                              results["rows"][i]["value"][fn],
+                                                                                              stats[str(results["rows"][i]["key"])][fn],
+                                                                                              fn))
+                        self.log.info("{2} for key {0} is verified and matches expected: {1}".format(results["rows"][i]["key"],
+                                                                                                     results["rows"][i]["value"][fn],
+                                                                                                     fn))
         return num_keys
 
 class EmployeeDataSet:
@@ -2094,6 +2149,141 @@ class SimpleDataSet:
         self.add_startkey_endkey_queries(views, limit)
         self.add_stale_queries(views, limit)
 
+class SalesDataSet:
+    def __init__(self, rest, docs_per_day = 200, bucket = "default", limit=None):
+        self.docs_per_day = docs_per_day
+        self.years = 1
+        self.months = 12
+        self.days = 28
+        self.bucket = bucket
+        self.rest = rest
+        self.views = self.create_views(rest, bucket=self.bucket)
+        self.name = "sales_dataset"
+        self.kv_store = None
+        self.doc_id_map = {}
+        self.docs_set = []
+        self.limit = limit
+
+
+    # views for this dataset
+    def create_views(self, rest, bucket="default"):
+        vfn = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc['sales']);}"
+
+        full_index_size = self.years * self.months * self.days * self.docs_per_day
+
+        return [QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn, reduce_fn="_count"),
+                QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn, reduce_fn="_sum"),
+                QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn, reduce_fn = "_stats")]
+
+    def load(self,tc, view, loads_per_iteration):
+        try:
+            self.doc_id_map['years'] = {}
+            smart = VBucketAwareMemcached(self.rest, self.bucket)
+            for i in range(1,self.years + 1):
+                self.doc_id_map['years'][i] =\
+                    { "months" : {}}
+                for j in range(1, self.months + 1):
+                    self.doc_id_map['years'][i]['months'][j] =\
+                        {"days" : {}}
+                    for k in range(1, self.days + 1):
+                        self.doc_id_map['years'][i]['months'][j]['days'][k]=\
+                            {"docs" : []}
+                        sales = random.randrange(4000000)
+                        kv_template = {"join_yr" : 2007+i, "join_mo" : j, "join_day" : k,
+                                       "sales" : sales}
+                        self.doc_id_map['years'][i]['months'][j]['days'][k]["sales"] = sales
+                        options = {"size": 256, "seed":  str(uuid.uuid4())[:7]}
+                        docs = DocumentGenerator.make_docs(loads_per_iteration, kv_template, options)
+                        self._load_chunk(smart, docs)
+        except Exception as ex:
+            view.results.addError(tc, sys.exc_info())
+            tc.log.error("At least one of load data threads is crashed: {0}".format(ex))
+            tc.thread_crashed.set()
+            raise ex
+        finally:
+            if not tc.thread_stopped.is_set():
+                tc.thread_stopped.set()
+
+    def _load_chunk(self, smart, docs):
+        doc_ids = []
+        idx = 0
+        for value in docs:
+                value = value.encode("utf-8", "ignore")
+                json_map = json.loads(value, encoding="utf-8")
+                year = json_map["join_yr"]
+                month = json_map["join_mo"]
+                day = json_map["join_day"]
+
+
+                doc_id = "{0}-{1}_{2}_{3}".format(str(idx).zfill(4),
+                                                  year,
+                                                  str(month).rjust(2,'0'),
+                                                  str(day).rjust(2,'0'))
+
+                del json_map["_id"]
+                smart.memcached(doc_id).set(doc_id, 0, 0, json.dumps(json_map))
+                doc_ids.append(doc_id)
+
+                idx += 1
+        return doc_ids
+
+    def add_reduce_queries(self, params, views=None):
+        views = views or self.views
+        for view in views:
+            expected_num_groups = 1
+            group_level = 0
+            expected_num_docs = view.index_size
+            if type(params) == types.DictType:
+                params_dict = params
+            else:
+                params_dict = ViewQueryTests.parse_string_to_dict(params)
+            if 'group_level' in params:
+                group_level = int(params_dict['group_level'])
+                if group_level == 1:
+                    expected_num_groups = self.years
+                elif group_level == 2:
+                   expected_num_groups = self.months * self.years
+                elif group_level >= 3:
+                    expected_num_groups = self.days * self.months * self.years
+            if self.limit:
+                expected_num_groups = min(self.limit, expected_num_groups)
+                expected_num_docs = min(self.limit, expected_num_docs)
+            view.queries += [QueryHelper(params_dict,
+                                         expected_num_docs,
+                                         expected_num_groups,
+                                         expected_statistics=self.calculate_stats(group_level))]
+
+    def calculate_stats(self, group_level):
+        stats = {}
+        groups_docs = {}
+        if not group_level:
+            key = 'None'
+            groups_docs[key] = []
+        for year in self.doc_id_map['years'].iteritems():
+            if group_level == 1:
+                key = '[{0}]'.format(year[0] + 2007)
+                groups_docs[key] = []
+            for month in year[1]['months'].iteritems():
+                if group_level == 2:
+                    key = '[{0}, {1}]'.format(year[0] + 2007, month[0])
+                    groups_docs[key] = []
+                for day in month[1]['days'].iteritems():
+                    if group_level >= 3:
+                        key = '[{0}, {1}, {2}]'.format(year[0] + 2007, month[0], day[0])
+                        groups_docs[key] = []
+                    for doc in xrange(self.docs_per_day):
+                        groups_docs[key].append(day[1]['sales'])
+
+        for group in groups_docs.iterkeys():
+           stats[group] = {}
+           stats[group]['count'] = len(groups_docs[group])
+           stats[group]['sum'] = math.fsum(groups_docs[group])
+           stats[group]['max'] = max(groups_docs[group])
+           stats[group]['min'] = min(groups_docs[group])
+           stats[group]['sumsqr'] =  math.fsum(map(lambda x: x * x, groups_docs[group]))
+
+        return stats
+
 class DataLoadHelper:
     @staticmethod
     def add_doc_gen_task(tm, rest, count, bucket = "default",
@@ -2120,7 +2310,8 @@ class QueryHelper:
                  expected_num_docs,
                  expected_num_groups = 1,
                  type_ = "view",
-                 error=None):
+                 error=None,
+                 expected_statistics = {}):
 
         self.params = params
 
@@ -2130,6 +2321,7 @@ class QueryHelper:
         self.type_ = type_   # "view" or "all_docs"
         self.expected_keys = []
         self.error = error
+        self.expected_statistics = expected_statistics
 
     # less open clients
     @staticmethod
