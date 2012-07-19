@@ -38,6 +38,7 @@ class PerfDefaults:
     # rebalance
     rebalance_after     =    200000
     num_nodes_after     =    7           # num of nodes after rebalance.
+    reb_max_retries     =    0           # num of retries if rebalance fails
 
     # control
     avg_value_size          =   2048     # average size of document body
