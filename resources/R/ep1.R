@@ -26,7 +26,7 @@ pdfname = args[7]
 # baseline_build="1.8.0r-55-g80f24f2-enterprise"
 # new_build = "1.8.1-852-rel-enterprise"
 # test_name = "mixed-suv-4-10.loop"
-# dbip = "couchdb2.couchbaseqe.com"
+# dbip = "10.5.2.41"
 # dbname= "eperf"
 # pdfname = "mixed-suv-4-10-1.8.0vs1.8.1-852"
 
@@ -508,78 +508,115 @@ if (nrow(latency_query) > 0) {
     latency_query <- result
 }
 
-# Get Latency-observe-server
-cat("generating latency-observe-server\n")
+# Get Latency-obs-persist-server
+cat("generating latency-obs-persist-server\n")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
     tryCatch({
-        url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-observe-server", sep='')
+        url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-obs-persist-server", sep='')
         cat(paste(url,"\n"))
         doc_json <- fromJSON(file=url)
         cat(paste(builds_list[index,]$id,"\n"))
         unlisted <- plyr::ldply(doc_json, unlist)
         result <- rbind(result,unlisted)
-    },error=function(e)e, finally=print("Error getting latency-observe-server"))
+    },error=function(e)e, finally=print("Error getting latency-obs-persist-server"))
 }
-latency_obs_server <- result
-if (nrow(latency_obs_server) > 0) {
+latency_obs_persist_server <- result
+if (nrow(latency_obs_persist_server) > 0) {
 
-    latency_obs_server$row <- as.numeric(latency_obs_server$row)
-    latency_obs_server$mystery <- as.numeric(latency_obs_server$mystery)
-    if (length(latency_obs_server$percentile_999th)) {
-        latency_obs_server$percentile_999th <- as.numeric(latency_obs_server$percentile_999th)
+    latency_obs_persist_server$row <- as.numeric(latency_obs_persist_server$row)
+    latency_obs_persist_server$mystery <- as.numeric(latency_obs_persist_server$mystery)
+    if (length(latency_obs_persist_server$percentile_999th)) {
+        latency_obs_persist_server$percentile_999th <- as.numeric(latency_obs_persist_server$percentile_999th)
     }
-    latency_obs_server$percentile_99th <- as.numeric(latency_obs_server$percentile_99th)
-    latency_obs_server$percentile_95th <- as.numeric(latency_obs_server$percentile_95th)
-    latency_obs_server$percentile_90th <- as.numeric(latency_obs_server$percentile_90th)
+    latency_obs_persist_server$percentile_99th <- as.numeric(latency_obs_persist_server$percentile_99th)
+    latency_obs_persist_server$percentile_95th <- as.numeric(latency_obs_persist_server$percentile_95th)
+    latency_obs_persist_server$percentile_90th <- as.numeric(latency_obs_persist_server$percentile_90th)
 
-    all_builds = factor(latency_obs_server$buildinfo.version)
+    all_builds = factor(latency_obs_persist_server$buildinfo.version)
     result <- data.frame()
     for(a_build in levels(all_builds)) {
-        tt <- latency_obs_server[latency_obs_server $buildinfo.version==a_build,]
+        tt <- latency_obs_persist_server[latency_obs_persist_server $buildinfo.version==a_build,]
         tt$mystery <- as.numeric(tt$mystery)
         min_myst = min(tt$mystery)
         filtered = transform(tt,row=mystery-min_myst)
         result <- rbind(result,filtered)
     }
-    latency_obs_server <- result
+    latency_obs_persist_server <- result
 }
 
-# Get Latency-observe-client
-cat("generating latency-observe-client\n")
+# Get Latency-obs-persist-client
+cat("generating latency-obs-persist-client\n")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
 	tryCatch({
-		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-observe-client", sep='')
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-obs-persist-client", sep='')
 		cat(paste(url,"\n"))
 		doc_json <- fromJSON(file=url)
 		cat(paste(builds_list[index,]$id,"\n"))
 		unlisted <- plyr::ldply(doc_json, unlist)
 		result <- rbind(result,unlisted)
-	},error=function(e)e, finally=print("Error getting latency-observe-client"))
+	},error=function(e)e, finally=print("Error getting latency-obs-persist-client"))
 }
-latency_obs_client <- result
-if (nrow(latency_obs_client) > 0) {
+latency_obs_persist_client <- result
+if (nrow(latency_obs_persist_client) > 0) {
 
-    latency_obs_client$row <- as.numeric(latency_obs_client$row)
-    latency_obs_client$mystery <- as.numeric(latency_obs_client$mystery)
-    if (length(latency_obs_client$percentile_999th)) {
-        latency_obs_client$percentile_999th <- as.numeric(latency_obs_client$percentile_999th)
+    latency_obs_persist_client$row <- as.numeric(latency_obs_persist_client$row)
+    latency_obs_persist_client$mystery <- as.numeric(latency_obs_persist_client$mystery)
+    if (length(latency_obs_persist_client$percentile_999th)) {
+        latency_obs_persist_client$percentile_999th <- as.numeric(latency_obs_persist_client$percentile_999th)
     }
-    latency_obs_client$percentile_99th <- as.numeric(latency_obs_client$percentile_99th)
-    latency_obs_client$percentile_95th <- as.numeric(latency_obs_client$percentile_95th)
-    latency_obs_client$percentile_90th <- as.numeric(latency_obs_client$percentile_90th)
+    latency_obs_persist_client$percentile_99th <- as.numeric(latency_obs_persist_client$percentile_99th)
+    latency_obs_persist_client$percentile_95th <- as.numeric(latency_obs_persist_client$percentile_95th)
+    latency_obs_persist_client$percentile_90th <- as.numeric(latency_obs_persist_client$percentile_90th)
 
-    all_builds = factor(latency_obs_client$buildinfo.version)
+    all_builds = factor(latency_obs_persist_client$buildinfo.version)
     result <- data.frame()
     for(a_build in levels(all_builds)) {
-        tt <- latency_obs_client[latency_obs_client $buildinfo.version==a_build,]
+        tt <- latency_obs_persist_client[latency_obs_persist_client $buildinfo.version==a_build,]
         tt$mystery <- as.numeric(tt$mystery)
         min_myst = min(tt$mystery)
         filtered = transform(tt,row=mystery-min_myst)
         result <- rbind(result,filtered)
     }
-    latency_obs_client <- result
+    latency_obs_persist_client <- result
+}
+
+# Get Latency-obs-repl-client
+cat("generating latency-obs-repl-client\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-obs-repl-client", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-obs-repl-client"))
+}
+latency_obs_repl_client <- result
+if (nrow(latency_obs_repl_client) > 0) {
+
+    latency_obs_repl_client$row <- as.numeric(latency_obs_repl_client$row)
+    latency_obs_repl_client$mystery <- as.numeric(latency_obs_repl_client$mystery)
+    if (length(latency_obs_repl_client$percentile_999th)) {
+        latency_obs_repl_client$percentile_999th <- as.numeric(latency_obs_repl_client$percentile_999th)
+    }
+    latency_obs_repl_client$percentile_99th <- as.numeric(latency_obs_repl_client$percentile_99th)
+    latency_obs_repl_client$percentile_95th <- as.numeric(latency_obs_repl_client$percentile_95th)
+    latency_obs_repl_client$percentile_90th <- as.numeric(latency_obs_repl_client$percentile_90th)
+
+    all_builds = factor(latency_obs_repl_client$buildinfo.version)
+    result <- data.frame()
+    for(a_build in levels(all_builds)) {
+        tt <- latency_obs_repl_client[latency_obs_repl_client $buildinfo.version==a_build,]
+        tt$mystery <- as.numeric(tt$mystery)
+        min_myst = min(tt$mystery)
+        filtered = transform(tt,row=mystery-min_myst)
+        result <- rbind(result,filtered)
+    }
+    latency_obs_repl_client <- result
 }
 
 # Get average query throughput
@@ -681,39 +718,56 @@ latency_query_histo <- result
 latency_query_histo$time <- as.numeric(latency_query_histo$time) * 1000
 latency_query_histo$count <- as.numeric(latency_query_histo$count)
 
-# Get latency_obs_server histogram
+# Get latency_obs_persist_server histogram
 cat("generating latency_obs_server histogram")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
     tryCatch({
-        url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-observe-server-histogram", sep='')
+        url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-obs-persist-server-histogram", sep='')
         cat(paste(url,"\n"))
         doc_json <- fromJSON(file=url)
         cat(paste(builds_list[index,]$id,"\n"))
         unlisted <- plyr::ldply(doc_json, unlist)
         result <- rbind(result,unlisted)
-    },error=function(e)e, finally=print("Error getting latency-observe-server histogram"))
+    },error=function(e)e, finally=print("Error getting latency-obs-persist-server histogram"))
 }
-latency_obs_server_histo <- result
-latency_obs_server_histo$time <- as.numeric(latency_obs_server_histo$time)
-latency_obs_server_histo$count <- as.numeric(latency_obs_server_histo$count)
+latency_obs_persist_server_histo <- result
+latency_obs_persist_server_histo$time <- as.numeric(latency_obs_persist_server_histo$time)
+latency_obs_persist_server_histo$count <- as.numeric(latency_obs_persist_server_histo$count)
 
-# Get latency_obs_client histogram
-cat("generating latency_obs_client histogram")
+# Get latency_obs_persist_client histogram
+cat("generating latency_obs_persist_client histogram")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
 	tryCatch({
-		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-observe-client-histogram", sep='')
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-obs-persist-client-histogram", sep='')
 		cat(paste(url,"\n"))
 		doc_json <- fromJSON(file=url)
 		cat(paste(builds_list[index,]$id,"\n"))
 		unlisted <- plyr::ldply(doc_json, unlist)
 		result <- rbind(result,unlisted)
-	},error=function(e)e, finally=print("Error getting latency-observe-client histogram"))
+	},error=function(e)e, finally=print("Error getting latency-obs-persist-client histogram"))
 }
-latency_obs_client_histo <- result
-latency_obs_client_histo$time <- as.numeric(latency_obs_client_histo$time)
-latency_obs_client_histo$count <- as.numeric(latency_obs_client_histo$count)
+latency_obs_persist_client_histo <- result
+latency_obs_persist_client_histo$time <- as.numeric(latency_obs_persist_client_histo$time)
+latency_obs_persist_client_histo$count <- as.numeric(latency_obs_persist_client_histo$count)
+
+# Get latency_obs_repl_client histogram
+cat("generating latency_obs_repl_client histogram")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-obs-persist-client-histogram", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-obs-persist-client histogram"))
+}
+latency_obs_repl_client_histo <- result
+latency_obs_repl_client_histo$time <- as.numeric(latency_obs_repl_client_histo$time)
+latency_obs_repl_client_histo$count <- as.numeric(latency_obs_repl_client_histo$count)
 
 # Get Data size on disk
 cat("generating disk usage over time")
@@ -1614,26 +1668,46 @@ if (nrow(latency_query_histo) > 0) {
     makeMetricDef("Final latency histogram for query commands")
 }
 
-if (nrow(latency_obs_server_histo) > 0) {
-    cat("plotting latency_obs_server histogram \n")
-    latency_obs_server_histo = latency_obs_server_histo[!is.na(latency_obs_server_histo$time), ]
-    p <- ggplot(latency_obs_server_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (sec)--->", y="count")
+if (nrow(latency_obs_persist_server_histo) > 0) {
+    cat("plotting latency_obs_persist_server histogram \n")
+    latency_obs_persist_server_histo = latency_obs_persist_server_histo[!is.na(latency_obs_persist_server_histo$time), ]
+    p <- ggplot(latency_obs_persist_server_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count)))
+    p <- p + labs(x="----latency (sec)--->", y="count")
     p <- p + geom_point()
     p <- addopts(p,"Server side observe latency histogram")
     print(p)
     makeFootnote(footnote)
-    makeMetricDef("Server side latency histogram for observe commands")
+    makeMetricDef(paste("Server side latency histogram ",
+                        "for observe persistency stats",
+                        sep="\n"))
 }
 
-if (nrow(latency_obs_client_histo) > 0) {
+if (nrow(latency_obs_persist_client_histo) > 0) {
     cat("plotting latency_obs_client histogram \n")
-    latency_obs_client_histo = latency_obs_client_histo[!is.na(latency_obs_client_histo$time), ]
-    p <- ggplot(latency_obs_client_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (sec)--->", y="count")
+    latency_obs_persist_client_histo = latency_obs_persist_client_histo[!is.na(latency_obs_persist_client_histo$time), ]
+    p <- ggplot(latency_obs_persist_client_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count)))
+    p <- p + labs(x="----latency (sec)--->", y="count")
     p <- p + geom_point()
-    p <- addopts(p,"Client side observe latency histogram")
+    p <- addopts(p,"Client side persist observe latency histogram")
     print(p)
     makeFootnote(footnote)
-    makeMetricDef("Client side latency histogram for observe commands")
+    makeMetricDef(paste("Client side latency histogram ",
+                        "for observe persistency stats",
+                        sep="\n"))
+}
+
+if (nrow(latency_obs_repl_client_histo) > 0) {
+    cat("plotting latency_obs_client histogram \n")
+    latency_obs_repl_client_histo = latency_obs_repl_client_histo[!is.na(latency_obs_repl_client_histo$time), ]
+    p <- ggplot(latency_obs_repl_client_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count)))
+    p <- p + labs(x="----latency (sec)--->", y="count")
+    p <- p + geom_point()
+    p <- addopts(p,"Client side repl observe latency histogram")
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef(paste("Client side latency histogram ",
+                        "for observe replication stats",
+                        sep="\n"))
 }
 
 if (nrow(latency_get) > 0) {
@@ -1843,52 +1917,78 @@ if (nrow(latency_query) > 0) {
 
 }
 
-if (nrow(latency_obs_server) > 0) {
+if (nrow(latency_obs_persist_server) > 0) {
 
-    cat("Latency-obs-server 90th\n")
-    temp <- latency_obs_server[latency_obs_server$client_id ==0,]
+    cat("Latency-obs-persist-server 90th\n")
+    temp <- latency_obs_persist_server[latency_obs_persist_server$client_id ==0,]
     p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="sec")
     p <- p + geom_point()
-    p <- addopts(p,"Latency-obs-server 90th  percentile")
+    p <- addopts(p,"Latency-obs-persist-server 90th  percentile")
     print(p)
     makeFootnote(footnote)
 
-    cat("Latency-obs-server 95th\n")
+    cat("Latency-obs-persist-server 95th\n")
     p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="sec")
     p <- p + geom_point()
-    p <- addopts(p,"Latency-obs-server 95th  percentile")
+    p <- addopts(p,"Latency-obs-persist-serve 95th  percentile")
     print(p)
     makeFootnote(footnote)
 
-    cat("Latency-obs-server 99th\n")
+    cat("Latency-obs-persist-server 99th\n")
     p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="sec")
     p <- p + geom_point()
-    p <- addopts(p,"Latency-obs-server 99th  percentile")
+    p <- addopts(p,"Latency-obs-persist-server 99th  percentile")
     print(p)
     makeFootnote(footnote)
 }
 
-if (nrow(latency_obs_client) > 0) {
+if (nrow(latency_obs_persist_client) > 0) {
 
-    cat("Latency-obs-client 90th\n")
-    temp <- latency_obs_client[latency_obs_client$client_id ==0,]
+    cat("Latency-obs-persist-client 90th\n")
+    temp <- latency_obs_persist_client[latency_obs_persist_client$client_id ==0,]
     p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="sec")
     p <- p + geom_point()
-    p <- addopts(p,"Latency-obs-client 90th  percentile")
+    p <- addopts(p,"Latency-obs-persist-client 90th  percentile")
     print(p)
     makeFootnote(footnote)
 
-    cat("Latency-obs-client 95th\n")
+    cat("Latency-obs-persist-client 95th\n")
     p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="sec")
     p <- p + geom_point()
-    p <- addopts(p,"Latency-obs-client 95th  percentile")
+    p <- addopts(p,"Latency-obs-persist-client 95th  percentile")
     print(p)
     makeFootnote(footnote)
 
-    cat("Latency-obs-client 99th\n")
+    cat("Latency-obs-persist-client 99th\n")
     p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="sec")
     p <- p + geom_point()
-    p <- addopts(p,"Latency-obs-client 99th  percentile")
+    p <- addopts(p,"Latency-obs-persist-client 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+}
+
+if (nrow(latency_obs_repl_client) > 0) {
+
+    cat("Latency-obs-repl-client 90th\n")
+    temp <- latency_obs_repl_client[latency_obs_repl_client$client_id ==0,]
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-obs-repl-client 90th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-obs-repl-client 95th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-obs-repl-client 95th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-obs-repl-client 99th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-obs-repl-client 99th  percentile")
     print(p)
     makeFootnote(footnote)
 
