@@ -388,7 +388,7 @@ class RebalanceHelper():
     #rest api instead of passing it to the fucntions
 
     @staticmethod
-    def rebalance_in(servers, how_many, do_shuffle=True, monitor=True):
+    def rebalance_in(servers, how_many, do_shuffle=True, monitor=True, do_check=True):
         servers_rebalanced = []
         log = logger.Logger.get_logger()
         rest = RestConnection(servers[0])
@@ -423,7 +423,7 @@ class RebalanceHelper():
             if len(toBeAdded) == int(how_many):
                 break
 
-        if len(toBeAdded) < how_many:
+        if do_check and len(toBeAdded) < how_many:
             raise Exception("unable to find {0} nodes to rebalance_in".format(how_many))
 
         for server in toBeAdded:
