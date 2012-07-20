@@ -44,6 +44,7 @@ class PerfWrapper(object):
 
                 for prefix in range(total_clients):
                     self.input.test_params['prefix'] = prefix
+                    self.is_leader = bool(prefix == 0)
                     executor = Process(target=test, args=(self, ))
                     executor.start()
                     executors.append(executor)
@@ -79,6 +80,7 @@ class PerfWrapper(object):
             self.input.test_params['start_delay'] = 5
             for prefix in range(0, total_bg_clients):
                 self.input.test_params['prefix'] = prefix
+                self.is_leader = bool(prefix == 0)
                 executor = Process(target=test, args=(self, ))
                 executor.start()
                 executors.append(executor)
@@ -88,6 +90,7 @@ class PerfWrapper(object):
             self.input.test_params['bg_max_ops_per_sec'] = 1
             for prefix in range(total_bg_clients, total_clients):
                 self.input.test_params['prefix'] = prefix + total_bg_clients
+                self.is_leader = False
                 executor = Process(target=test, args=(self, ))
                 executor.start()
                 executors.append(executor)
