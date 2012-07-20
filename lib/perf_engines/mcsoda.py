@@ -251,11 +251,17 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             o_last_flush += ops_done
 
             if max_ops_per_sec:
+                # Taking into account global throughtput
+                if cfg.get('active_fg_workers') is not None:
+                    concurrent_workers = cfg.get('active_fg_workers').value
+                else:
+                    concurrent_workers = 1
+                local_max_ops_per_sec = max_ops_per_sec / concurrent_workers
                 # Actual throughput
                 ops_per_sec = ops_done / delta2
                 # Sleep if too fast. It must be too fast.
-                if ops_per_sec > max_ops_per_sec:
-                    sleep_time = CORRECTION_FACTOR * ops_done / max_ops_per_sec - delta2
+                if ops_per_sec > local_max_ops_per_sec:
+                    sleep_time = CORRECTION_FACTOR * ops_done / local_max_ops_per_sec - delta2
                     time.sleep(max(sleep_time, 0))
 
             if hot_shift > 0:

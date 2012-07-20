@@ -2,6 +2,7 @@ import copy
 import socket
 import functools
 from multiprocessing import Process
+from multiprocessing.sharedctypes import Value
 
 from membase.api import httplib2
 from membase.api.rest_client import RestConnection
@@ -63,7 +64,7 @@ class PerfWrapper(object):
             -- constant background load (mainly memcached sets/gets)
             -- ramping up load (mainly view queries)
 
-            Currenly these processes don't have synchronization points.
+            Processes use shared objects (ctype wrappers) for synchronization.
             """
             if self.parami('index_phase', 0) or self.parami('load_phase', 0):
                 return PerfWrapper.multiply(test)(self, *args, **kargs)
@@ -77,7 +78,10 @@ class PerfWrapper(object):
 
             # Background load (memcached)
             original_delay = self.parami('start_delay', 30)
+            original_fg_max_ops_per_sec = self.parami('fg_max_ops_per_sec',
+                                                      1000)
             self.input.test_params['start_delay'] = 5
+            self.input.test_params['fg_max_ops_per_sec'] = 100
             for prefix in range(0, total_bg_clients):
                 self.input.test_params['prefix'] = prefix
                 self.is_leader = bool(prefix == 0)
@@ -87,7 +91,12 @@ class PerfWrapper(object):
 
             # Foreground load (memcached)
             self.input.test_params['start_delay'] = original_delay
+            self.input.test_params['fg_max_ops_per_sec'] = \
+                original_fg_max_ops_per_sec
             self.input.test_params['bg_max_ops_per_sec'] = 1
+
+            self.active_fg_workers = Value('i', 0) # signed int
+
             for prefix in range(total_bg_clients, total_clients):
                 self.input.test_params['prefix'] = prefix
                 self.is_leader = False
@@ -97,6 +106,7 @@ class PerfWrapper(object):
 
             for executor in executors:
                 executor.join()
+                self.active_fg_workers.value -= 1
 
             return executors[-1]
         return wrapper
