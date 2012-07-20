@@ -89,7 +89,7 @@ class PerfWrapper(object):
                 executor.start()
                 executors.append(executor)
 
-            # Foreground load (memcached)
+            # Foreground load (queries)
             self.input.test_params['start_delay'] = original_delay
             self.input.test_params['fg_max_ops_per_sec'] = \
                 original_fg_max_ops_per_sec
