@@ -89,7 +89,7 @@ class PerfWrapper(object):
             self.input.test_params['start_delay'] = original_delay
             self.input.test_params['bg_max_ops_per_sec'] = 1
             for prefix in range(total_bg_clients, total_clients):
-                self.input.test_params['prefix'] = prefix + total_bg_clients
+                self.input.test_params['prefix'] = prefix
                 self.is_leader = False
                 executor = Process(target=test, args=(self, ))
                 executor.start()
