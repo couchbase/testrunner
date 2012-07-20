@@ -1,9 +1,9 @@
 import copy
-import httplib2
 import socket
 import functools
 from multiprocessing import Process
 
+from membase.api import httplib2
 from membase.api.rest_client import RestConnection
 
 from eperf import EVPerfClient
