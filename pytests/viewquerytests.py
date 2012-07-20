@@ -303,13 +303,14 @@ class ViewQueryTests(unittest.TestCase):
 
             # Just doing 2 iterations
             for expected_progress in [30, 60]:
-                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
+                rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
                 reached = RestHelper(rest).rebalance_reached(expected_progress)
                 self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
                 stopped = rest.stop_rebalance()
                 self.assertTrue(stopped, msg="unable to stop rebalance")
                 self._query_all_views(data_set.views, limit=self.limit)
-                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=ejectedNodes)
+
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
 
             self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
             self._query_all_views(data_set.views, limit=self.limit)
