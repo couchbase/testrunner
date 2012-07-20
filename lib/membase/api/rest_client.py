@@ -745,7 +745,7 @@ class RestConnection(object):
         if status:
             log.info('rebalance operation started')
         else:
-            log.error('rebalance operation failed')
+            log.error('rebalance operation failed: {0}'.format(content))
             #extract the error
             raise InvalidArgumentException('controller/rebalance',
                                            parameters=params)
@@ -1205,11 +1205,23 @@ class RestConnection(object):
         return status
 
 
-    def stop_rebalance(self):
+    def stop_rebalance(self, wait_timeout=10):
         api = self.baseUrl + '/controller/stopRebalance'
 
         status, content = self._http_request(api, 'POST')
-        log.info("rebalance was stopped")
+
+        if status:
+            for i in xrange(wait_timeout):
+                if self._rebalance_progress_status() == 'running':
+                    log.info("rebalance is not stopped yet")
+                    time.sleep(1)
+                    status = False
+                else:
+                    log.info("rebalance was stopped")
+                    status = True
+                    break
+        else:
+            log.error("Rebalance is not stopped due to {0}".format(content))
         return status
 
 
