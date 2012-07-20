@@ -1106,7 +1106,7 @@ class RestConnection(object):
                       replicaNumber=1,
                       proxyPort=11211,
                       bucketType='membase',
-                      replica_index=0):
+                      replica_index=1):
         api = '{0}{1}'.format(self.baseUrl, '/pools/default/buckets')
         params = urllib.urlencode({})
         #this only works for default bucket ?
