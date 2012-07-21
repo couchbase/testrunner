@@ -66,7 +66,7 @@ class PerfWrapper(object):
             Currenly these processes don't have synchronization points.
             """
             if self.parami('index_phase', 0) or self.parami('load_phase', 0):
-                return PerfWrapper.multiply(test(self, *args, **kargs))
+                return PerfWrapper.multiply(test)(self, *args, **kargs)
 
             total_bg_clients = self.parami('total_bg_clients', 1)
             total_fg_clients = self.parami('total_fg_clients', 1)
