@@ -778,7 +778,7 @@ class RestConnection(object):
             #-1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
             if progress == -100:
-                log.error("unable to retrieve rebalanceProgress.try again in 2 seconds")
+                log.error("unable to retrieve rebalanceProgress.try again in 1 second")
                 retry += 1
             else:
                 retry = 0
@@ -794,16 +794,20 @@ class RestConnection(object):
                     log.error("apparently rebalance progress code in infinite loop: {0}".format(progress))
                     return False
             #sleep for 2 seconds
-            time.sleep(2)
+            time.sleep(1)
 
         if progress < 0:
             log.error("rebalance progress code : {0}".format(progress))
             return False
         else:
             duration = time.time() - start
+            if duration > 10:
+                sleep = 10
+            else:
+                sleep = duration
             log.info('rebalance progress took {0} seconds '.format(duration))
-            log.info("sleep for 10 seconds after rebalance...")
-            time.sleep(10)
+            log.info("sleep for {0} seconds after rebalance...".format(sleep))
+            time.sleep(sleep)
             return True
 
     def _rebalance_progress_status(self):
