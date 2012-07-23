@@ -278,25 +278,20 @@ class CreateDeleteViewTests(ViewBaseTest):
         self.log.info("DDoc Data Validation Successful")
 
 
-    """Create view design doc i) tests create single view in single doc (test_create_views,num_views = 1,num_docs=1)
-    ii) tests create multiple views in single docs(test_create_views,num_views = 10,num_docs=1)
-    iii) tests create multiple views in multiple docs(test_create_views,num_views = 5,num_docs=5)
-    iv) Tests create view without  existing designdoc
-    v) Tests create view with invalid name having non alpha numeric characters
-    and View with long name(test_create_views,inavlid_view = True)
-    vi) Tests same name or duplicate view in different design doc"""
     def test_invalid_view(self):
         self._load_doc_data_all_buckets()
-        invalid_view_name_list = ["", "#", "{"]
-        long_view_name = 'V' * 2000
-        invalid_view_name_list.append(long_view_name)
+        invalid_view_name_list = ["", " leadingspace", "\nleadingnewline",
+                                  "\rleadingcarriagereturn", "\tleadingtab",
+                                  "trailingspace ", "trailingnewline\n",
+                                  "trailingcarriagereturn\r", "trailingtab\t"]
         for view_name in invalid_view_name_list:
             view = View(view_name, self.default_map_func, None)
-            try:
-                self.cluster.create_view(self.master, self.default_design_doc_name, view, 'default', self.wait_timeout * 2)
-                self.log.error("server allowed creation of invalid view:{0}", view_name)
-            except DesignDocCreationException:
-                self.log.info("view creation has been failed for view name as" + view_name)
+            with self.assertRaises(DesignDocCreationException):
+                self.cluster.create_view(
+                    self.master, self.default_design_doc_name, view,
+                    'default', self.wait_timeout * 2)
+                self.fail("server allowed creation of invalid "
+                               "view named `{0}`".format(view_name))
 
     def test_create_view_with_duplicate_name(self):
         self._load_doc_data_all_buckets()
