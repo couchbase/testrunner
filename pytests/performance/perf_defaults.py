@@ -64,3 +64,4 @@ class PerfDefaults:
     view_compaction         =   10       # view fragmentation percentage triggers compaction
     vbuckets                =   1024     # number of vbuckets
     warmup                  =   0        # restart memcached and measure warmup phase. 1: enabled, 0: disabled
+    woq_pattern             =   0        # measure standard write/observe/query pattern

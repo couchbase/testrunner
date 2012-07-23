@@ -773,7 +773,8 @@ class PerfBase(unittest.TestCase):
                 'obs-backoff': self.paramf('obs_backoff', PerfDefaults.obs_backoff),
                 'obs-max-backoff': self.paramf('obs_max_backoff', PerfDefaults.obs_max_backoff),
                 'obs-persist-count': self.parami('obs_persist_count', PerfDefaults.obs_persist_count),
-                'obs-repl-count': self.parami('obs_repl_count', PerfDefaults.obs_repl_count)
+                'obs-repl-count': self.parami('obs_repl_count', PerfDefaults.obs_repl_count),
+                'woq-pattern': self.param('woq_pattern', PerfDefaults.woq_pattern)
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
