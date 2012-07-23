@@ -2,13 +2,14 @@
 
 from threading import Thread, RLock
 from time import sleep
+import socket
 
 from mc_bin_client import MemcachedClient
 from obs import Observer
 from obs_req import ObserveRequestKey, ObserveRequest
 from obs_res import ObserveResponse
-from obs_def import ObservePktFmt, ObserveStatus
-from obs_helper import VbucketHelper, synchronized
+from obs_def import ObservePktFmt, ObserveStatus, ObserveKeyState
+from obs_helper import VbucketHelper, synchronized, SocketHelper
 
 BACKOFF = 0.2
 MAX_BACKOFF = 1
@@ -124,6 +125,16 @@ class McsodaObserver(Observer, Thread):
 
         return True
 
+    @synchronized("conn_lock")
+    def _reconnect(self, conn):
+        if not conn or\
+            conn.__class__.__name__ != "MemcachedClient":
+            print "<%s> failed to reconnect, invalid connection object"\
+                % self.__class__.__name__
+            return False
+
+        return conn.reconnect()
+
     def _send(self):
         self.obs_keys.clear()   # {server: [keys]}
 
@@ -229,8 +240,121 @@ class McsodaObserver(Observer, Thread):
 
         return None
 
-    def _reconn(self):
-        pass
+    def block_for_persistence(self, key, cas, timeout=0):
+        """
+        observe a key until it has been persisted
+        """
+        self.backoff = self.cfg.get('obs-backoff', BACKOFF)
+
+        while True:
+
+            res = self.observe_single(key, timeout)
+
+            if not res:
+                print "<%s> block_for_persistence: empty response"
+                return False
+
+            key_len = len(res.keys)
+            if key_len != 1:
+                # we are not supposed to receive responses for more than one key,
+                # otherwise, it's a server side protocol error
+                print "<%s> block_for_persistence: invalid number of keys " \
+                    "in response: %d" % (self.__class__.__name__, key_len)
+                return False
+
+            res_key = res.keys[0]
+
+            if res_key.key != key:
+                print "<%s> block_for_persistence: invalid key %s in response" \
+                    % self.__class__.__name__
+                return False
+
+            if res_key.cas != cas:
+                print "<%s> block_for_persistence: key: %s, cas: %s has been modified" \
+                    % (self.__class__.__name__, key, cas)
+                return False
+
+            if res_key.key_state == ObserveKeyState.OBS_PERSISITED:
+                return True
+            elif res_key.key_state == ObserveKeyState.OBS_FOUND:
+                sleep(self.backoff)
+                self.backoff = min(self.backoff * 2, self.max_backoff)
+                continue
+            elif res_key.key_state == ObserveKeyState.OBS_NOT_FOUND:
+                print "<%s> block_for_persistence: key: %s, cas: %s does not" \
+                    " exist any more" % (self.__class__.__name__, key, cas)
+                return False
+            else:
+                print "<%s> block_for_persistence: invalid key state: %x" \
+                    % (self.__class__.__name__, res_key.key_state)
+                return False
+
+        return False # unreachable
+
+    def observe_single(self, key, timeout=0):
+        """
+        send an observe command and get the response back
+        """
+        if not key:
+            print "<%s> observe_single: invalid key" % self.__class__.__name__
+            return None
+
+        vbucketid = VbucketHelper.get_vbucket_id(key, self.cfg.get("vbuckets", 0))
+        server = self._get_server_str(vbucketid)
+        req_key = ObserveRequestKey(key, vbucketid)
+
+        req = ObserveRequest([req_key])
+        pkt = req.pack()
+
+        try:
+            skt = self.conns[server].s
+        except KeyError:
+            print "<%s> KeyError: %s" % (self.__class__.__name__, server)
+            self._add_conn(server)
+            return None
+
+        try:
+            SocketHelper.send_bytes(skt, pkt, timeout)
+        except IOError:
+            print "<%s> IOError: failed to send observe pkt : %s" \
+                % (self.__class__.__name__, pkt)
+            self._reconnect(self.conns[server])
+            self._refresh_conns()
+            return None
+        except socket.timeout:
+            print "<%s> timeout: failed to send observe pkt : %s" \
+                % (self.__class__.__name__, pkt)
+            return None
+        except Exception as e:
+            print "<%s> failed to send observe pkt : %s" \
+                % (self.__class__.__name__, e)
+            return None
+
+        try:
+            hdr = SocketHelper.recv_bytes(skt, ObservePktFmt.OBS_RES_HDR_LEN, timeout)
+            res = ObserveResponse()
+            if not res.unpack_hdr(hdr):
+                if res.status == ERR_NOT_MY_VBUCKET:
+                    self._refresh_conns()
+                return None
+            body = SocketHelper.recv_bytes(skt, res.body_len, timeout)
+            res.unpack_body(body)
+        except IOError:
+            print "<%s> IOError: failed to recv observe pkt" \
+                % self.__class__.__name__
+            self._reconnect(self.conns[server])
+            self._refresh_conns()
+            return None
+        except socket.timeout:
+            print "<%s> timeout: failed to recv observe pkt" \
+                % self.__class__.__name__
+            return None
+        except Exception as e:
+            print "<%s> failed to recv observe pkt : %s" \
+                % (self.__class__.__name__, e)
+            return None
+
+        return res
 
     def measure_client_latency(self):
         observables = self.observable_filter(ObserveStatus.OBS_SUCCESS)
