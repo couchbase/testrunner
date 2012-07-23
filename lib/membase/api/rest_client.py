@@ -286,6 +286,16 @@ class RestConnection(object):
 
         return json
 
+    #the same as Preview a Random Document on UI
+    def get_random_key(self, bucket):
+        api = self.baseUrl + 'pools/default/buckets/%s/localRandomKey' % (bucket)
+        status, content = self._http_request(api, headers=self._create_capi_headers())
+        json_parsed = json.loads(content)
+
+        if not status:
+            raise Exception("unable to get random document/key for bucket %s" % (bucket) )
+        return json_parsed
+
 
     def run_view(self, bucket, view, name):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}/_view/{2}'.format(bucket, view, name)
