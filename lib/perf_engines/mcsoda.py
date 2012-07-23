@@ -9,6 +9,7 @@ import string
 import struct
 import random
 import threading
+import multiprocessing
 
 sys.path.append("lib")
 sys.path.append(".")
@@ -40,6 +41,7 @@ from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "A
 
 from libobserve.obs_mcsoda import McsodaObserver
 from libobserve.obs import Observable
+from libobserve.obs_helper import UnblockingJoinableQueue
 
 LARGE_PRIME = 9576890767
 
@@ -136,8 +138,34 @@ def obs_cb(store):
         print "[mcsoda] obs_cb is broken"
         return
 
-    print "[mcsoda] obs_cb: clear key_cas %s" % store.key_cas
-    store.key_cas.clear()
+    print "[mcsoda] obs_cb: clear obs_key_cas %s" % store.obs_key_cas
+    store.obs_key_cas.clear()
+
+def woq_worker(req_queue, stats_queue, ctl, cfg, store):
+    """
+    measure latencies of standard write/observe/query patterns
+    """
+    print "[mcsoda] woq_worker started"
+    woq_observer = McsodaObserver(ctl, cfg, store, None)
+
+    while True:
+
+        start_time = time.time() # latency includes observe and query time
+        key, cas = req_queue.get(block=True)
+
+        # observe
+        if not woq_observer.block_for_persistence(key, cas):
+            # put an invalid object to indicate error
+            stats_queue.put([key, cas, 0, 0], block=True)
+            req_queue.task_done()
+            continue
+
+        # TODO: query
+
+        latency = time.time() - start_time
+        stats_queue.put([key, cas, start_time, latency], block=True)
+        req_queue.task_done()
+    print "[mcsoda] woq_worker stopped working"
 
 def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     i = 0
@@ -166,6 +194,15 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
 
     heartbeat_last = t_last
 
+    if cfg.get('woq-pattern', 0):
+        woq_req_queue = UnblockingJoinableQueue(1)    # pattern: write/observe/query
+        woq_stats_queue = multiprocessing.Queue(1)
+        woq_process = multiprocessing.Process(target=woq_worker,
+                                              args=(woq_req_queue, woq_stats_queue,
+                                                    ctl, cfg, store))
+        woq_process.daemon = True
+        woq_process.start()
+
     if cfg.get('observe', 0):
         observer = McsodaObserver(ctl, cfg, store, obs_cb)
         observer.start()
@@ -187,8 +224,35 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
 
         command = next_cmd(cfg, cur, store)
         flushed = store.command(command)
+
+        if flushed and cfg.get('woq-pattern', 0):
+
+            # record stats
+            if not woq_stats_queue.empty():
+                try:
+                    key, cas, start_time, latency = woq_stats_queue.get(block=False)
+                    if not start_time and not latency:
+                        store.woq_key_cas.clear()   # error
+                    else:
+                        store.add_timing_sample("woq", latency)
+                        store.save_stats(start_time)
+                        store.woq_key_cas.clear()   # simply clear all, no key/cas sanity check
+                        print "[mcsoda] woq_stats: key: %s, cas: %s, latency: %f"\
+                            % (key, cas, latency)
+                except Queue.Empty:
+                    pass
+
+            # produce request
+            if woq_req_queue.all_finished():
+                for key_num, cas in store.woq_key_cas.iteritems():
+                    key = prepare_key(key_num, cfg.get('prefix', ''))
+                    try:
+                        woq_req_queue.put([key, cas], block=False)
+                    except Queue.Full:
+                        break
+
         if flushed and cfg.get('observe', 0):
-            if store.key_cas and not observer.num_observables():
+            if store.obs_key_cas and not observer.num_observables():
                 observables = []
                 for key_num, cas in store.key_cas.iteritems():
                     obs = Observable(key=prepare_key(key_num, cfg.get('prefix', '')),
@@ -551,7 +615,8 @@ class StoreMemcachedBinary(Store):
                       (CMD_PREPEND, False) ]
         self.xfer_sent = 0
         self.xfer_recv = 0
-        self.key_cas = {} # {key_num: cas} pair
+        self.obs_key_cas = {} # {key_num: cas} pair
+        self.woq_key_cas = {} # {key_num: cas} pair
 
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
         self.conn = mc_bin_client.MemcachedClient(host, port)
@@ -777,8 +842,10 @@ class StoreMemcachedBinary(Store):
             raise Exception("Unexpected recvMsg magic: " + str(magic))
         val, buf = self.readbytes(sock, datalen, buf)
         self.buf = buf
-        if not self.key_cas and cmd == CMD_SET:
-            self.key_cas[opaque] = cas  # opaque is the key_num
+        if not self.obs_key_cas and cmd == CMD_SET:
+            self.obs_key_cas[opaque] = cas  # opaque is the key_num
+        if not self.woq_key_cas and cmd == CMD_SET:
+            self.woq_key_cas[opaque] = cas
         return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
 
 
@@ -927,8 +994,10 @@ class StoreMembaseBinary(StoreMemcachedBinary):
             struct.unpack(RES_PKT_FMT, pkt)
         if magic != RES_MAGIC_BYTE:
             raise Exception("Unexpected recvMsg magic: " + str(magic))
-        if not self.key_cas and cmd == CMD_SET:
-            self.key_cas[opaque] = cas  # opaque is the key_num
+        if not self.obs_key_cas and cmd == CMD_SET:
+            self.obs_key_cas[opaque] = cas  # opaque is the key_num
+        if not self.woq_key_cas and cmd == CMD_SET:
+            self.woq_key_cas[opaque] = cas  # opaque is the key_num
         val, buf = self.readbytes(sock, datalen, buf)
         return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
 
