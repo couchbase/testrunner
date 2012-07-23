@@ -17,6 +17,57 @@ class VbucketHelper:
             vbucketId = crc32_hash(key) & (num_vbuckets - 1)
         return vbucketId
 
+class SocketHelper:
+
+    @staticmethod
+    def send_bytes(skt, buf, timeout=0):
+        """
+        Send bytes to the socket
+        @throws ValueError, IOError, socket.timeout, Exception
+        """
+        if not buf or not skt:
+            raise ValueError("<send_bytes> invalid socket descriptor or buf")
+
+        if timeout:
+            skt.settimeout(timeout)
+        else:
+            skt.settimeout(None)
+
+        length = len(buf)
+        sent_total = 0
+
+        while sent_total < length:
+            sent = skt.send(buf)
+            if not sent:
+                raise IOError("<send_bytes> connection broken")
+            sent_total += sent
+            buf = buf[sent:]
+
+        return sent_total
+
+    @staticmethod
+    def recv_bytes(skt, length, timeout=0):
+        """
+        Receive bytes from the socket
+        @throws ValueError, IOError, socket.timeout, Exception
+        """
+        if not skt or length < 0:
+            raise ValueError("<recv_bytes> invalid socket descriptor or length")
+
+        if timeout:
+            skt.settimeout(timeout)
+        else:
+            skt.settimeout(None)
+
+        buf = ''
+        while len(buf) < length:
+            data = skt.recv(length - len(buf))
+            if not data:
+                raise IOError("<recv_bytes> connection broken")
+            buf += data
+
+        return buf
+
 class SyncDict:
     """
     Synchronized dict wrapper with basic atomic operations.
