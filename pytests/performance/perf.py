@@ -771,7 +771,9 @@ class PerfBase(unittest.TestCase):
                 'cluster_name': self.param("cluster_name", ""),
                 'observe': self.param("observe", PerfDefaults.observe),
                 'obs-backoff': self.paramf('obs_backoff', PerfDefaults.obs_backoff),
-                'obs-max-backoff': self.paramf('obs_max_backoff', PerfDefaults.obs_max_backoff)
+                'obs-max-backoff': self.paramf('obs_max_backoff', PerfDefaults.obs_max_backoff),
+                'obs-persist-count': self.parami('obs_persist_count', PerfDefaults.obs_persist_count),
+                'obs-repl-count': self.parami('obs_repl_count', PerfDefaults.obs_repl_count)
                 }
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()

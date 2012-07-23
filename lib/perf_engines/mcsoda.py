@@ -191,8 +191,10 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             if store.key_cas and not observer.num_observables():
                 observables = []
                 for key_num, cas in store.key_cas.iteritems():
-                    obs = Observable(prepare_key(key_num, cfg.get('prefix', '')),
-                                     cas)
+                    obs = Observable(key=prepare_key(key_num, cfg.get('prefix', '')),
+                                     cas=cas,
+                                     persist_count=cfg.get('obs-persist-count', 1),
+                                     repl_count=cfg.get('obs-repl-count', 1))
                     observables.append(obs)
                 observer.load_observables(observables)
 
