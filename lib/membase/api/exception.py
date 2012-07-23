@@ -75,7 +75,7 @@ class InvalidArgumentException(MembaseHttpException):
             format(self.api, self.parameters)
 
 
-class ServerJoinException(MembaseHttpException):
+class ServerSelfJoinException(MembaseHttpException):
     def __init__(self, nodeIp='', remoteIp=''):
         self._message = 'node: {0} already added to this cluster:{1}'.\
             format(remoteIp, nodeIp)
@@ -115,29 +115,37 @@ class FailoverFailedException(MembaseHttpException):
 
 
 class DesignDocCreationException(MembaseHttpException):
-    def __init__(self, design_doc_name, reason = ''):
+    def __init__(self, design_doc_name, reason=''):
         self._message = 'Error occured design document %s: %s' % (design_doc_name, reason)
 
 class QueryViewException(MembaseHttpException):
-    def __init__(self, view_name, reason = ''):
+    def __init__(self, view_name, reason=''):
         self._message = 'Error occured querying view %s: %s' % (view_name, reason)
 
 class ReadDocumentException(MembaseHttpException):
-      def __init__(self, doc_id, reason = ''):
+      def __init__(self, doc_id, reason=''):
         self._message = 'Error occured looking up document %s: %s' % (doc_id, reason)
 
 class CompactViewFailed(MembaseHttpException):
-      def __init__(self, design_doc_name, reason = ''):
-        self._message = 'Error occured triggering compaction for design_doc %s: %s' %\
+      def __init__(self, design_doc_name, reason=''):
+        self._message = 'Error occured triggering compaction for design_doc %s: %s' % \
             (design_doc_name, reason)
 
 class SetViewInfoNotFound(MembaseHttpException):
-      def __init__(self, design_doc_name, reason = ''):
-        self._message = 'Error occured reading set_view _info of ddoc %s: %s' %\
+      def __init__(self, design_doc_name, reason=''):
+        self._message = 'Error occured reading set_view _info of ddoc %s: %s' % \
             (design_doc_name, reason)
 
 
 class GetBucketInfoFailed(MembaseHttpException):
-    def __init__(self, bucket, reason = ''):
-        self._message = 'Error occured getting bucket information %s: %s' %\
+    def __init__(self, bucket, reason=''):
+        self._message = 'Error occured getting bucket information %s: %s' % \
             (bucket, reason)
+
+class AddNodeException(MembaseHttpException):
+    def __init__(self, nodeIp='', remoteIp='', reason=''):
+        self._message = 'Error adding node: {0} to the cluster:{1} - {2}'.\
+            format(remoteIp, nodeIp, reason)
+        self.parameters = dict()
+        self.parameters['nodeIp'] = nodeIp
+        self.parameters['remoteIp'] = remoteIp

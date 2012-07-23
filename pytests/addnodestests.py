@@ -1,7 +1,7 @@
 import unittest
 from TestInput import TestInputSingleton
 import logger
-from membase.api.exception import ServerJoinException, MembaseHttpExceptionTypes, ServerAlreadyJoinedException
+from membase.api.exception import ServerSelfJoinException, MembaseHttpExceptionTypes, ServerAlreadyJoinedException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -20,18 +20,18 @@ class AddNodesTests(unittest.TestCase):
         self.servers = TestInputSingleton.input.servers
         self.membase = TestInputSingleton.input.membase_settings
 
-    def common_setUp(self,with_buckets):
+    def common_setUp(self, with_buckets):
         ClusterOperationHelper.cleanup_cluster(self.servers)
         server = self.servers[0]
         if with_buckets:
-            BucketOperationHelper.delete_all_buckets_or_assert(self.servers,test_case=self)
+            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, test_case=self)
             ok = BucketOperationHelper.create_multiple_buckets(server, 1)
             if not ok:
                 self.fail("unable to create multiple buckets on this node : {0}".format(server))
 
 
     def tearDown(self):
-        BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers,test_case=self)
+        BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
         #wait for all ns_servers
         for server in self.servers:
             self.assertTrue(RestHelper(RestConnection(server)).is_ns_server_running(timeout_in_seconds=480),
@@ -44,10 +44,10 @@ class AddNodesTests(unittest.TestCase):
     def _add_1_node_body(self):
         master = self.servers[0]
         master_rest = RestConnection(master)
-        for i in range(1,len(self.servers)):
+        for i in range(1, len(self.servers)):
             ip = self.servers[i].ip
             port = self.servers[i].port
-            self.log.info('adding node : {0}:{1} to the cluster'.format(ip,port))
+            self.log.info('adding node : {0}:{1} to the cluster'.format(ip, port))
             otpNode = master_rest.add_node(user=self.membase.rest_username,
                                            password=self.membase.rest_password,
                                            remoteIp=ip, port=port)
@@ -69,7 +69,7 @@ class AddNodesTests(unittest.TestCase):
         master = self.servers[0]
         master_rest = RestConnection(master)
         added_otps = []
-        for i in range(1,len(self.servers)):
+        for i in range(1, len(self.servers)):
             ip = self.servers[i].ip
             port = self.servers[i].port
             self.log.info('adding node : {0} to the cluster'.format(ip))
@@ -101,14 +101,14 @@ class AddNodesTests(unittest.TestCase):
                                            password=self.membase.rest_password,
                                            remoteIp=master.ip, port=master.port)
             self.fail("server did not raise any exception while adding the node to itself")
-        except ServerJoinException as ex:
-            self.assertEquals(ex.type,MembaseHttpExceptionTypes.NODE_CANT_ADD_TO_ITSELF)
+        except ServerSelfJoinException as ex:
+            self.assertEquals(ex.type, MembaseHttpExceptionTypes.NODE_CANT_ADD_TO_ITSELF)
 
     def _add_node_already_added_body(self):
         self.common_setUp(False)
         master = self.servers[0]
         master_rest = RestConnection(master)
-        for i in range(1,len(self.servers)):
+        for i in range(1, len(self.servers)):
             ip = self.servers[i].ip
             self.log.info('adding node : {0} to the cluster'.format(ip))
             otpNode = master_rest.add_node(user=self.membase.rest_username,
@@ -120,7 +120,7 @@ class AddNodesTests(unittest.TestCase):
                 try:
                     readd_otpNode = master_rest.add_node(user=self.membase.rest_username,
                                            password=self.membase.rest_password,
-                                           remoteIp=ip,port=self.servers[i].port)
+                                           remoteIp=ip, port=self.servers[i].port)
                     if readd_otpNode:
                         self.fail("server did not raise any exception when calling add_node on an already added node")
                 except ServerAlreadyJoinedException:

@@ -7,9 +7,9 @@ import time
 import logger
 from couchbase.document import DesignDocument, View
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
-from membase.api.exception import BucketCreationException, ServerJoinException, ClusterRemoteException, \
+from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
-    ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound
+    ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException
 log = logger.Logger.get_logger()
 #helper library methods built on top of RestConnection interface
 
@@ -287,7 +287,7 @@ class RestConnection(object):
         return json
 
 
-    def run_view(self,bucket,view,name):
+    def run_view(self, bucket, view, name):
         api = self.baseUrl + 'couchBase/{0}/_design/{1}/_view/{2}'.format(bucket, view, name)
 
         status, content = self._http_request(api, headers=self._create_capi_headers())
@@ -300,7 +300,7 @@ class RestConnection(object):
         return json_parsed
 
 
-    def delete_view(self,bucket,view):
+    def delete_view(self, bucket, view):
         status, json = self._delete_design_doc(bucket, view)
 
         if not status:
@@ -393,7 +393,7 @@ class RestConnection(object):
         return  json.loads(content)
 
 
-    def get_couch_doc(self, doc_id,  bucket = "default", timeout=120):
+    def get_couch_doc(self, doc_id, bucket="default", timeout=120):
         """ use couchBase uri to retrieve document from a bucket """
 
         api = self.baseUrl + 'couchBase/%s/%s' % (bucket, doc_id)
@@ -490,7 +490,7 @@ class RestConnection(object):
 
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
         if not headers:
-            headers=self._create_headers()
+            headers = self._create_headers()
 
         end_time = time.time() + timeout
         while True:
@@ -654,7 +654,7 @@ class RestConnection(object):
     #can't add the node to itself ( TODO )
     #server already added
     #returns otpNode
-    def add_node(self, user='', password='', remoteIp='', port='8091' ):
+    def add_node(self, user='', password='', remoteIp='', port='8091'):
         otpNode = None
         log.info('adding remote node : {0} to this cluster @ : {1}'\
         .format(remoteIp, self.ip))
@@ -676,12 +676,13 @@ class RestConnection(object):
                 raise ServerAlreadyJoinedException(nodeIp=self.ip,
                                                    remoteIp=remoteIp)
             elif content.find('Prepare join failed. Joining node to itself is not allowed') >= 0:
-                raise ServerJoinException(nodeIp=self.ip,
+                raise ServerSelfJoinException(nodeIp=self.ip,
                                           remoteIp=remoteIp)
             else:
                 log.error('add_node error : {0}'.format(content))
-                raise ServerJoinException(nodeIp=self.ip,
-                                          remoteIp=remoteIp)
+                raise AddNodeException(nodeIp=self.ip,
+                                          remoteIp=remoteIp,
+                                          reason=content)
 
         return otpNode
 
@@ -709,7 +710,7 @@ class RestConnection(object):
                 log.error('eject_node error {0}'.format(content))
         return True
 
-    def fail_over(self, otpNode=None ):
+    def fail_over(self, otpNode=None):
         if otpNode is None:
             log.error('otpNode parameter required')
             return False
@@ -752,7 +753,7 @@ class RestConnection(object):
 
         return status
 
-    def diag_eval(self,code):
+    def diag_eval(self, code):
         api = '{0}{1}'.format(self.baseUrl, 'diag/eval/')
         status, content = self._http_request(api, "POST", code)
         log.info("/diag/eval : status : {0} content : {1}".format(status, content))
@@ -763,8 +764,8 @@ class RestConnection(object):
         start = time.time()
         progress = 0
         retry = 0
-        same_progress_count=0
-        previous_progress=0
+        same_progress_count = 0
+        previous_progress = 0
         while progress != -1 and (progress != 100 or self._rebalance_progress_status() == 'running') and retry < 20:
             #-1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
@@ -832,7 +833,7 @@ class RestConnection(object):
                             count += 1
                             total_percentage += percentage
                     if count:
-                        avg_percentage = (total_percentage/count)
+                        avg_percentage = (total_percentage / count)
                     else:
                         avg_percentage = 0
                     log.info('rebalance percentage : {0} %' .format(avg_percentage))
@@ -1246,7 +1247,7 @@ class RestConnection(object):
         disk_size = (json_parsed[0]["basicStats"]["diskUsed"]) / (1024 * 1024)
         return status, disk_size
 
-    def ddoc_compaction(self, design_doc_id, bucket = "default"):
+    def ddoc_compaction(self, design_doc_id, bucket="default"):
         api = self.baseUrl + "pools/default/buckets/%s/ddocs/%s/controller/compactView" % \
             (bucket, design_doc_id)
         status, content = self._http_request(api, 'POST')
@@ -1282,7 +1283,7 @@ class RestConnection(object):
                             allowedTimePeriodToHour=None,
                             allowedTimePeriodToMin=None,
                             allowedTimePeriodAbort=None,
-                            bucket = None):
+                            bucket=None):
         """Reset compaction values to default, try with old fields (dp4 build)
         and then try with newer fields"""
         params = {}
@@ -1297,10 +1298,10 @@ class RestConnection(object):
             params["autoCompactionDefined"] = "true"
             # reuse current ram quota in mb per node
             num_nodes = len(self.node_statuses())
-            quota = self.get_bucket_json(bucket)["quota"]["ram"] /(1048576 * num_nodes)
+            quota = self.get_bucket_json(bucket)["quota"]["ram"] / (1048576 * num_nodes)
             params["ramQuotaMB"] = quota
 
-        params["parallelDBAndViewCompaction"] =  parallelDBAndVC
+        params["parallelDBAndViewCompaction"] = parallelDBAndVC
         # Need to verify None because the value could be = 0
         if dbFragmentThreshold is not None:
             params["databaseFragmentationThreshold[size]"] = dbFragmentThreshold
@@ -1441,7 +1442,7 @@ class Node(object):
         self.availableStorage = []
         self.storage = []
         self.memoryQuota = 0
-        self.moxi =11211
+        self.moxi = 11211
         self.memcached = 11210
         self.id = ""
         self.ip = ""
