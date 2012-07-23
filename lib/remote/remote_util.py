@@ -538,6 +538,34 @@ class RemoteMachineShellConnection:
         # remove capture file from source after copy to destination
         #os.remove(full_src_path)
 
+    def extend_windows_info(self):
+        try:
+            info = {}
+            o = self.execute_batch_command('systeminfo')
+            for line in o:
+                line_list = line.split(':')
+                if len(line_list) > 2:
+                    if line_list[0] == 'Virtual Memory':
+                        key = "".join(line_list[0:2])
+                        value = " ".join(line_list[2:])
+                    else:
+                        key = line_list[0]
+                        value = " ".join(line_list[1:])
+                elif len(line_list) == 2:
+                    (key, value) = line_list
+                else:
+                    continue
+                key = key.strip(' \t\n\r')
+                if key.find("[") != -1:
+                    info[key_prev] += '\n' + key + value.strip(' \t\n\r')
+                else:
+                    value = value.strip(' \t\n\r')
+                    info[key] = value
+                    key_prev = key
+            return info
+        except Exception as ex:
+            log.error("error {0} appeared during getting  windows info".format(ex))
+
     # this function used to modify bat file to run task schedule in windows
     def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
@@ -1281,11 +1309,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.ip = self.ip
             info.distribution_version = win_info['os']
             info.deliverable_type = 'exe'
-            #TODO: For windows
-            info.ram = ''
-            info.disk = ''
-            info.cpu = ''
-            info.hostname = ''
             return info
         else:
             #now run uname -m to get the architechtre type
@@ -1310,27 +1333,44 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.hostname = self.get_hostname()
             return info
 
-    #TODO: Windows
+    def get_extended_windows_info(self):
+        info = {}
+        win_info = self.extend_windows_info()
+        info['ram'] = self.get_ram_info(win_info)
+        info['disk'] = self.get_disk_info(win_info)
+        info['cpu'] = self.get_cpu_info(win_info)
+        info['hostname'] = self.get_hostname()
+        return info
+
     def get_hostname(self):
         o, r = self.execute_command_raw('hostname')
         if o:
             return o
 
-    #TODO: Windows
-    def get_cpu_info(self):
-        o, r = self.execute_command_raw('sudo cat /proc/cpuinfo')
+    def get_cpu_info(self, win_info=None):
+        if win_info:
+            o = win_info['Processor(s)']
+        else:
+            o, r = self.execute_command_raw('sudo cat /proc/cpuinfo')
         if o:
             return o
 
-    #TODO: Windows
-    def get_ram_info(self):
-        o, r = self.execute_command_raw('sudo cat /proc/meminfo')
+    def get_ram_info(self, win_info=None):
+        if win_info:
+            o = "Virtual Memory Max Size =" + win_info['Virtual Memory Max Size'] + '\n'
+            o += "Virtual Memory Available =" + win_info['Virtual Memory Available'] + '\n'
+            o += "Virtual Memory In Use =" + win_info['Virtual Memory In Use']
+        else:
+            o, r = self.execute_command_raw('sudo cat /proc/meminfo')
         if o:
             return o
 
-    #TODO: Windows
-    def get_disk_info(self):
-        o, r = self.execute_command_raw('sudo df -Th')
+    def get_disk_info(self, win_info=None):
+        if win_info:
+            o = "Total Physical Memory =" + win_info['Total Physical Memory'] + '\n'
+            o += "Available Physical Memory =" + win_info['Available Physical Memory']
+        else:
+            o, r = self.execute_command_raw('sudo df -Th')
         if o:
             return o
 
@@ -1602,6 +1642,14 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
         return output, error
+
+    def execute_batch_command(self, command):
+        remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
+
+        o,r = self.execute_command(remote_command)
+        if r:
+            log.error("Command didn't run successfully. Error: {0}".format(r))
+        return o;
 
 class RemoteUtilHelper(object):
 
