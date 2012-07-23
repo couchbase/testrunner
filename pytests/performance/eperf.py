@@ -1875,15 +1875,14 @@ class EVPerfClient(EPerfClient):
 
         if why == "loop" and self.parami("fg_max_ops", self.fg_max_ops):
             cfg['max-ops'] = start_at + (self.parami("fg_max_ops", self.fg_max_ops) / num_clients)
+            if self.parami("fg_max_ops_per_sec", 0):
+                cfg['max-ops-per-sec'] = self.parami("fg_max_ops_per_sec", 0)
+            if getattr(self, "active_fg_workers", None) is not None:
+                self.active_fg_workers.value += 1
+                cfg['active_fg_workers'] = self.active_fg_workers
 
         cfg['stats_ops'] = self.parami("mcsoda_fg_stats_ops",
                                        PerfDefaults.mcsoda_fg_stats_ops)
-        if self.parami("fg_max_ops_per_sec", 0):
-            cfg['max-ops-per-sec'] = self.parami("fg_max_ops_per_sec", 0)
-        if getattr(self, "active_fg_workers", None) is not None:
-            self.active_fg_workers.value += 1
-            cfg['active_fg_workers'] = self.active_fg_workers
-
         rv_cur, start_time, end_time = \
             super(EVPerfClient, self).mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
                                                  stats_collector=stats_collector,
