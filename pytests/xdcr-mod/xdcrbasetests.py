@@ -13,7 +13,6 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import VBucketAwareMemcached
 
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
-from basetestcase import BaseTestCase
 #===============================================================================
 # class: XDCRConstants
 # Constants used in XDCR application testing. It includes input parameters as well
