@@ -35,7 +35,7 @@ class McsodaObserver(Observer, Thread):
         self.callback = callback
         self.conn_lock = RLock()
         self._build_conns()
-        self.backoff = BACKOFF
+        self.backoff = self.cfg.get('obs-backoff', BACKOFF)
         self.max_backoff = self.cfg.get('obs-max-backoff', MAX_BACKOFF)
         super(McsodaObserver, self).__init__()
 
@@ -52,7 +52,7 @@ class McsodaObserver(Observer, Thread):
                 self.clear_observables()
                 if self.callback:
                     self.callback(self.store)
-                self.backoff = BACKOFF
+                self.backoff = self.cfg.get('obs-backoff', BACKOFF)
         print "<%s> stopped running" % (self.__class__.__name__)
 
     @synchronized("conn_lock")
