@@ -308,6 +308,12 @@ class ViewQueryTests(unittest.TestCase):
                 self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
                 stopped = rest.stop_rebalance()
                 self.assertTrue(stopped, msg="unable to stop rebalance")
+
+                #for cases if rebalance ran fast
+                if RestHelper(rest).is_cluster_rebalanced():
+                    self.log.info("Rebalance is finished already.")
+                    break
+
                 self._query_all_views(data_set.views, limit=self.limit)
 
             rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
