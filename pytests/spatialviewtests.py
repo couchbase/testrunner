@@ -284,17 +284,19 @@ class SpatialViewTests(unittest.TestCase):
                           .format(num_docs))
         design_name = "dev_test_failover_{0}".format(num_docs)
         prefix = str(uuid.uuid4())[:7]
-
-        fh = FailoverHelper(self.helper.servers, self)
-
         inserted_keys = self._setup_index(design_name, num_docs, prefix)
-        failover_nodes = fh.failover(1)
-        self.helper.query_index_for_verification(design_name, inserted_keys,
+        try:
+            fh = FailoverHelper(self.helper.servers, self)
+
+            failover_nodes = fh.failover(1)
+            self.helper.query_index_for_verification(design_name, inserted_keys,
                                                  wait_for_persistence=False)
 
-        # The test cleanup expects all nodes running, hence spin the
-        # full cluster up again
-        fh.undo_failover(failover_nodes)
+            # The test cleanup expects all nodes running, hence spin the
+            # full cluster up again
+            fh.undo_failover(failover_nodes)
+        finally:
+            fh._start_servers(failover_nodes)
 
 
     def test_update_view_x_docs(self):

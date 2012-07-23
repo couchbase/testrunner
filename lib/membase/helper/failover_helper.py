@@ -52,14 +52,13 @@ class FailoverHelper(object):
 
 
     # Start and add the failovered nodes back to the cluster and rebalance it
-    def undo_failover(self, nodes):
-        self.log.info("Add nodes back to the cluster: {0}".format(nodes))
+    def undo_failover(self, failover_nodes):
+        self.log.info("Add nodes back to the cluster: {0}".format(failover_nodes))
         rest = RestConnection(self.servers[0])
 
-        for node in nodes:
-            self._start_server(node)
-
-        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
+        self._start_servers(failover_nodes)
+        rest.rebalance(otpNodes=set([node.id for node in rest.node_statuses()] +
+                                    [node.id for node in failover_nodes]),
                        ejectedNodes=[])
         rest.monitorRebalance()
 
@@ -89,13 +88,9 @@ class FailoverHelper(object):
                     master_rest.diag_eval(stop_cluster.format(node.id))
 
 
-    def _start_server(self, node):
-        master_rest = RestConnection(self.servers[0])
-        for server in self.servers:
-            rest = RestConnection(server)
-            self.log.info("see if server {0}:{1} is stopped".format(server.ip, server.port))
-            if RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
-                continue
-
-            self.log.info("running {0}".format(start_cluster.format(node.id)))
-            master_rest.diag_eval(start_cluster.format(node.id))
+    def _start_servers(self, nodes):
+        for node in nodes:
+            for server in self.servers:
+                if node.ip == server.ip and str(node.port) == server.port:
+                    shell = RemoteMachineShellConnection(server)
+                    shell.start_couchbase()
