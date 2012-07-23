@@ -2,6 +2,7 @@
 
 from crc32 import crc32_hash
 from functools import wraps
+from multiprocessing.queues import JoinableQueue
 
 try:
     import threading as _threading
@@ -16,6 +17,24 @@ class VbucketHelper:
         if num_vbuckets > 0:
             vbucketId = crc32_hash(key) & (num_vbuckets - 1)
         return vbucketId
+
+class UnblockingJoinableQueue(JoinableQueue):
+    """
+    A joinable queue with methods for unblocking events.
+    """
+
+    def all_finished(self):
+        """
+        Check if all tasks have finished
+        """
+        self._cond.acquire()
+        try:
+            if self._unfinished_tasks._semlock._is_zero():
+                return True
+        finally:
+            self._cond.release()
+
+        return False
 
 class SocketHelper:
 
