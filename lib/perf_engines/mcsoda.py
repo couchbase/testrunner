@@ -216,6 +216,9 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             cfg.get('max-creates', 0) > 0 and \
             cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
             break
+        if ctl.get('shutdown_event') is not None:
+            if ctl['shutdown_event'].is_set():
+                break
 
         heartbeat_duration = time.time() - heartbeat_last
         if heartbeat != 0 and heartbeat_duration > heartbeat:
@@ -1288,6 +1291,8 @@ def run(cfg, cur, protocol, host_port, user, pswd,
         threads = [t for t in threads if t.isAlive()]
 
     ctl['run_ok'] = False
+    if ctl.get('shutdown_event') is not None:
+        ctl['shutdown_event'].set()
     log.info("[mcsoda: %s] stopped running." %why)
     return cur, t_start, t_end
 

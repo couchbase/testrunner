@@ -1,7 +1,7 @@
 import copy
 import socket
 import functools
-from multiprocessing import Process
+from multiprocessing import Process, Event
 from multiprocessing.sharedctypes import Value
 
 from membase.api import httplib2
@@ -75,6 +75,7 @@ class PerfWrapper(object):
             self.input.test_params['num_clients'] = total_clients
 
             executors = list()
+            self.shutdown_event = Event()
 
             # Background load (memcached)
             original_delay = self.parami('start_delay', 30)
@@ -104,6 +105,7 @@ class PerfWrapper(object):
                 executor.start()
                 executors.append(executor)
 
+            # Shutdown
             for executor in executors:
                 executor.join()
                 self.active_fg_workers.value -= 1
