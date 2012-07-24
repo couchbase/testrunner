@@ -23,7 +23,7 @@ class Observable:
         self.repl_count = int(repl_count)
         self.repl_servers = set()
 
-    def remove_server(self, server, repl=False):
+    def remove_server(self, server, repl=False, stats=True):
         """ remove server from checklist, decrement counter
             and record finish time if necessary
         """
@@ -31,13 +31,13 @@ class Observable:
             if server in self.repl_servers:
                 self.repl_servers.remove(server)
                 self.repl_count -= 1
-                if not self.repl_count:
+                if stats and not self.repl_count:
                     self.repl_end_time = time.time()
         else:
             if server in self.persist_servers:
                 self.persist_servers.remove(server)
                 self.persist_count -= 1
-                if not self.persist_count:
+                if stats and not self.persist_count:
                     self.persist_end_time = time.time()
 
     def __repr__(self):
@@ -116,19 +116,31 @@ class Observer:
 
             if not obs:
                 continue
-            elif obs.cas == res_key.cas:
-                # TODO: race cond?
-                if res_key.key_state == ObserveKeyState.OBS_PERSISITED:
-                    obs.remove_server(server, repl=False)
-                    obs.remove_server(server, repl=True)
-                elif res_key.key_state == ObserveKeyState.OBS_FOUND:
-                    obs.remove_server(server, repl=True)
-                if obs.persist_count <= 0 and\
-                    obs.repl_count <= 0:
-                    obs.status = ObserveStatus.OBS_SUCCESS
+
+            if server in obs.persist_servers:
+                if obs.cas == res_key.cas:
+                    if res_key.key_state == ObserveKeyState.OBS_PERSISITED:
+                        obs.remove_server(server, repl=False)
+                else:
+                    obs.status = ObserveStatus.OBS_MODIFIED
+            elif server in obs.repl_servers:
+                if res_key.key_state in \
+                    [ObserveKeyState.OBS_PERSISITED, ObserveKeyState.OBS_FOUND]:
+                        obs.remove_server(server, repl=True,
+                                          stats=(obs.cas == res_key.cas))
+                elif res_key.key_state == ObserveKeyState.OBS_IMPOSSIBLE:
+                    print "<%s> invalid key_state %x from repl sever" \
+                        % (self.__class__.__name__, server)
+                    obs.remove_server(server, repl=True, stats=False)
             else:
-                # TODO: repl may have old cas value
-                obs.status = ObserveStatus.OBS_MODIFIED
+                print "<%s> invalid server: %s" \
+                    % (self.__class__.__name__, server)
+                obs.status = ObserveStatus.OBS_ERROR
+
+            if obs.persist_count <= 0 and \
+                obs.repl_count <= 0:
+                obs.status = ObserveStatus.OBS_SUCCESS
+
             self._observables.put(obs.key, obs)
         return True
 

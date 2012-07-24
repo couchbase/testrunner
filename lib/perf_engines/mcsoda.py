@@ -254,7 +254,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
         if flushed and cfg.get('observe', 0):
             if store.obs_key_cas and not observer.num_observables():
                 observables = []
-                for key_num, cas in store.key_cas.iteritems():
+                for key_num, cas in store.obs_key_cas.iteritems():
                     obs = Observable(key=prepare_key(key_num, cfg.get('prefix', '')),
                                      cas=cas,
                                      persist_count=cfg.get('obs-persist-count', 1),
