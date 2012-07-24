@@ -1,6 +1,8 @@
 import time
 
+from threading import Thread
 from rebalance.rebalance_base import RebalanceBaseTest
+from membase.api.rest_client import RestConnection
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -39,6 +41,64 @@ class RebalanceInTests(RebalanceBaseTest):
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in+1])
         self._verify_all_buckets(self.servers[0])
         self._verify_stats_all_buckets(self.servers[:self.nodes_in+1])
+
+    """Rebalances nodes into a cluster during getting random keys.
+
+    This test begins by loading a given number of items into the node.
+    Then it creates cluster with nodes_init nodes. Then we
+    send requests to all nodes in the cluster to get random key values.
+    Next step is add nodes_in nodes into cluster and rebalance it. During rebalancing
+    we get random keys from all nodes and verify that are different every time.
+    Once the cluster has been rebalanced we again get random keys from all new nodes
+    in the cluster, than we wait for the disk queues to drain,
+    and then verify that there has been no data loss."""
+    def rebalance_in_get_random_key(self):
+        nodes_init = self.input.param("nodes_init", 1)
+        servs_in = self.servers[nodes_init:nodes_init + self.nodes_in]
+        servs_init = self.servers[:nodes_init]
+        if nodes_init > 1:
+            self.cluster.rebalance(self.servers[:1], servs_init[1:], [])
+        rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
+        time.sleep(5)
+        rest_cons = [RestConnection(self.servers[i]) for i in xrange(nodes_init)]
+        result = []
+        num_iter = 0
+        # get random keys for each node during rebalancing
+        while rest_cons[0]._rebalance_progress_status() == 'running' and num_iter < 100:
+            list_threads = []
+            temp_result = []
+            self.log.info("getting random keys for all nodes in cluster....")
+            for rest in rest_cons:
+                t = Thread(target=rest.get_random_key,
+                       name="get_random_key",
+                       args=(self.default_bucket_name, ))
+                list_threads.append(t)
+                temp_result.append(rest.get_random_key(self.default_bucket_name))
+
+                t.start()
+            [t.join() for t in list_threads]
+
+            if tuple(temp_result) == tuple(result):
+                self.log.fail("random keys are not changed")
+            else:
+                result = temp_result
+            num_iter += 1
+
+        rebalance.result()
+        # get random keys for new added nodes
+        rest_cons = [RestConnection(self.servers[i]) for i in xrange(nodes_init + self.nodes_in)]
+        list_threads = []
+        for rest in rest_cons:
+              t = Thread(target=rest.get_random_key,
+                       name="get_random_key",
+                       args=(self.default_bucket_name, ))
+              list_threads.append(t)
+              t.start()
+        [t.join() for t in list_threads]
+
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
+        self._verify_all_buckets(self.servers[0])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
 
     """Rebalances nodes into a cluster while doing mutations.
 
