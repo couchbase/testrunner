@@ -99,6 +99,29 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_negative_query(query_params, error)
         self._query_test_init(data_set)
 
+    def test_simple_dataset_stale_queries_extended(self):
+        # init dataset for test
+        stale = str(self.input.param("stale_param", "update_after"))
+        num_docs_to_add = self.input.param("num_docs_to_add", 10)
+        data_set = SimpleDataSet(self._rconn(), self.num_docs)
+        data_set.add_stale_queries()
+        self._query_test_init(data_set)
+
+        #load one more portion of data
+        ViewBaseTests._load_docs(self, num_docs_to_add, "new-data")
+        #query once again
+        results = ViewBaseTests._get_view_results(self, self._rconn(), data_set.views[0].bucket,
+                                                      data_set.views[0].name, extra_params={'stale' : stale})
+        if stale == 'False':
+            expected_num_docs = self.num_docs + num_docs_to_add
+        elif stale in ['update_after', 'ok']:
+            expected_num_docs = self.num_docs
+        self.assertEqual(len(ViewBaseTests._get_keys(self, results)), expected_num_docs,
+                         "Stale %s query failed: expected keys=%d, current keys=%d" % (stale, expected_num_docs,
+                                                                                       len(ViewBaseTests._get_keys(self, results))))
+        self.log.info("Stale %s query passed: has %d keys as expected" % (stale, expected_num_docs))
+
+
     def test_employee_dataset_startkey_endkey_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
