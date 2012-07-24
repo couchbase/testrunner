@@ -1575,7 +1575,7 @@ nodes = factor(ns_server_data_system$node)
 for(ns_node in levels(nodes)) {
     node_system_stats = subset(ns_server_data_system, node==ns_node)
     p <- ggplot(node_system_stats, aes(row, cpu_util, color=buildinfo.version, label=cpu_util))
-    p <- p + labs(x="----time (sec)--->", y="%")
+    p <- p + labs(x="----time (min)--->", y="%")
     p <- p + coord_cartesian(ylim = c(0, 100))
     p <- p + geom_point()
     p <- addopts(p, paste("CPU utilization", ns_node, sep=" - "))
