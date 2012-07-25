@@ -4,6 +4,8 @@ from couchbase.documentgenerator import DocumentGenerator
 from memcached.helper.data_helper import MemcachedClientHelper
 from basetestcase import BaseTestCase
 from memcached.helper.kvstore import KVStore
+from mc_bin_client import MemcachedError
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 class WarmUpTests(BaseTestCase):
     def setUp(self):
@@ -12,9 +14,9 @@ class WarmUpTests(BaseTestCase):
         self.timeout = 120
         self.bucket_name = self.input.param("bucket", "default")
         self.bucket_size = 256
-        self.nodes_in = self.input.param("nodes_in", 0)
-        servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
-        rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
+        self.nodes_in = int(self.input.param("nodes_in", 1))
+        self.servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
+        rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in, [])
         rebalance.result()
         self.cluster.create_default_bucket(self.servers[0], self.bucket_size, self.num_replicas)
         self.buckets[self.bucket_name] = {1 : KVStore()}
@@ -24,11 +26,22 @@ class WarmUpTests(BaseTestCase):
         #pass
 
     def _load_doc_data_all_buckets(self, op_type='create', start=0):
+        loaded = False
+        count = 0
         age = range(5)
         first = ['james', 'sharon']
         template = '{{ "age": {0}, "first_name": "{1}" }}'
         gen_load = DocumentGenerator('test_docs', template, age, first, start=start, end=self.num_items)
-        self._load_all_buckets(self.servers[0], gen_load, op_type, 0)
+        while not loaded and count < 10:
+            try :
+                self._load_all_buckets(self.servers[0], gen_load, op_type, 0)
+                loaded = True
+            except MemcachedError as error:
+                if error.status == 134:
+                    loaded = False
+                    self.log.error("Memcached error 134, wait for 5 seconds and then try again")
+                    count += 1
+                    time.sleep(5)
 
     def _async_load_doc_data_all_buckets(self, op_type='create', start=0):
         age = range(5)
@@ -40,16 +53,20 @@ class WarmUpTests(BaseTestCase):
         return tasks
 
     def _stats_befor_warmup(self):
-        self.stats_monitor = self.input.param("stats_monitor", "mem_used")
+        if not self.access_log:
+            self.stat_str = ""
+        else:
+            self.stat_str = "warmup"
+        self.stats_monitor = self.input.param("stats_monitor", "ep_warmup_key_count")
         self.stats_monitor = self.stats_monitor.split(";")
-        self.stats_monitor.append("uptime")
-        self.stats_monitor.append("curr_items_tot")
         for server in self.servers:
             mc_conn = MemcachedClientHelper.direct_client(server, self.bucket_name, self.timeout)
             self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)] = {}
             for stat_to_monitor in self.stats_monitor:
-                self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)][stat_to_monitor] = mc_conn.stats("")[stat_to_monitor]
-                self.log.info("memcached %s:%s has %s value %s" % (server.ip, server.port, stat_to_monitor , mc_conn.stats("")[stat_to_monitor]))
+                self.pre_warmup_stats["%s:%s" % (server.ip, server.port)][stat_to_monitor] = mc_conn.stats(self.stat_str)[stat_to_monitor]
+                self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["uptime"] = mc_conn.stats("")["uptime"]
+                self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["curr_items_tot"] = mc_conn.stats("")["curr_items_tot"]
+                self.log.info("memcached %s:%s has %s value %s" % (server.ip, server.port, stat_to_monitor , mc_conn.stats(self.stat_str)[stat_to_monitor]))
             mc_conn.close()
 
     def _kill_nodes(self, nodes):
@@ -109,6 +126,8 @@ class WarmUpTests(BaseTestCase):
                                    'ep_queue_size', '==', 0))
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                    'ep_flusher_todo', '==', 0))
+                tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
+                                   'ep_uncommitted_items', '==', 0))
         for task in tasks:
             task.result()
 
@@ -153,7 +172,7 @@ class WarmUpTests(BaseTestCase):
                     self.log.info("warmup completed, awesome!!! Warmed up. %s items " % (mc.stats()["curr_items_tot"]))
                     time.sleep(5)
                     if mc.stats()["curr_items_tot"] == self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["curr_items_tot"]:
-                        self._stats_report(server, mc.stats())
+                        self._stats_report(server, mc.stats(self.stat_str))
                         warmed_up = True
                     else:
                         continue
@@ -180,14 +199,31 @@ class WarmUpTests(BaseTestCase):
                 self.log.info("%s on, %s:%s is %s" % \
                                (stat_to_monitor, server.ip, server.port, after_warmup_stat[stat_to_monitor]))
 
+    def _wait_for_access_run(self, access_log_time, access_scanner_runs, mc):
+        access_log_created = False
+        new_scanner_run = int(mc.stats()["ep_num_access_scanner_runs"])
+        time.sleep(access_log_time * 60)
+        self.log.info("new access scanner run is %s" % new_scanner_run)
+        count = 0
+        while not access_log_created and count < 5:
+            if new_scanner_run <= access_scanner_runs:
+                count += 1
+                time.sleep(5)
+                new_scanner_run = int(mc.stats()["ep_num_access_scanner_runs"])
+            else:
+                access_log_created = True
+        return access_log_created
+
     def test_warmup(self):
         ep_threshold = self.input.param("ep_threshold", "ep_mem_low_wat")
         active_resident_threshold = int(self.input.param("active_resident_threshold", 110))
+        self.access_log = self.input.param("access_log", False)
+        access_log_time = self.input.param("access_log_time", 2)
         mc = MemcachedClientHelper.direct_client(self.servers[0], self.bucket_name)
         stats = mc.stats()
         threshold = int(self.input.param('threshold', stats[ep_threshold]))
         threshold_reached = False
-        self.num_items = self.input.param("items", 200)
+        self.num_items = self.input.param("items", 10000)
         self._load_doc_data_all_buckets('create')
         #load items till reached threshold or mem-ratio is less than resident ratio threshold
         while not threshold_reached :
@@ -195,18 +231,28 @@ class WarmUpTests(BaseTestCase):
             if mem_used < threshold or int(mc.stats()["vb_active_perc_mem_resident"]) >= active_resident_threshold:
                 self.log.info("mem_used and vb_active_perc_mem_resident_ratio reached at %s/%s and %s " % (mem_used, threshold, mc.stats()["vb_active_perc_mem_resident"]))
                 items = self.num_items
-                self.num_items += self.num_items
+                self.num_items += self.input.param("items", 10000)
                 self._load_doc_data_all_buckets('create', items)
             else:
                 threshold_reached = True
                 self.log.info("DGM state achieved!!!!")
         #parallel load of data
-        tasks = self._async_load_doc_data_all_buckets('create', self.num_items)
+        items = self.num_items
+        self.num_items += 10000
+        tasks = self._async_load_doc_data_all_buckets('create', items)
         #wait for draining of data before restart and warm up
         self._wait_for_stats_all_buckets(self.servers)
         self._stats_befor_warmup()
         for task in tasks:
             task.result()
+        #If warmup is done through access log then run access scanner
+        if self.access_log :
+            scanner_runs = int(mc.stats()["ep_num_access_scanner_runs"])
+            self.log.info("setting access scanner time %s minutes" % access_log_time)
+            self.log.info("current access scanner run is %s" % scanner_runs)
+            ClusterOperationHelper.flushctl_set(self.servers[0], "alog_sleep_time", access_log_time , self.bucket_name)
+            if not self._wait_for_access_run(access_log_time, scanner_runs, mc):
+                self.fail("Not able to create access log within %s" % access_log_time)
         self._restart_memcache()
         if self._warmup():
-            self._load_doc_data_all_buckets('update')
+            self._load_doc_data_all_buckets('update', self.num_items - items)
