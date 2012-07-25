@@ -62,7 +62,10 @@ class PerfWrapper(object):
         def wrapper(self, *args, **kargs):
             """This wrapper launches two groups of processes:
             -- constant background load (mainly memcached sets/gets)
-            -- ramping up load (mainly view queries)
+            -- constant foreground load (mainly view queries)
+
+            However during the test number of foreground processes increases. So
+            consistency only means number of operation per second.
 
             Processes use shared objects (ctype wrappers) for synchronization.
             """
