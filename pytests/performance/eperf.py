@@ -1875,6 +1875,7 @@ class EVPerfClient(EPerfClient):
 
         if why == "loop" and self.parami("fg_max_ops", self.fg_max_ops):
             cfg['max-ops'] = start_at + (self.parami("fg_max_ops", self.fg_max_ops) / num_clients)
+            ctl = {'run_ok': True}
             if self.parami("fg_max_ops_per_sec", 0):
                 cfg['max-ops-per-sec'] = self.parami("fg_max_ops_per_sec", 0)
             if getattr(self, "active_fg_workers", None) is not None:
