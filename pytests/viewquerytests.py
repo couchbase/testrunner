@@ -342,6 +342,11 @@ class ViewQueryTests(unittest.TestCase):
 
                 self._query_all_views(data_set.views, limit=self.limit)
 
+            #for cases if rebalance ran fast
+            if RestHelper(rest).is_cluster_rebalanced():
+                self.log.info("Rebalance is finished already.")
+                nodes = rest.node_statuses()
+                continue
             rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
 
             self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
