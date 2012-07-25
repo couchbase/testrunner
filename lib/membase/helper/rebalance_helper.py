@@ -1,7 +1,8 @@
 from random import shuffle
 import time
 import logger
-from membase.api.exception import StatsUnavailableException, ServerAlreadyJoinedException
+from membase.api.exception import StatsUnavailableException, \
+    ServerAlreadyJoinedException, RebalanceFailedException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
@@ -436,7 +437,11 @@ class RebalanceHelper():
         if monitor is not True:
             return True, servers_rebalanced
         if started:
-            result = rest.monitorRebalance()
+            try:
+                result = rest.monitorRebalance()
+            except RebalanceFailedException as e:
+                log.error("rebalance failed: {0}".format(e))
+                return False, servers_rebalanced
             msg = "successfully rebalanced in selected nodes from the cluster ? {0}"
             log.info(msg.format(result))
             return result, servers_rebalanced
