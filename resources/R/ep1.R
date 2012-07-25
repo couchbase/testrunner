@@ -794,8 +794,9 @@ if (reb) {
     latency_get = rebFilter(latency_get, builds_list)
     latency_set = rebFilter(latency_set, builds_list)
     latency_query = rebFilter(latency_query, builds_list)
-    latency_obs_client = rebFilter(latency_obs_client, builds_list)
-    latency_obs_server = rebFilter(latency_obs_server, builds_list)
+    latency_obs_persist_client = rebFilter(latency_obs_persist_client, builds_list)
+    latency_obs_persist_server = rebFilter(latency_obs_persist_server, builds_list)
+    latency_obs_repl_client = rebFilter(latency_obs_repl_client, builds_list)
     throughput_query = rebFilter(throughput_query, builds_list)
     disk_data = rebFilter(disk_data, builds_list)
 
