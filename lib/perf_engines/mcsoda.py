@@ -168,6 +168,9 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
             req_queue.task_done()
             continue
 
+        if cfg.get("woq-verbose", 0):
+            query_start = time.time()
+
         try:
             result = store.rest.query_view(ddoc, view, bucket, query_params)
         except QueryViewException as e:
@@ -175,6 +178,11 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
             stats_queue.put([key, cas, 0, 0], block=True)
             req_queue.task_done()
             continue
+
+        if cfg.get("woq-verbose", 0):
+            print "[mcsoda] woq_worker query latency: %s "\
+                % (time.time() - query_start)
+            print "[mcsoda] woq_worker query result: %s" % result
 
         latency = time.time() - start_time
         stats_queue.put([key, cas, start_time, latency], block=True)
