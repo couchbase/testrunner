@@ -549,6 +549,11 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
 
+        if self.parami("index_phase", 0) and self.param("woq_pattern", 0):
+            view_gen = ViewGen()
+            ddocs = view_gen.generate_ddocs([1])
+            self.index_phase(ddocs)
+
         if self.parami("access_phase", 1) == 1:
 
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:

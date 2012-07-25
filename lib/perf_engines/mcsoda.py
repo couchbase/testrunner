@@ -33,6 +33,8 @@ except ImportError:
 import crc32
 import mc_bin_client
 
+from membase.api.exception import QueryViewException
+
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETMPFAIL
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
@@ -145,6 +147,12 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
     """
     measure latencies of standard write/observe/query patterns
     """
+    bucket = "default"
+    ddoc = "A"
+    view = "city1"  # TODO pass from eperf
+    query_params = {"limit": 10,
+                    "stale": "false"}
+
     print "[mcsoda] woq_worker started"
     woq_observer = McsodaObserver(ctl, cfg, store, None)
 
@@ -160,7 +168,13 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
             req_queue.task_done()
             continue
 
-        # TODO: query
+        try:
+            result = store.rest.query_view(ddoc, view, bucket, query_params)
+        except QueryViewException as e:
+            print "[mcsoda] woq_worker QueryViewException: %s" % e
+            stats_queue.put([key, cas, 0, 0], block=True)
+            req_queue.task_done()
+            continue
 
         latency = time.time() - start_time
         stats_queue.put([key, cas, start_time, latency], block=True)
@@ -867,8 +881,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                  'username': user or self.cfg.get("rest_username", "Administrator"),
                  'password': pswd or self.cfg.get("rest_password", "password") }
 
-        rest = RestConnection(info)
-        self.awareness = VBucketAwareMemcached(rest, bucket, info)
+        self.rest = RestConnection(info)
+        self.awareness = VBucketAwareMemcached(self.rest, bucket, info)
         self.backoff = 0
         self.xfer_sent = 0
         self.xfer_recv = 0
