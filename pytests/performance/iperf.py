@@ -136,7 +136,7 @@ class PerfWrapper(object):
                         pass
 
                 # Execute performance test
-                region = XPerfTests.get_ec2_region()
+                region = XPerfTests.get_region()
                 if region == 'east':
                     self.input.servers = self.input.clusters[0]
                     self.input.test_params['bucket'] = self.get_buckets()[0]
@@ -145,22 +145,6 @@ class PerfWrapper(object):
                     self.input.servers = self.input.clusters[1]
                     self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
                     return test(self, *args, **kargs)
-                else:
-                    # 1st test executor:
-                    self_copy = copy.copy(self)
-                    self_copy.input.servers = self_copy.input.clusters[0]
-                    self_copy.input.test_params['bucket'] = self_copy.get_buckets()[0]
-                    primary = Process(target=test, args=(self_copy, ))
-                    primary.start()
-
-                    # 2nd test executor:
-                    self.input.servers = self.input.clusters[1]
-                    self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
-                    self.input.test_params['stats'] = 0
-                    secondary = test(self, *args, **kargs)
-
-                    primary.join()
-                    return secondary
             return wrapper
         return decorator
 
@@ -254,8 +238,11 @@ class XPerfTests(EVPerfClient):
             return [self.param('bucket', 'default')]
 
     @staticmethod
-    def get_ec2_region():
+    def get_region():
         """Try to identify public hostname and return corresponding EC2 region.
+
+        In case of socket exception (it may happen when client is local VM) use
+        VM hostname.
 
         Reference: http://bit.ly/instancedata
         """
@@ -263,13 +250,13 @@ class XPerfTests(EVPerfClient):
         try:
             uri = 'http://169.254.169.254/latest/meta-data/public-hostname'
             http = httplib2.Http(timeout=5)
-            response, content = http.request(uri)
-            if 'west' in content:
-                return 'west'
-            else:
-                return 'east'
+            response, hostname = http.request(uri)
         except socket.timeout:
-            return
+            hostname = socket.gethostname()
+        if 'west' in hostname:
+            return 'west'
+        else:
+            return 'east'
 
     @PerfWrapper.xperf()
     def test_vperf_unidir(self):
