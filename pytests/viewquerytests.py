@@ -74,6 +74,28 @@ class ViewQueryTests(unittest.TestCase):
         data_set.add_stale_queries()
         self._query_test_init(data_set)
 
+    def test_simple_dataset_stale_queries_data_modification(self):
+        # init dataset for test
+        data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
+        data_set.add_stale_queries(stale_param="false", limit=self.limit)
+        doc_names = data_set.load(self, data_set.views[0])
+        for view in data_set.views:
+            for q in view.queries:
+                q.expected_keys = doc_names
+        self._query_all_views(data_set.views, verify_expected_keys=True)
+
+        #delete docs
+        doc_names = ViewBaseTests._delete_docs(self, self.num_docs, self.num_docs / 2,
+                                               data_set.views[0].prefix)
+
+        for view in data_set.views:
+            for q in view.queries:
+                q.expected_num_docs = self.num_docs / 2
+                if self.limit and self.limit < self.expected_num_docs:
+                    q.expected_num_docs = self.limit
+                q.expected_keys = doc_names
+        self._query_all_views(data_set.views, verify_expected_keys=True)
+
     def test_simple_dataset_startkey_endkey_queries(self):
         data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
         data_set.add_startkey_endkey_queries()
@@ -988,13 +1010,14 @@ class ViewQueryTests(unittest.TestCase):
     ##
     # run all queries for all views in parallel
     ##
-    def _query_all_views(self, views, verify_results = True, kv_store = None, limit=None):
+    def _query_all_views(self, views, verify_results = True, kv_store = None, limit=None,
+                         verify_expected_keys=False):
 
         query_threads = []
         for view in views:
             t = StoppableThread(target=view.run_queries,
                name="query-{0}".format(view.name),
-               args=(self, verify_results, kv_store, limit))
+               args=(self, verify_results, kv_store, limit, verify_expected_keys))
             query_threads.append(t)
             t.start()
 
@@ -1075,7 +1098,8 @@ class QueryView:
             rest.create_view(self.name, self.bucket, [View(self.name, self.fn_str, self.reduce_fn)])
 
     # query this view
-    def run_queries(self, tc, verify_results = False, kv_store = None, limit=None):
+    def run_queries(self, tc, verify_results = False, kv_store = None, limit=None,
+                    verify_expected_keys=False):
         try:
             rest = tc._rconn(tc.server)
 
@@ -1162,6 +1186,10 @@ class QueryView:
                                 result_count_stats[num_keys] += 1
                         time.sleep(delay)
 
+                    if num_keys == expected_num_docs and verify_expected_keys:
+                        QueryHelper.verify_query_ids_full(rest, query, results)
+                        self.log.info("Keys in query results are equal to expected")
+
                     try:
                         if(num_keys != expected_num_docs):
                             # debug query results
@@ -1190,7 +1218,6 @@ class QueryView:
                                                                          num_verified_docs, limit=limit)
                             msg = "unable to retrieve expected results: {0}".format(key_failures)
                             tc.assertEquals(len(key_failures), 0, msg)
-
                         # verify values for include_docs tests
                         if('include_docs' in params):
                             failures = QueryHelper.verify_query_values(rest, query, results, self.bucket)
@@ -2122,7 +2149,7 @@ class SimpleDataSet:
                                  QueryHelper({"start_key" : start_key},
                                              view.index_size - start_key)]
 
-    def add_stale_queries(self, views = None, limit= None):
+    def add_stale_queries(self, views = None, limit= None, stale_param=None):
         if views is None:
             views = self.views
 
@@ -2132,10 +2159,12 @@ class SimpleDataSet:
                 limit = self.limit
                 limit = limit < index_size and limit or index_size
 
-
-            view.queries += [QueryHelper({"stale" : "false" , "limit" : str(limit)}, limit),
-                             QueryHelper({"stale" : "ok" , "limit" : str(limit)}, limit),
-                             QueryHelper({"stale" : "update_after" , "limit" : str(limit)}, limit)]
+            if stale_param:
+                view.queries += [QueryHelper({"stale" :  stale_param, "limit" : str(limit)}, limit),]
+            else:
+                view.queries += [QueryHelper({"stale" : "false" , "limit" : str(limit)}, limit),
+                                 QueryHelper({"stale" : "ok" , "limit" : str(limit)}, limit),
+                                 QueryHelper({"stale" : "update_after" , "limit" : str(limit)}, limit)]
 
     def add_reduce_queries(self, views = None, limit= None):
         if views is None:
@@ -2436,6 +2465,22 @@ class QueryHelper:
                     failures.append(msg)
 
         return failures
+
+    @staticmethod
+    def verify_query_ids_full(rest, query, results):
+        if(len(query.expected_keys) == 0):
+            raise Exception("There are no expected keys defined")
+
+        current_ids = [str(doc['id']) for doc in results['rows']]
+
+        if 'limit' in query.params:
+            expected_ids = query.expected_keys[:int(query.params['limit'])]
+        else:
+            expected_ids = query.expected_keys
+
+        if current_ids != expected_ids:
+            raise Exception("Current ids and expected are not equal:\n current:{0} \n expected: {1} "
+                            .format(current_ids, expected_ids))
 
     @staticmethod
     def verify_query_values(rest, query, results, bucket = "default"):
