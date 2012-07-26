@@ -33,6 +33,7 @@ class ViewBaseTests(unittest.TestCase):
         self.expiry_ratio = self.input.param("expiry-ratio", 0.1)
         self.num_buckets = self.input.param("num-buckets", 1)
         self.case_number = self.input.param("case_number", 0)
+        self.dgm_run = self.input.param("dgm_run", False)
 
         #avoid clean up if the previous test has been tear down
         if not self.input.param("skip_cleanup", True) or self.case_number == 1:
@@ -41,6 +42,8 @@ class ViewBaseTests(unittest.TestCase):
         rest = RestConnection(master)
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         mem_quota = int(rest.get_nodes_self().mcdMemoryReserved * node_ram_ratio)
+        if self.dgm_run:
+            mem_quota = 256
         rest.init_cluster(master.rest_username, master.rest_password)
         rest.init_cluster_memoryQuota(master.rest_username, master.rest_password, memoryQuota=mem_quota)
         if self.num_buckets==1:
@@ -1280,12 +1283,13 @@ class ViewFailoverTests(unittest.TestCase):
     def test_view_failover_multiple_design_docs_x_node_replica_y(self):
         failover_nodes = []
         try:
+            nodes_init = self.input.param("nodes_init", 0)
             failover_helper = FailoverHelper(self.servers, self)
             master = self.servers[0]
             rest = RestConnection(master)
 
             # verify we are fully clustered
-            ViewBaseTests._begin_rebalance_in(self)
+            ViewBaseTests._begin_rebalance_in(self, howmany=nodes_init)
             ViewBaseTests._end_rebalance(self)
             nodes = rest.node_statuses()
             self._view_test_threads = []
