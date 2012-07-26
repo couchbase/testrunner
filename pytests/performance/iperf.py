@@ -251,7 +251,7 @@ class XPerfTests(EVPerfClient):
             uri = 'http://169.254.169.254/latest/meta-data/public-hostname'
             http = httplib2.Http(timeout=5)
             response, hostname = http.request(uri)
-        except socket.timeout:
+        except (socket.timeout, socket.error):
             hostname = socket.gethostname()
         if 'west' in hostname:
             return 'west'
