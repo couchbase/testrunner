@@ -1450,13 +1450,13 @@ class EmployeeDataSet:
 
         for view in views:
             limit = self.limit or 1
-            limit = min(limit, view.index_size)
+            limit = min(limit, view.index_size - int(skip))
 
             #empty results will be returned
-            if view.reduce_fn and skip > limit:
+            if view.reduce_fn:
                 views.remove(view)
-
-            view.queries += [QueryHelper({"skip" : skip, "limit" : str(limit)}, limit)]
+            else:
+                view.queries += [QueryHelper({"skip" : skip, "limit" : str(limit)}, limit)]
 
     def add_key_queries(self, views=None, limit=None):
         if views is None:
