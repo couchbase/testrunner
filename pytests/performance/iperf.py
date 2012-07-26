@@ -131,8 +131,8 @@ class PerfWrapper(object):
                     slave = self.input.clusters[1][0]
                     try:
                         self.start_replication(master, slave, bidir=bidir)
-                    except Exception:
-                        pass
+                    except Exception, why:
+                        print why
 
                 # Execute performance test
                 region = XPerfTests.get_region()
