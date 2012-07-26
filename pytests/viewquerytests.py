@@ -882,7 +882,8 @@ class ViewQueryTests(unittest.TestCase):
                     tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name + str(i), view))
             if action == 'delete':
                 for i in xrange(ddoc_num):
-                    tasks.append(self.cluster.delete_view(self.servers[0], ddoc_name + str(i), None))
+                    prefix = ("","dev_")[view.dev_view]
+                    tasks.append(self.cluster.async_delete_view(self.servers[0], prefix + ddoc_name + str(i), None))
 
         self._query_all_views(data_set.views)
 
@@ -912,7 +913,7 @@ class ViewQueryTests(unittest.TestCase):
                 self._query_all_views(data_set.views)
         if action == 'delete':
             for view in data_set.views:
-                tasks.append(self.cluster.delete_view(self.servers[0], view.name[4:], None))
+                tasks.append(self.cluster.delete_view(self.servers[0], view.name, None))
                 time.sleep(1)
             for view in data_set.views:
                 for q in view.queries:
