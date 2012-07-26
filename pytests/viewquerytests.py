@@ -8,6 +8,7 @@ import copy
 import random
 import types
 import math
+import datetime
 from threading import Thread, Event
 from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper
@@ -932,6 +933,18 @@ class ViewQueryTests(unittest.TestCase):
         data_set = SalesDataSet(self._rconn(), docs_per_day, limit=self.limit)
         data_set.load(self, data_set.views[0], docs_per_day)
         data_set.add_reduce_queries(params)
+        self._query_all_views(data_set.views, limit=self.limit)
+
+    def test_sales_dataset_skip_query_datatypes(self):
+        docs_per_day = self.input.param('docs-per-day', 200)
+        skip = self.input.param('skip', 2000)
+        nodes_num_to_add = self.input.param('nodes_to_add', 0)
+        if nodes_num_to_add:
+            rebalance = self.cluster.async_rebalance(self.servers[:nodes_num_to_add + 1], [self.servers[1 : nodes_num_to_add + 1]], [])
+            rebalance.result()
+        data_set = SalesDataSet(self._rconn(), docs_per_day, limit=self.limit, test_datatype=True)
+        data_set.add_skip_queries(skip=skip, limit=self.limit)
+        data_set.load(self, data_set.views[0], docs_per_day)
         self._query_all_views(data_set.views, limit=self.limit)
 
 
@@ -2156,13 +2169,14 @@ class SimpleDataSet:
         self.add_stale_queries(views, limit)
 
 class SalesDataSet:
-    def __init__(self, rest, docs_per_day = 200, bucket = "default", limit=None):
+    def __init__(self, rest, docs_per_day = 200, bucket = "default", limit=None, test_datatype=False):
         self.docs_per_day = docs_per_day
         self.years = 1
         self.months = 12
         self.days = 28
         self.bucket = bucket
         self.rest = rest
+        self.test_datatype = test_datatype
         self.views = self.create_views(rest, bucket=self.bucket)
         self.name = "sales_dataset"
         self.kv_store = None
@@ -2177,9 +2191,24 @@ class SalesDataSet:
 
         full_index_size = self.years * self.months * self.days * self.docs_per_day
 
-        return [QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn, reduce_fn="_count"),
-                QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn, reduce_fn="_sum"),
-                QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn, reduce_fn = "_stats")]
+        if self.test_datatype:
+            vfn1 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc['is_support_included']);}"
+            vfn2 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], [doc['is_support_included'],doc['is_high_priority_client']]);}"
+            vfn3 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], Date.parse(doc['delivery_date']));}"
+            vfn4 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], {client : {name : doc['client_name'], contact : doc['client_contact']}});}"
+            vfn5 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc['client_reclaims_rate']);}"
+            views = [QueryView(rest, full_index_size, bucket=bucket, fn_str= vfn1),
+                     QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn2),
+                     QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn3),
+                     QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn4),
+                     QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn5),
+                     QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn5, reduce_fn = "_count")]
+        else:
+            views = [QueryView(rest, full_index_size, bucket=bucket, fn_str=vfn, reduce_fn="_count"),
+                     QueryView(rest, full_index_size, bucket=bucket, fn_str=vfn, reduce_fn="_sum"),
+                     QueryView(rest, full_index_size, bucket=bucket, fn_str=vfn, reduce_fn = "_stats")]
+
+        return views
 
     def load(self,tc, view, loads_per_iteration):
         try:
@@ -2195,9 +2224,20 @@ class SalesDataSet:
                         self.doc_id_map['years'][i]['months'][j]['days'][k]=\
                             {"docs" : []}
                         sales = random.randrange(4000000)
-                        kv_template = {"join_yr" : 2007+i, "join_mo" : j, "join_day" : k,
-                                       "sales" : sales}
-                        self.doc_id_map['years'][i]['months'][j]['days'][k]["sales"] = sales
+                        if self.test_datatype:
+                            kv_template = {"join_yr" : 2007 + i, "join_mo" : j, "join_day" : k,
+                                           "sales" : sales,
+                                           "delivery_date" : str(datetime.date(2007 + i, j, k)),
+                                           "is_support_included" : random.choice([True, False]),
+                                           "is_high_priority_client" : random.choice([True, False]),
+                                           "client_contact" :  str(uuid.uuid4())[:10],
+                                           "client_name" : str(uuid.uuid4())[:10],
+                                           "client_reclaims_rate" : random.random()}
+                            self.doc_id_map['years'][i]['months'][j]['days'][k]["sales"] = kv_template
+                        else:
+                            kv_template = {"join_yr" : 2007+i, "join_mo" : j, "join_day" : k,
+                                           "sales" : sales}
+                            self.doc_id_map['years'][i]['months'][j]['days'][k]["sales"] = sales
                         options = {"size": 256, "seed":  str(uuid.uuid4())[:7]}
                         docs = DocumentGenerator.make_docs(loads_per_iteration, kv_template, options)
                         self._load_chunk(smart, docs)
@@ -2258,6 +2298,22 @@ class SalesDataSet:
                                          expected_num_docs,
                                          expected_num_groups,
                                          expected_statistics=self.calculate_stats(group_level))]
+
+    def add_skip_queries(self, skip, limit=None, views=None):
+        if views is None:
+            views = self.views
+
+        for view in views:
+            limit = self.limit
+
+            if view.reduce_fn:
+                view.queries += [QueryHelper({"skip" : 0}, view.index_size),]
+                continue
+            if limit:
+                limit = min(limit, view.index_size)
+                view.queries += [QueryHelper({"skip" : skip, "limit" : str(limit)}, limit)]
+            else:
+                view.queries += [QueryHelper({"skip" : skip}, view.index_size - int(skip))]
 
     def calculate_stats(self, group_level):
         stats = {}
