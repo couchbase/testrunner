@@ -139,11 +139,11 @@ class PerfWrapper(object):
                 if region == 'east':
                     self.input.servers = self.input.clusters[0]
                     self.input.test_params['bucket'] = self.get_buckets()[0]
-                    return test(self, *args, **kargs)
+                    return PerfWrapper.multiply(test)(self, *args, **kargs)
                 elif region == 'west':
                     self.input.servers = self.input.clusters[1]
                     self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
-                    return test(self, *args, **kargs)
+                    return PerfWrapper.multiply(test)(self, *args, **kargs)
             return wrapper
         return decorator
 
