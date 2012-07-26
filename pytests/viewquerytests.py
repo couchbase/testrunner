@@ -928,7 +928,7 @@ class ViewQueryTests(unittest.TestCase):
         params = self.input.param('query_params', {})
         nodes_num_to_add = self.input.param('nodes_to_add', 0)
         if nodes_num_to_add:
-            rebalance = self.cluster.async_rebalance(self.servers[:nodes_num_to_add + 1], [self.servers[1 : nodes_num_to_add + 1]], [])
+            rebalance = self.cluster.async_rebalance(self.servers[:nodes_num_to_add + 1], self.servers[1 : nodes_num_to_add + 1], [])
             rebalance.result()
         data_set = SalesDataSet(self._rconn(), docs_per_day, limit=self.limit)
         data_set.load(self, data_set.views[0], docs_per_day)
