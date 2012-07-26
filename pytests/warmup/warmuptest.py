@@ -6,6 +6,7 @@ from basetestcase import BaseTestCase
 from memcached.helper.kvstore import KVStore
 from mc_bin_client import MemcachedError
 from membase.helper.cluster_helper import ClusterOperationHelper
+from couchbase.documentgenerator import BlobGenerator
 
 class WarmUpTests(BaseTestCase):
     def setUp(self):
@@ -13,7 +14,8 @@ class WarmUpTests(BaseTestCase):
         self.pre_warmup_stats = {}
         self.timeout = 120
         self.bucket_name = self.input.param("bucket", "default")
-        self.bucket_size = 256
+        self.bucket_size = self.input.param("bucket_size", 256)
+        self.data_size = self.input.param("data_size", 2048)
         self.nodes_in = int(self.input.param("nodes_in", 1))
         self.servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
         rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in, [])
@@ -28,10 +30,7 @@ class WarmUpTests(BaseTestCase):
     def _load_doc_data_all_buckets(self, op_type='create', start=0):
         loaded = False
         count = 0
-        age = range(5)
-        first = ['james', 'sharon']
-        template = '{{ "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('test_docs', template, age, first, start=start, end=self.num_items)
+        gen_load = BlobGenerator('warmup', 'warmup-', self.data_size, start=start, end=self.num_items)
         while not loaded and count < 10:
             try :
                 self._load_all_buckets(self.servers[0], gen_load, op_type, 0)
@@ -44,10 +43,7 @@ class WarmUpTests(BaseTestCase):
                     time.sleep(5)
 
     def _async_load_doc_data_all_buckets(self, op_type='create', start=0):
-        age = range(5)
-        first = ['james', 'sharon']
-        template = '{{ "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('test_docs', template, age, first, start=start, end=self.num_items)
+        gen_load = BlobGenerator('warmup', 'warmup-', self.data_size, start=start, end=self.num_items)
         self._load_all_buckets(self.servers[0], gen_load, op_type, 0)
         tasks = self._async_load_all_buckets(self.servers[0], gen_load, op_type, 0)
         return tasks
