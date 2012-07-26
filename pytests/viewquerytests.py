@@ -913,7 +913,7 @@ class ViewQueryTests(unittest.TestCase):
                 self._query_all_views(data_set.views)
         if action == 'delete':
             for view in data_set.views:
-                tasks.append(self.cluster.delete_view(self.servers[0], view.name, None))
+                tasks.append(self.cluster.async_delete_view(self.servers[0], view.name, None))
                 time.sleep(1)
             for view in data_set.views:
                 for q in view.queries:
