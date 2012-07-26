@@ -1,4 +1,3 @@
-import copy
 import socket
 import functools
 from multiprocessing import Process, Event
