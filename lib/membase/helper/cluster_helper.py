@@ -95,7 +95,7 @@ class ClusterOperationHelper(object):
         for bucket in buckets:
         #Load some data
             l_threads = MemcachedClientHelper.create_threads([master], bucket.name,
-                                                                     -1, keys_count, {1024: 0.50, 512: 0.50}, 2, -1,
+                                                                     - 1, keys_count, {1024: 0.50, 512: 0.50}, 2, -1,
                                                                      True, True)
             [t.start() for t in l_threads]
             # Do persistence verification
@@ -265,7 +265,7 @@ class ClusterOperationHelper(object):
         flush_params = ['bg_fetch_delay', 'couch_response_timeout', 'exp_pager_stime', 'flushall_enabled',
                         'klog_compactor_queue_cap', 'klog_max_log_size', 'klog_max_entry_ratio',
                         'queue_age_cap', 'max_size', 'max_txn_size', 'mem_high_wat', 'mem_low_wat',
-                        'min_data_age', 'timing_log']
+                        'min_data_age', 'timing_log', 'alog_sleep_time']
         if key in tap_params:
             return memcacheConstants.ENGINE_PARAM_TAP
         if key in checkpoint_params:
