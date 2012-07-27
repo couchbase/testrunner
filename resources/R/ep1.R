@@ -320,7 +320,7 @@ ns_server_data $get_misses <- as.numeric(ns_server_data$get_misses)
 ns_server_data $get_hits <- as.numeric(ns_server_data$get_hits)
 ns_server_data <- transform(ns_server_data , cache_miss=ifelse(ns_server_data$cmd_get <= ns_server_data$ep_bg_fetched,0,ns_server_data$ep_bg_fetched/ns_server_data$cmd_get))
 ns_server_data$cache_miss <- ns_server_data$cache_miss*100
-ns_server_data$curr_connections <- ns_server_data$curr_connections
+ns_server_data$curr_connections <- as.numeric(ns_server_data$curr_connections)
 all_builds = factor(ns_server_data$buildinfo.version)
 result_tmp <- data.frame()
 for(a_build in levels(all_builds)) {
