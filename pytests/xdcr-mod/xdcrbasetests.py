@@ -31,6 +31,7 @@ class XDCRConstants:
     REPLICATION_TYPE_CONTINUOUS = "continuous"
     REPLICATION_DIRECTION_UNIDIRECTION = "unidirection"
     REPLICATION_DIRECTION_BIDIRECTION = "bidirection"
+    FAILOVER_CLUSTER_DEFAULT = "source"
 
 #===============================================================================
 # class: XDCRBaseTest
@@ -107,6 +108,9 @@ class XDCRBaseTest(unittest.TestCase):
         self._expires = self._input.param("expires", 0)
         self._log.info("Initializing input parameters completed...")
         self._timeout = self._input.param("timeout", 60)
+        self._failover =self._input.param("failover",None)
+        if self._failover is not None:
+            self._failover = self._failover.split("-")
 
     def _init_clusters(self):
         for key in self._clusters_keys_olst:
@@ -174,6 +178,7 @@ class XDCRBaseTest(unittest.TestCase):
         for node in nodes:
             if node.ip == master_node.ip:
                 return int(ratio / float(len(nodes)) / float(num_buckets) * float(mem_quota))
+                #TODO - add ack_log_size and idle stats check from TAP
         return int(ratio / float(num_buckets) * float(mem_quota))
 
 
@@ -294,7 +299,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     'ep_queue_size', '==', 0))
                 tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, '',
                     'ep_flusher_todo', '==', 0))
-                #TODO - add ack_log_size and idle stats check from TAP
         for task in tasks:
             task.result(self._timeout)
 
@@ -306,7 +310,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             while num_try < 5 and result is False:
                 num_try += 1
                 tasks.append(self._cluster_helper.async_verify_data(server, bucket, kv_stores[kv_store]))
-                tasks.append(self._cluster_helper.async_verify_data(server, bucket, kv_stores[kv_store]))
                 try:
                     for task in tasks:
                         result = task.result(self._timeout * num_try)
@@ -315,8 +318,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     for task in tasks:
                         task.cancel()
                     raise Exception(
-                        "Unable to get expected results for verify_all_buckets {0} sec and {1}th attempt".format(
-                            self._timeout * num_try, num_try))
+                        "Unable to get expected results for verify_all_buckets {0} sec and {1}the try".format(
+                            60 * num_try, num_try))
 
 
     def _verify_stats_all_buckets(self, servers):
@@ -354,3 +357,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 30, bucket)
             self._log.info("wait for expiry pager to run on all these nodes")
             time.sleep(30)
+
+    def _async_failover(self, src_nodes, failover_node):
+        tasks = []
+        tasks.append(self._cluster_helper.async_failover(src_nodes, failover_node))
+        return tasks

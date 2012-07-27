@@ -1175,4 +1175,3 @@ class FailoverTask(Task):
                 if server.ip == node.ip and int(server.port) == int(node.port):
                     self.log.info("Failing over {0}:{1}".format(node.ip, node.port))
                     rest.fail_over(node.id)
-
