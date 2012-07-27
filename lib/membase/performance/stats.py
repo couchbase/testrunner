@@ -163,6 +163,12 @@ class StatsCollector(object):
                "latency-obs-repl-client-histogram":self._task["latency"].get("latency-obs-repl-client-histogram", []),
                "latency-obs-repl-client":self._task["latency"].get('percentile-latency-obs-repl-client', []),
                "latency-obs-repl-client-recent":self._task["latency"].get('percentile-latency-obs-repl-client-recent', []),
+               "latency-woq-obs-histogram":self._task["latency"].get("latency-woq-obs-histogram", []),
+               "latency-woq-obs":self._task["latency"].get('percentile-latency-woq-obs', []),
+               "latency-woq-obs-recent":self._task["latency"].get('percentile-latency-woq-obs-recent', []),
+               "latency-woq-query-histogram":self._task["latency"].get("latency-woq-query-histogram", []),
+               "latency-woq-query":self._task["latency"].get('percentile-latency-woq-query', []),
+               "latency-woq-query-recent":self._task["latency"].get('percentile-latency-woq-query-recent', []),
                "latency-woq-histogram":self._task["latency"].get("latency-woq-histogram", []),
                "latency-woq":self._task["latency"].get('percentile-latency-woq', []),
                "latency-woq-recent":self._task["latency"].get('percentile-latency-woq-recent', [])
