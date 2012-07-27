@@ -509,6 +509,86 @@ if (nrow(latency_query) > 0) {
     latency_query <- result
 }
 
+# Get Latency-woq-obs
+cat("generating latency-woq-obs\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-woq-obs", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-woq-obs"))
+}
+latency_woq_obs <- result
+if (nrow(latency_woq_obs) > 0) {
+
+    latency_woq_obs$row <- as.numeric(latency_woq_obs$row)
+    latency_woq_obs$mystery <- as.numeric(latency_woq_obs$mystery)
+    if (length(latency_woq_obs$percentile_999th)) {
+        latency_woq_obs$percentile_999th <- as.numeric(latency_woq_obs$percentile_999th)
+    }
+    latency_woq_obs$percentile_99th <- as.numeric(latency_woq_obs$percentile_99th)
+    latency_woq_obs$percentile_95th <- as.numeric(latency_woq_obs$percentile_95th)
+    latency_woq_obs$percentile_90th <- as.numeric(latency_woq_obs$percentile_90th)
+    if (length(latency_woq_obs$percentile_80th)) {
+        latency_woq_obs$percentile_80th <- as.numeric(latency_woq_obs$percentile_80th)
+    }
+
+    all_builds = factor(latency_woq_obs$buildinfo.version)
+    result <- data.frame()
+    for(a_build in levels(all_builds)) {
+        tt <- latency_woq_obs[latency_woq_obs $buildinfo.version==a_build,]
+        tt$mystery <- as.numeric(tt$mystery)
+        min_myst = min(tt$mystery)
+        filtered = transform(tt,row=mystery-min_myst)
+        result <- rbind(result,filtered)
+    }
+    latency_woq_obs <- result
+}
+
+# Get Latency-woq-query
+cat("generating latency-woq-query\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-woq-query", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-woq-query"))
+}
+latency_woq_query <- result
+if (nrow(latency_woq_query) > 0) {
+
+    latency_woq_query$row <- as.numeric(latency_woq_query$row)
+    latency_woq_query$mystery <- as.numeric(latency_woq_query$mystery)
+    if (length(latency_woq_query$percentile_999th)) {
+        latency_woq_query$percentile_999th <- as.numeric(latency_woq_query$percentile_999th)
+    }
+    latency_woq_query$percentile_99th <- as.numeric(latency_woq_query$percentile_99th)
+    latency_woq_query$percentile_95th <- as.numeric(latency_woq_query$percentile_95th)
+    latency_woq_query$percentile_90th <- as.numeric(latency_woq_query$percentile_90th)
+    if (length(latency_woq_query$percentile_80th)) {
+        latency_woq_query$percentile_80th <- as.numeric(latency_woq_query$percentile_80th)
+    }
+
+    all_builds = factor(latency_woq_query$buildinfo.version)
+    result <- data.frame()
+    for(a_build in levels(all_builds)) {
+        tt <- latency_woq_query[latency_woq_query $buildinfo.version==a_build,]
+        tt$mystery <- as.numeric(tt$mystery)
+        min_myst = min(tt$mystery)
+        filtered = transform(tt,row=mystery-min_myst)
+        result <- rbind(result,filtered)
+    }
+    latency_woq_query <- result
+}
+
 # Get Latency-woq
 cat("generating latency-woq\n")
 result <- data.frame()
@@ -759,6 +839,40 @@ latency_query_histo <- result
 latency_query_histo$time <- as.numeric(latency_query_histo$time) * 1000
 latency_query_histo$count <- as.numeric(latency_query_histo$count)
 
+# Get Latency-woq-obs histogram
+cat("generating latency-woq-obs histogram")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-woq-obs-histogram", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-woq-obs histogram"))
+}
+latency_woq_obs_histo <- result
+latency_woq_obs_histo$time <- as.numeric(latency_woq_obs_histo$time)
+latency_woq_obs_histo$count <- as.numeric(latency_woq_obs_histo$count)
+
+# Get Latency-woq-query histogram
+cat("generating latency-woq-query histogram")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","latency-woq-query-histogram", sep='')
+		cat(paste(url,"\n"))
+		doc_json <- fromJSON(file=url)
+		cat(paste(builds_list[index,]$id,"\n"))
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	},error=function(e)e, finally=print("Error getting latency-woq-query histogram"))
+}
+latency_woq_query_histo <- result
+latency_woq_query_histo$time <- as.numeric(latency_woq_query_histo$time)
+latency_woq_query_histo$count <- as.numeric(latency_woq_query_histo$count)
+
 # Get Latency-woq histogram
 cat("generating latency-woq histogram")
 result <- data.frame()
@@ -855,6 +969,8 @@ if (reb) {
     latency_obs_persist_client = rebFilter(latency_obs_persist_client, builds_list)
     latency_obs_persist_server = rebFilter(latency_obs_persist_server, builds_list)
     latency_obs_repl_client = rebFilter(latency_obs_repl_client, builds_list)
+    latency_woq_obs = rebFilter(latency_woq_obs, builds_list)
+    latency_woq_query = rebFilter(latency_woq_query, builds_list)
     latency_woq = rebFilter(latency_woq, builds_list)
     throughput_query = rebFilter(throughput_query, builds_list)
     disk_data = rebFilter(disk_data, builds_list)
@@ -1741,8 +1857,31 @@ if (nrow(latency_query_histo) > 0) {
     makeMetricDef("Final latency histogram for query commands")
 }
 
+if (nrow(latency_woq_obs_histo) > 0) {
+    cat("plotting latency-woq-obs histogram \n")
+    latency_woq_obs_histo = latency_woq_obs_histo[!is.na(latency_woq_obs_histo$time), ]
+    p <- ggplot(latency_woq_obs_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (s)--->", y="count")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency woq-obs histogram")
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef("Final latency histogram for woq-obs commands")
+}
+
+if (nrow(latency_woq_query_histo) > 0) {
+    cat("plotting latency-woq-query histogram \n")
+    latency_woq_query_histo = latency_woq_query_histo[!is.na(latency_woq_query_histo$time), ]
+    p <- ggplot(latency_woq_query_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (s)--->", y="count")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency woq-query histogram")
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef("Final latency histogram for woq-query commands")
+}
+
 if (nrow(latency_woq_histo) > 0) {
     cat("plotting latency-woq histogram \n")
+    latency_woq_histo = latency_woq_histo[!is.na(latency_woq_histo$time), ]
     p <- ggplot(latency_woq_histo, aes(x=time, y=count, color=buildinfo.version, label= prettySize(count))) + labs(x="----latency (s)--->", y="count")
     p <- p + geom_point()
     p <- addopts(p,"Latency woq histogram")
@@ -1998,6 +2137,56 @@ if (nrow(latency_query) > 0) {
         makeFootnote(footnote)
     }
 
+}
+
+if (nrow(latency_woq_obs) > 0) {
+
+    cat("Latency-woq-obs 90th\n")
+    temp <- latency_woq_obs[latency_woq_obs$client_id ==0,]
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-woq-obs 90th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-woq-obs 95th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-woq-obs 95th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-woq-obs 99th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-woq-obs 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
+}
+
+if (nrow(latency_woq_query) > 0) {
+
+    cat("Latency-woq-query 90th\n")
+    temp <- latency_woq_query[latency_woq_query$client_id ==0,]
+    p <- ggplot(temp, aes(temp$row, temp$percentile_90th, color=buildinfo.version, label=temp$percentile_90th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-woq-query 90th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-woq-query 95th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_95th, color=buildinfo.version, label=temp$percentile_95th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-woq-query 95th  percentile")
+    print(p)
+    makeFootnote(footnote)
+
+    cat("Latency-woq-query 99th\n")
+    p <- ggplot(temp, aes(temp$row, temp$percentile_99th, color=buildinfo.version, label=temp$percentile_99th)) + labs(x="----time (sec)--->", y="sec")
+    p <- p + geom_point()
+    p <- addopts(p,"Latency-woq-query 99th  percentile")
+    print(p)
+    makeFootnote(footnote)
 }
 
 if (nrow(latency_woq) > 0) {
