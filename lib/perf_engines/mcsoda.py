@@ -158,8 +158,8 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
 
     while True:
 
-        start_time = time.time() # latency includes observe and query time
         key, cas = req_queue.get(block=True)
+        start_time = time.time() # latency includes observe and query time
 
         # observe
         if not woq_observer.block_for_persistence(key, cas):
