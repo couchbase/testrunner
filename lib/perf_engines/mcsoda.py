@@ -164,28 +164,34 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
         # observe
         if not woq_observer.block_for_persistence(key, cas):
             # put an invalid object to indicate error
-            stats_queue.put([key, cas, 0, 0], block=True)
+            stats_queue.put([key, cas, 0, 0, 0, 0], block=True)
             req_queue.task_done()
             continue
 
+        obs_latency = time.time() - start_time
         if cfg.get("woq-verbose", 0):
-            query_start = time.time()
+            print "[mcsoda] woq_worker obs latency: %s, key = %s, cas = %s "\
+                % (obs_latency, key, cas)
+
+        query_start = time.time()
 
         try:
             result = store.rest.query_view(ddoc, view, bucket, query_params)
         except QueryViewException as e:
             print "[mcsoda] woq_worker QueryViewException: %s" % e
-            stats_queue.put([key, cas, 0, 0], block=True)
+            stats_queue.put([key, cas, 0, 0, 0, 0], block=True)
             req_queue.task_done()
             continue
 
+        query_latency = time.time() - query_start
         if cfg.get("woq-verbose", 0):
-            print "[mcsoda] woq_worker query latency: %s "\
-                % (time.time() - query_start)
+            print "[mcsoda] woq_worker query latency: %s, key = %s, cas = %s "\
+                % (query_latency, key, cas)
             print "[mcsoda] woq_worker query result: %s" % result
 
         latency = time.time() - start_time
-        stats_queue.put([key, cas, start_time, latency], block=True)
+        stats_queue.put([key, cas, start_time, obs_latency, query_latency, latency],
+                        block=True)
         req_queue.task_done()
     print "[mcsoda] woq_worker stopped working"
 
@@ -255,15 +261,19 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             # record stats
             if not woq_stats_queue.empty():
                 try:
-                    key, cas, start_time, latency = woq_stats_queue.get(block=False)
+                    key, cas, start_time, obs_latency, query_latency, latency \
+                        = woq_stats_queue.get(block=False)
                     if not start_time and not latency:
                         store.woq_key_cas.clear()   # error
                     else:
+                        store.add_timing_sample("woq-obs", obs_latency)
+                        store.add_timing_sample("woq-query", query_latency)
                         store.add_timing_sample("woq", latency)
                         store.save_stats(start_time)
                         store.woq_key_cas.clear()   # simply clear all, no key/cas sanity check
-                        print "[mcsoda] woq_stats: key: %s, cas: %s, latency: %f"\
-                            % (key, cas, latency)
+                        print "[mcsoda] woq_stats: key: %s, cas: %s, " \
+                            "obs_latency: %f, query_latency: %f, latency: %f" \
+                            % (key, cas, obs_latency, query_latency, latency)
                 except Queue.Empty:
                     pass
 
