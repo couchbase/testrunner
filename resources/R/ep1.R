@@ -320,6 +320,7 @@ ns_server_data $get_misses <- as.numeric(ns_server_data$get_misses)
 ns_server_data $get_hits <- as.numeric(ns_server_data$get_hits)
 ns_server_data <- transform(ns_server_data , cache_miss=ifelse(ns_server_data$cmd_get <= ns_server_data$ep_bg_fetched,0,ns_server_data$ep_bg_fetched/ns_server_data$cmd_get))
 ns_server_data$cache_miss <- ns_server_data$cache_miss*100
+ns_server_data$curr_connections <- ns_server_data$curr_connections
 all_builds = factor(ns_server_data$buildinfo.version)
 result_tmp <- data.frame()
 for(a_build in levels(all_builds)) {
@@ -1627,6 +1628,19 @@ if (nrow(ns_server_data) > 0) {
     p <- addopts(p,"cache_miss percentage 0-5")
     print(p)
     makeFootnote(footnote)
+
+    cat("generating connections \n")
+    p <- ggplot(ns_server_data, aes(row, curr_connections, color=buildinfo.version , label= curr_connections)) + labs(x="----time (sec)--->", y="connections")
+    p <- p + geom_point()
+    p <- addopts(p,"Number of connections")
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef(paste("Number of connections to this server",
+                        "including connections from external",
+                        "drivers, proxies, TAP requests and",
+                        "internal statistic gathering (measured",
+                        "from curr_connections)",
+                        sep="\n"))
 }
 
 cat("generating cpu_util \n")
