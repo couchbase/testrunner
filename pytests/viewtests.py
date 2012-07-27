@@ -190,8 +190,8 @@ class ViewBaseTests(unittest.TestCase):
 
         # self._verify_views_replicated(bucket, view_name, map_fn)
         keys = ViewBaseTests._get_keys(self, results)
-        #TODO: we should extend this function to wait for disk_write_queue for all nodes
-        RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
+
+        RebalanceHelper.wait_for_persistence(master, bucket, 0)
 
         total_time = view_time
         # Keep trying this for maximum 5 minutes
@@ -241,8 +241,9 @@ class ViewBaseTests(unittest.TestCase):
         value = ViewBaseTests._get_built_in_reduce_results(self, results)
         results_without_reduce = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs,
                                                         extra_params={"reduce": False})
-        #TODO: we should extend this function to wait for disk_write_queue for all nodes
-        RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
+
+        RebalanceHelper.wait_for_persistence(master, bucket, 0)
+
         # try this for maximum 3 minutes
         attempt = 0
         delay = 10
@@ -295,8 +296,9 @@ class ViewBaseTests(unittest.TestCase):
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
         value = ViewBaseTests._get_built_in_reduce_results(self, results)
-        #TODO: we should extend this function to wait for disk_write_queue for all nodes
-        RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
+
+        RebalanceHelper.wait_for_persistence(master, bucket, 0)
+
         # try this for maximum 3 minutes
         attempt = 0
         delay = 10
@@ -352,8 +354,9 @@ class ViewBaseTests(unittest.TestCase):
         #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, updated_num_docs)
         keys = ViewBaseTests._get_keys(self, results)
-        #TODO: we should extend this function to wait for disk_write_queue for all nodes
-        RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
+
+        RebalanceHelper.wait_for_persistence(master, bucket, 0)
+
         # try this for maximum 3 minutes
         attempt = 0
         delay = 10
@@ -559,7 +562,7 @@ class ViewBaseTests(unittest.TestCase):
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names))
         keys = ViewBaseTests._get_keys(self, results)
 
-        RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_persistence(master, bucket, 0)
 
         # try this for maximum 3 minutes
         attempt = 0
@@ -803,7 +806,9 @@ class ViewBaseTests(unittest.TestCase):
 
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, limit=2 * len(doc_names))
         doc_names_view = ViewBaseTests._get_doc_names(self, results)
-        RebalanceHelper.wait_for_stats(master, bucket, 'ep_queue_size', 0)
+
+        RebalanceHelper.wait_for_persistence(master, bucket, 0)
+
         # try this for maximum 1 minute
         attempt = 0
         delay = 5
@@ -900,9 +905,7 @@ class ViewBaseTests(unittest.TestCase):
         view_name = "dev_test_compare_views_all_nodes"
         ViewBaseTests._create_view_for_gen_docs(self, rest, bucket, prefix, view_name)
 
-        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_flusher_todo', 0)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(master, bucket, 'ep_uncommitted_items', 0)
+        RebalanceHelper.wait_for_persistence(master, bucket, 0)
 
         ViewBaseTests._end_rebalance(self)
         ViewBaseTests._verify_views_from_all(self, master, bucket, view_name, num_docs, doc_names)
