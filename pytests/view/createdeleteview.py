@@ -508,6 +508,9 @@ class CreateDeleteViewTests(ViewBaseTest):
         # load initial documents
         self._load_doc_data_all_buckets()
 
+        #wait for persistence before verification
+        self._wait_for_stats_all_buckets(self.servers)
+
         self.cluster.failover(self.servers[:self.num_servers],
                                   self.servers[self.num_servers - self.nodes_out:])
 
@@ -559,12 +562,15 @@ class CreateDeleteViewTests(ViewBaseTest):
             self._verify_ddoc_data_all_buckets()
 
         #rebalance the cluster, do more ddoc ops and then verify again
-        self.cluster.rebalance(self.servers[:self.num_servers], [], self.servers[1:self.num_servers])
+        self.cluster.rebalance(self.servers[:self.num_servers], [], self.servers[self.num_servers - self.nodes_out:])
 
         for bucket in self.buckets:
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, "dev_test_2", "v2")
             if self.ddoc_ops in ["update", "delete"]:
                 self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test_2", "v2")
+
+        #wait for persistence before verification
+        self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
 
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
@@ -616,6 +622,10 @@ class CreateDeleteViewTests(ViewBaseTest):
         #update the server list as master is no longer there
         self.servers = self.servers[1:]
         self.master = self.servers[1]
+
+        #wait for persistence before verification
+        self._wait_for_stats_all_buckets(self.servers)
+
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
             self._verify_ddoc_data_all_buckets()
