@@ -220,6 +220,15 @@ class EPerfMaster(perf.PerfBase):
         mvs.append(avg*5)
         return mvs
 
+    def set_nru_freq(self, freq):
+        """Set up NRU access scanner running frequency"""
+        for server in self.input.servers:
+            shell = RemoteMachineShellConnection(server)
+            cmd = "/opt/couchbase/bin/cbepctl localhost:11210 "\
+                  "set flush_param alog_sleep_time {0}".format(freq)
+            self._exec_and_log(shell, cmd)
+            shell.disconnect()
+
     # Gets the vbucket count
     def gated_start(self, clients):
         """
@@ -294,6 +303,11 @@ class EPerfMaster(perf.PerfBase):
 
         if self.parami("load_phase", 1) > 0:
             print "Loading"
+
+            nru_freq = self.parami('nru_freq', PerfDefaults.nru_freq)
+            if nru_freq != PerfDefaults.nru_freq:
+                self.set_nru_freq(nru_freq)
+
             num_clients = self.parami("num_clients", len(self.input.clients) or 1)
             start_at = int(self.paramf("start_at", 1.0) * \
                            (self.parami("prefix", 0) * num_items /
