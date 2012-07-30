@@ -37,7 +37,7 @@ class bidirectional(XDCRReplicationBaseTest):
         elif self._num_items >=100000:
             self._timeout = 600
 
-        if "source" in self._failover or "destination" in self._failover:
+        if self._failover is not None:
             self._timeout*= 2
         self._log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(dest_nodes[0].ip))
         self._log.info("Waiting for for {0} seconds, for replication to catchup ...".format(self._timeout))

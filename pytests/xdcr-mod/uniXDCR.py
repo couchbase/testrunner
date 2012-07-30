@@ -33,7 +33,7 @@ class unidirectional(XDCRReplicationBaseTest):
         elif self._num_items >=100000:
             self._timeout = 600
 
-        if "source" in self._failover or "destination" in self._failover:
+        if self._failover is not None:
             self._timeout*= 2
 
         self._log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(dest_nodes[0].ip))
@@ -64,11 +64,11 @@ class unidirectional(XDCRReplicationBaseTest):
 
         if self._doc_ops is not None:
             if "create" in self._doc_ops:
-                self._load_all_buckets(src_master, gen_create, "create", self._expires)
+                self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
             if "update" in self._doc_ops:
-                self._load_all_buckets(src_master, gen_update, "update", self._expires)
+                self._load_all_buckets(src_master, self.gen_update, "update", self._expires)
             if "delete" in self._doc_ops:
-                self._load_all_buckets(src_master, gen_delete, "delete", self._expires)
+                self._load_all_buckets(src_master, self.gen_delete, "delete", self._expires)
             self._wait_for_stats_all_buckets(src_nodes)
 
         dest_key_index = 1
@@ -94,17 +94,17 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_nodes = self._clusters_dic[1]
         dest_master = dest_nodes[0]
 
-        self._load_all_buckets(src_master, gen_create, "create", self._expires)
+        self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
         tasks = []
         """Setting up creates/updates/deletes at source nodes"""
         if self._doc_ops is not None:
             # allows multiple of them but one by one
             if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, gen_update, "update", self._expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_update, "update", self._expires))
             if "create" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, gen_create, "create", self._expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_create, "create", self._expires))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, gen_delete, "delete", self._expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", self._expires))
         time.sleep(5)
         for task in tasks:
             task.result()
@@ -230,7 +230,7 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_nodes = self._clusters_dic[1]
         dest_master = dest_nodes[0]
 
-        self._load_all_buckets(src_master, gen_create, "create", self._expires)
+        self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
 
         tasks = []
         """Setting up failover while creates/updates/deletes at source nodes"""
@@ -244,9 +244,9 @@ class unidirectional(XDCRReplicationBaseTest):
                 tasks.extend(self._async_failover(dest_nodes, [dest_nodes[i]]))
                 self._log.info(" Failing over Destination Node {0}".format(dest_nodes[i].ip))
             if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, gen_update, "update", self._expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_update, "update", self._expires))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, gen_delete, "delete", self._expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", self._expires))
         time.sleep(15)
         for task in tasks:
             task.result()
