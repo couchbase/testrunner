@@ -527,7 +527,9 @@ def choose_entry(arr, n):
 
 # --------------------------------------------------------
 
-class Store:
+
+class Store(object):
+
 
     def connect(self, target, user, pswd, cfg, cur, bucket="default"):
         self.target = target

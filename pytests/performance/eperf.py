@@ -1397,7 +1397,12 @@ function(doc) {
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+        if self.parami('num_nodes_before', 0):
+            server_sn = self.parami('prefix', 0) % \
+                self.parami('num_nodes_before', 0)
+        else:
+            server_sn = self.parami('prefix', 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
                           ratio_sets = self.paramf('ratio_sets', 0.3),
@@ -1902,6 +1907,7 @@ class EVPerfClient(EPerfClient):
             if getattr(self, "shutdown_event", None) is not None:
                 ctl['shutdown_event'] = self.shutdown_event
             cfg['time'] = self.parami('time', 0)
+            cfg['node_prefix'] = self.parami('prefix', 0)
 
         cfg['stats_ops'] = self.parami("mcsoda_fg_stats_ops",
                                        PerfDefaults.mcsoda_fg_stats_ops)

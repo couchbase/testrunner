@@ -60,10 +60,16 @@ class Reader(threading.Thread):
                 self.reader_go.wait()
                 self.reader_go.clear()
 
+
 class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
+
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
-        mcsoda.StoreMembaseBinary.connect_host_port(self, host, port, user, pswd, bucket=bucket)
+        if not hasattr(self, 'identity'):
+            self.identity = (port, user, pswd, bucket)
+
+        super(StoreCouchbase, self).connect_host_port(host, *self.identity)
+        self.memcacheds = self.awareness.memcacheds
 
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -76,6 +82,20 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
             self.capi_host_port = (host, 9500)
             self.capi_skt.connect(self.capi_host_port)
         self.init_reader(self.capi_skt)
+
+    def disconnect(self):
+        """Close socket connection"""
+        self.capi_skt.shutdown(2)
+        self.capi_skt.close()
+
+    def restart_connection(self):
+        """Determine new hostname, drop existing connection, establish new
+        socket connection."""
+        servers = [host_port.split(':')[0] for host_port in self.memcacheds]
+        host = servers[self.cfg.get('node_prefix', 0) % len(servers)]
+
+        self.disconnect()
+        self.connect_host_port(host, *self.identity)
 
     def init_reader(self, skt):
         self.reader_go = threading.Event()
@@ -97,6 +117,12 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
         return arr, ''.join(inflight_grp['queries']), len(inflight_grp['queries'])
 
     def inflight_send(self, t):
+        # Before sending new batch, check number of active nodes. Restart HTTP
+        # connection if this number changes.
+        if len(self.memcacheds) != len(self.awareness.memcacheds):
+            self.memcacheds = self.awareness.memcacheds
+            self.restart_connection()
+
         for_mc, buf_capi, num_capi = t
 
         sent_mc = mcsoda.StoreMembaseBinary.inflight_send(self, for_mc)
