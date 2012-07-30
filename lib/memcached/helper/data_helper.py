@@ -15,7 +15,7 @@ import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
 from memcached.helper.old_kvstore import ClientKeyValueStore
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL
 import json
 import sys
@@ -701,6 +701,8 @@ class VBucketAwareMemcached(object):
         self.log = logger.Logger.get_logger()
         self.info = info
         self.bucket = bucket
+        if isinstance(bucket, Bucket):
+            self.bucket = bucket.name
         self.memcacheds = {}
         self.vBucketMap = {}
         self.vBucketMapReplica = {}

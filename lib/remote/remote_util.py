@@ -1433,7 +1433,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if type == 'windows':
             restore_command = WIN_CBRESTORE_COMMAND_PATH
 
-        for bucket in buckets.iterkeys():
+        for bucket in buckets:
             command = "{0} {1} {2}{3}@{4}:{5} {6} {7}".format(restore_command, backup_location, "http://",
                                                               login_info, self.ip, self.port, "-x try_xwm=0 -b", bucket)
             output, error = self.execute_command(command.format(command))

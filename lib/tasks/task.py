@@ -4,7 +4,7 @@ import random
 import string
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
@@ -231,6 +231,8 @@ class StatsWaitTask(Task):
         Task.__init__(self, "stats_wait_task")
         self.servers = servers
         self.bucket = bucket
+        if isinstance(bucket, Bucket):
+            self.bucket = bucket.name
         self.param = param
         self.stat = stat
         self.comparison = comparison
