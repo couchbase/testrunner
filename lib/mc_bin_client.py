@@ -228,7 +228,7 @@ class MemcachedClient(object):
         if meta_type != memcacheConstants.META_REVID:
             raise ValueError("Invalid meta type %x" % meta_type)
         try:
-            seqno = struct.unpack('>I', meta_data[:8])[0]
+            seqno = struct.unpack('>Q', meta_data[:8])[0]
             cas = struct.unpack('>Q', meta_data[8:16])[0]
             exp_flags = struct.unpack('>I', meta_data[16:20])[0]
             flags_other = False
