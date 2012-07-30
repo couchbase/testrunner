@@ -157,7 +157,7 @@ class PerfWrapper(object):
             rebalance_after = self.parami('rebalance_after', 0) / total_clients
             self.level_callbacks = [('cur-queries', rebalance_after,
                                      self.latched_rebalance)]
-            return test(self, *args, **kargs)
+            return PerfWrapper.multiply(test)(self, *args, **kargs)
         return wrapper
 
 
