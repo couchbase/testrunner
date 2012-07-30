@@ -1060,7 +1060,6 @@ class RestConnection(object):
 
         return buckets
 
-
     def get_bucket_stats_for_node(self, bucket='default', node=None):
         if not node:
             log.error('node_ip not specified')
@@ -1078,7 +1077,7 @@ class RestConnection(object):
             op = json_parsed["op"]
             samples = op["samples"]
             for stat_name in samples:
-                stats[stat_name] = samples[stat_name][0]
+                stats[stat_name] = samples[stat_name][-1]
 
         return stats
 
