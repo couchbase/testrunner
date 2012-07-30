@@ -46,6 +46,7 @@ class PerfWrapper(object):
                     self.input.test_params['prefix'] = prefix
                     self.is_leader = bool(prefix == 0)
                     executor = Process(target=test, args=(self, ))
+                    executor.daemon = True
                     executor.start()
                     executors.append(executor)
 
