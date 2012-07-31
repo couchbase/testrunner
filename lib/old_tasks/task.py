@@ -439,7 +439,7 @@ class LoadDocGeneratorTask(GenericLoadingTask):
                     _json = json.loads(_value, encoding="utf-8")
                     _id = _json["meta"]["id"].encode("ascii", "ignore")
                     try:
-                        self.do_task_op("set", _id, json.dump(_json["json"]), self.expiration)
+                        self.do_task_op("set", _id, json.dumps(_json["json"]), self.expiration)
                         self.doc_op_count += 1
                     except Exception as e:
                         self.state = "finished"
