@@ -22,6 +22,7 @@ import logging.config
 from xunit import XUnitTestResult
 from TestInput import TestInputParser, TestInputSingleton
 from optparse import OptionParser, OptionGroup
+import signal
 
 
 def usage(err=None):
@@ -207,7 +208,25 @@ def get_server_logs(input, path):
         except Exception as e:
             print "unable to obtain diags from %s %s" % (diag_url, e)
 
+# This little code snippet is from
+# http://greenteapress.com/semaphores/threading_cleanup.py (2012-07-31)
+# It's now possible to interrupt the testrunner via ctrl-c at any time
+def watcher():
+    child = os.fork()
+    if child == 0: return
+    try:
+        os.wait()
+    except KeyboardInterrupt:
+        print 'KeyBoardInterrupt'
+        try:
+            os.kill(child, signal.SIGKILL)
+        except OSError:
+            pass
+    sys.exit()
+
 if __name__ == "__main__":
+    watcher()
+
     names, test_params, arg_i, arg_p , options = parse_args(sys.argv)
     TestInputSingleton.input = TestInputParser.get_test_input(sys.argv) # get params from command line
     test_params.update(TestInputSingleton.input.test_params) # ensure command line params get higher priority
