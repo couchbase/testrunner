@@ -24,22 +24,27 @@ from performance import perf
 from perf_engines.cbsoda import StoreCouchbase
 from perf_engines import mcsoda
 from scripts.perf.rel_cri_stats import CBStatsCollector
-
 from cbkarma.rest_client import CbKarmaClient
 
+
 class EPerfMaster(perf.PerfBase):
-    specURL = "http://hub.internal.couchbase.org/confluence/pages/viewpage.action?pageId=1901816"
+
+    """
+    specURL = http://hub.internal.couchbase.org/confluence/pages/viewpage.action?pageId=1901816
+
+    """
 
     def setUp(self):
         self.dgm = False
         self.is_master = True
         self.input = TestInputSingleton.input
-        self.mem_quota = self.parami("mem_quota", PerfDefaults.mem_quota) # for 10G system
+        self.mem_quota = self.parami("mem_quota",
+                                     PerfDefaults.mem_quota)  # for 10G system
         self.level_callbacks = []
         self.latched_rebalance_done = False
         self.is_multi_node = False
         self.is_leader = self.parami("prefix", 0) == 0
-        self.superSetUp();
+        self.superSetUp()
 
     def superSetUp(self):
         super(EPerfMaster, self).setUp()
@@ -51,13 +56,13 @@ class EPerfMaster(perf.PerfBase):
         super(EPerfMaster, self).tearDown()
 
     def get_all_stats(self):
-        # One node, the 'master', should aggregate stats from client and server nodes
-        # and push results to couchdb.
-        # Assuming clients ssh_username/password are same as server
-        # Save servers list as clients
-        # Replace servers ip with clients ip
+        """One node, the 'master', should aggregate stats from client and
+        server nodes and push results to couchdb.
+        Assuming clients ssh_username/password are same as server
+        Save servers list as clients
+        Replace servers ip with clients ip"""
         clients = self.input.servers
-        for i  in range(len(clients)):
+        for i in range(len(clients)):
             clients[i].ip = self.input.clients[i]
         remotepath = '/tmp'
 
@@ -66,10 +71,11 @@ class EPerfMaster(perf.PerfBase):
             shell = RemoteMachineShellConnection(client)
             filename = '{0}.json'.format(i)
             destination = "{0}/{1}".format(os.getcwd(), filename)
-            print "Getting client stats file {0} from {1}".format(filename, client)
+            print "Getting client stats file {0} from {1}".format(filename,
+                                                                  client)
             if not shell.get_file(remotepath, filename, destination):
-                print "Unable to fetch the json file {0} on Client {1} @ {2}".format(remotepath+'/'+filename \
-                                                                                     , i, client.ip)
+                print "Unable to fetch the json file {0} on Client {1} @ {2}"\
+                    .format(remotepath + '/' + filename, i, client.ip)
                 exit(1)
             i += 1
 
@@ -161,7 +167,8 @@ class EPerfMaster(perf.PerfBase):
                 file = gzip.open("{0}.{1}.json.gz".format(i, type), 'rb')
                 break
             except IOError:
-                print "[stats aggregation error] cannot open file : {0}.{1}.json.gz".format(i, type)
+                print "[stats aggregation error] cannot open file: " + \
+                      "{0}.{1}.json.gz".format(i, type)
                 i += 1
 
         if file is None:
@@ -178,17 +185,19 @@ class EPerfMaster(perf.PerfBase):
 
         # Average QPS
         if type == 'loop':
-            final_json['qps'] = {'average': self.calc_avg_qps(final_json['ops'])}
+            average_qps = self.calc_avg_qps(final_json['ops'])
+            final_json['qps'] = {'average': average_qps}
         else:
             final_json['qps'] = {'average': 0}
 
         for i in range(i, len_clients):
             try:
-                file  = gzip.open("{0}.{1}.json.gz".format(i, type),'rb')
+                file = gzip.open("{0}.{1}.json.gz".format(i, type), 'rb')
             except IOError:
-                # cannot find stats produced by this client, check stats collection.
-                # the results might be incomplete.
-                print "[stats aggregation error] cannot open file : {0}.{1}.json.gz".format(i, type)
+                # cannot find stats produced by this client, check stats
+                # collection. the results might be incomplete.
+                print "[stats aggregation error] cannot open file: " +\
+                      "{0}.{1}.json.gz".format(i, type)
                 continue
 
             dict = file.read()
@@ -202,7 +211,8 @@ class EPerfMaster(perf.PerfBase):
                     final_json[key].extend(value)
             if type == 'loop' and self.parami("fg_max_ops", 0):
                 final_json['qps']['average'] += self.calc_avg_qps(dict['ops'])
-                final_json['ops'] = self._merge_query_ops(final_json['ops'], dict['ops'])
+                final_json['ops'] = self._merge_query_ops(final_json['ops'],
+                                                          dict['ops'])
 
         file = gzip.open("{0}.{1}.json.gz".format('final', type), 'wb')
         file.write("{0}".format(json.dumps(final_json)))
@@ -214,10 +224,10 @@ class EPerfMaster(perf.PerfBase):
         # sizes is 33% 1k, 33% 2k, 33% 3k, 1% 10k.
         mvs = []
         for i in range(33):
-            mvs.append(avg/2)
+            mvs.append(avg / 2)
             mvs.append(avg)
-            mvs.append(avg*1.5)
-        mvs.append(avg*5)
+            mvs.append(avg * 1.5)
+        mvs.append(avg * 5)
         return mvs
 
     def set_nru_freq(self, freq):
@@ -267,7 +277,8 @@ class EPerfMaster(perf.PerfBase):
                         prefix = 'hot_'
                     else:
                         prefix = ''
-                    client_phase = prefix + phase + '-' + str(self.parami("prefix", 0))
+                    client_phase = prefix + phase + '-' + \
+                        str(self.parami("prefix", 0))
 
                     # Change status to 'started'
                     if self.parami(phase + "_phase", 0):
@@ -308,14 +319,14 @@ class EPerfMaster(perf.PerfBase):
             if nru_freq != PerfDefaults.nru_freq:
                 self.set_nru_freq(nru_freq)
 
-            num_clients = self.parami("num_clients", len(self.input.clients) or 1)
-            start_at = int(self.paramf("start_at", 1.0) * \
-                           (self.parami("prefix", 0) * num_items /
-                            num_clients))
+            num_clients = self.parami("num_clients",
+                                      len(self.input.clients) or 1)
+            start_at = int(self.paramf("start_at", 1.0) *
+                           self.parami("prefix", 0) * num_items / num_clients)
             items = self.parami("num_items", num_items) / num_clients
             self.is_multi_node = False
-            mvs = self.min_value_size(self.parami("avg_value_size", PerfDefaults.avg_value_size))
-            prefix = self.param('cluster_prefix', '') + self.params('prefix', '0')
+            mvs = self.min_value_size(self.parami("avg_value_size",
+                                                  PerfDefaults.avg_value_size))
             self.load(items,
                       self.param('size', mvs),
                       kind=self.param('kind', 'json'),
@@ -331,27 +342,27 @@ class EPerfMaster(perf.PerfBase):
     def access_phase_clients_start_at(self):
         self.access_phase_items = self.parami("items", PerfDefaults.items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
-        start_at = int(self.paramf("start_at", 1.0) * \
-                           (self.parami("prefix", 0) * \
-                                self.access_phase_items / num_clients))
+        start_at = int(self.paramf("start_at", 1.0) *
+                       self.parami("prefix", 0) * self.access_phase_items /
+                       num_clients)
         return num_clients, start_at
 
     @_dashboard(phase='access')
     def access_phase(self, items,
-                     ratio_sets     = 0,
-                     ratio_misses   = 0,
-                     ratio_creates  = 0,
-                     ratio_deletes  = 0,
-                     ratio_hot      = 0,
-                     ratio_hot_gets = 0,
-                     ratio_hot_sets = 0,
-                     ratio_expirations = 0,
-                     max_creates    = 0,
-                     hot_shift      = 10,
-                     ratio_queries  = 0,
-                     queries        = None,
-                     proto_prefix   = "membase-binary",
-                     host           = None):
+                     ratio_sets=0,
+                     ratio_misses=0,
+                     ratio_creates=0,
+                     ratio_deletes=0,
+                     ratio_hot=0,
+                     ratio_hot_gets=0,
+                     ratio_hot_sets=0,
+                     ratio_expirations=0,
+                     max_creates=0,
+                     hot_shift=10,
+                     ratio_queries=0,
+                     queries=None,
+                     proto_prefix="membase-binary",
+                     host=None):
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
             items = self.parami("items", items)
@@ -364,36 +375,37 @@ class EPerfMaster(perf.PerfBase):
             if host is None:
                 host = self.input.servers[0].ip
             port = self.input.servers[0].port
-            mvs = self.min_value_size(self.parami("avg_value_size", PerfDefaults.avg_value_size))
-            self.loop(num_ops        = 0,
-                      num_items      = items,
-                      max_items      = items + max_creates + 1,
-                      max_creates    = max_creates,
-                      min_value_size = self.param('size', mvs),
-                      kind           = self.param('kind', 'json'),
-                      protocol       = self.mk_protocol(host, port, proto_prefix),
-                      clients        = self.parami('clients', 1),
-                      ratio_sets     = ratio_sets,
-                      ratio_misses   = ratio_misses,
-                      ratio_creates  = ratio_creates,
-                      ratio_deletes  = ratio_deletes,
-                      ratio_hot      = ratio_hot,
-                      ratio_hot_gets = ratio_hot_gets,
-                      ratio_hot_sets = ratio_hot_sets,
-                      ratio_expirations = ratio_expirations,
-                      expiration     = self.parami('expiration', 60 * 5), # 5 minutes.
-                      test_name      = self.id(),
-                      use_direct     = self.parami('use_direct', 1),
-                      doc_cache      = self.parami('doc_cache', 0),
-                      prefix         = "",
-                      collect_server_stats = self.is_leader,
-                      start_at       = start_at,
-                      report         = self.parami('report', int(max_creates * 0.1)),
-                      exit_after_creates = self.parami('exit_after_creates', 1),
-                      hot_shift = self.parami('hot_shift', hot_shift),
+            mvs = self.min_value_size(self.parami("avg_value_size",
+                                      PerfDefaults.avg_value_size))
+            self.loop(num_ops=0,
+                      num_items=items,
+                      max_items=items + max_creates + 1,
+                      max_creates=max_creates,
+                      min_value_size=self.param('size', mvs),
+                      kind=self.param('kind', 'json'),
+                      protocol=self.mk_protocol(host, port, proto_prefix),
+                      clients=self.parami('clients', 1),
+                      ratio_sets=ratio_sets,
+                      ratio_misses=ratio_misses,
+                      ratio_creates=ratio_creates,
+                      ratio_deletes=ratio_deletes,
+                      ratio_hot=ratio_hot,
+                      ratio_hot_gets=ratio_hot_gets,
+                      ratio_hot_sets=ratio_hot_sets,
+                      ratio_expirations=ratio_expirations,
+                      expiration=self.parami('expiration', 60 * 5),  # 5 minutes.
+                      test_name=self.id(),
+                      use_direct=self.parami('use_direct', 1),
+                      doc_cache=self.parami('doc_cache', 0),
+                      prefix="",
+                      collect_server_stats=self.is_leader,
+                      start_at=start_at,
+                      report=self.parami('report', int(max_creates * 0.1)),
+                      exit_after_creates=self.parami('exit_after_creates', 1),
+                      hot_shift=self.parami('hot_shift', hot_shift),
                       is_eperf=True,
-                      ratio_queries = ratio_queries,
-                      queries = queries)
+                      ratio_queries=ratio_queries,
+                      queries=queries)
 
     # restart the cluster and wait for it to warm up
     @_dashboard(phase='warmup')
@@ -408,8 +420,7 @@ class EPerfMaster(perf.PerfBase):
                        'json': 0}
 
         sc = self.start_stats(self.spec_reference + ".warmup",
-            test_params=test_params,
-            client_id=client_id)
+                              test_params=test_params, client_id=client_id)
 
         start_time = time.time()
 
@@ -421,13 +432,13 @@ class EPerfMaster(perf.PerfBase):
 
         end_time = time.time()
 
-        ops = { 'tot-sets': 0,
-                'tot-gets': 0,
-                'tot-items': 0,
-                'tot-creates': 0,
-                'tot-misses': 0,
-                "start-time": start_time,
-                "end-time": end_time }
+        ops = {'tot-sets': 0,
+               'tot-gets': 0,
+               'tot-items': 0,
+               'tot-creates': 0,
+               'tot-misses': 0,
+               "start-time": start_time,
+               "end-time": end_time}
 
         self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
@@ -444,8 +455,8 @@ class EPerfMaster(perf.PerfBase):
                                'json': 0}
 
                 sc = self.start_stats(self.spec_reference + ".index",
-                    test_params=test_params,
-                    client_id=client_id)
+                                      test_params=test_params,
+                                      client_id=client_id)
 
                 start_time = time.time()
 
@@ -467,22 +478,25 @@ class EPerfMaster(perf.PerfBase):
             # Initialize indexing
             for ddoc_name, d in ddocs.items():
                 for view_name, x in d["views"].items():
-                    self.rest.query_view(ddoc_name, view_name, bucket, { "limit": 10 })
+                    self.rest.query_view(ddoc_name, view_name, bucket,
+                                         {"limit": 10})
 
             # Wait until there are no active indexing tasks
             if self.parami('wait_for_indexer', 1):
-                ClusterOperationHelper.wait_for_completion(self.rest, 'indexer')
+                ClusterOperationHelper.wait_for_completion(self.rest,
+                                                           'indexer')
 
             # Wait until there are no active view compaction tasks
             if self.parami('wait_for_compaction', 1):
-                ClusterOperationHelper.wait_for_completion(self.rest, 'view_compaction')
+                ClusterOperationHelper.wait_for_completion(self.rest,
+                                                           'view_compaction')
 
             # Stop stats collector
             if self.parami("collect_stats", 1):
                 end_time = time.time()
 
-                ops = { 'start-time': start_time,
-                        'end-time': end_time }
+                ops = {'start-time': start_time,
+                       'end-time': end_time}
 
                 self.end_stats(sc, ops, self.spec_reference + ".index")
 
@@ -507,8 +521,11 @@ class EPerfMaster(perf.PerfBase):
     def latched_rebalance(self, cur):
         if not self.latched_rebalance_done:
             self.latched_rebalance_done = True
-            self.delayed_rebalance(self.parami("num_nodes_after", PerfDefaults.num_nodes_after), 0.01,
-                                   self.parami("reb_max_retries", PerfDefaults.reb_max_retries))
+            self.delayed_rebalance(self.parami("num_nodes_after",
+                                               PerfDefaults.num_nodes_after),
+                                   0.01,
+                                   self.parami("reb_max_retries",
+                                               PerfDefaults.reb_max_retries))
 
     # ---------------------------------------------
 
@@ -522,15 +539,24 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         if self.parami("access_phase", 1) == 1:
             self.access_phase(items,
-                              ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                              ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                              ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                              ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                              ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                              max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+                              ratio_sets=self.paramf('ratio_sets',
+                                                     PerfDefaults.ratio_sets),
+                              ratio_misses=self.paramf('ratio_misses',
+                                                       PerfDefaults.ratio_misses),
+                              ratio_creates=self.paramf('ratio_creates',
+                                                        PerfDefaults.ratio_creates),
+                              ratio_deletes=self.paramf('ratio_deletes',
+                                                        PerfDefaults.ratio_deletes),
+                              ratio_hot=self.paramf('ratio_hot',
+                                                    PerfDefaults.ratio_hot),
+                              ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                         PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                         PerfDefaults.ratio_hot_sets),
+                              ratio_expirations=self.paramf('ratio_expirations',
+                                                            PerfDefaults.ratio_expirations),
+                              max_creates=self.parami("max_creates",
+                                                      PerfDefaults.max_creates))
 
     def test_eperf_write(self):
         """
@@ -542,15 +568,24 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         if self.parami("access_phase", 1) == 1:
             self.access_phase(items,
-                              ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                              ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                              ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                              ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                              ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                              max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+                              ratio_sets=self.paramf('ratio_sets',
+                                                     PerfDefaults.ratio_sets),
+                              ratio_misses=self.paramf('ratio_misses',
+                                                       PerfDefaults.ratio_misses),
+                              ratio_creates=self.paramf('ratio_creates',
+                                                        PerfDefaults.ratio_creates),
+                              ratio_deletes=self.paramf('ratio_deletes',
+                                                        PerfDefaults.ratio_deletes),
+                              ratio_hot=self.paramf('ratio_hot',
+                                                    PerfDefaults.ratio_hot),
+                              ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                         PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                         PerfDefaults.ratio_hot_sets),
+                              ratio_expirations=self.paramf('ratio_expirations',
+                                                            PerfDefaults.ratio_expirations),
+                              max_creates=self.parami("max_creates",
+                                                      PerfDefaults.max_creates))
 
     def test_eperf_mixed(self, save_snapshot=False):
         """
@@ -560,7 +595,8 @@ class EPerfMaster(perf.PerfBase):
         items = self.parami("items", PerfDefaults.items)
 
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes),
+                        items)
 
         if self.parami("index_phase", 0) and self.param("woq_pattern", 0):
             view_gen = ViewGen()
@@ -572,20 +608,32 @@ class EPerfMaster(perf.PerfBase):
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 # starts cbstats collection
                 cbStatsCollector = CBStatsCollector()
+                cb_exc = self.param("cb_stats_exc", PerfDefaults.cb_stats_exc)
+                frequency = self.parami("cb_stats_freq",
+                                        PerfDefaults.cb_stats_freq)
                 cbStatsCollector.collect_cb_stats(servers=self.input.servers,
-                    cb_exc=self.param("cb_stats_exc", PerfDefaults.cb_stats_exc),
-                    frequency=self.parami("cb_stats_freq", PerfDefaults.cb_stats_freq))
+                                                  cb_exc=cb_exc,
+                                                  frequency=frequency)
 
             self.access_phase(items,
-                              ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                              ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                              ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                              ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                              ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                              max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+                              ratio_sets=self.paramf('ratio_sets',
+                                                     PerfDefaults.ratio_sets),
+                              ratio_misses=self.paramf('ratio_misses',
+                                                       PerfDefaults.ratio_misses),
+                              ratio_creates=self.paramf('ratio_creates',
+                                                        PerfDefaults.ratio_creates),
+                              ratio_deletes=self.paramf('ratio_deletes',
+                                                        PerfDefaults.ratio_deletes),
+                              ratio_hot=self.paramf('ratio_hot',
+                                                    PerfDefaults.ratio_hot),
+                              ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                         PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                         PerfDefaults.ratio_hot_sets),
+                              ratio_expirations=self.paramf('ratio_expirations',
+                                                            PerfDefaults.ratio_expirations),
+                              max_creates=self.parami("max_creates",
+                                                      PerfDefaults.max_creates))
 
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 cbStatsCollector.stop()
@@ -609,7 +657,7 @@ class EPerfMaster(perf.PerfBase):
         bucket = self.param("bucket", PerfDefaults.bucket)
 
         if self.load_snapshots(file_base, bucket) \
-            and self.parami("warmup", PerfDefaults.warmup):
+                and self.parami("warmup", PerfDefaults.warmup):
             self.gated_start(self.input.clients)
             print "[test_eperf_warmup] loaded snapshot, start warmup phase"
             self.warmup_phase()
@@ -625,31 +673,44 @@ class EPerfMaster(perf.PerfBase):
         self.spec("test_eperf_rebalance")
         items = self.parami("items", PerfDefaults.items)
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes),
+                        items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
-        rebalance_after = self.parami("rebalance_after", PerfDefaults.rebalance_after)
+        rebalance_after = self.parami("rebalance_after",
+                                      PerfDefaults.rebalance_after)
         self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                 getattr(self, "latched_rebalance"))]
 
         if self.parami("access_phase", 1) == 1:
-
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 # starts cbstats collection
                 cbStatsCollector = CBStatsCollector()
+                cb_exc = self.param("cb_stats_exc", PerfDefaults.cb_stats_exc)
+                frequency = self.parami("cb_stats_freq",
+                                        PerfDefaults.cb_stats_freq)
                 cbStatsCollector.collect_cb_stats(servers=self.input.servers,
-                    cb_exc=self.param("cb_stats_exc", PerfDefaults.cb_stats_exc),
-                    frequency=self.parami("cb_stats_freq", PerfDefaults.cb_stats_freq))
+                                                  cb_exc=cb_exc,
+                                                  frequency=frequency)
 
             self.access_phase(items,
-                              ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                              ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                              ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                              ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                              ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                              max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+                              ratio_sets=self.paramf('ratio_sets',
+                                                     PerfDefaults.ratio_sets),
+                              ratio_misses=self.paramf('ratio_misses',
+                                                       PerfDefaults.ratio_misses),
+                              ratio_creates=self.paramf('ratio_creates',
+                                                        PerfDefaults.ratio_creates),
+                              ratio_deletes=self.paramf('ratio_deletes',
+                                                        PerfDefaults.ratio_deletes),
+                              ratio_hot=self.paramf('ratio_hot',
+                                                    PerfDefaults.ratio_hot),
+                              ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                         PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                         PerfDefaults.ratio_hot_sets),
+                              ratio_expirations=self.paramf('ratio_expirations',
+                                                            PerfDefaults.ratio_expirations),
+                              max_creates=self.parami("max_creates",
+                                                      PerfDefaults.max_creates))
 
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 cbStatsCollector.stop()
@@ -664,15 +725,24 @@ class EPerfMaster(perf.PerfBase):
 
         if self.parami("access_phase", 1) == 1:
             self.access_phase(items,
-                ratio_sets     = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                ratio_misses   = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                ratio_creates  = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                ratio_deletes  = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                ratio_hot      = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                max_creates    = self.parami("max_creates", PerfDefaults.max_creates))
+                              ratio_sets=self.paramf('ratio_sets',
+                                                     PerfDefaults.ratio_sets),
+                              ratio_misses=self.paramf('ratio_misses',
+                                                       PerfDefaults.ratio_misses),
+                              ratio_creates=self.paramf('ratio_creates',
+                                                        PerfDefaults.ratio_creates),
+                              ratio_deletes=self.paramf('ratio_deletes',
+                                                        PerfDefaults.ratio_deletes),
+                              ratio_hot=self.paramf('ratio_hot',
+                                                    PerfDefaults.ratio_hot),
+                              ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                         PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                         PerfDefaults.ratio_hot_sets),
+                              ratio_expirations=self.paramf('ratio_expirations',
+                                                            PerfDefaults.ratio_expirations),
+                              max_creates=self.parami("max_creates",
+                                                      PerfDefaults.max_creates))
 
         if self.parami("loop_wait_until_drained", 0) == 1:
             self.wait_until_drained()
@@ -686,51 +756,54 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 90:3:6:1.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.1),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.30),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.1428),
-                          ratio_hot      = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.005),
-                          max_creates    = self.parami("max_creates", 2000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.1),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.30),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.1428),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.005),
+                          max_creates=self.parami("max_creates", 2000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_all_in_memory(self):
         self.spec("EPT-ALL-IN-MEMORY-1")
-        items = self.parami("items",1000000)
+        items = self.parami("items", 1000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.5),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot      = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates    = self.parami("max_creates", 1000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.025),
+                          max_creates=self.parami("max_creates", 1000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_all_in_memory_scaled_down_read(self):
         self.spec("EPT-ALL-IN-MEMORY-SCALED-DOWN-READ.1")
-        items = self.parami("items",200000)
+        items = self.parami("items", 200000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 2), items)
         # Read:Insert:Update:Delete Ratio = 90:3:6:1.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.1),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.30),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.01428),
-                          ratio_hot      = self.paramf('ratio_hot', 0.05),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.005),
-                          max_creates    = self.parami("max_creates", 200000))
+                          ratio_sets=self.paramf('ratio_sets', 0.1),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.30),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.01428),
+                          ratio_hot=self.paramf('ratio_hot', 0.05),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.005),
+                          max_creates=self.parami("max_creates", 200000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_write_1(self):
@@ -740,87 +813,107 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.8),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot      = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates    = self.parami("max_creates", 3000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.8),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.025),
+                          max_creates=self.parami("max_creates", 3000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_scaled_down_write_1(self):
         self.spec("EPT-SCALED-DOWN-WRITE.1")
-        items = self.parami("items",3000000)
+        items = self.parami("items", 3000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 2), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.8),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot      = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates    = self.parami("max_creates", 300000))
+                          ratio_sets=self.paramf('ratio_sets', 0.8),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.025),
+                          max_creates=self.parami("max_creates", 300000))
         self.gated_finish(self.input.clients, notify)
 
-    def test_ept_scaled_down_write_2(self, ratio_hot=0.05, ratio_hot_get_set=0.95,
+    def test_ept_scaled_down_write_2(self, ratio_hot=0.05,
+                                     ratio_hot_get_set=0.95,
                                      max_creates=300000):
         self.spec("EPT-SCALED-DOWN-WRITE.2-" +
                   str(ratio_hot) + "-" +
                   str(ratio_hot_get_set) + "-" +
                   str(max_creates))
-        items = self.parami("items",3000000)
+        items = self.parami("items", 3000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 2), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.8),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot      = self.paramf('ratio_hot', ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_get_set),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_get_set),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates    = self.parami("max_creates", max_creates))
+                          ratio_sets=self.paramf('ratio_sets', 0.8),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot=self.paramf('ratio_hot', ratio_hot),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                     ratio_hot_get_set),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                     ratio_hot_get_set),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.025),
+                          max_creates=self.parami("max_creates", max_creates))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_scaled_down_write_2_5_98(self):
-        self.test_ept_scaled_down_write_2(ratio_hot=0.05, ratio_hot_get_set=0.98)
+        self.test_ept_scaled_down_write_2(ratio_hot=0.05,
+                                          ratio_hot_get_set=0.98)
+
     def test_ept_scaled_down_write_2_5_99(self):
-        self.test_ept_scaled_down_write_2(ratio_hot=0.05, ratio_hot_get_set=0.99)
+        self.test_ept_scaled_down_write_2(ratio_hot=0.05,
+                                          ratio_hot_get_set=0.99)
+
     def test_ept_scaled_down_write_2_5_995(self):
-        self.test_ept_scaled_down_write_2(ratio_hot=0.05, ratio_hot_get_set=0.995)
+        self.test_ept_scaled_down_write_2(ratio_hot=0.05,
+                                          ratio_hot_get_set=0.995)
 
     def test_ept_scaled_down_write_2_20_98(self):
-        self.test_ept_scaled_down_write_2(ratio_hot=0.20, ratio_hot_get_set=0.98)
+        self.test_ept_scaled_down_write_2(ratio_hot=0.20,
+                                          ratio_hot_get_set=0.98)
+
     def test_ept_scaled_down_write_2_20_99(self):
-        self.test_ept_scaled_down_write_2(ratio_hot=0.20, ratio_hot_get_set=0.99)
+        self.test_ept_scaled_down_write_2(ratio_hot=0.20,
+                                          ratio_hot_get_set=0.99)
+
     def test_ept_scaled_down_write_2_20_995(self):
-        self.test_ept_scaled_down_write_2(ratio_hot=0.20, ratio_hot_get_set=0.995)
+        self.test_ept_scaled_down_write_2(ratio_hot=0.20,
+                                          ratio_hot_get_set=0.995)
 
     def test_ept_scaled_down_mixed(self, ratio_hot=0.2, ratio_hot_get_set=0.95):
-        self.spec("EPT-SCALED-DOWN-MIXED-" + str(ratio_hot) + "-" + str(ratio_hot_get_set))
+        self.spec("EPT-SCALED-DOWN-MIXED-" + str(ratio_hot) + "-" +
+                  str(ratio_hot_get_set))
         items = self.parami("items", 3000000)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 2), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot = self.paramf('ratio_hot', ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_get_set),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_get_set),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 300000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', ratio_hot),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                     ratio_hot_get_set),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                     ratio_hot_get_set),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 300000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_scaled_down_mixed_2(self):
@@ -828,15 +921,19 @@ class EPerfMaster(perf.PerfBase):
 
     def test_ept_scaled_down_mixed_2_5_98(self):
         self.test_ept_scaled_down_mixed(ratio_hot=0.05, ratio_hot_get_set=0.98)
+
     def test_ept_scaled_down_mixed_2_5_99(self):
         self.test_ept_scaled_down_mixed(ratio_hot=0.05, ratio_hot_get_set=0.99)
+
     def test_ept_scaled_down_mixed_2_5_995(self):
         self.test_ept_scaled_down_mixed(ratio_hot=0.05, ratio_hot_get_set=0.995)
 
     def test_ept_scaled_down_mixed_2_20_98(self):
         self.test_ept_scaled_down_mixed(ratio_hot=0.20, ratio_hot_get_set=0.98)
+
     def test_ept_scaled_down_mixed_2_20_99(self):
         self.test_ept_scaled_down_mixed(ratio_hot=0.20, ratio_hot_get_set=0.99)
+
     def test_ept_scaled_down_mixed_2_20_995(self):
         self.test_ept_scaled_down_mixed(ratio_hot=0.20, ratio_hot_get_set=0.995)
 
@@ -847,48 +944,55 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", 2), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.8),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot      = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates    = self.parami("max_creates", 300000))
+                          ratio_sets=self.paramf('ratio_sets', 0.8),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.025),
+                          max_creates=self.parami("max_creates", 300000))
         self.gated_finish(self.input.clients, notify)
 
-    def test_ept_mixed_1(self, items=7000000, ratio_hot=0.2, ratio_hot_gets_sets=0.95,
-                         max_creates=5000000):
-        self.spec("EPT-MIXED.1-" + str(ratio_hot) + "-" + str(ratio_hot_gets_sets) + "-" +
-                  str(max_creates))
+    def test_ept_mixed_1(self, items=7000000, ratio_hot=0.2,
+                         ratio_hot_gets_sets=0.95, max_creates=5000000):
+        self.spec("EPT-MIXED.1-" + str(ratio_hot) + "-" +
+                  str(ratio_hot_gets_sets) + "-" + str(max_creates))
         items = self.parami("items", items)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.5),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot      = self.paramf('ratio_hot', ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_gets_sets),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_gets_sets),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates    = self.parami("max_creates", max_creates))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', ratio_hot),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                     ratio_hot_gets_sets),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                     ratio_hot_gets_sets),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", max_creates))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_mixed_1_5_995(self):
         self.test_ept_mixed_1(ratio_hot=0.05, ratio_hot_gets_sets=0.995)
 
     def test_ept_mixed_1_15M_5_995(self):
-        self.test_ept_mixed_1(items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+        self.test_ept_mixed_1(items=15000000, ratio_hot=0.05,
+                              ratio_hot_gets_sets=0.995)
 
     def test_ept_mixed_1_22M_5_995(self):
-        self.test_ept_mixed_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+        self.test_ept_mixed_1(items=22000000, ratio_hot=0.05,
+                              ratio_hot_gets_sets=0.995)
 
     def test_ept_mixed_1_22M_5_995_15M(self):
-        self.test_ept_mixed_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995,
+        self.test_ept_mixed_1(items=22000000, ratio_hot=0.05,
+                              ratio_hot_gets_sets=0.995,
                               max_creates=15000000)
 
     def test_ept_rebalance_low_1(self):
@@ -902,15 +1006,16 @@ class EPerfMaster(perf.PerfBase):
                                  getattr(self, "latched_rebalance"))]
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.5),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot      = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates    = self.parami("max_creates", 5000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 5000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_rebalance_scaled_down_1(self):
@@ -924,15 +1029,16 @@ class EPerfMaster(perf.PerfBase):
                                  getattr(self, "latched_rebalance"))]
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.5),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot      = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates    = self.parami("max_creates", 50000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 50000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_rebalance_med_1(self):
@@ -946,35 +1052,40 @@ class EPerfMaster(perf.PerfBase):
                                  getattr(self, "latched_rebalance"))]
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.5),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot      = self.paramf('ratio_hot', 0.6),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.parami('ratio_expirations', 0.03),
-                          max_creates    = self.parami("max_creates", 5000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.6),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.parami('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 5000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_mixed_nocompact(self):
         self.spec("EPT-MIXED-NOCOMPACT")
         items = self.parami("items", 7000000)
         if self.is_master:
-            self.rest.set_auto_compaction("false", dbFragmentThresholdPercentage=100, viewFragmntThresholdPercentage=100) # 100% fragmentation thresholds.
+            # 100% fragmentation thresholds
+            self.rest.set_auto_compaction("false",
+                                          dbFragmentThresholdPercentage=100,
+                                          viewFragmntThresholdPercentage=100)
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets     = self.paramf('ratio_sets', 0.5),
-                          ratio_misses   = self.paramf('ratio_misses', 0.05),
-                          ratio_creates  = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes  = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot      = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates    = self.parami("max_creates", 5000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 5000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_read_original(self):
@@ -984,15 +1095,16 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 90:3:6:1.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.1),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.30),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.1428),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.005),
-                          max_creates = self.parami("max_creates", 10800000))
+                          ratio_sets=self.paramf('ratio_sets', 0.1),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.30),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.1428),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.005),
+                          max_creates=self.parami("max_creates", 10800000))
         self.gated_finish(self.input.clients, notify)
 
     # This is a small version of test_ept_read_original with fewer creates.
@@ -1008,25 +1120,31 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 90:3:6:1.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.1),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.30),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.1428),
-                          ratio_hot = self.paramf('ratio_hot', ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_gets_sets),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_gets_sets),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.005),
-                          max_creates = self.parami("max_creates", max_creates))
+                          ratio_sets=self.paramf('ratio_sets', 0.1),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.30),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.1428),
+                          ratio_hot=self.paramf('ratio_hot', ratio_hot),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                     ratio_hot_gets_sets),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                     ratio_hot_gets_sets),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.005),
+                          max_creates=self.parami("max_creates", max_creates))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_read_original_1_15M_5_995(self):
-        self.test_ept_read_original_1(items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+        self.test_ept_read_original_1(items=15000000, ratio_hot=0.05,
+                                      ratio_hot_gets_sets=0.995)
 
     def test_ept_read_original_1_22M_5_995(self):
-        self.test_ept_read_original_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+        self.test_ept_read_original_1(items=22000000, ratio_hot=0.05,
+                                      ratio_hot_gets_sets=0.995)
 
     def test_ept_read_original_1_22M_5_995_15M(self):
-        self.test_ept_read_original_1(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995,
+        self.test_ept_read_original_1(items=22000000, ratio_hot=0.05,
+                                      ratio_hot_gets_sets=0.995,
                                       max_creates=15000000)
 
     def test_ept_write_original(self):
@@ -1036,15 +1154,16 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.8),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates = self.parami("max_creates", 20000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.8),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.025),
+                          max_creates=self.parami("max_creates", 20000000))
         self.gated_finish(self.input.clients, notify)
 
     # This is a small version of test_ept_mixed_original with fewer creates.
@@ -1055,15 +1174,16 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.8),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates = self.parami("max_creates", 10000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.8),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.025),
+                          max_creates=self.parami("max_creates", 10000000))
         self.gated_finish(self.input.clients, notify)
 
     # hot itmes are 1/4 of the original_1
@@ -1079,25 +1199,31 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 20:15:60:5.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.8),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.1875),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.0769),
-                          ratio_hot = self.paramf('ratio_hot', ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', ratio_hot_gets_sets),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', ratio_hot_gets_sets),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.025),
-                          max_creates = self.parami("max_creates", max_creates))
+                          ratio_sets=self.paramf('ratio_sets', 0.8),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.1875),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.0769),
+                          ratio_hot=self.paramf('ratio_hot', ratio_hot),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                     ratio_hot_gets_sets),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                     ratio_hot_gets_sets),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.025),
+                          max_creates=self.parami("max_creates", max_creates))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_write_original_2_15M_5_995(self):
-        self.test_ept_write_original_2(items=15000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+        self.test_ept_write_original_2(items=15000000, ratio_hot=0.05,
+                                       ratio_hot_gets_sets=0.995)
 
     def test_ept_write_original_2_22M_5_995(self):
-        self.test_ept_write_original_2(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995)
+        self.test_ept_write_original_2(items=22000000, ratio_hot=0.05,
+                                       ratio_hot_gets_sets=0.995)
 
     def test_ept_write_original_2_22M_5_995_30M(self):
-        self.test_ept_write_original_2(items=22000000, ratio_hot=0.05, ratio_hot_gets_sets=0.995,
+        self.test_ept_write_original_2(items=22000000, ratio_hot=0.05,
+                                       ratio_hot_gets_sets=0.995,
                                        max_creates=30000000)
 
     def test_query_all_docs_mixed_original(self):
@@ -1109,7 +1235,8 @@ class EPerfMaster(perf.PerfBase):
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
 
-        # self.index_phase(...) # Skip indexing because we use _all_docs, not a secondary index.
+        # self.index_phase(...) # Skip indexing because we use _all_docs, not
+        # a secondary index.
 
         view = self.param("view", "/default/_all_docs")
         limit = self.parami("limit", 10)
@@ -1121,28 +1248,31 @@ class EPerfMaster(perf.PerfBase):
         # Insert  10% - N/A
         # Update  15% - 95% of mutates should mutate a hot key
         # Delete  5%  - 95% of the deletes should delete a hot key
-        # Queries 20% - A mix of queries on the _all_docs index. Queries may or may not hit hot keys.
+        # Queries 20% - A mix of queries on the _all_docs index. Queries may
+        # or may not hit hot keys.
 
         self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
         self.fg_max_ops = self.parami("fg_max_ops", 1000000)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami("prefix", 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.2857),
-                          queries = queries,
-                          proto_prefix = "couchbase",
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.3),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.33),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000),
+                          ratio_queries=self.paramf('ratio_queries', 0.2857),
+                          queries=queries,
+                          proto_prefix="couchbase",
+                          host=host)
         self.gated_finish(self.input.clients, notify)
 
     def test_evperf_workload2(self):
@@ -1151,7 +1281,7 @@ class EPerfMaster(perf.PerfBase):
         notify = self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", 10), items)
         ddocs = {}
-        ddocs["A"] = { "views": {} }
+        ddocs["A"] = {"views": {}}
         ddocs["A"]["views"]["city"] = {}
         ddocs["A"]["views"]["city"]["map"] = """
 function(doc) {
@@ -1168,7 +1298,7 @@ function(doc) {
   }
 }
 """
-        ddocs["B"] = { "views": {} }
+        ddocs["B"] = {"views": {}}
         ddocs["B"]["views"]["realm"] = {}
         ddocs["B"]["views"]["realm"]["map"] = """
 function(doc) {
@@ -1185,7 +1315,7 @@ function(doc) {
   }
 }
 """
-        ddocs["C"] = { "views": {} }
+        ddocs["C"] = {"views": {}}
         ddocs["C"]["views"]["experts"] = {}
         ddocs["C"]["views"]["experts"]["map"] = """
 function(doc) {
@@ -1217,37 +1347,32 @@ function(doc) {
         b = '/default/'
 
         q = {}
-        q['all_docs']    = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
-        q['city']        = b + '_design/A/_view/city?limit=' + str(limit) + '&startkey="{city}"'
-        q['city2']       = b + '_design/A/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
-        q['realm']       = b + '_design/B/_view/realm?limit=30&startkey="{realm}"'
-        q['experts']     = b + '_design/B/_view/experts?limit=30&startkey="{name}"'
-        q['coins-beg']   = b + '_design/C/_view/experts?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
-        q['coins-exp']   = b + '_design/C/_view/experts?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
-        q['and0']        = b + '_design/C/_view/realm?limit=30&startkey=["{realm}",{coins}]'
-        q['and1']        = b + '_design/C/_view/realm?limit=30&startkey=["{realm}",{coins}]'
-        q['and2']        = b + '_design/C/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
+        q['all_docs'] = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
+        q['city'] = b + '_design/A/_view/city?limit=' + str(limit) + '&startkey="{city}"'
+        q['city2'] = b + '_design/A/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
+        q['realm'] = b + '_design/B/_view/realm?limit=30&startkey="{realm}"'
+        q['experts'] = b + '_design/B/_view/experts?limit=30&startkey="{name}"'
+        q['coins-beg'] = b + '_design/C/_view/experts?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
+        q['coins-exp'] = b + '_design/C/_view/experts?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
+        q['and0'] = b + '_design/C/_view/realm?limit=30&startkey=["{realm}",{coins}]'
+        q['and1'] = b + '_design/C/_view/realm?limit=30&startkey=["{realm}",{coins}]'
+        q['and2'] = b + '_design/C/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
 
         queries_by_kind = [
-            [ # 5
-                q['all_docs']
-                ],
-            [ # 45% / 5 = 9
+            [  # 5
+                q['all_docs']],
+            [  # 45% / 5 = 9
                 q['city'],
                 q['city2'],
                 q['realm'],
-                q['experts']
-                ],
-            [ # 30% / 5 = 6
+                q['experts']],
+            [  # 30% / 5 = 6
                 q['coins-beg'],
-                q['coins-exp']
-                ],
-            [ # 25% / 5 = 5
+                q['coins-exp']],
+            [  # 25% / 5 = 5
                 q['and0'],
                 q['and1'],
-                q['and2'],
-                ]
-            ]
+                q['and2']]]
 
         remaining = [5, 9, 6, 5]
 
@@ -1259,22 +1384,24 @@ function(doc) {
         self.fg_max_ops = self.parami("fg_max_ops", 1000000)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami("prefix", 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.3571),
-                          queries = queries,
-                          proto_prefix = "couchbase",
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.3),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.33),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000),
+                          ratio_queries=self.paramf('ratio_queries', 0.3571),
+                          queries=queries,
+                          proto_prefix="couchbase",
+                          host=host)
         self.gated_finish(self.input.clients, notify)
 
     def test_evperf_workload3(self):
@@ -1304,22 +1431,24 @@ function(doc) {
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami('max_creates', 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.3571),
-                          queries = queries,
-                          proto_prefix = 'couchbase',
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.3),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.33),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami('max_creates', 30000000),
+                          ratio_queries=self.paramf('ratio_queries', 0.3571),
+                          queries=queries,
+                          proto_prefix='couchbase',
+                          host=host)
 
         self.gated_finish(self.input.clients, notify)
 
@@ -1351,21 +1480,31 @@ function(doc) {
         queries = view_gen.join_queries(queries)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami("prefix", 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                          ratio_misses = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                          ratio_creates = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                          ratio_deletes = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                          ratio_hot = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                          ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                          max_creates = self.parami("max_creates", PerfDefaults.max_creates),
-                          queries = queries,
-                          proto_prefix = "couchbase",
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets',
+                                                 PerfDefaults.ratio_sets),
+                          ratio_misses=self.paramf('ratio_misses',
+                                                   PerfDefaults.ratio_misses),
+                          ratio_creates=self.paramf('ratio_creates',
+                                                    PerfDefaults.ratio_creates),
+                          ratio_deletes=self.paramf('ratio_deletes',
+                                                    PerfDefaults.ratio_deletes),
+                          ratio_hot=self.paramf('ratio_hot',
+                                                PerfDefaults.ratio_hot),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                     PerfDefaults.ratio_hot_gets),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                     PerfDefaults.ratio_hot_sets),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        PerfDefaults.ratio_expirations),
+                          max_creates=self.parami("max_creates",
+                                                  PerfDefaults.max_creates),
+                          queries=queries,
+                          proto_prefix="couchbase",
+                          host=host)
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1405,19 +1544,20 @@ function(doc) {
         host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.3571),
-                          queries = queries,
-                          proto_prefix = "couchbase",
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.3),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.33),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000),
+                          ratio_queries=self.paramf('ratio_queries', 0.3571),
+                          queries=queries,
+                          proto_prefix="couchbase",
+                          host=host)
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1449,22 +1589,24 @@ function(doc) {
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.3571),
-                          queries = queries,
-                          proto_prefix = "couchbase",
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.3),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.33),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000),
+                          ratio_queries=self.paramf('ratio_queries', 0.3571),
+                          queries=queries,
+                          proto_prefix="couchbase",
+                          host=host)
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1497,22 +1639,24 @@ function(doc) {
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.3571),
-                          queries = queries,
-                          proto_prefix = "couchbase",
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.3),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.33),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000),
+                          ratio_queries=self.paramf('ratio_queries', 0.3571),
+                          queries=queries,
+                          proto_prefix="couchbase",
+                          host=host)
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1543,22 +1687,24 @@ function(doc) {
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.3571),
-                          queries = queries,
-                          proto_prefix = "couchbase",
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.3),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.33),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000),
+                          ratio_queries=self.paramf('ratio_queries', 0.3571),
+                          queries=queries,
+                          proto_prefix="couchbase",
+                          host=host)
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1591,22 +1737,24 @@ function(doc) {
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.3),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.33),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.25),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000),
-                          ratio_queries = self.paramf('ratio_queries', 0.3571),
-                          queries = queries,
-                          proto_prefix = "couchbase",
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.3),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.33),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000),
+                          ratio_queries=self.paramf('ratio_queries', 0.3571),
+                          queries=queries,
+                          proto_prefix="couchbase",
+                          host=host)
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1639,22 +1787,32 @@ function(doc) {
                                             use_all_docs=False, extend=True)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         if self.parami("access_phase", 0):
             self.access_phase(items,
-                              ratio_sets = self.paramf('ratio_sets', PerfDefaults.ratio_sets),
-                              ratio_misses = self.paramf('ratio_misses', PerfDefaults.ratio_misses),
-                              ratio_creates = self.paramf('ratio_creates', PerfDefaults.ratio_creates),
-                              ratio_deletes = self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
-                              ratio_hot = self.paramf('ratio_hot', PerfDefaults.ratio_hot),
-                              ratio_hot_gets = self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
-                              ratio_hot_sets = self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
-                              ratio_expirations = self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
-                              max_creates = self.parami("max_creates", PerfDefaults.max_creates),
-                              queries = queries,
-                              proto_prefix = "couchbase",
-                              host = host)
+                              ratio_sets=self.paramf('ratio_sets',
+                                                     PerfDefaults.ratio_sets),
+                              ratio_misses=self.paramf('ratio_misses',
+                                                       PerfDefaults.ratio_misses),
+                              ratio_creates=self.paramf('ratio_creates',
+                                                        PerfDefaults.ratio_creates),
+                              ratio_deletes=self.paramf('ratio_deletes',
+                                                        PerfDefaults.ratio_deletes),
+                              ratio_hot=self.paramf('ratio_hot',
+                                                    PerfDefaults.ratio_hot),
+                              ratio_hot_gets=self.paramf('ratio_hot_gets',
+                                                         PerfDefaults.ratio_hot_gets),
+                              ratio_hot_sets=self.paramf('ratio_hot_sets',
+                                                         PerfDefaults.ratio_hot_sets),
+                              ratio_expirations=self.paramf('ratio_expirations',
+                                                            PerfDefaults.ratio_expirations),
+                              max_creates=self.parami("max_creates",
+                                                      PerfDefaults.max_creates),
+                              queries=queries,
+                              proto_prefix="couchbase",
+                              host=host)
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1666,15 +1824,16 @@ function(doc) {
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
     # This is a small version of test_ept_mixed_original with fewer creates.
@@ -1685,15 +1844,16 @@ function(doc) {
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 15000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 15000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_rebalance_low_original(self):
@@ -1707,15 +1867,16 @@ function(doc) {
                                  getattr(self, "latched_rebalance"))]
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_rebalance_med_original(self):
@@ -1729,15 +1890,16 @@ function(doc) {
                                  getattr(self, "latched_rebalance"))]
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot = self.paramf('ratio_hot', 0.6),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.parami('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.6),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.parami('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_ept_mixed_nocompact_original(self):
@@ -1745,19 +1907,23 @@ function(doc) {
         items = self.parami("items", 45000000)
         notify = self.gated_start(self.input.clients)
         if self.is_master:
-            self.rest.set_auto_compaction("false", dbFragmentThresholdPercentage=100, viewFragmntThresholdPercentage=100) # 100% fragmentation thresholds.
+            # 100% fragmentation thresholds.
+            self.rest.set_auto_compaction("false",
+                                          dbFragmentThresholdPercentage=100,
+                                          viewFragmntThresholdPercentage=100)
         self.load_phase(self.parami("num_nodes", 10), items)
         # Read:Insert:Update:Delete Ratio = 50:4:40:6.
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
-                          ratio_misses = self.paramf('ratio_misses', 0.05),
-                          ratio_creates = self.paramf('ratio_creates', 0.08),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.13),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = self.parami("max_creates", 30000000))
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.05),
+                          ratio_creates=self.paramf('ratio_creates', 0.08),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.13),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=self.parami("max_creates", 30000000))
         self.gated_finish(self.input.clients, notify)
 
     def test_stats_collector(self):
@@ -1803,21 +1969,24 @@ function(doc) {
         max_creates = self.parami('max_creates', 100)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        host = self.input.servers[self.parami('prefix', 0) % len(self.input.servers)].ip
+        server_sn = self.parami("prefix", 0) % len(self.input.servers)
+        host = self.input.servers[server_sn].ip
 
         self.access_phase(items,
-                          ratio_sets = self.paramf('ratio_sets', 0.5),
-                          ratio_misses = self.paramf('ratio_misses', 0.2),
-                          ratio_creates = self.paramf('ratio_creates', 0.5),
-                          ratio_deletes = self.paramf('ratio_deletes', 0.5),
-                          ratio_hot = self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations = self.paramf('ratio_expirations', 0.03),
-                          max_creates = max_creates,
-                          host = host)
+                          ratio_sets=self.paramf('ratio_sets', 0.5),
+                          ratio_misses=self.paramf('ratio_misses', 0.2),
+                          ratio_creates=self.paramf('ratio_creates', 0.5),
+                          ratio_deletes=self.paramf('ratio_deletes', 0.5),
+                          ratio_hot=self.paramf('ratio_hot', 0.2),
+                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                          ratio_expirations=self.paramf('ratio_expirations',
+                                                        0.03),
+                          max_creates=max_creates,
+                          host=host)
 
         self.rest.delete_bucket(bucket='default')
+
 
 class EPerfClient(EPerfMaster):
 
@@ -1831,14 +2000,14 @@ class EPerfClient(EPerfMaster):
         self.bg_max_ops_per_sec = 0
         self.fg_max_ops = 0
 
-        pass # Skip super's setUp().  The master should do the real work.
+        pass  # Skip super's setUp().  The master should do the real work.
 
     def tearDown(self):
         if self.sc is not None:
             self.sc.stop()
             self.sc = None
 
-        pass # Skip super's tearDown().  The master should do the real work.
+        pass  # Skip super's tearDown().  The master should do the real work.
 
     def mk_stats(self, verbosity):
         if self.parami("prefix", 0) == 0 and self.level_callbacks:
@@ -1861,8 +2030,8 @@ class EPerfClient(EPerfMaster):
 class EVPerfClient(EPerfClient):
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
-                   stats_collector = None, stores = None, ctl = None,
-                   heartbeat = 0, why = None, bucket="default"):
+                   stats_collector=None, stores=None, ctl=None,
+                   heartbeat=0, why=None, bucket="default"):
         self.bg_thread = None
         self.bg_thread_ctl = None
 
@@ -1871,33 +2040,40 @@ class EVPerfClient(EPerfClient):
         # If non-zero background ops/second, the background thread,
         # with cloned parameters, doesn't do any queries, only basic
         # key-value ops.
-        if why == "loop" and self.parami("bg_max_ops_per_sec", self.bg_max_ops_per_sec):
+        if why == "loop" and \
+                self.parami("bg_max_ops_per_sec", self.bg_max_ops_per_sec):
             self.bg_thread_cfg = copy.deepcopy(cfg)
-            self.bg_thread_cfg['max-ops-per-sec'] = self.parami("bg_max_ops_per_sec",
-                                                                self.bg_max_ops_per_sec)
-            self.bg_thread_cfg['ratio-queries'] = self.paramf("bg_ratio_queries", 0.0)
+            self.bg_thread_cfg['max-ops-per-sec'] = \
+                self.parami("bg_max_ops_per_sec", self.bg_max_ops_per_sec)
+            self.bg_thread_cfg['ratio-queries'] = \
+                self.paramf("bg_ratio_queries", 0.0)
             self.bg_thread_cfg['queries'] = self.param("bg_queries", "")
             self.bg_thread_cur = copy.deepcopy(cur)
-            self.bg_thread_ctl = { 'run_ok': True }
+            self.bg_thread_ctl = {'run_ok': True}
 
             self.bg_stores = [StoreCouchbase()]
 
             self.bg_thread = threading.Thread(target=mcsoda.run,
                                               args=(self.bg_thread_cfg,
                                                     self.bg_thread_cur,
-                                                    protocol, host_port, user, pswd,
-                                                    stats_collector, self.bg_stores, self.bg_thread_ctl,
+                                                    protocol, host_port,
+                                                    user, pswd,
+                                                    stats_collector,
+                                                    self.bg_stores,
+                                                    self.bg_thread_ctl,
                                                     heartbeat, "loop-bg",
                                                     bucket))
             self.bg_thread.daemon = True
             self.bg_thread.start()
 
-            # Also, the main mcsoda run should do no memcached/key-value requests.
+            # Also, the main mcsoda run should do no memcached/key-value
+            # requests.
             cfg['ratio-sets'] = self.paramf("fg_ratio_sets", 0.0)
             cfg['ratio-queries'] = self.paramf("fg_ratio_queries", 1.0)
 
         if why == "loop" and self.parami("fg_max_ops", self.fg_max_ops):
-            cfg['max-ops'] = start_at + (self.parami("fg_max_ops", self.fg_max_ops) / num_clients)
+            cfg['max-ops'] = start_at + \
+                self.parami("fg_max_ops", self.fg_max_ops) / num_clients
             ctl = {'run_ok': True}
             if self.parami("fg_max_ops_per_sec", 0):
                 cfg['max-ops-per-sec'] = self.parami("fg_max_ops_per_sec", 0)
@@ -1912,7 +2088,8 @@ class EVPerfClient(EPerfClient):
         cfg['stats_ops'] = self.parami("mcsoda_fg_stats_ops",
                                        PerfDefaults.mcsoda_fg_stats_ops)
         rv_cur, start_time, end_time = \
-            super(EVPerfClient, self).mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
+            super(EVPerfClient, self).mcsoda_run(cfg, cur, protocol, host_port,
+                                                 user, pswd,
                                                  stats_collector=stats_collector,
                                                  stores=stores,
                                                  ctl=ctl,
@@ -1929,7 +2106,8 @@ class EVPerfClient(EPerfClient):
             description = socket.gethostname() + '-fg'
             self.cbkarma_client.histo(self.test_id, description, rv_cur)
             description = socket.gethostname() + '-bg'
-            self.cbkarma_client.histo(self.test_id, description, self.bg_thread_cur)
+            self.cbkarma_client.histo(self.test_id, description,
+                                      self.bg_thread_cur)
 
         return rv_cur, start_time, end_time
 
@@ -1937,9 +2115,10 @@ class EVPerfClient(EPerfClient):
 def params_to_str(params):
     param_str = ""
     if params is not None:
-        for k,v in params.items():
-            param_str += "&{0}={1}".format(k,v)
+        for k, v in params.items():
+            param_str += "&{0}={1}".format(k, v)
     return param_str
+
 
 def compute_queries(queries_by_kind, remaining, suffix=""):
     i = 0
@@ -1956,12 +2135,14 @@ def compute_queries(queries_by_kind, remaining, suffix=""):
 
     return queries
 
+
 def join_queries(queries):
     queries = ';'.join(queries)
     queries = queries.replace('[', '%5B')
     queries = queries.replace(']', '%5D')
     queries = queries.replace(',', '%2C')
     return queries
+
 
 class ViewGen:
 
@@ -2055,7 +2236,8 @@ class ViewGen:
                     index_of_map = 0
                     view_name = self.VIEW_NAMES[index_of_map]
                 ddocs[ddoc_name]['views'][view_name] = {}
-                ddocs[ddoc_name]['views'][view_name]['map'] = self.MAP_FUNCTIONS[index_of_map]
+                ddocs[ddoc_name]['views'][view_name]['map'] = \
+                    self.MAP_FUNCTIONS[index_of_map]
                 index_of_map += 1
             index_of_ddoc += 1
 
@@ -2100,55 +2282,56 @@ class ViewGen:
 
         # Only all_docs case
         if ddocs is None:
-            queries_by_kind = [[b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"']]
+            queries_by_kind = \
+                [[b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"']]
             remaining = [1]
-            queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
+            queries = self.compute_queries(queries_by_kind, remaining,
+                                           query_suffix)
             return self.join_queries(queries)
 
         # Pseudo all docs case
         if pseudo:
-            queries_by_kind = [[b + '_design/all/_view/docs?limit=' + str(limit) + '&startkey="{key}"']]
+            queries_by_kind = \
+                [[b + '_design/all/_view/docs?limit=' + str(limit) + '&startkey="{key}"']]
             remaining = [1]
-            queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
+            queries = self.compute_queries(queries_by_kind, remaining,
+                                           query_suffix)
             return self.join_queries(queries)
 
         # General case
-        ddoc_names = [name for name, ddoc in sorted(ddocs.iteritems())
-                           for view in ddoc["views"]]
+        ddoc_names = \
+            [name for name, ddoc in sorted(ddocs.iteritems()) for view in ddoc["views"]]
 
         q = {}
-        q['city']        = b + '_design/' + ddoc_names[0] + '/_view/city1?limit=' + str(limit) + '&startkey="{city}"'
-        q['city2']       = b + '_design/' + ddoc_names[1] + '/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
-        q['realm']       = b + '_design/' + ddoc_names[2] + '/_view/realm1?limit=30&startkey="{realm}"'
-        q['experts']     = b + '_design/' + ddoc_names[3] + '/_view/experts1?limit=30&startkey="{name}"'
-        q['coins-beg']   = b + '_design/' + ddoc_names[4] + '/_view/experts2?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
-        q['coins-exp']   = b + '_design/' + ddoc_names[4] + '/_view/experts2?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
-        q['and0']        = b + '_design/' + ddoc_names[5] + '/_view/realm2?limit=30&startkey=["{realm}",{coins}]'
-        q['and1']        = b + '_design/' + ddoc_names[6] + '/_view/realm3?limit=30&startkey=["{realm}",{coins}]'
-        q['and2']        = b + '_design/' + ddoc_names[7] + '/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
+        q['city'] = b + '_design/' + ddoc_names[0] + '/_view/city1?limit=' + str(limit) + '&startkey="{city}"'
+        q['city2'] = b + '_design/' + ddoc_names[1] + '/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
+        q['realm'] = b + '_design/' + ddoc_names[2] + '/_view/realm1?limit=30&startkey="{realm}"'
+        q['experts'] = b + '_design/' + ddoc_names[3] + '/_view/experts1?limit=30&startkey="{name}"'
+        q['coins-beg'] = b + '_design/' + ddoc_names[4] + '/_view/experts2?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
+        q['coins-exp'] = b + '_design/' + ddoc_names[4] + '/_view/experts2?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
+        q['and0'] = b + '_design/' + ddoc_names[5] + '/_view/realm2?limit=30&startkey=["{realm}",{coins}]'
+        q['and1'] = b + '_design/' + ddoc_names[6] + '/_view/realm3?limit=30&startkey=["{realm}",{coins}]'
+        q['and2'] = b + '_design/' + ddoc_names[7] + '/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
 
         queries_by_kind = [
-            [ # 45% / 5 = 9
+            [  # 45% / 5 = 9
                 q['city'],
                 q['city2'],
                 q['realm'],
-                q['experts']
-                ],
-            [ # 30% / 5 = 6
+                q['experts']],
+            [  # 30% / 5 = 6
                 q['coins-beg'],
-                q['coins-exp']
-                ],
-            [ # 25% / 5 = 5
+                q['coins-exp']],
+            [  # 25% / 5 = 5
                 q['and0'],
                 q['and1'],
-                q['and2'],
-                ]
-            ]
+                q['and2']]]
 
         remaining = [9, 6, 5]
 
         if use_all_docs:
-            q['all_docs'] = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
+            q['all_docs'] = b + '_all_docs?limit=' + str(limit) + \
+                '&startkey="{key}"'
             queries_by_kind = [[q['all_docs']]] + queries_by_kind
             remaining = [5] + remaining
 
@@ -2157,7 +2340,8 @@ class ViewGen:
             queries_by_kind = queries_by_kind + [[q['reduce']]]
             remaining = remaining + [5]
 
-        queries = self.compute_queries(queries_by_kind, remaining, query_suffix)
+        queries = self.compute_queries(queries_by_kind, remaining,
+                                       query_suffix)
         if extend:
             queries = self.extend_queries(queries, ddocs)
         queries = self.join_queries(queries)
