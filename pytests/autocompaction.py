@@ -24,13 +24,13 @@ class AutoCompactionTests(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
         self.autocompaction_value = TestInputSingleton.input.param("autocompaction_value", 0)
-        BucketOperationHelper.delete_all_buckets_or_assert(self.servers,self)
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
 
     @staticmethod
     def insert_key(serverInfo, bucket_name, count, size):
         client = MemcachedClientHelper.proxy_client(serverInfo, bucket_name)
         value = MemcachedClientHelper.create_value("*", size)
-        for i in range(count*1000):
+        for i in range(count * 1000):
             key = "key_" + str(i)
             flag = random.randint(1, 999)
             client.set(key, 0, flag, value)
@@ -40,13 +40,13 @@ class AutoCompactionTests(unittest.TestCase):
         bucket_name = "default"
         MAX_RUN = 100
         item_size = 1024
-        update_item_size = item_size*((float(97 - percent_threshold))/100)
+        update_item_size = item_size * ((float(97 - percent_threshold)) / 100)
         serverInfo = self.servers[0]
         self.log.info(serverInfo)
         rest = RestConnection(serverInfo)
         remote_client = RemoteMachineShellConnection(serverInfo)
 
-        output, rq_content = rest.set_auto_compaction("false", dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=100)
+        output, rq_content, header = rest.set_auto_compaction("false", dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=100)
 
         if not output and (percent_threshold <= MIN_COMPACTION_THRESHOLD or percent_threshold >= MAX_COMPACTION_THRESHOLD):
             self.assertFalse(output, "it should be  impossible to set compaction value = {0}%".format(percent_threshold))
@@ -61,9 +61,9 @@ class AutoCompactionTests(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
             info = rest.get_nodes_self()
 
-            available_ram = info.memoryQuota * (node_ram_ratio)/2
-            items = (int(available_ram*1000)/2)/item_size
-            rest.create_bucket(bucket= bucket_name, ramQuotaMB=int(available_ram), authType='sasl',
+            available_ram = info.memoryQuota * (node_ram_ratio) / 2
+            items = (int(available_ram * 1000) / 2) / item_size
+            rest.create_bucket(bucket=bucket_name, ramQuotaMB=int(available_ram), authType='sasl',
                                saslPassword='password', replicaNumber=1, proxyPort=11211)
             BucketOperationHelper.wait_for_memcached(serverInfo, bucket_name)
             BucketOperationHelper.wait_for_vbuckets_ready_state(serverInfo, bucket_name)

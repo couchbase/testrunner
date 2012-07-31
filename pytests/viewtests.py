@@ -26,7 +26,7 @@ class ViewBaseTests(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.created_views = {}
         self.servers = self.input.servers
-        self.replica  = self.input.param("replica", 1)
+        self.replica = self.input.param("replica", 1)
         self.failover_factor = self.input.param("failover-factor", 1)
         self.num_docs = self.input.param("num-docs", 10000)
         self.num_design_docs = self.input.param("num-design-docs", 20)
@@ -46,15 +46,15 @@ class ViewBaseTests(unittest.TestCase):
             mem_quota = 256
         rest.init_cluster(master.rest_username, master.rest_password)
         rest.init_cluster_memoryQuota(master.rest_username, master.rest_password, memoryQuota=mem_quota)
-        if self.num_buckets==1:
+        if self.num_buckets == 1:
             ViewBaseTests._create_default_bucket(self, replica=self.replica)
         else:
             ViewBaseTests._create_multiple_buckets(self, replica=self.replica)
         ViewBaseTests._log_start(self)
         db_compaction = self.input.param("db_compaction", 30)
         view_compaction = self.input.param("view_compaction", 30)
-        rest.set_auto_compaction(dbFragmentThresholdPercentage = db_compaction,
-                                 viewFragmntThresholdPercentage = view_compaction)
+        rest.set_auto_compaction(dbFragmentThresholdPercentage=db_compaction,
+                                 viewFragmntThresholdPercentage=view_compaction)
 
     @staticmethod
     def common_tearDown(self):
@@ -122,7 +122,7 @@ class ViewBaseTests(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
-            if( available_ram < 256):
+            if(available_ram < 256):
                 available_ram = 256
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
             ready = BucketOperationHelper.wait_for_memcached(master, name)
@@ -133,7 +133,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _create_multiple_buckets(self, replica=1):
         master = self.servers[0]
-        created = BucketOperationHelper.create_multiple_buckets(master, replica, howmany=self.num_buckets,saslPassword="")
+        created = BucketOperationHelper.create_multiple_buckets(master, replica, howmany=self.num_buckets, saslPassword="")
         self.assertTrue(created, "unable to create multiple buckets")
 
         rest = RestConnection(master)
@@ -202,7 +202,7 @@ class ViewBaseTests(unittest.TestCase):
             self.log.info(msg.format(len(keys), len(doc_names)))
             self.log.info("trying again in {0} seconds".format(delay))
             time.sleep(delay)
-            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names),extra_params=params)
+            results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
             view_time = results['view_time']
             total_time += view_time
             keys = ViewBaseTests._get_keys(self, results)
@@ -211,7 +211,7 @@ class ViewBaseTests(unittest.TestCase):
 
         # Only if the lengths are not equal, look for missing keys
         if len(keys) != len(doc_names):
-            not_found = list(set(doc_names)-set(keys))
+            not_found = list(set(doc_names) - set(keys))
             ViewBaseTests._print_keys_not_found(self, not_found, 10)
             self.fail("map function did not return docs for {0} keys".format(len(not_found)))
 
@@ -477,7 +477,7 @@ class ViewBaseTests(unittest.TestCase):
                     results = rest.query_view(view, view, bucket, params, invalid_query=invalid_results)
 
                     if u'error' in results and results[u'error'].find('not_found') < 0:
-                        raise Exception("{0}: {1}".format(results[u'error'],results[u'reason']))
+                        raise Exception("{0}: {1}".format(results[u'error'], results[u'reason']))
 
                 if results.get(u'errors', []):
                     self.fail("unable to get view_results for {0} due to error {1}".format(view, results.get(u'errors')))
@@ -576,7 +576,7 @@ class ViewBaseTests(unittest.TestCase):
             results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names))
             keys = ViewBaseTests._get_keys(self, results)
         keys = ViewBaseTests._get_keys(self, results)
-        not_found = list(set(doc_names)-set(keys))
+        not_found = list(set(doc_names) - set(keys))
         if not_found:
             ViewBaseTests._print_keys_not_found(self, not_found, 10)
             self.fail("map function did not return docs for {0} keys".format(len(not_found)))
@@ -592,7 +592,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _test_load_data_get_view_x_mins_multiple_design_docs(self,
          load_data_duration, number_of_items,
-         run_view_duration,num_of_design_docs):
+         run_view_duration, num_of_design_docs):
         ViewBaseTests._setup_cluster(self)
         self.log.info("_setup_cluster returned")
         self._view_test_threads = []
@@ -615,7 +615,7 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _test_load_data_get_view_x_mins_thread_wrapper(self,
-       load_data_duration, number_of_items, run_view_duration,failures):
+       load_data_duration, number_of_items, run_view_duration, failures):
         try:
             ViewBaseTests._test_load_data_get_view_x_mins(self, load_data_duration, number_of_items, run_view_duration)
         except Exception as ex:
@@ -836,7 +836,7 @@ class ViewBaseTests(unittest.TestCase):
         for i in range(start_index, end_index):
             key = "{0}-{1}".format(prefix, i)
             smart.delete(key)
-            delete_count+=1
+            delete_count += 1
         self.log.info("deleted {0} json documents".format(delete_count))
         expected_delete_count = end_index - start_index
         self.assertTrue(delete_count == (end_index - start_index),
@@ -848,7 +848,7 @@ class ViewBaseTests(unittest.TestCase):
         master = self.servers[0]
         rest = RestConnection(master)
         if not howmany:
-            howmany= len(self.servers)
+            howmany = len(self.servers)
         for server in self.servers[1:howmany]:
             self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
             otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
@@ -872,7 +872,7 @@ class ViewBaseTests(unittest.TestCase):
         #        for node in nodes:
         #            allNodes.append(node.id)
         if not howmany:
-            howmany= len(self.servers)
+            howmany = len(self.servers)
         for server in self.servers[1:howmany]:
             self.log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
             for node in nodes:
@@ -988,7 +988,7 @@ class ViewBasicTests(unittest.TestCase):
 
     def test_delete_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs - 1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -998,7 +998,7 @@ class ViewBasicTests(unittest.TestCase):
 
     def test_readd_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_readd_docs = self.input.param('num-readd-docs', self.num_docs-1)
+        num_of_readd_docs = self.input.param('num-readd-docs', self.num_docs - 1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -1009,7 +1009,7 @@ class ViewBasicTests(unittest.TestCase):
 
     def test_update_x_docs(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_update_docs = self.input.param('num-update-docs', self.num_docs-1)
+        num_of_update_docs = self.input.param('num-update-docs', self.num_docs - 1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -1028,7 +1028,7 @@ class ViewBasicTests(unittest.TestCase):
         function = '{"views":[]}'
 
         api = rest.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
-        status, content = rest._http_request(api, 'PUT', function, headers=rest._create_capi_headers())
+        status, content, header = rest._http_request(api, 'PUT', function, headers=rest._create_capi_headers())
         if not status:
             json_parsed = json.loads(content)
             self.assertEquals(u"The field `views' is not a json object." , json_parsed["reason"])
@@ -1050,9 +1050,9 @@ class ViewBasicTests(unittest.TestCase):
         for view in view_names:
             rest.create_view(view, bucket, [View(view, map_fn)])
             self.created_views[view] = bucket
-            response = rest.get_view(bucket, view)
+            response, meta = rest.get_view(bucket, view)
             self.assertTrue(response)
-            self.assertEquals(response["meta"]["id"], "_design/{0}".format(view))
+            self.assertEquals(meta["id"], "_design/{0}".format(view))
             self.log.info(response)
             #            self._verify_views_replicated(bucket, view, map_fn)
 
@@ -1071,10 +1071,10 @@ class ViewBasicTests(unittest.TestCase):
             map_fn = "function (doc) {emit(doc._id, doc);}"
             rest.create_view(view, bucket, [View(view, map_fn)])
             self.created_views[view] = bucket
-            response = rest.get_view(bucket, view)
+            response, meta = rest.get_view(bucket, view)
             self.assertTrue(response)
-            self.assertEquals(response["meta"]["id"], "_design/{0}".format(view))
-            self.assertEquals(response["json"]["views"][view]["map"].encode("ascii", "ignore"), map_fn)
+            self.assertEquals(meta["id"], "_design/{0}".format(view))
+            self.assertEquals(response["views"][view]["map"].encode("ascii", "ignore"), map_fn)
             #now let's update all those views ?
 
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
@@ -1082,10 +1082,10 @@ class ViewBasicTests(unittest.TestCase):
             map_fn = "function (doc) {emit(doc._id, null);}"
             rest.create_view(view, bucket, [View(view, map_fn)])
             self.created_views[view] = bucket
-            response = rest.get_view(bucket, view)
+            response, meta = rest.get_view(bucket, view)
             self.assertTrue(response)
-            self.assertEquals(response["meta"]["id"], "_design/{0}".format(view))
-            self.assertEquals(response["json"]["views"][view]["map"].encode("ascii", "ignore"), map_fn)
+            self.assertEquals(meta["id"], "_design/{0}".format(view))
+            self.assertEquals(response["views"][view]["map"].encode("ascii", "ignore"), map_fn)
             self.log.info(response)
 
     def test_create_view(self):
@@ -1137,7 +1137,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_x_docs_rebalance_in(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs - 1)
         # verify we are fully de-clustered
         ViewBaseTests._begin_rebalance_out(self)
         ViewBaseTests._end_rebalance(self)
@@ -1150,7 +1150,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_x_docs_incremental_rebalance_in(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs - 1)
         ViewBaseTests._create_view_doc_name(self, prefix)
 
         master = self.servers[0]
@@ -1175,7 +1175,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_x_docs_rebalance_out(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs - 1)
         # verify we are fully clustered
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
@@ -1188,7 +1188,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def test_delete_x_docs_incremental_rebalance_out(self):
         prefix = str(uuid.uuid4())[:7]
-        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs-1)
+        num_of_deleted_docs = self.input.param('num-deleted-docs', self.num_docs - 1)
         ViewBaseTests._create_view_doc_name(self, prefix)
 
         ViewBaseTests._begin_rebalance_in(self)
@@ -1241,7 +1241,7 @@ class ViewRebalanceTests(unittest.TestCase):
             rebalanced_in, which_servers = RebalanceHelper.rebalance_in(self.servers, 1, monitor=False)
             # Just doing 2 iterations
             for i in [1, 2]:
-                expected_progress = 20*i
+                expected_progress = 20 * i
                 reached = RestHelper(rest).rebalance_reached(expected_progress)
                 self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
                 stopped = rest.stop_rebalance()
@@ -1252,7 +1252,7 @@ class ViewRebalanceTests(unittest.TestCase):
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node")
 
-            self.assertTrue(len(rest.node_statuses()) -len(nodes)==1, msg="unable to add and rebalance more nodes")
+            self.assertTrue(len(rest.node_statuses()) - len(nodes) == 1, msg="unable to add and rebalance more nodes")
             nodes = rest.node_statuses()
 
         ViewBaseTests._verify_docs_doc_name(self, doc_names, prefix)
@@ -1310,7 +1310,7 @@ class ViewFailoverTests(unittest.TestCase):
                            ejectedNodes=[node.id for node in failover_nodes])
             msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
-    
+
             for key, value in view_names.items():
                 ViewBaseTests._verify_docs_doc_name(self, value, key)
         finally:
@@ -1340,7 +1340,7 @@ class ViewFailoverTests(unittest.TestCase):
             view_names = {}
 
             # Create half of the design docs before failover
-            for i in range(0, self.num_design_docs/2):
+            for i in range(0, self.num_design_docs / 2):
                 prefix = str(uuid.uuid4())[:7]
                 ViewBaseTests._create_view_doc_name(self, prefix)
                 doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix)
@@ -1361,7 +1361,7 @@ class ViewFailoverTests(unittest.TestCase):
             time.sleep(20)
 
             # Create half of the design docs after failover
-            for i in range(self.num_design_docs/2, self.num_design_docs):
+            for i in range(self.num_design_docs / 2, self.num_design_docs):
                 prefix = str(uuid.uuid4())[:7]
                 ViewBaseTests._create_view_doc_name(self, prefix)
                 doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix)
@@ -1420,7 +1420,7 @@ class ViewCreationDeletionTests(unittest.TestCase):
         buckets = rest.get_buckets()
 
         # Cluster total - 1 nodes
-        ViewBaseTests._begin_rebalance_in(self, howmany=len(self.servers)-1)
+        ViewBaseTests._begin_rebalance_in(self, howmany=len(self.servers) - 1)
         ViewBaseTests._end_rebalance(self)
 
         view_names = {}
@@ -1429,7 +1429,7 @@ class ViewCreationDeletionTests(unittest.TestCase):
             for i in range(0, self.num_design_docs):
                 prefix = str(uuid.uuid4())[:7]
                 ViewBaseTests._create_view_doc_name(self, prefix, bucket.name)
-                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name,\
+                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name, \
                     verify=False)
                 view_names[prefix] = doc_names
                 view_bucket[prefix] = bucket.name
@@ -1472,7 +1472,7 @@ class ViewCreationDeletionTests(unittest.TestCase):
             for i in range(0, self.num_design_docs):
                 prefix = str(uuid.uuid4())[:7]
                 ViewBaseTests._create_view_doc_name(self, prefix, bucket.name)
-                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name,\
+                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name, \
                     verify=False)
                 view_names[prefix] = doc_names
                 view_bucket[prefix] = bucket.name
@@ -1491,7 +1491,7 @@ class ViewCreationDeletionTests(unittest.TestCase):
             for i in range(0, self.num_design_docs):
                 prefix = str(uuid.uuid4())[:7]
                 ViewBaseTests._create_view_doc_name(self, prefix, bucket.name)
-                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name,\
+                doc_names = ViewBaseTests._load_docs(self, self.num_docs, prefix, bucket=bucket.name, \
                     verify=False)
                 view_names[prefix] = doc_names
                 view_bucket[prefix] = bucket.name
@@ -1499,7 +1499,7 @@ class ViewCreationDeletionTests(unittest.TestCase):
         # Verify views
         for key, value in view_names.items():
             view_name = "dev_test_view-{0}".format(key)
-            ViewBaseTests._verify_views_from_all(self, master, view_bucket[key], view_name,\
+            ViewBaseTests._verify_views_from_all(self, master, view_bucket[key], view_name, \
                 self.num_docs, value)
 
 class ViewMultipleNodeTests(unittest.TestCase):

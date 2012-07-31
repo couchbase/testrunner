@@ -640,11 +640,12 @@ class ViewCreateTask(Task):
 
         try:
             # appending view to existing design doc
-            content = rest.get_ddoc(self.bucket, self.design_doc_name)
+            content, meta = rest.get_ddoc(self.bucket, self.design_doc_name)
             ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
             #if view is to be updated
             if self.view:
                 ddoc.add_view(self.view)
+            self.ddoc_rev_no = self._parse_revision(meta['rev'])
 
         except ReadDocumentException:
             # creating first view in design doc
@@ -698,7 +699,25 @@ class ViewCreateTask(Task):
             self.set_exception(e)
 
     def _check_ddoc_revision(self):
-        return True
+        valid = False
+        rest = RestConnection(self.server)
+
+        try:
+            content, meta = rest.get_ddoc(self.bucket, self.design_doc_name)
+            new_rev_id = self._parse_revision(meta['rev'])
+            if new_rev_id != self.ddoc_rev_no:
+                self.ddoc_rev_no = new_rev_id
+                valid = True
+        except ReadDocumentException:
+            pass
+
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.info("Unexpected Exception Caught")
+            self.set_exception(e)
+
+        return valid
 
     def _parse_revision(self, rev_string):
         return int(rev_string.split('-')[0])
@@ -721,7 +740,7 @@ class ViewDeleteTask(Task):
         try:
             if self.view:
                 # remove view from existing design doc
-                content = rest.get_ddoc(self.bucket, self.design_doc_name)
+                content, header = rest.get_ddoc(self.bucket, self.design_doc_name)
                 ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
                 status = ddoc.delete_view(self.view)
                 if not status:
@@ -818,7 +837,7 @@ class ViewQueryTask(Task):
             content = \
                 rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
 
-            self.log.info("(%d rows) expected, (%d rows) returned" %\
+            self.log.info("(%d rows) expected, (%d rows) returned" % \
                           (self.expected_rows, len(content['rows'])))
 
             if len(content['rows']) == self.expected_rows:

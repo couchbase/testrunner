@@ -56,12 +56,12 @@ class SpatialViewTests(unittest.TestCase):
             self.helper.create_index_fun(design_name, prefix, fun)
 
             # Verify that the function was really stored
-            response = rest.get_spatial(bucket, design_name)
+            response, meta = rest.get_spatial(bucket, design_name)
             self.assertTrue(response)
-            self.assertEquals(response["meta"]["id"],
+            self.assertEquals(meta["id"],
                               "_design/{0}".format(design_name))
             self.assertEquals(
-                response["json"]["spatial"][design_name].encode("ascii",
+                response["spatial"][design_name].encode("ascii",
                                                                 "ignore"),
                 fun)
 
@@ -105,7 +105,7 @@ class SpatialViewTests(unittest.TestCase):
         # Delete documents and verify that the documents got deleted
         deleted_keys = self.helper.delete_docs(num_deleted_docs, prefix)
         num_expected = num_docs - len(deleted_keys)
-        results = self.helper.get_results(design_name, 2*num_docs,
+        results = self.helper.get_results(design_name, 2 * num_docs,
                                           num_expected=num_expected)
         result_keys = self.helper.get_keys(results)
         self.assertEqual(len(result_keys), num_expected)
@@ -127,7 +127,7 @@ class SpatialViewTests(unittest.TestCase):
         # Update documents and verify that the documents got updated
         updated_keys = self.helper.insert_docs(num_updated_docs, prefix,
                                                dict(updated=True))
-        results = self.helper.get_results(design_name, 2*num_docs)
+        results = self.helper.get_results(design_name, 2 * num_docs)
         result_updated_keys = self._get_updated_docs_keys(results)
         self.assertEqual(len(updated_keys), len(result_updated_keys))
         self.helper.verify_result(updated_keys, result_updated_keys)
@@ -310,8 +310,8 @@ class SpatialViewTests(unittest.TestCase):
 
         # Create an index that emits all documents
         self.helper.create_index_fun(design_name, prefix)
-        keys_b = self.helper.insert_docs(num_docs/3, prefix + "bbb")
-        keys_c = self.helper.insert_docs(num_docs-(num_docs/3), prefix + "ccc")
+        keys_b = self.helper.insert_docs(num_docs / 3, prefix + "bbb")
+        keys_c = self.helper.insert_docs(num_docs - (num_docs / 3), prefix + "ccc")
         self.helper.query_index_for_verification(design_name, keys_b + keys_c)
 
         # Update index to only a subset of the documents

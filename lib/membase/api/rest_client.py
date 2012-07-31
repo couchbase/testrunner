@@ -177,7 +177,7 @@ class RestConnection(object):
         api = self.baseUrl + 'couchBase/_active_tasks'
 
         try:
-            status, content = self._http_request(api, 'GET', headers=self._create_capi_headers())
+            status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
             json_parsed = json.loads(content)
         except ValueError:
             return ""
@@ -188,7 +188,7 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/tasks'
 
         try:
-            status, content = self._http_request(api, 'GET', headers=self._create_headers())
+            status, content, header = self._http_request(api, 'GET', headers=self._create_headers())
             return json.loads(content)
         except ValueError:
             return ""
@@ -201,7 +201,7 @@ class RestConnection(object):
         design_doc = DesignDocument(design_doc_name, views)
         api = '%scouchBase/%s/_design/%s' % (self.baseUrl, bucket_name, design_doc_name)
 
-        status, content = self._http_request(api, 'PUT', str(design_doc),
+        status, content, header = self._http_request(api, 'PUT', str(design_doc),
                                             headers=self._create_capi_headers())
         if not status:
             raise Exception("unable to create ddoc: " + design_doc_name +
@@ -212,14 +212,14 @@ class RestConnection(object):
         design_doc_name = design_doc.id
         api = '%scouchBase/%s/%s' % (self.baseUrl, bucket, design_doc_name)
         if isinstance(bucket, Bucket):
-             api = '%scouchBase/%s/%s' % (self.baseUrl, bucket.name, design_doc_name)
+            api = '%scouchBase/%s/%s' % (self.baseUrl, bucket.name, design_doc_name)
 
-        if isinstance(bucket, Bucket) and bucket.authType=="sasl":
-            status, content = self._http_request(api, 'PUT', str(design_doc),
+        if isinstance(bucket, Bucket) and bucket.authType == "sasl":
+            status, content, header = self._http_request(api, 'PUT', str(design_doc),
                                                 headers=self._create_capi_headers_with_auth(
                                                 username=bucket.name, password=bucket.saslPassword))
         else:
-            status, content = self._http_request(api, 'PUT', str(design_doc),
+            status, content, header = self._http_request(api, 'PUT', str(design_doc),
                                                  headers=self._create_capi_headers())
         if not status:
             raise DesignDocCreationException(design_doc_name, content)
@@ -243,12 +243,12 @@ class RestConnection(object):
                                                                  view_name,
                                                                  urllib.urlencode(query))
         log.info("index query url: {0}".format(api))
-        if isinstance(bucket, Bucket) and bucket.authType=="sasl":
-            status, content = self._http_request(api, headers=self._create_capi_headers_with_auth(
+        if isinstance(bucket, Bucket) and bucket.authType == "sasl":
+            status, content, header = self._http_request(api, headers=self._create_capi_headers_with_auth(
                                                 username=bucket.name, password=bucket.saslPassword),
                                                 timeout=timeout)
         else:
-            status, content = self._http_request(api, headers=self._create_capi_headers(),
+            status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                              timeout=timeout)
         return status, content
 
@@ -296,28 +296,28 @@ class RestConnection(object):
 
 
     def get_ddoc(self, bucket, ddoc_name):
-        status, json = self._get_design_doc(bucket, ddoc_name)
+        status, json, meta = self._get_design_doc(bucket, ddoc_name)
 
         if not status:
             raise ReadDocumentException(ddoc_name, json)
 
-        return json
+        return json, meta
 
     #the same as Preview a Random Document on UI
     def get_random_key(self, bucket):
         api = self.baseUrl + 'pools/default/buckets/%s/localRandomKey' % (bucket)
-        status, content = self._http_request(api, headers=self._create_capi_headers())
+        status, content, header = self._http_request(api, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
 
         if not status:
-            raise Exception("unable to get random document/key for bucket %s" % (bucket) )
+            raise Exception("unable to get random document/key for bucket %s" % (bucket))
         return json_parsed
 
 
     def run_view(self, bucket, view, name):
         api = self.baseUrl + 'couchBase/%s/_design/%s/_view/%s' % (bucket, view, name)
 
-        status, content = self._http_request(api, headers=self._create_capi_headers())
+        status, content, header = self._http_request(api, headers=self._create_capi_headers())
 
         json_parsed = json.loads(content)
 
@@ -356,12 +356,12 @@ class RestConnection(object):
 
 
     def get_spatial(self, bucket, spatial):
-        status, json = self._get_design_doc(bucket, spatial)
+        status, json, meta = self._get_design_doc(bucket, spatial)
 
         if not status:
             raise Exception("unable to get the spatial view definition")
 
-        return json
+        return json, meta
 
 
     def delete_spatial(self, bucket, spatial):
@@ -401,7 +401,7 @@ class RestConnection(object):
                 api += "{0}={1}".format(param, params[param])
 
         log.info("index query url: {0}".format(api))
-        status, content = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
+        status, content, header = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
 
         json_parsed = json.loads(content)
 
@@ -411,7 +411,7 @@ class RestConnection(object):
         api = self.baseUrl + 'couchBase/{0}/_all_docs?{1}'.format(bucket, urllib.urlencode(params))
         log.info("query all_docs url: {0}".format(api))
 
-        status, content = self._http_request(api, headers=self._create_capi_headers(),
+        status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                              timeout=timeout)
 
         if not status:
@@ -424,7 +424,7 @@ class RestConnection(object):
         """ use couchBase uri to retrieve document from a bucket """
 
         api = self.baseUrl + 'couchBase/%s/%s' % (bucket, doc_id)
-        status, content = self._http_request(api, headers=self._create_capi_headers(),
+        status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                              timeout=timeout)
 
         if not status:
@@ -434,7 +434,7 @@ class RestConnection(object):
 
     def _create_design_doc(self, bucket, name, function):
         api = self.baseUrl + 'couchBase/%s/_design/%s' % (bucket, name)
-        status, content = self._http_request(
+        status, content, header = self._http_request(
             api, 'PUT', function, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
         return status, json_parsed
@@ -445,17 +445,20 @@ class RestConnection(object):
         if isinstance(bucket, Bucket):
             api = self.baseUrl + 'couchBase/%s/_design/%s' % (bucket.name, name)
 
-        if isinstance(bucket, Bucket) and bucket.authType=="sasl" and bucket.name!="default":
-            status, content = self._http_request(api, headers=self._create_capi_headers_with_auth(
+        if isinstance(bucket, Bucket) and bucket.authType == "sasl" and bucket.name != "default":
+            status, content, header = self._http_request(api, headers=self._create_capi_headers_with_auth(
                                                 username=bucket.name, password=bucket.saslPassword))
         else:
-            status, content = self._http_request(api, headers=self._create_capi_headers())
+            status, content, header = self._http_request(api, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
-        return status, json_parsed
-
+        meta_parsed = ""
+        if status:
+            meta = header['x-couchbase-meta']
+            meta_parsed = json.loads(meta)
+        return status, json_parsed, meta_parsed
 
     def _delete_design_doc(self, bucket, name):
-        status, design_doc = self._get_design_doc(bucket, name)
+        status, design_doc, meta = self._get_design_doc(bucket, name)
         if not status:
             raise Exception("unable to delete design document")
 
@@ -463,11 +466,11 @@ class RestConnection(object):
         if isinstance(bucket, Bucket):
             api = self.baseUrl + 'couchBase/%s/_design/%s' % (bucket.name, name)
 
-        if isinstance(bucket, Bucket) and bucket.authType=="sasl" and bucket.name!="default":
-            status, content = self._http_request(api, 'DELETE', headers=self._create_capi_headers_with_auth(
+        if isinstance(bucket, Bucket) and bucket.authType == "sasl" and bucket.name != "default":
+            status, content, header = self._http_request(api, 'DELETE', headers=self._create_capi_headers_with_auth(
                                                 username=bucket.name, password=bucket.saslPassword))
         else:
-            status, content = self._http_request(api, 'DELETE', headers=self._create_capi_headers())
+            status, content, header = self._http_request(api, 'DELETE', headers=self._create_capi_headers())
 
         json_parsed = json.loads(content)
 
@@ -480,11 +483,11 @@ class RestConnection(object):
             api = self.baseUrl + \
             'couchBase/%s/_design/%s/_spatial/_compact' % (bucket.name, design_name)
 
-        if isinstance(bucket, Bucket) and bucket.authType=="sasl":
-            status, content = self._http_request(api, 'POST', headers=self._create_capi_headers_with_auth(
+        if isinstance(bucket, Bucket) and bucket.authType == "sasl":
+            status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers_with_auth(
                                                 username=bucket.name, password=bucket.saslPassword))
         else:
-            status, content = self._http_request(api, 'POST', headers=self._create_capi_headers())
+            status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers())
 
         json_parsed = json.loads(content)
 
@@ -494,14 +497,14 @@ class RestConnection(object):
     def set_view_info(self, bucket, design_name):
         api = self.baseUrl + 'couchBase/_set_view/%s/_design/%s/_info' % (bucket, design_name)
         if isinstance(bucket, Bucket):
-             api = self.baseUrl + \
+            api = self.baseUrl + \
             'couchBase/_set_view/%s/_design/%s/_info' % (bucket, design_name)
 
-        if isinstance(bucket, Bucket) and bucket.authType=="sasl":
-            status, content = self._http_request(api, 'POST', headers=self._create_capi_headers_with_auth(
+        if isinstance(bucket, Bucket) and bucket.authType == "sasl":
+            status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers_with_auth(
                                                 username=bucket.name, password=bucket.saslPassword))
         else:
-            status, content = self._http_request(api, 'GET', headers=self._create_capi_headers())
+            status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
 
         if not status:
             raise SetViewInfoNotFound(design_name, content)
@@ -513,7 +516,7 @@ class RestConnection(object):
         api = self.baseUrl + \
             'couchBase/%s/_design/%s/_spatial/_info' % (bucket, design_name)
 
-        status, content = self._http_request(
+        status, content, header = self._http_request(
             api, 'GET', headers=self._create_capi_headers())
 
         json_parsed = json.loads(content)
@@ -548,7 +551,7 @@ class RestConnection(object):
             try:
                 response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers)
                 if response['status'] in ['200', '201', '202']:
-                    return True, content
+                    return True, content, response
                 else:
                     try:
                         json_parsed = json.loads(content)
@@ -559,7 +562,7 @@ class RestConnection(object):
                     if "error" in json_parsed:
                         reason = json_parsed["error"]
                     log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content.rstrip('\n')))
-                    return False, content
+                    return False, content, response
             except socket.error as e:
                 log.error("socket error while connecting to {0}:{1} error {2}: ".format(self.ip, self.port, e))
                 if time.time() > end_time:
@@ -579,7 +582,7 @@ class RestConnection(object):
 
         log.info('settings/web params : {0}'.format(params))
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         return status
 
 
@@ -591,7 +594,7 @@ class RestConnection(object):
 
         log.info('settings/web params : {0}'.format(params))
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         return status
 
 
@@ -605,7 +608,7 @@ class RestConnection(object):
 
         log.info('pools/default params : {0}'.format(params))
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         return status
 
     #password:password username:Administrator hostname:127.0.0.1:9002 name:two
@@ -621,7 +624,7 @@ class RestConnection(object):
                                    'password': password,
                                    'name':name})
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         #sample response :
         # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
         if status:
@@ -641,7 +644,7 @@ class RestConnection(object):
         log.info(msg)
         api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(name)
         params = urllib.urlencode({})
-        status, content = self._http_request(api, 'DELETE', params)
+        status, content, header = self._http_request(api, 'DELETE', params)
         #sample response :
         # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
         if status:
@@ -664,7 +667,7 @@ class RestConnection(object):
                                    'fromBucket': fromBucket,
                                    'toCluster':toCluster})
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         #respone : {"database":"http://127.0.0.1:9500/_replicator",
         # "document":{"type":"xdc","source":"default","targetBucket":"default",
         # "target":"http://Administrator:asdasd@127.0.0.1:9002/pools/default/buckets/default",
@@ -683,7 +686,7 @@ class RestConnection(object):
         controller_resp = self.create_replication(type, bucket, bucket, dest_ref)
         document = controller_resp[u'document']
         database = controller_resp[u'database']
-        (true, json_resp) = self._http_request(database, 'POST', json.dumps(document), self._create_capi_headers())
+        (true, json_resp, header) = self._http_request(database, 'POST', json.dumps(document), self._create_capi_headers())
         resp = json.loads(json_resp)
         if resp["ok"] == true:
             return (database, resp["id"])
@@ -712,7 +715,7 @@ class RestConnection(object):
                                    'user': user,
                                    'password': password})
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
 
         if status:
             json_parsed = json.loads(content)
@@ -746,7 +749,7 @@ class RestConnection(object):
                                    'user': user,
                                    'password': password})
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
 
         if status:
             log.info('ejectNode successful')
@@ -767,7 +770,7 @@ class RestConnection(object):
         api = self.baseUrl + 'controller/failOver'
         params = urllib.urlencode({'otpNode': otpNode})
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
 
         if status:
             log.info('fail_over successful')
@@ -790,7 +793,7 @@ class RestConnection(object):
 
         api = self.baseUrl + "controller/rebalance"
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
 
         if status:
             log.info('rebalance operation started')
@@ -804,7 +807,7 @@ class RestConnection(object):
 
     def diag_eval(self, code):
         api = '{0}{1}'.format(self.baseUrl, 'diag/eval/')
-        status, content = self._http_request(api, "POST", code)
+        status, content, header = self._http_request(api, "POST", code)
         log.info("/diag/eval : status : {0} content : {1}".format(status, content))
         return status, content
 
@@ -854,7 +857,7 @@ class RestConnection(object):
     def _rebalance_progress_status(self):
         api = self.baseUrl + "pools/default/rebalanceProgress"
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
         if status:
@@ -867,7 +870,7 @@ class RestConnection(object):
         avg_percentage = -1
         api = self.baseUrl + "pools/default/rebalanceProgress"
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
         if status:
@@ -904,7 +907,7 @@ class RestConnection(object):
         rebalanced = None
         api = self.baseUrl + 'pools/rebalanceStatuses'
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
 
@@ -917,7 +920,7 @@ class RestConnection(object):
     def log_client_error(self, post):
         api = self.baseUrl + 'logClientError'
 
-        status, content = self._http_request(api, 'POST', post)
+        status, content, header = self._http_request(api, 'POST', post)
 
         if not status:
             log.error('unable to logClientError')
@@ -928,7 +931,7 @@ class RestConnection(object):
         node = None
         api = self.baseUrl + 'nodes/self'
 
-        status, content = self._http_request(api, timeout=timeout)
+        status, content, header = self._http_request(api, timeout=timeout)
 
         if status:
             json_parsed = json.loads(content)
@@ -941,7 +944,7 @@ class RestConnection(object):
         nodes = []
         api = self.baseUrl + 'nodeStatuses'
 
-        status, content = self._http_request(api, timeout=timeout)
+        status, content, header = self._http_request(api, timeout=timeout)
 
         json_parsed = json.loads(content)
 
@@ -965,7 +968,7 @@ class RestConnection(object):
         parsed = {}
         api = self.baseUrl + 'pools/default'
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         if status:
             parsed = json.loads(content)
@@ -976,7 +979,7 @@ class RestConnection(object):
         parsed = {}
         api = self.baseUrl + 'pools'
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
 
@@ -990,7 +993,7 @@ class RestConnection(object):
         version = None
         api = self.baseUrl + 'pools'
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
 
@@ -1005,7 +1008,7 @@ class RestConnection(object):
         buckets = []
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets/')
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
 
@@ -1026,7 +1029,7 @@ class RestConnection(object):
         api = "{0}{1}{2}{3}{4}:{5}{6}".format(self.baseUrl, 'pools/default/buckets/',
                                      bucket, "/nodes/", node.ip, node.port, "/stats")
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
 
@@ -1048,7 +1051,7 @@ class RestConnection(object):
 
         api = self.baseUrl + 'pools/default/buckets/{0}/stats?zoom={1}'.format(bucket, zoom)
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         return json.loads(content)
 
@@ -1057,7 +1060,7 @@ class RestConnection(object):
 
         api = self.baseUrl + 'pools/default/'
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         return json.loads(content)
 
@@ -1065,7 +1068,7 @@ class RestConnection(object):
         nodes = []
         api = self.baseUrl + 'pools/default'
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
 
@@ -1090,7 +1093,7 @@ class RestConnection(object):
         stats = {}
         api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
 
@@ -1108,7 +1111,7 @@ class RestConnection(object):
     def get_bucket_json(self, bucket='default'):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
         if not status:
             raise GetBucketInfoFailed(bucket, content)
 
@@ -1121,12 +1124,12 @@ class RestConnection(object):
         if isinstance(bucket, Bucket):
             api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
         num = 1
         while not status and num_attempt > num:
             log.info("try again after {0} sec".format(timeout))
             time.sleep(timeout)
-            status, content = self._http_request(api)
+            status, content, header = self._http_request(api)
             num += 1
         if status:
             bucketInfo = RestParser().parse_get_bucket_response(content)
@@ -1140,9 +1143,9 @@ class RestConnection(object):
     def delete_bucket(self, bucket='default'):
         api = '%s%s%s' % (self.baseUrl, '/pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
-            api = '%s%s%s' %s (self.baseUrl, '/pools/default/buckets/', bucket.name)
+            api = '%s%s%s' % s (self.baseUrl, '/pools/default/buckets/', bucket.name)
 
-        status, content = self._http_request(api, 'DELETE')
+        status, content, header = self._http_request(api, 'DELETE')
         return status
 
 
@@ -1192,7 +1195,7 @@ class RestConnection(object):
         log.info("{0} with param: {1}".format(api, params))
 
         create_start_time = time.time()
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         create_time = time.time() - create_start_time
         log.info("{0} seconds to create bucket {1}".format(create_time, bucket))
 
@@ -1207,7 +1210,7 @@ class RestConnection(object):
         settings = None
         api = self.baseUrl + 'settings/autoFailover'
 
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
 
         json_parsed = json.loads(content)
 
@@ -1230,14 +1233,14 @@ class RestConnection(object):
         api = self.baseUrl + 'settings/autoFailover'
         log.info('settings/autoFailover params : {0}'.format(params))
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         return status
 
 
     def reset_autofailover(self):
         api = self.baseUrl + 'settings/autoFailover/resetCount'
 
-        status, content = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(api, 'POST', '')
         return status
 
 
@@ -1254,7 +1257,7 @@ class RestConnection(object):
                                    'alerts': alerts})
         log.info('settings/alerts params : {0}'.format(params))
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         return status
 
 
@@ -1263,14 +1266,14 @@ class RestConnection(object):
         params = urllib.urlencode({'enabled': 'false'})
         log.info('settings/alerts params : {0}'.format(params))
 
-        status, content = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
         return status
 
 
     def stop_rebalance(self, wait_timeout=10):
         api = self.baseUrl + '/controller/stopRebalance'
 
-        status, content = self._http_request(api, 'POST')
+        status, content, header = self._http_request(api, 'POST')
 
         if status:
             for i in xrange(wait_timeout):
@@ -1293,7 +1296,7 @@ class RestConnection(object):
             params = urllib.urlencode({'path': data_path})
             log.info('/nodes/self/controller/settings params : {0}'.format(params))
 
-            status, content = self._http_request(api, 'POST', params)
+            status, content, header = self._http_request(api, 'POST', params)
             if status:
                 log.info("Setting data_path: {0}: status {1}".format(data_path, status))
             else:
@@ -1302,7 +1305,7 @@ class RestConnection(object):
 
     def get_database_disk_size(self, bucket='default'):
         api = self.baseUrl + "pools/{0}/buckets".format(bucket)
-        status, content = self._http_request(api)
+        status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
         # disk_size in MB
         disk_size = (json_parsed[0]["basicStats"]["diskUsed"]) / (1024 * 1024)
@@ -1311,7 +1314,7 @@ class RestConnection(object):
     def ddoc_compaction(self, design_doc_id, bucket="default"):
         api = self.baseUrl + "pools/default/buckets/%s/ddocs/%s/controller/compactView" % \
             (bucket, design_doc_id)
-        status, content = self._http_request(api, 'POST')
+        status, content, header = self._http_request(api, 'POST')
         if not status:
             raise CompactViewFailed(design_doc_id, content)
 

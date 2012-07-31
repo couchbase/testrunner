@@ -234,7 +234,7 @@ class CreateDeleteViewTests(ViewBaseTest):
             for ddoc_name, view_list in self.ddoc_view_map.items():
                 try:
                     #fetch the DDoc information from the database
-                    ddoc_json = rest.get_ddoc(bucket, ddoc_name)
+                    ddoc_json, header = rest.get_ddoc(bucket, ddoc_name)
                     self.log.info('Database Document {0} details : {1}'.format(ddoc_name, json.dumps(ddoc_json)))
                     ddoc = DesignDocument._init_from_json(ddoc_name, ddoc_json)
                     for view in view_list:
