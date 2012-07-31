@@ -22,22 +22,28 @@ from perf_defaults import PerfDefaults
 from perf_engines import mcsoda
 import testconstants
 
+
 def TODO():
     pass
 
-class PerfBase(unittest.TestCase):
-    specURL = "http://hub.internal.couchbase.org/confluence/display/cbit/Black+Box+Performance+Test+Matrix"
 
-    # The setUpBaseX() methods allow subclasses to resequence the
-    # setUp() and skip cluster configuration.
-    #
+class PerfBase(unittest.TestCase):
+
+    """
+    specURL = http://hub.internal.couchbase.org/confluence/display/cbit/Black+Box+Performance+Test+Matrix
+
+    """
+
+    # The setUpBaseX() methods allow subclasses to resequence the setUp() and
+    # skip cluster configuration.
     def setUpBase0(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.vbucket_count = PerfDefaults.vbuckets
         self.sc = None
-        if self.parami("tear_down_on_setup", PerfDefaults.tear_down_on_setup) == 1:
-            self.tearDown() # Tear down in case previous run had unclean death.
+        if self.parami("tear_down_on_setup",
+                       PerfDefaults.tear_down_on_setup) == 1:
+            self.tearDown()  # Tear down in case previous run had unclean death
         master = self.input.servers[0]
         self.set_up_rest(master)
 
@@ -180,7 +186,7 @@ class PerfBase(unittest.TestCase):
         try:
             # Parallel database and view compaction
             parallel_compaction = self.param("parallel_compaction",
-                                              PerfDefaults.parallel_compaction)
+                                             PerfDefaults.parallel_compaction)
             # Database fragmentation threshold
             db_compaction = self.parami("db_compaction",
                                         PerfDefaults.db_compaction)
@@ -229,13 +235,15 @@ class PerfBase(unittest.TestCase):
 
     def tear_down_buckets(self):
         print "[perf.tearDown] Tearing down bucket"
-        BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers, self)
+        BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers,
+                                                           self)
         print "[perf.tearDown] Bucket teared down"
 
     def tear_down_cluster(self):
         print "[perf.tearDown] Tearing down cluster"
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers,
+                                                             self)
         print "[perf.tearDown] Cluster teared down"
 
     def set_up_proxy(self, bucket=None):
@@ -277,10 +285,12 @@ class PerfBase(unittest.TestCase):
                 protocol = "couchbase"
             else:
                 protocol = \
-                    '-'.join(((["membase"] + \
-                                   protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
+                    '-'.join(((["membase"] +
+                    protocol_in.split("://"))[-2] + "-binary").split('-')[0:2])
             host_port = ('@' + protocol_in.split("://")[-1]).split('@')[-1]
-            user, pswd = (('@' + protocol_in.split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
+            user, pswd = (('@' +
+                           protocol_in.split("://")[-1]).split('@')[-2] +
+                           ":").split(':')[0:2]
         else:
             protocol = 'memcached-' + protocol_in
             host_port = self.target_host_port(use_direct=use_direct)
@@ -322,25 +332,30 @@ class PerfBase(unittest.TestCase):
         base = 'https://s3.amazonaws.com/database-analysis'
         dir = '/tmp/'
         if remote.is_membase_installed():
-            dir = dir + '/membase/{0}-{1}-{2}/'.format(num_nodes, 1024, db_size)
+            dir = dir + '/membase/{0}-{1}-{2}/'.format(num_nodes, 1024,
+                                                       db_size)
             output, error = remote.execute_command('mkdir -p {0}'.format(dir))
             remote.log_command_output(output, error)
             file = '{0}_mb.tar.gz'.format(bucket)
-            base_url = base + '/membase/{0}-{1}-{2}/{3}'.format(num_nodes, \
-                                                                    1024, db_size, file)
+            base_url = base + '/membase/{0}-{1}-{2}/{3}'.format(num_nodes,
+                                                                1024, db_size,
+                                                                file)
         else:
-            dir = dir + '/couchbase/{0}-{1}-{2}/'.format(num_nodes, 256, db_size)
+            dir = dir + '/couchbase/{0}-{1}-{2}/'.format(num_nodes, 256,
+                                                         db_size)
             output, error = remote.execute_command('mkdir -p {0}'.format(dir))
             remote.log_command_output(output, error)
             file = '{0}_cb.tar.gz'.format(bucket)
-            base_url = base + '/couchbase/{0}-{1}-{2}/{3}'.format(num_nodes, \
-                                                               256, db_size, file)
+            base_url = base + '/couchbase/{0}-{1}-{2}/{3}'.format(num_nodes,
+                                                                  256, db_size,
+                                                                  file)
 
         info = remote.extract_remote_info()
         wget_command = 'wget'
         if info.type.lower() == 'windows':
             wget_command = \
-                "cd {0} ;cmd /c 'c:\\automation\\wget.exe --no-check-certificate".format(dir)
+                "cd {0} ;cmd /c 'c:\\automation\\wget.exe --no-check-certificate"\
+                .format(dir)
 
         # Check if the file exists on the remote server else download the gzipped version
         # Extract if necessary
@@ -349,8 +364,9 @@ class PerfBase(unittest.TestCase):
             additional_quote = ""
             if info.type.lower() == 'windows':
                 additional_quote = "'"
-            command = "{0} -v -O {1}{2} {3} {4} ".format(wget_command, dir, file,
-                                                         base_url, additional_quote)
+            command = "{0} -v -O {1}{2} {3} {4} ".format(wget_command, dir,
+                                                         file, base_url,
+                                                         additional_quote)
             output, error = remote.execute_command(command)
             remote.log_command_output(output, error)
 
@@ -366,7 +382,8 @@ class PerfBase(unittest.TestCase):
                 destination_folder = testconstants.COUCHBASE_DATA_PATH
         if self.data_path:
             destination_folder = self.data_path
-        untar_command = 'cd {1}; tar -xzf {0}'.format(dir+file, destination_folder)
+        untar_command = 'cd {1}; tar -xzf {0}'.format(dir + file,
+                                                      destination_folder)
         output, error = remote.execute_command(untar_command)
         remote.log_command_output(output, error)
 
@@ -378,24 +395,27 @@ class PerfBase(unittest.TestCase):
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
 
-    def _build_tar_name(self, bucket, version="unknown_version", file_base=None):
-        """
-        build tar file name.
+    def _build_tar_name(self, bucket, version="unknown_version",
+                        file_base=None):
+        """build tar file name.
+
         {file_base}-{version}-{bucket}.tar.gz
         """
         if not file_base:
             file_base = os.path.splitext(
-                os.path.basename(self.param("conf_file", PerfDefaults.conf_file)))[0]
+                os.path.basename(self.param("conf_file",
+                                 PerfDefaults.conf_file)))[0]
         return "{0}-{1}-{2}.tar.gz".format(file_base, version, bucket)
 
     def _save_snapshot(self, server, bucket, file_base=None):
         """Save data files to a snapshot"""
 
-        src_data_path = os.path.dirname(server.data_path or testconstants.COUCHBASE_DATA_PATH)
+        src_data_path = os.path.dirname(server.data_path or
+                                        testconstants.COUCHBASE_DATA_PATH)
         dest_data_path = "{0}-snapshots".format(src_data_path)
 
         print "[perf: _save_snapshot] server = {0} , src_data_path = {1}, dest_data_path = {2}"\
-                .format(server.ip, src_data_path, dest_data_path)
+            .format(server.ip, src_data_path, dest_data_path)
 
         shell = RemoteMachineShellConnection(server)
 
@@ -409,7 +429,7 @@ class PerfBase(unittest.TestCase):
         # save as gzip file, if file exsits, overwrite
         # TODO: multiple buckets
         zip_cmd = "cd {0}; tar -cvzf {1}/{2} {3} {3}-data _*"\
-                    .format(src_data_path, dest_data_path, dest_file, bucket)
+            .format(src_data_path, dest_data_path, dest_file, bucket)
         self._exec_and_log(shell, zip_cmd)
 
         shell.disconnect()
@@ -418,11 +438,12 @@ class PerfBase(unittest.TestCase):
     def _load_snapshot(self, server, bucket, file_base=None, overwrite=True):
         """Load data files from a snapshot"""
 
-        dest_data_path = os.path.dirname(server.data_path or testconstants.COUCHBASE_DATA_PATH)
+        dest_data_path = os.path.dirname(server.data_path or
+                                         testconstants.COUCHBASE_DATA_PATH)
         src_data_path = "{0}-snapshots".format(dest_data_path)
 
         print "[perf: _load_snapshot] server = {0} , src_data_path = {1}, dest_data_path = {2}"\
-                .format(server.ip, src_data_path, dest_data_path)
+            .format(server.ip, src_data_path, dest_data_path)
 
         shell = RemoteMachineShellConnection(server)
 
@@ -438,14 +459,15 @@ class PerfBase(unittest.TestCase):
             return False
 
         if not overwrite:
-            self._save_snapshot(server,
-                               bucket,
-                               "{0}.tar.gz".format(time.strftime('%X-%x-%Z'))) # TODO: filename
+            self._save_snapshot(server, bucket,
+                                "{0}.tar.gz".format(time.strftime('%X-%x-%Z')))  # TODO: filename
 
-        rm_cmd = "rm -rf {0}/{1} {0}/{1}-data {0}/_*".format(dest_data_path, bucket)
+        rm_cmd = "rm -rf {0}/{1} {0}/{1}-data {0}/_*".format(dest_data_path,
+                                                             bucket)
         self._exec_and_log(shell, rm_cmd)
 
-        unzip_cmd = "cd {0}; tar -xvzf {1}/{2}".format(dest_data_path, src_data_path, src_file)
+        unzip_cmd = "cd {0}; tar -xvzf {1}/{2}".format(dest_data_path,
+                                                       src_data_path, src_file)
         self._exec_and_log(shell, unzip_cmd)
 
         shell.disconnect()
@@ -493,7 +515,8 @@ class PerfBase(unittest.TestCase):
     def _get_src_version(self):
         """get testrunner version"""
         try:
-            result = subprocess.Popen(['git', 'rev-parse', 'HEAD'], stdout=subprocess.PIPE).communicate()[0]
+            result = subprocess.Popen(['git', 'rev-parse', 'HEAD'],
+                                      stdout=subprocess.PIPE).communicate()[0]
         except subprocess.CalledProcessError as e:
             print "[perf] unable to get src code version : {0}".format(str(e))
             return "unknown version"
@@ -501,8 +524,8 @@ class PerfBase(unittest.TestCase):
 
     def start_stats(self, stats_spec, servers=None,
                     process_names=['memcached', 'beam.smp', 'couchjs'],
-                    test_params = None, client_id = '',
-                    collect_server_stats = True):
+                    test_params=None, client_id='',
+                    collect_server_stats=True):
         if self.parami('stats', 1) == 0:
             return None
 
@@ -510,7 +533,7 @@ class PerfBase(unittest.TestCase):
         sc = self.mk_stats(False)
         bucket = self.param("bucket", "default")
         sc.start(servers, bucket, process_names, stats_spec, 10, client_id,
-                 collect_server_stats = collect_server_stats)
+                 collect_server_stats=collect_server_stats)
         test_params['testrunner'] = self._get_src_version()
         self.test_params = test_params
         self.sc = sc
@@ -544,29 +567,30 @@ class PerfBase(unittest.TestCase):
              collect_server_stats=True,
              is_eperf=False,
              hot_shift=0):
-        cfg = { 'max-items': num_items,
-                'max-creates': num_items,
-                'max-ops-per-sec': self.parami("load_mcsoda_max_ops_sec", PerfDefaults.mcsoda_max_ops_sec),
-                'min-value-size': min_value_size or self.parami("min_value_size", 1024),
-                'ratio-sets': self.paramf("load_ratio_sets", ratio_sets),
-                'ratio-misses': self.paramf("load_ratio_misses", 0.0),
-                'ratio-creates': self.paramf("load_ratio_creates", 1.0),
-                'ratio-deletes': self.paramf("load_ratio_deletes", 0.0),
-                'ratio-hot': 0.0,
-                'ratio-hot-sets': ratio_hot_sets,
-                'ratio-hot-gets': ratio_hot_gets,
-                'ratio-expirations': ratio_expirations,
-                'expiration': expiration or 0,
-                'exit-after-creates': 1,
-                'json': int(kind == 'json'),
-                'batch': self.parami("batch", PerfDefaults.batch),
-                'vbuckets': self.vbucket_count,
-                'doc-cache': doc_cache,
-                'prefix': prefix,
-                'report': report,
-                'hot-shift': hot_shift,
-                'cluster_name': self.param("cluster_name", "")
-                }
+        cfg = {'max-items': num_items,
+               'max-creates': num_items,
+               'max-ops-per-sec': self.parami("load_mcsoda_max_ops_sec",
+                                              PerfDefaults.mcsoda_max_ops_sec),
+               'min-value-size': min_value_size or self.parami("min_value_size",
+                                                               1024),
+               'ratio-sets': self.paramf("load_ratio_sets", ratio_sets),
+               'ratio-misses': self.paramf("load_ratio_misses", 0.0),
+               'ratio-creates': self.paramf("load_ratio_creates", 1.0),
+               'ratio-deletes': self.paramf("load_ratio_deletes", 0.0),
+               'ratio-hot': 0.0,
+               'ratio-hot-sets': ratio_hot_sets,
+               'ratio-hot-gets': ratio_hot_gets,
+               'ratio-expirations': ratio_expirations,
+               'expiration': expiration or 0,
+               'exit-after-creates': 1,
+               'json': int(kind == 'json'),
+               'batch': self.parami("batch", PerfDefaults.batch),
+               'vbuckets': self.vbucket_count,
+               'doc-cache': doc_cache,
+               'prefix': prefix,
+               'report': report,
+               'hot-shift': hot_shift,
+               'cluster_name': self.param("cluster_name", "")}
         cur = {}
         if start_at >= 0:
             cur['cur-items'] = start_at
@@ -589,9 +613,9 @@ class PerfBase(unittest.TestCase):
         if is_eperf:
             collect_server_stats = self.parami("prefix", 0) == 0
             client_id = self.parami("prefix", 0)
-            sc = self.start_stats("{0}.{1}".format(self.spec_reference, phase), # stats spec e.x: testname.load
-                              test_params = cfg_params, client_id = client_id,
-                              collect_server_stats = collect_server_stats)
+            sc = self.start_stats("{0}.{1}".format(self.spec_reference, phase),  # stats spec e.x: testname.load
+                                  test_params=cfg_params, client_id=client_id,
+                                  collect_server_stats=collect_server_stats)
 
         # For Black box, multi node tests
         # always use membase-binary
@@ -599,39 +623,43 @@ class PerfBase(unittest.TestCase):
             protocol = self.mk_protocol(host=self.input.servers[0].ip,
                                         port=self.input.servers[0].port)
 
-        protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
+        protocol, host_port, user, pswd = \
+            self.protocol_parse(protocol, use_direct=use_direct)
 
         if not user.strip():
             user = self.input.servers[0].rest_username
         if not pswd.strip():
             pswd = self.input.servers[0].rest_password
 
-        self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
+        self.log.info("mcsoda - %s %s %s %s" %
+                      (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
 
-        cur, start_time, end_time = self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
-                                                    heartbeat=self.parami("mcsoda_heartbeat", 0), why="load",
-                                                    bucket=self.param("bucket", "default"))
+        cur, start_time, end_time = \
+            self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
+                            heartbeat=self.parami("mcsoda_heartbeat", 0),
+                            why="load", bucket=self.param("bucket", "default"))
         self.num_items_loaded = num_items
-        ops = { 'tot-sets': cur.get('cur-sets', 0),
-                'tot-gets': cur.get('cur-gets', 0),
-                'tot-items': cur.get('cur-items', 0),
-                'tot-creates': cur.get('cur-creates', 0),
-                'tot-misses': cur.get('cur-misses', 0),
-                "start-time": start_time,
-                "end-time": end_time }
+        ops = {'tot-sets': cur.get('cur-sets', 0),
+               'tot-gets': cur.get('cur-gets', 0),
+               'tot-items': cur.get('cur-items', 0),
+               'tot-creates': cur.get('cur-creates', 0),
+               'tot-misses': cur.get('cur-misses', 0),
+               "start-time": start_time,
+               "end-time": end_time}
 
         if is_eperf:
             if self.parami("load_wait_until_drained", 1) == 1:
                 self.wait_until_drained()
-            self.end_stats(sc, ops, "{0}.{1}".format(self.spec_reference, phase))
+            self.end_stats(sc, ops, "{0}.{1}".format(self.spec_reference,
+                                                     phase))
 
         return ops, start_time, end_time
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
-                   stats_collector = None, stores = None, ctl = None,
-                   heartbeat = 0, why = "", bucket = "default"):
+                   stats_collector=None, stores=None, ctl=None,
+                   heartbeat=0, why="", bucket="default"):
         return mcsoda.run(cfg, cur, protocol, host_port, user, pswd,
                           stats_collector=stats_collector,
                           stores=stores,
@@ -647,7 +675,8 @@ class PerfBase(unittest.TestCase):
             print "WARNING: running on single node cluster"
             return
         else:
-            print "[perf.setUp] rebalancing nodes: num_nodes = {0}".format(num_nodes)
+            print "[perf.setUp] rebalancing nodes: num_nodes = {0}".\
+                format(num_nodes)
             self.is_multi_node = True
 
         if self.input.clusters:
@@ -664,7 +693,7 @@ class PerfBase(unittest.TestCase):
 
     @staticmethod
     def delayed_rebalance_worker(servers, num_nodes, delay_seconds, sc,
-                                max_retries=PerfDefaults.reb_max_retries):
+                                 max_retries=PerfDefaults.reb_max_retries):
         time.sleep(delay_seconds)
         if not sc:
             print "[delayed_rebalance_worker] invalid stats collector"
@@ -673,8 +702,9 @@ class PerfBase(unittest.TestCase):
         retries = 0
         while not status and retries <= max_retries:
             start_time = time.time()
-            status, nodes \
-                = RebalanceHelper.rebalance_in(servers, num_nodes - 1, do_check=(not retries))
+            status, nodes = RebalanceHelper.rebalance_in(servers,
+                                                         num_nodes - 1,
+                                                         do_check=(not retries))
             end_time = time.time()
             print "[delayed_rebalance_worker] status: {0}, nodes: {1}, retries: {2}"\
                 .format(status, nodes, retries)
@@ -687,20 +717,24 @@ class PerfBase(unittest.TestCase):
                           max_retries=PerfDefaults.reb_max_retries):
         print "delayed_rebalance"
         t = threading.Thread(target=PerfBase.delayed_rebalance_worker,
-                             args=(self.input.servers, num_nodes, delay_seconds, self.sc, max_retries))
+                             args=(self.input.servers, num_nodes,
+                             delay_seconds, self.sc, max_retries))
         t.daemon = True
         t.start()
 
     @staticmethod
     def set_auto_compaction(server, parallel_compaction, percent_threshold):
         rest = RestConnection(server)
-        rest.set_auto_compaction(parallel_compaction, dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=percent_threshold)
+        rest.set_auto_compaction(parallel_compaction,
+                                 dbFragmentThresholdPercentage=percent_threshold,
+                                 viewFragmntThresholdPercentage=percent_threshold)
 
     @staticmethod
     def delayed_compaction_worker(servers, parallel_compaction,
                                   percent_threshold, delay_seconds):
         time.sleep(delay_seconds)
-        PerfBase.set_auto_compaction(servers[0], parallel_compaction, percent_threshold)
+        PerfBase.set_auto_compaction(servers[0], parallel_compaction,
+                                     percent_threshold)
 
     def delayed_compaction(self, parallel_compaction="false",
                            percent_threshold=0.01,
@@ -726,7 +760,8 @@ class PerfBase(unittest.TestCase):
              kind='binary',
              protocol='binary',
              clients=1,
-             ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0, ratio_deletes=0.0,
+             ratio_misses=0.0,
+             ratio_sets=0.0, ratio_creates=0.0, ratio_deletes=0.0,
              ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95,
              ratio_expirations=0.0,
              expiration=None,
@@ -740,43 +775,50 @@ class PerfBase(unittest.TestCase):
              ctl=None,
              hot_shift=0,
              is_eperf=False,
-             ratio_queries = 0,
-             queries = 0):
+             ratio_queries=0,
+             queries=0):
         num_items = num_items or self.num_items_loaded
 
-        cfg = { 'max-items': max_items or num_items,
-                'max-creates': max_creates or 0,
-                'max-ops-per-sec': self.parami("mcsoda_max_ops_sec", PerfDefaults.mcsoda_max_ops_sec),
-                'min-value-size': min_value_size or self.parami("min_value_size", 1024),
-                'exit-after-creates': exit_after_creates,
-                'ratio-sets': ratio_sets,
-                'ratio-misses': ratio_misses,
-                'ratio-creates': ratio_creates,
-                'ratio-deletes': ratio_deletes,
-                'ratio-hot': ratio_hot,
-                'ratio-hot-sets': ratio_hot_sets,
-                'ratio-hot-gets': ratio_hot_gets,
-                'ratio-expirations': ratio_expirations,
-                'ratio-queries' : ratio_queries,
-                'expiration': expiration or 0,
-                'threads': clients,
-                'json': int(kind == 'json'),
-                'batch': self.parami("batch", PerfDefaults.batch),
-                'vbuckets': self.vbucket_count,
-                'doc-cache': doc_cache,
-                'prefix': prefix,
-                'queries': queries,
-                'report': report,
-                'hot-shift': hot_shift,
-                'cluster_name': self.param("cluster_name", ""),
-                'observe': self.param("observe", PerfDefaults.observe),
-                'obs-backoff': self.paramf('obs_backoff', PerfDefaults.obs_backoff),
-                'obs-max-backoff': self.paramf('obs_max_backoff', PerfDefaults.obs_max_backoff),
-                'obs-persist-count': self.parami('obs_persist_count', PerfDefaults.obs_persist_count),
-                'obs-repl-count': self.parami('obs_repl_count', PerfDefaults.obs_repl_count),
-                'woq-pattern': self.param('woq_pattern', PerfDefaults.woq_pattern),
-                'woq-verbose': self.param('woq_verbose', PerfDefaults.woq_verbose)
-                }
+        cfg = {'max-items': max_items or num_items,
+               'max-creates': max_creates or 0,
+               'max-ops-per-sec': self.parami("mcsoda_max_ops_sec",
+                                              PerfDefaults.mcsoda_max_ops_sec),
+               'min-value-size': min_value_size or self.parami("min_value_size",
+                                                               1024),
+               'exit-after-creates': exit_after_creates,
+               'ratio-sets': ratio_sets,
+               'ratio-misses': ratio_misses,
+               'ratio-creates': ratio_creates,
+               'ratio-deletes': ratio_deletes,
+               'ratio-hot': ratio_hot,
+               'ratio-hot-sets': ratio_hot_sets,
+               'ratio-hot-gets': ratio_hot_gets,
+               'ratio-expirations': ratio_expirations,
+               'ratio-queries': ratio_queries,
+               'expiration': expiration or 0,
+               'threads': clients,
+               'json': int(kind == 'json'),
+               'batch': self.parami("batch", PerfDefaults.batch),
+               'vbuckets': self.vbucket_count,
+               'doc-cache': doc_cache,
+               'prefix': prefix,
+               'queries': queries,
+               'report': report,
+               'hot-shift': hot_shift,
+               'cluster_name': self.param("cluster_name", ""),
+               'observe': self.param("observe", PerfDefaults.observe),
+               'obs-backoff': self.paramf('obs_backoff',
+                                          PerfDefaults.obs_backoff),
+               'obs-max-backoff': self.paramf('obs_max_backoff',
+                                              PerfDefaults.obs_max_backoff),
+               'obs-persist-count': self.parami('obs_persist_count',
+                                                PerfDefaults.obs_persist_count),
+               'obs-repl-count': self.parami('obs_repl_count',
+                                             PerfDefaults.obs_repl_count),
+               'woq-pattern': self.param('woq_pattern',
+                                         PerfDefaults.woq_pattern),
+               'woq-verbose': self.param('woq_verbose',
+                                         PerfDefaults.woq_verbose)}
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
@@ -788,15 +830,15 @@ class PerfBase(unittest.TestCase):
         sc = None
         if self.parami("collect_stats", 1):
             sc = self.start_stats(self.spec_reference + ".loop",
-                                  test_params = cfg_params, client_id = client_id,
-                                  collect_server_stats = collect_server_stats)
+                                  test_params=cfg_params, client_id=client_id,
+                                  collect_server_stats=collect_server_stats)
 
-        cur = { 'cur-items': num_items }
+        cur = {'cur-items': num_items}
         if start_at >= 0:
             cur['cur-gets'] = start_at
         if num_ops is None:
             num_ops = num_items
-        if type(num_ops) == type(0):
+        if isinstance(num_ops, int):
             cfg['max-ops'] = num_ops
         else:
             # Here, we num_ops looks like "time to run" tuple of...
@@ -810,14 +852,16 @@ class PerfBase(unittest.TestCase):
                                         port=self.input.servers[0].port)
 
         self.log.info("mcsoda - protocol %s" % protocol)
-        protocol, host_port, user, pswd = self.protocol_parse(protocol, use_direct=use_direct)
+        protocol, host_port, user, pswd = \
+            self.protocol_parse(protocol, use_direct=use_direct)
 
         if not user.strip():
             user = self.input.servers[0].rest_username
         if not pswd.strip():
             pswd = self.input.servers[0].rest_password
 
-        self.log.info("mcsoda - %s %s %s %s" % (protocol, host_port, user, pswd))
+        self.log.info("mcsoda - %s %s %s %s" %
+                      (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(cur))
 
@@ -825,21 +869,19 @@ class PerfBase(unittest.TestCase):
         if protocol == "couchbase":
             stores = [StoreCouchbase()]
 
-        cur, start_time, end_time = self.mcsoda_run(cfg, cur,
-                                                    protocol, host_port, user, pswd,
-                                                    stats_collector=sc,
-                                                    ctl=ctl, stores=stores,
-                                                    heartbeat=self.parami("mcsoda_heartbeat", 0),
-                                                    why="loop",
-                                                    bucket=self.param("bucket", "default"))
+        cur, start_time, end_time = \
+            self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
+                            stats_collector=sc, ctl=ctl, stores=stores,
+                            heartbeat=self.parami("mcsoda_heartbeat", 0),
+                            why="loop", bucket=self.param("bucket", "default"))
 
-        ops = { 'tot-sets': cur.get('cur-sets', 0),
-                'tot-gets': cur.get('cur-gets', 0),
-                'tot-items': cur.get('cur-items', 0),
-                'tot-creates': cur.get('cur-creates', 0),
-                'tot-misses': cur.get('cur-misses', 0),
-                "start-time": start_time,
-                "end-time": end_time }
+        ops = {'tot-sets': cur.get('cur-sets', 0),
+               'tot-gets': cur.get('cur-gets', 0),
+               'tot-items': cur.get('cur-items', 0),
+               'tot-creates': cur.get('cur-creates', 0),
+               'tot-misses': cur.get('cur-misses', 0),
+               "start-time": start_time,
+               "end-time": end_time}
 
         # Wait until there are no active indexing tasks
         if self.parami('wait_for_indexer', 0):
@@ -847,7 +889,8 @@ class PerfBase(unittest.TestCase):
 
         # Wait until there are no active view compaction tasks
         if self.parami('wait_for_compaction', 0):
-            ClusterOperationHelper.wait_for_completion(self.rest, 'view_compaction')
+            ClusterOperationHelper.wait_for_completion(self.rest,
+                                                       'view_compaction')
 
         if self.parami("collect_stats", 1):
             self.end_stats(sc, ops, self.spec_reference + ".loop")
@@ -871,9 +914,11 @@ class PerfBase(unittest.TestCase):
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
 
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0, \
+        RebalanceHelper.wait_for_stats_on_all(master, bucket,
+                                              'ep_queue_size', 0,
                                               fn=RebalanceHelper.wait_for_stats_no_timeout)
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0, \
+        RebalanceHelper.wait_for_stats_on_all(master, bucket,
+                                              'ep_flusher_todo', 0,
                                               fn=RebalanceHelper.wait_for_stats_no_timeout)
 
         print "[drain] disk write queue has been drained"
@@ -923,13 +968,13 @@ class PerfBase(unittest.TestCase):
         print "[warmup] warmup finished"
 
         end_time = time.time()
-        ops = { 'tot-sets': 0,
-                'tot-gets': 0,
-                'tot-items': 0,
-                'tot-creates': 0,
-                'tot-misses': 0,
-                "start-time": start_time,
-                "end-time": end_time }
+        ops = {'tot-sets': 0,
+               'tot-gets': 0,
+               'tot-items': 0,
+               'tot-creates': 0,
+               'tot-misses': 0,
+               "start-time": start_time,
+               "end-time": end_time}
 
         if collect_stats:
             self.end_stats(sc, ops, self.spec_reference + ".warmup")
@@ -991,16 +1036,16 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = self.paramf('ratio_sets', 0.0),
-                  ratio_misses   = self.paramf('ratio_misses', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 1),
+                  ratio_sets=self.paramf('ratio_sets', 0.0),
+                  ratio_misses=self.paramf('ratio_misses', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_get_4client(self):
         self.spec('NPP-02-1k.1')
@@ -1008,16 +1053,16 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 4),
-                  ratio_sets     = self.paramf('ratio_sets', 0.0),
-                  ratio_misses   = self.paramf('ratio_misses', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 4),
+                  ratio_sets=self.paramf('ratio_sets', 0.0),
+                  ratio_misses=self.paramf('ratio_misses', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_set_1client(self):
         self.spec('NPP-03-1k.1')
@@ -1025,17 +1070,17 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  min_value_size = self.parami('size', 1024),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = self.paramf('ratio_sets', 1.0),
-                  ratio_creates  = self.paramf('ratio_creates', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  min_value_size=self.parami('size', 1024),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 1),
+                  ratio_sets=self.paramf('ratio_sets', 1.0),
+                  ratio_creates=self.paramf('ratio_creates', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                  test_name=self.id())
 
     def test_mixed_1client(self):
         self.spec('NPP-04-1k.1')
@@ -1043,19 +1088,19 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  min_value_size = self.parami('size', 1024),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = self.paramf('ratio_sets', 0.2),
-                  ratio_misses   = self.paramf('ratio_misses', 0.2),
-                  ratio_creates  = self.paramf('ratio_creates', 0.5),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  min_value_size=self.parami('size', 1024),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 1),
+                  ratio_sets=self.paramf('ratio_sets', 0.2),
+                  ratio_misses=self.paramf('ratio_misses', 0.2),
+                  ratio_creates=self.paramf('ratio_creates', 0.5),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_get_30client(self):
         self.spec('NPP-05-1k')
@@ -1065,14 +1110,14 @@ class NodePeakPerformance(PerfBase):
         self.loop_prep()
         seconds = self.parami('seconds', 60 * 60)
         self.loop(('seconds', seconds),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 30),
-                  ratio_sets     = self.paramf('ratio_sets', 0.0),
-                  ratio_misses   = self.paramf('ratio_misses', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 30),
+                  ratio_sets=self.paramf('ratio_sets', 0.0),
+                  ratio_misses=self.paramf('ratio_misses', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_get_5client_2node(self):
         self.spec('NPP-06-1k.1')
@@ -1081,16 +1126,16 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 5),
-                  ratio_sets     = self.paramf('ratio_sets', 0.0),
-                  ratio_misses   = self.paramf('ratio_misses', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 5),
+                  ratio_sets=self.paramf('ratio_sets', 0.0),
+                  ratio_misses=self.paramf('ratio_misses', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_get_5client_3node(self):
         self.spec('NPP-07-1k.1')
@@ -1099,16 +1144,16 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 5),
-                  ratio_sets     = self.paramf('ratio_sets', 0.0),
-                  ratio_misses   = self.paramf('ratio_misses', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 5),
+                  ratio_sets=self.paramf('ratio_sets', 0.0),
+                  ratio_misses=self.paramf('ratio_misses', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_get_5client_5node(self):
         self.spec('NPP-08-1k.1')
@@ -1117,16 +1162,16 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 5),
-                  ratio_sets     = self.paramf('ratio_sets', 0.0),
-                  ratio_misses   = self.paramf('ratio_misses', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 5),
+                  ratio_sets=self.paramf('ratio_sets', 0.0),
+                  ratio_misses=self.paramf('ratio_misses', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_get_1client_rebalance(self):
         self.spec('NPP-09-5k.1')
@@ -1136,16 +1181,16 @@ class NodePeakPerformance(PerfBase):
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = self.paramf('ratio_sets', 0.0),
-                  ratio_misses   = self.paramf('ratio_misses', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 1),
+                  ratio_sets=self.paramf('ratio_sets', 0.0),
+                  ratio_misses=self.paramf('ratio_misses', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_mixed_1client_rebalance_json(self):
         self.spec('NPP-10-1k.1')
@@ -1155,19 +1200,19 @@ class NodePeakPerformance(PerfBase):
                   kind=self.param('kind', 'json'))
         self.loop_prep()
         self.delayed_rebalance(4, delay_seconds=10)
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  min_value_size = self.parami('size', 1024),
-                  kind           = self.param('kind', 'json'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = self.paramf('ratio_sets', 0.2),
-                  ratio_misses   = self.paramf('ratio_misses', 0.2),
-                  ratio_creates  = self.paramf('ratio_creates', 0.5),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  min_value_size=self.parami('size', 1024),
+                  kind=self.param('kind', 'json'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 1),
+                  ratio_sets=self.paramf('ratio_sets', 0.2),
+                  ratio_misses=self.paramf('ratio_misses', 0.2),
+                  ratio_creates=self.paramf('ratio_creates', 0.5),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
     def test_set_1client_json(self):
         self.spec('NPP-12-1k.1')
@@ -1175,42 +1220,46 @@ class NodePeakPerformance(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  min_value_size = self.parami('size', 1024),
-                  kind           = self.param('kind', 'json'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = self.paramf('ratio_sets', 1.0),
-                  ratio_creates  = self.paramf('ratio_creates', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  min_value_size=self.parami('size', 1024),
+                  kind=self.param('kind', 'json'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 1),
+                  ratio_sets=self.paramf('ratio_sets', 1.0),
+                  ratio_creates=self.paramf('ratio_creates', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
 
 
 class DiskDrainRate(PerfBase):
 
     def test_1M_2k(self):
         self.spec('DRR-01')
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
-                                                                'test_time':time.time()})
-        ops, start_time, end_time = self.load(self.parami("items", 1000000),
-                                              self.parami('size', 2048),
-                                              kind=self.param('kind', 'binary'),
-                                              doc_cache=self.parami('doc_cache', 0))
+        sc = self.start_stats(self.spec_reference,
+                              test_params={'test_name': self.id(),
+                                           'test_time': time.time()})
+        ops, start_time, end_time = \
+            self.load(self.parami("items", 1000000),
+                      self.parami('size', 2048),
+                      kind=self.param('kind', 'binary'),
+                      doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
     def test_1M_1k(self):
         self.spec('DRR-02.1')
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
-                                                                'test_time':time.time()})
-        ops, start_time, end_time = self.load(self.parami("items", 1000000),
-                                              self.parami('size', 1024),
-                                              kind=self.param('kind', 'binary'),
-                                              ratio_sets=self.paramf('ratio-sets', 0.9),
-                                              doc_cache=self.parami('doc_cache', 0))
+        sc = self.start_stats(self.spec_reference,
+                              test_params={'test_name': self.id(),
+                                           'test_time': time.time()})
+        ops, start_time, end_time = \
+            self.load(self.parami("items", 1000000),
+                      self.parami('size', 1024),
+                      kind=self.param('kind', 'binary'),
+                      ratio_sets=self.paramf('ratio-sets', 0.9),
+                      doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
@@ -1218,36 +1267,42 @@ class DiskDrainRate(PerfBase):
         self.spec('DRR-03')
         self.rebalance_nodes(2)
         self.delayed_rebalance(4)
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
-                                                                'test_time':time.time()})
-        ops, start_time, end_time = self.load(self.parami("items", 1000000),
-                                              self.parami('size', 1024),
-                                              kind=self.param('kind', 'binary'),
-                                              doc_cache=self.parami('doc_cache', 0))
+        sc = self.start_stats(self.spec_reference,
+                              test_params={'test_name': self.id(),
+                                           'test_time': time.time()})
+        ops, start_time, end_time = \
+            self.load(self.parami("items", 1000000),
+                      self.parami('size', 1024),
+                      kind=self.param('kind', 'binary'),
+                      doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
     def test_1M_compaction(self):
         self.spec('DRR-04')
         self.delayed_compaction()
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
-                                                                'test_time':time.time()})
-        ops, start_time, end_time = self.load(self.parami("items", 1000000),
-                                              self.parami('size', 1024),
-                                              kind=self.param('kind', 'binary'),
-                                              doc_cache=self.parami('doc_cache', 0))
+        sc = self.start_stats(self.spec_reference,
+                              test_params={'test_name': self.id(),
+                                           'test_time': time.time()})
+        ops, start_time, end_time = \
+            self.load(self.parami("items", 1000000),
+                      self.parami('size', 1024),
+                      kind=self.param('kind', 'binary'),
+                      doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
     def test_1M_clog(self):
         self.spec('DRR-06')
         self.clog_cluster([self.input.servers[0]])
-        ops, load_start_time, load_end_time = self.load(self.parami("items", 1000000),
-                                                        self.parami('size', 1024),
-                                                        kind=self.param('kind', 'binary'),
-                                                        doc_cache=self.parami('doc_cache', 0))
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
-                                                                'test_time':time.time()})
+        ops, start_time, end_time = \
+            self.load(self.parami("items", 1000000),
+                      self.parami('size', 1024),
+                      kind=self.param('kind', 'binary'),
+                      doc_cache=self.parami('doc_cache', 0))
+        sc = self.start_stats(self.spec_reference,
+                              test_params={'test_name': self.id(),
+                                           'test_time': time.time()})
         start_time_unclog = time.time()
         self.unclog_cluster([self.input.servers[0]])
         end_time_unclog = self.wait_until_drained()
@@ -1260,7 +1315,7 @@ class DiskDrainRate(PerfBase):
 class MapReduce(PerfBase):
 
     def go_load(self):
-        items  = self.parami("items", 1000000)
+        items = self.parami("items", 1000000)
         self.load(items,
                   self.parami('size', 1024),
                   kind=self.param('kind', 'json'),
@@ -1272,29 +1327,32 @@ class MapReduce(PerfBase):
         if load:
             self.go_load()
 
-        items  = self.parami("items", 1000000)
-        limit  = self.parami('limit', limit)
+        items = self.parami("items", 1000000)
+        limit = self.parami('limit', limit)
         bucket = "default"
-        view   = "myview"
+        view = "myview"
 
-        self.rest.create_view(view, bucket, [View(view, map_fun, reduce_fun)])
+        self.rest.create_view(view, bucket,
+                              [View(view, map_fun, reduce_fun)])
 
-        self.log.info("building view: %s = %s; %s" % (view, map_fun, reduce_fun))
+        self.log.info("building view: %s = %s; %s" %
+                      (view, map_fun, reduce_fun))
         ops = {}
         ops["view-build-start-time"] = time.time()
-        self.rest.view_results(bucket, view, { "startkey":"a" }, limit, timeout=480)
+        self.rest.view_results(bucket, view, {"startkey": "a"}, limit,
+                               timeout=480)
         ops["view-build-end-time"] = time.time()
 
         sc = self.start_stats(self.spec_reference,
-                              test_params={'test_name':self.id(),
-                                           'test_time':time.time()})
+                              test_params={'test_name': self.id(),
+                                           'test_time': time.time()})
         self.log.info("accessing view: %s" % (view,))
         ops["start-time"] = time.time()
         key_maker = getattr(mcsoda, key_name)
         n = self.parami("ops", 10000)
         report = int(n * 0.1)
 
-        ctl = { 'run_ok': True }
+        ctl = {'run_ok': True}
         if view_clients <= 1:
             MapReduce.go_view_worker(ctl, self.rest, 0, n, items,
                                      key_name, key_maker,
@@ -1306,8 +1364,8 @@ class MapReduce(PerfBase):
             try:
                 for x in range(view_clients):
                     t = threading.Thread(target=MapReduce.go_view_worker,
-                                         args=(ctl, self.rest, offset, n, items,
-                                               key_name, key_maker,
+                                         args=(ctl, self.rest, offset, n,
+                                               items, key_name, key_maker,
                                                bucket, view, limit,
                                                self.sc, report))
                     threads.append(t)
@@ -1333,18 +1391,17 @@ class MapReduce(PerfBase):
             e = key_maker(k, mcsoda.prepare_key(k))
             start = time.time()
             r = rest.view_results(bucket, view,
-                                  { "startkey":e, "endkey":e }, limit)
+                                  {"startkey": e, "endkey": e}, limit)
             if i % report == 0:
-                print("ex: view result for %s, %s = %s" % \
-                          (key_name, e, r))
+                print("ex: view result for %s, %s = %s" % (key_name, e, r))
             end = time.time()
-            sc.ops_stats({ 'tot-gets': 0,
-                           'tot-sets': 0,
-                           'tot-deletes': 0,
-                           'tot-arpas': 0,
-                           'tot-views': 1,
-                           'start-time': start,
-                           'end-time': end })
+            sc.ops_stats({'tot-gets': 0,
+                          'tot-sets': 0,
+                          'tot-deletes': 0,
+                          'tot-arpas': 0,
+                          'tot-views': 1,
+                          'start-time': start,
+                          'end-time': end})
 
     def test_VP_001(self):
         self.spec('VP-001')
@@ -1389,12 +1446,12 @@ class MapReduce(PerfBase):
 
     def go_with_mcsoda(self):
         self.go_load()
-        cfg = { 'min-value-size': self.parami("min_value_size", 1024),
-                'vbuckets': self.vbucket_count,
-                'batch':  PerfDefaults.batch,
-                'json': 1 }
-        cur = { 'cur-items': self.parami("items", 1000000) }
-        ctl = { 'run_ok': True }
+        cfg = {'min-value-size': self.parami("min_value_size", 1024),
+               'vbuckets': self.vbucket_count,
+               'batch':  PerfDefaults.batch,
+               'json': 1}
+        cur = {'cur-items': self.parami("items", 1000000)}
+        ctl = {'run_ok': True}
         protocol = self.param('protocol', 'binary')
         protocol, host_port, user, pswd = \
             self.protocol_parse(protocol, use_direct=True)
@@ -1430,19 +1487,22 @@ class ErlangAsyncDrainingTests(PerfBase):
         super(ErlangAsyncDrainingTests, self).setUp()
 
     def go(self, original, modified, mode):
-        ClusterOperationHelper.change_erlang_async(self.input.servers, original, modified)
+        ClusterOperationHelper.change_erlang_async(self.input.servers,
+                                                   original, modified)
         #restart
         ClusterOperationHelper.stop_cluster(self.input.servers)
         ClusterOperationHelper.start_cluster(self.input.servers)
         time.sleep(10)
         self.wait_until_warmed_up()
 
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
-                                                                'test_time':time.time()})
-        ops, start_time, end_time = self.load(self.parami("items", 1000000),
-                                              self.parami('size', 2048),
-                                              kind=self.param('kind', mode),
-                                              doc_cache=self.parami('doc_cache', 0))
+        sc = self.start_stats(self.spec_reference,
+                              test_params={'test_name': self.id(),
+                                           'test_time': time.time()})
+        ops, start_time, end_time = \
+            self.load(self.parami("items", 1000000),
+                      self.parami('size', 2048),
+                      kind=self.param('kind', mode),
+                      doc_cache=self.parami('doc_cache', 0))
         ops['end-time'] = self.wait_until_drained()
         self.end_stats(sc, ops)
 
@@ -1472,7 +1532,8 @@ class TransactionSize(PerfBase):
     def go(self, settings):
         for key, val in settings:
             val = self.param(key, val)
-            ClusterOperationHelper.flushctl_set(self.input.servers[0], key, val)
+            ClusterOperationHelper.flushctl_set(self.input.servers[0],
+                                                key, val)
 
         for key, val in settings:
             key = 'ep_' + key
@@ -1482,17 +1543,17 @@ class TransactionSize(PerfBase):
                   self.parami('size', 1024),
                   kind=self.param('kind', 'binary'))
         self.loop_prep()
-        self.loop(num_ops        = self.parami("ops", 20000000),
-                  num_items      = self.parami("items", 1000000),
-                  min_value_size = self.parami('size', 1024),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = self.paramf('ratio_sets', 1.0),
-                  ratio_creates  = self.paramf('ratio_creates', 0.0),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  test_name      = self.id())
+        self.loop(num_ops=self.parami("ops", 20000000),
+                  num_items=self.parami("items", 1000000),
+                  min_value_size=self.parami('size', 1024),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 1),
+                  ratio_sets=self.paramf('ratio_sets', 1.0),
+                  ratio_creates=self.paramf('ratio_creates', 0.0),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                  test_name=self.id())
 
         for key, val in settings:
             key = 'ep_' + key
@@ -1552,10 +1613,11 @@ class TransactionSize(PerfBase):
 class Warmup(PerfBase):
 
     def setUp(self):
-        self.dgm = self.parami("dgm", 0) # By default, no DGM for Warmup tests.
+        self.dgm = self.parami("dgm", 0)  # By default, no DGM for Warmup tests.
         super(Warmup, self).setUp()
 
-    def go(self, items=None, kind='binary', expiration=0, ratio_expirations=0.0):
+    def go(self, items=None, kind='binary', expiration=0,
+           ratio_expirations=0.0):
         items = items or self.parami("items", 2000000)
         self.load(items,
                   kind=kind,
@@ -1566,14 +1628,15 @@ class Warmup(PerfBase):
         ClusterOperationHelper.stop_cluster(self.input.servers)
         ClusterOperationHelper.start_cluster(self.input.servers)
         start_time = time.time()
-        time.sleep(max(10, expiration + 2)) # Sleep longer than expiration.
-        sc = self.start_stats(self.spec_reference, test_params={'test_name':self.id(),
-                                                                'test_time':start_time})
+        time.sleep(max(10, expiration + 2))  # Sleep longer than expiration.
+        sc = self.start_stats(self.spec_reference,
+                              test_params={'test_name': self.id(),
+                                           'test_time': start_time})
         self.wait_until_warmed_up()
         end_time = time.time()
-        self.end_stats(sc, { 'tot-items': self.num_items_loaded,
-                             "start-time": start_time,
-                             "end-time": end_time })
+        self.end_stats(sc, {'tot-items': self.num_items_loaded,
+                            "start-time": start_time,
+                            "end-time": end_time})
 
     def test_WARM_01_1(self):
         self.spec('WARM-01-1')
@@ -1587,12 +1650,12 @@ class Warmup(PerfBase):
 class WarmupDGM(Warmup):
 
     def setUp(self):
-        PerfBase.setUp(self) # Skip Warmup.setUp() to get default DGM behavior.
+        PerfBase.setUp(self)  # Skip Warmup.setUp() to get default DGM behavior
 
     def test_WARM_02_1(self):
         self.spec('WARM-02.1')
         self.go(kind='binary',
-                expiration=self.parami("expiration", 20), # 20 seconds.
+                expiration=self.parami("expiration", 20),  # 20 seconds.
                 ratio_expirations=self.paramf("ratio_expirations", 1.0))
 
 
@@ -1635,8 +1698,8 @@ class TODO_CacheMisses(TODO_PerfBase):
         min_value_size = self.parami("min_value_size", 1024)
         dgm_factor = 3
         num_items = self.mem_quota() * 1024 * 1024 * dgm_factor / min_value_size
-        self.log.info("loading {0} items, {0}x more than mem_quota of {0}MB".format(
-                num_items, dgm_factor, min_value_size))
+        self.log.info("loading {0} items, {0}x more than mem_quota of {0}MB".
+                      format(num_items, dgm_factor, min_value_size))
         self.load(num_items)
         self.loop_prep()
         self.loop(num_items)
@@ -1712,7 +1775,7 @@ class TODO_DatabaseFileSize(TODO_PerfBase):
         self.spec('DBF-01')
 
         m10 = 10000000
-        m1  =  1000000
+        m1 = 1000000
 
         self.load(m10)
         self.wait_until_drained()
@@ -1722,7 +1785,8 @@ class TODO_DatabaseFileSize(TODO_PerfBase):
             self.loop(m10)
             self.measure_db_size()
 
-        # TODO: self.loop(m1, ratio_sets=1.0, ratio_creates=0.0, ratio_deletes=1.0)
+        # TODO: self.loop(m1, ratio_sets=1.0, ratio_creates=0.0,
+        #                 ratio_deletes=1.0)
 
         self.loop(m1, ratio_sets=1.0, ratio_creates=0.0, expiration=[1.0, 10])
         self.measure_db_size()
@@ -1741,15 +1805,15 @@ class Experimental(PerfBase):
         self.loop_prep()
         seconds = self.parami('seconds', 60 * 20)
         self.loop(('seconds', seconds),
-                  num_items      = self.parami("items", 1000000),
-                  min_value_size = self.parami('size', 1024),
-                  kind           = self.param('kind', 'binary'),
-                  protocol       = self.param('protocol', 'binary'),
-                  clients        = self.parami('clients', 1),
-                  ratio_sets     = self.paramf('ratio_sets', 0.2),
-                  ratio_misses   = self.paramf('ratio_misses', 0.2),
-                  ratio_creates  = self.paramf('ratio_creates', 0.5),
-                  ratio_hot      = self.paramf('ratio_hot', 0.2),
-                  ratio_hot_sets = self.paramf('ratio_hot_sets', 0.95),
-                  ratio_hot_gets = self.paramf('ratio_hot_gets', 0.95),
-                  test_name      = self.id())
+                  num_items=self.parami("items", 1000000),
+                  min_value_size=self.parami('size', 1024),
+                  kind=self.param('kind', 'binary'),
+                  protocol=self.param('protocol', 'binary'),
+                  clients=self.parami('clients', 1),
+                  ratio_sets=self.paramf('ratio_sets', 0.2),
+                  ratio_misses=self.paramf('ratio_misses', 0.2),
+                  ratio_creates=self.paramf('ratio_creates', 0.5),
+                  ratio_hot=self.paramf('ratio_hot', 0.2),
+                  ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
+                  ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
+                  test_name=self.id())
