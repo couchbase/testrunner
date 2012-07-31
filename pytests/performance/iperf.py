@@ -6,7 +6,7 @@ from multiprocessing.sharedctypes import Value
 from membase.api import httplib2
 from membase.api.rest_client import RestConnection
 
-from eperf import EVPerfClient
+from performance.eperf import EVPerfClient
 
 
 class PerfWrapper(object):
@@ -34,7 +34,8 @@ class PerfWrapper(object):
                 total_clients = min(4, total_clients)
             self.input.test_params['num_clients'] = total_clients
 
-            if self.parami('index_phase', 0) or self.parami('hot_load_phase', 0):
+            if self.parami('index_phase', 0) or \
+                    self.parami('hot_load_phase', 0):
                 # Single-threaded tasks (hot load phase, index phase)
                 self.input.test_params['prefix'] = 0
                 return test(self, *args, **kargs)
@@ -64,8 +65,8 @@ class PerfWrapper(object):
             -- constant background load (mainly memcached sets/gets)
             -- constant foreground load (mainly view queries)
 
-            However during the test number of foreground processes increases. So
-            consistency only means number of operation per second.
+            However during the test number of foreground processes increases.
+            So consistency only means number of operation per second.
 
             Processes use shared objects (ctype wrappers) for synchronization.
             """
@@ -99,7 +100,7 @@ class PerfWrapper(object):
                 original_fg_max_ops_per_sec
             self.input.test_params['bg_max_ops_per_sec'] = 1
 
-            self.active_fg_workers = Value('i', 0) # signed int
+            self.active_fg_workers = Value('i', 0)  # signed int
 
             for prefix in range(total_bg_clients, total_clients):
                 self.input.test_params['prefix'] = prefix
@@ -124,8 +125,8 @@ class PerfWrapper(object):
                 """Define remote cluster and start replication (only before
                 load phase).
                 """
-                if (self.parami('load_phase', 0) and
-                    not self.parami('hot_load_phase', 0)):
+                if self.parami('load_phase', 0) and \
+                        not self.parami('hot_load_phase', 0):
                     master = self.input.clusters[0][0]
                     slave = self.input.clusters[1][0]
                     try:
@@ -141,7 +142,8 @@ class PerfWrapper(object):
                     return PerfWrapper.multiply(test)(self, *args, **kargs)
                 elif region == 'west':
                     self.input.servers = self.input.clusters[1]
-                    self.input.test_params['bucket'] = self.get_buckets(reversed=True)[0]
+                    self.input.test_params['bucket'] = \
+                        self.get_buckets(reversed=True)[0]
                     return PerfWrapper.multiply(test)(self, *args, **kargs)
             return wrapper
         return decorator
