@@ -1,6 +1,8 @@
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from membase.helper.rebalance_helper import RebalanceHelper
 from xdcrbasetests import XDCRReplicationBaseTest
+from remote.remote_util import RemoteMachineShellConnection
+from memcached.helper.data_helper import MemcachedClientHelper
 from random import randrange
 
 import time
@@ -10,9 +12,10 @@ class unidirectional(XDCRReplicationBaseTest):
         super(unidirectional, self).setUp()
 
         self.gen_create = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
-        self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=self._num_items / 2,
-            end=self._num_items)
-        self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size, end=self._num_items / 2 - 1)
+        self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size,
+            start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+        self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size,
+            end=int(self._num_items * (float)(self._percent_update) / 100) - 1)
 
     def tearDown(self):
         super(unidirectional, self).tearDown()
@@ -46,8 +49,11 @@ class unidirectional(XDCRReplicationBaseTest):
         self._verify_stats_all_buckets(dest_nodes)
         self._verify_all_buckets(dest_nodes[0])
 
+        if "update" in self._doc_ops:
+            self._verify_revIds(src_nodes[0], dest_nodes[0], "update")
+
         if "delete" in self._doc_ops:
-            self._verify_revIds_deletes(src_nodes[0], dest_nodes[0])
+            self._verify_revIds(src_nodes[0], dest_nodes[0], "delete")
 
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified byuser. """
@@ -58,8 +64,6 @@ class unidirectional(XDCRReplicationBaseTest):
         src_nodes = self._clusters_dic[0]
         src_master = src_nodes[0]
 
-        dest_nodes = self._clusters_dic[1]
-        dest_master = dest_nodes[0]
         """Setting up creates/updates/deletes at source nodes"""
 
         if self._doc_ops is not None:
@@ -90,9 +94,6 @@ class unidirectional(XDCRReplicationBaseTest):
 
         src_nodes = self._clusters_dic[0]
         src_master = src_nodes[0]
-
-        dest_nodes = self._clusters_dic[1]
-        dest_master = dest_nodes[0]
 
         self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
         tasks = []
@@ -125,6 +126,154 @@ class unidirectional(XDCRReplicationBaseTest):
     Create/Update/Delete are performed after based on doc-ops specified by the user.
     Verifying whether XDCR replication is successful on subsequent destination clusters. """
 
+    def do_a_warm_up(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.stop_couchbase()
+        time.sleep(5)
+        shell.start_couchbase()
+        shell.disconnect()
+
+    def load_with_ops_with_warmup(self):
+
+        ord_keys = self._clusters_keys_olst
+        ord_keys_len = len(ord_keys)
+
+        src_nodes = self._clusters_dic[0]
+        dest_nodes = self._clusters_dic[1]
+        src_master = src_nodes[0]
+        expires = self._expires
+
+        #Time to sleep depends on the number of items
+        time.sleep(30)
+        if self._warmup == "source":
+            warmupnodes = src_nodes
+        elif self._warmup == "destination":
+            warmupnodes = dest_nodes
+        elif self._warmup == "all":
+            warmupnodes = src_nodes
+            warmupnodes.extend(dest_nodes)
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
+        time.sleep(30)
+
+        #Setting up doc-ops at source nodes
+        if (self._doc_ops is not None):
+            # allows multiple of them but one by one
+            if "create" in self._doc_ops:
+                self._load_all_buckets(src_master, self.gen_create, "create", expires)
+            if "update" in self._doc_ops:
+                self._load_all_buckets(src_master, self.gen_update, "update", expires)
+            if "delete" in self._doc_ops:
+                self._load_all_buckets(src_master, self.gen_delete, "delete", expires)
+            self._wait_for_stats_all_buckets(src_nodes)
+
+        time.sleep(60)
+
+        # Checking replication at destination clusters
+        dest_key_index = 1
+        for key in ord_keys[1:]:
+            if dest_key_index == ord_keys_len:
+                break
+            dest_key = ord_keys[dest_key_index]
+            dest_nodes = self._clusters_dic[dest_key]
+
+            for server in warmupnodes:
+                mc = MemcachedClientHelper.direct_client(server, "default")
+                start = time.time()
+                while time.time() - start < 150:
+                    if mc.stats()["ep_warmup_thread"] == "complete":
+                        self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
+                        time.sleep(10)
+                        break
+                    elif mc.stats()["ep_warmup_thread"] == "running":
+                        self._log.info(
+                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                        continue
+                    else:
+                        self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
+                        break
+                if mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("ERROR: ep_warmup_thread's status not complete")
+                mc.close()
+
+            self.verify_xdcr_stats(src_nodes, dest_nodes)
+            dest_key_index += 1
+
+
+    def load_with_async_ops_with_warmup(self):
+
+        ord_keys = self._clusters_keys_olst
+        ord_keys_len = len(ord_keys)
+
+        src_nodes = self._clusters_dic[0]
+        dest_nodes = self._clusters_dic[1]
+        src_master = src_nodes[0]
+        expires = self._expires
+
+        self._load_all_buckets(src_master, self.gen_create, "create", expires)
+
+        #Time to sleep depends on the number of items
+        time.sleep(30)
+        if self._warmup == "source":
+            warmupnodes = src_nodes
+        elif self._warmup == "destination":
+            warmupnodes = dest_nodes
+        elif self._warmup == "all":
+            warmupnodes = src_nodes
+            warmupnodes.extend(dest_nodes)
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
+        time.sleep(30)
+
+        tasks = []
+        #Setting up doc-ops at source nodes
+        if (self._doc_ops is not None):
+            # allows multiple of them but one by one
+            if "update" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_update, "update", expires))
+            if "create" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_create, "create", expires))
+            if "delete" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", expires))
+            time.sleep(60)
+        for task in tasks:
+            task.result()
+
+        time.sleep(30)
+        self._wait_for_stats_all_buckets(src_nodes)
+
+
+        # Checking replication at destination clusters
+        dest_key_index = 1
+        for key in ord_keys[1:]:
+            if dest_key_index == ord_keys_len:
+                break
+            dest_key = ord_keys[dest_key_index]
+            dest_nodes = self._clusters_dic[dest_key]
+
+            for server in warmupnodes:
+                mc = MemcachedClientHelper.direct_client(server, "default")
+                start = time.time()
+                while time.time() - start < 150:
+                    if mc.stats()["ep_warmup_thread"] == "complete":
+                        self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
+                        time.sleep(10)
+                        break
+                    elif mc.stats()["ep_warmup_thread"] == "running":
+                        self._log.info(
+                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                        continue
+                    else:
+                        self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
+                        break
+                if mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("ERROR: ep_warmup_thread's status not complete")
+                mc.close()
+
+            self.verify_xdcr_stats(src_nodes, dest_nodes)
+            dest_key_index += 1
+
+
     def load_with_failover(self):
 
         ord_keys = self._clusters_keys_olst
@@ -137,6 +286,8 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_master = dest_nodes[0]
 
         self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
+
+        time.sleep(60)
 
         if "source" in self._failover:
             i = randrange(1, len(src_nodes))
@@ -183,6 +334,8 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_master = dest_nodes[0]
 
         self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
+
+        time.sleep(60)
 
         if "source" in self._failover:
             i = randrange(1, len(src_nodes))
@@ -231,6 +384,8 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_master = dest_nodes[0]
 
         self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
+
+        time.sleep(60)
 
         tasks = []
         """Setting up failover while creates/updates/deletes at source nodes"""

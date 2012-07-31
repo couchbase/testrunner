@@ -549,7 +549,7 @@ class ValidateDataTask(GenericLoadingTask):
 
 
 class VerifyRevIdTask(GenericLoadingTask):
-    def __init__(self, src_server, dest_server, bucket, kv_store):
+    def __init__(self, src_server, dest_server, bucket, kv_store, ops_perf):
         GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
         self.client_dest = VBucketAwareMemcached(RestConnection(dest_server), bucket)
 
@@ -558,18 +558,29 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
         self.err_count = 0
+        self.ops_perf = ops_perf
 
     def has_next(self):
-        if self.itr < self.num_deleted_keys:
-            return True
-        return False
+        if self.ops_perf == "delete":
+            if self.itr < self.num_deleted_keys:
+                return True
+            return False
+        elif self.ops_perf == "update":
+            if self.itr < self.num_valid_keys:
+                return True
+            return False
 
     def next(self):
-        if self.itr < self.num_deleted_keys:
-            self._check_deleted_key_revId(self.deleted_keys[self.itr])
-        self.itr += 1
+        if self.ops_perf == "delete":
+            if self.itr < self.num_deleted_keys:
+                self._check_key_revId(self.deleted_keys[self.itr])
+            self.itr += 1
+        elif self.ops_perf == "update":
+            if self.itr < self.num_valid_keys:
+                self._check_key_revId(self.valid_keys[self.itr])
+            self.itr += 1
 
-    def _check_deleted_key_revId(self, key):
+    def _check_key_revId(self, key):
         try:
             src = self.client.memcached(key)
             dest = self.client_dest.memcached(key)
