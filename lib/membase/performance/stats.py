@@ -531,7 +531,7 @@ class StatUtil(object):
     def build_info(node):
         rest = RestConnection(node)
         api = rest.baseUrl + 'nodes/self'
-        status, content = rest._http_request(api)
+        status, content, header = rest._http_request(api)
         json_parsed = json.loads(content)
         return json_parsed
 
