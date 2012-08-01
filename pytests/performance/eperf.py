@@ -249,9 +249,6 @@ class EPerfMaster(perf.PerfBase):
         if not self.is_master:
             self.setUpBase1()
 
-    def gated_finish(self, clients, notify):
-        pass
-
     def _dashboard(phase):
         def _outer(function):
             def _inner(self, *args, **kargs):
@@ -874,7 +871,6 @@ function(doc) {
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host)
-        self.gated_finish(self.input.clients, notify)
 
     def test_evperf_workload3(self):
         """Like workload 2 but has queries on view with reduce step"""
@@ -921,8 +917,6 @@ function(doc) {
                           queries=queries,
                           proto_prefix='couchbase',
                           host=host)
-
-        self.gated_finish(self.input.clients, notify)
 
     def test_vperf1(self):
         """1 design document, 1 view"""
@@ -1473,14 +1467,6 @@ class EVPerfClient(EPerfClient):
                                       self.bg_thread_cur)
 
         return rv_cur, start_time, end_time
-
-
-def params_to_str(params):
-    param_str = ""
-    if params is not None:
-        for k, v in params.items():
-            param_str += "&{0}={1}".format(k, v)
-    return param_str
 
 
 def compute_queries(queries_by_kind, remaining, suffix=""):

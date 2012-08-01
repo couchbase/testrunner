@@ -7,7 +7,6 @@ import testconstants
 import subprocess
 
 # membase imports
-from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -21,10 +20,6 @@ from TestInput import TestInputSingleton
 from perf_defaults import PerfDefaults
 from perf_engines import mcsoda
 import testconstants
-
-
-def TODO():
-    pass
 
 
 class PerfBase(unittest.TestCase):
@@ -747,10 +742,6 @@ class PerfBase(unittest.TestCase):
         t.daemon = True
         t.start()
 
-    def loop_prep(self):
-        self.wait_until_drained()
-        self.restartProxy()
-
     def loop(self, num_ops=None,
              num_items=None,
              max_items=None,
@@ -897,17 +888,6 @@ class PerfBase(unittest.TestCase):
 
         return ops, start_time, end_time
 
-    def loop_bg(self, num_ops, num_items=None, min_value_size=None,
-                kind='binary',
-                protocol='binary',
-                clients=1,
-                expiration=None,
-                ratio_misses=0.0, ratio_sets=0.0, ratio_creates=0.0,
-                ratio_hot=0.2, ratio_hot_sets=0.95, ratio_hot_gets=0.95):
-        min_value_size = min_value_size or self.parami("min_value_size", 1024)
-        num_items = num_items or self.num_items_loaded
-        TODO()
-
     def wait_until_drained(self):
         print "[drain] draining disk write queue ..."
 
@@ -990,17 +970,6 @@ class PerfBase(unittest.TestCase):
             RebalanceHelper.wait_for_stats_on_all(master, bucket,
                                                   'ep_warmup_thread',
                                                   'complete', fn=fn)
-
-    def clog_cluster(self, servers):
-        ClusterOperationHelper.flushctl_stop(servers)
-
-    def unclog_cluster(self, servers):
-        ClusterOperationHelper.flushctl_start(servers)
-
-    def measure_db_size(self):
-        bucket = self.param("bucket", "default")
-        status, db_size = self.rest.get_database_disk_size(bucket)
-        return db_size
 
     def param(self, name, default_value):
         input = getattr(self, "input", TestInputSingleton.input)
