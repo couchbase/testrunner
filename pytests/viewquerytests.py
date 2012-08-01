@@ -49,6 +49,7 @@ class ViewQueryTests(unittest.TestCase):
             ViewBaseTests.common_setUp(self)
             self.limit = TestInputSingleton.input.param("limit", None)
             self.reduce_fn = TestInputSingleton.input.param("reduce_fn", None)
+            self.skip_rebalance = TestInputSingleton.input.param("skip_rebalance", False)
             self.error = None
             self.task_manager = taskmanager.TaskManager()
             self.task_manager.start()
@@ -56,6 +57,8 @@ class ViewQueryTests(unittest.TestCase):
             self.thread_stopped = Event()
             self.server = None
             self.cluster = Cluster()
+            if not self.skip_rebalance:
+                self.cluster.rebalance(self.servers[:], self.servers[1:], [])
         except Exception as ex:
             skip_setup_failed = True
             self.fail(ex)
@@ -203,9 +206,6 @@ class ViewQueryTests(unittest.TestCase):
     def test_employee_dataset_alldocs_failover_queries(self):
         failover_nodes = []
         try:
-            ViewBaseTests._begin_rebalance_in(self)
-            ViewBaseTests._end_rebalance(self)
-
             docs_per_day = self.input.param('docs-per-day', 200)
             data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
@@ -243,9 +243,6 @@ class ViewQueryTests(unittest.TestCase):
     def test_employee_dataset_alldocs_incremental_failover_queries(self):
         failover_nodes = []
         try:
-            ViewBaseTests._begin_rebalance_in(self)
-            ViewBaseTests._end_rebalance(self)
-
             docs_per_day = self.input.param('docs-per-day', 200)
             data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
@@ -419,8 +416,6 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
 
     def test_employee_dataset_stale_queries(self):
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
 
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
@@ -429,8 +424,6 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_all_queries(self):
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
 
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
@@ -439,9 +432,6 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_skip_queries(self):
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
-
         docs_per_day = self.input.param('docs-per-day', 200)
         skip = self.input.param('skip', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
@@ -450,9 +440,6 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_skip_incremental_queries(self):
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
-
         docs_per_day = self.input.param('docs-per-day', 200)
         skip = 0
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
@@ -470,9 +457,6 @@ class ViewQueryTests(unittest.TestCase):
             data_set.views = [view for view in data_set.views if skip < view.index_size]
 
     def test_all_datasets_all_queries(self):
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
-
         ds1 = EmployeeDataSet(self._rconn())
         ds2 = SimpleDataSet(self._rconn(), self.num_docs)
         data_sets = [ds1, ds2]
@@ -500,9 +484,6 @@ class ViewQueryTests(unittest.TestCase):
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
         data_set.add_startkey_endkey_queries()
         self._query_test_init(data_set, False)
-
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
 
         query_nodes_threads = []
         for server in self.servers:
@@ -532,10 +513,6 @@ class ViewQueryTests(unittest.TestCase):
 
         data_set.add_startkey_endkey_queries()
         self._query_test_init(data_set, False)
-
-        # Cluster total - 1 nodes
-        ViewBaseTests._begin_rebalance_in(self)
-        ViewBaseTests._end_rebalance(self)
 
         prefix = str(uuid.uuid4())[:7]
         ViewBaseTests._load_docs(self, self.num_docs, prefix, verify=False)
@@ -673,9 +650,6 @@ class ViewQueryTests(unittest.TestCase):
     def test_employee_dataset_failover_pending_queries(self):
         failover_nodes = []
         try:
-            ViewBaseTests._begin_rebalance_in(self)
-            ViewBaseTests._end_rebalance(self)
-
             docs_per_day = self.input.param('docs-per-day', 200)
             data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
@@ -792,9 +766,6 @@ class ViewQueryTests(unittest.TestCase):
             data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
             data_set.add_startkey_endkey_queries()
             self._query_test_init(data_set, False)
-
-            ViewBaseTests._begin_rebalance_in(self)
-            ViewBaseTests._end_rebalance(self)
 
             self.server = self.servers[-1]
             shell = RemoteMachineShellConnection(self.servers[0])
