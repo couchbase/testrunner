@@ -746,108 +746,23 @@ class EPerfMaster(perf.PerfBase):
 
     def test_evperf_workload2(self):
         self.spec("evperf_workload2")
-        items = self.parami("items", 45000000)
-        notify = self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", 10), items)
-        ddocs = {}
-        ddocs["A"] = {"views": {}}
-        ddocs["A"]["views"]["city"] = {}
-        ddocs["A"]["views"]["city"]["map"] = """
-function(doc) {
-  if (doc.city != null) {
-    emit(doc.city, null);
-  }
-}
-"""
-        ddocs["A"]["views"]["city2"] = {}
-        ddocs["A"]["views"]["city2"]["map"] = """
-function(doc) {
-  if (doc.city != null) {
-    emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
-  }
-}
-"""
-        ddocs["B"] = {"views": {}}
-        ddocs["B"]["views"]["realm"] = {}
-        ddocs["B"]["views"]["realm"]["map"] = """
-function(doc) {
-  if (doc.realm != null) {
-    emit(doc.realm, null);
-  }
-}
-"""
-        ddocs["B"]["views"]["experts"] = {}
-        ddocs["B"]["views"]["experts"]["map"] = """
-function(doc) {
-  if (doc.category == 2) {
-    emit([doc.name, doc.coins], null);
-  }
-}
-"""
-        ddocs["C"] = {"views": {}}
-        ddocs["C"]["views"]["experts"] = {}
-        ddocs["C"]["views"]["experts"]["map"] = """
-function(doc) {
-  emit([doc.category, doc.coins], null);
-}
-"""
-        ddocs["C"]["views"]["realm"] = {}
-        ddocs["C"]["views"]["realm"]["map"] = """
-function(doc) {
-  emit([doc.realm, doc.coins], null)
-}
-"""
-        ddocs["C"]["views"]["realm2"] = {}
-        ddocs["C"]["views"]["realm2"]["map"] = """
-function(doc) {
-  emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
-}
-"""
-        ddocs["C"]["views"]["category"] = {}
-        ddocs["C"]["views"]["category"]["map"] = """
-function(doc) {
-  emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
-}
-"""
+
+        # Load phase
+        items = self.parami('items', PerfDefaults.items)
+        num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
+        self.load_phase(num_nodes, items)
+
+        # Index phase
+        view_gen = ViewGen()
+        ddocs = view_gen.generate_ddocs([2, 2, 4])
         self.index_phase(ddocs)
 
-        limit = self.parami("limit", 10)
-
-        b = '/default/'
-
-        q = {}
-        q['all_docs'] = b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"'
-        q['city'] = b + '_design/A/_view/city?limit=' + str(limit) + '&startkey="{city}"'
-        q['city2'] = b + '_design/A/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
-        q['realm'] = b + '_design/B/_view/realm?limit=30&startkey="{realm}"'
-        q['experts'] = b + '_design/B/_view/experts?limit=30&startkey="{name}"'
-        q['coins-beg'] = b + '_design/C/_view/experts?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
-        q['coins-exp'] = b + '_design/C/_view/experts?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
-        q['and0'] = b + '_design/C/_view/realm?limit=30&startkey=["{realm}",{coins}]'
-        q['and1'] = b + '_design/C/_view/realm?limit=30&startkey=["{realm}",{coins}]'
-        q['and2'] = b + '_design/C/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
-
-        queries_by_kind = [
-            [  # 5
-                q['all_docs']],
-            [  # 45% / 5 = 9
-                q['city'],
-                q['city2'],
-                q['realm'],
-                q['experts']],
-            [  # 30% / 5 = 6
-                q['coins-beg'],
-                q['coins-exp']],
-            [  # 25% / 5 = 5
-                q['and0'],
-                q['and1'],
-                q['and2']]]
-
-        remaining = [5, 9, 6, 5]
-
-        queries = compute_queries(queries_by_kind, remaining,
-                                  self.param("query_suffix", ""))
-        queries = join_queries(queries)
+        # Access phase
+        limit = self.parami('limit', 10)
+        query_suffix = self.param("query_suffix", "")
+        bucket = self.params('bucket', 'default')
+        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
+                                            use_all_docs=True)
 
         self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
         self.fg_max_ops = self.parami("fg_max_ops", 1000000)
@@ -877,17 +792,17 @@ function(doc) {
 
         self.spec('evperf_workload3')
 
-        """Load phase"""
-        items = self.parami('items', 45000000)
-        notify = self.gated_start(self.input.clients)
-        self.load_phase(self.parami('num_nodes', 10), items)
+        # Load phase
+        items = self.parami('items', PerfDefaults.items)
+        num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
+        self.load_phase(num_nodes, items)
 
-        """Index phase"""
+        # Index phase
         view_gen = ViewGen()
         ddocs = view_gen.generate_ddocs([2, 2, 4], add_reduce=True)
         self.index_phase(ddocs)
 
-        """Access phase"""
+        # Access phase
         limit = self.parami('limit', 10)
         query_suffix = self.param('query_suffix', '')
         bucket = self.params('bucket', 'default')
@@ -1467,30 +1382,6 @@ class EVPerfClient(EPerfClient):
                                       self.bg_thread_cur)
 
         return rv_cur, start_time, end_time
-
-
-def compute_queries(queries_by_kind, remaining, suffix=""):
-    i = 0
-    queries = []
-
-    while remaining.count(0) < len(remaining):
-        kind = i % len(remaining)
-        count = remaining[kind]
-        if count > 0:
-            remaining[kind] = count - 1
-            k = queries_by_kind[kind]
-            queries.append(k[count % len(k)] + suffix)
-        i = i + 1
-
-    return queries
-
-
-def join_queries(queries):
-    queries = ';'.join(queries)
-    queries = queries.replace('[', '%5B')
-    queries = queries.replace(']', '%5D')
-    queries = queries.replace(',', '%2C')
-    return queries
 
 
 class ViewGen:
