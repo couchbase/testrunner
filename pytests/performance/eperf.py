@@ -326,7 +326,8 @@ class EPerfMaster(perf.PerfBase):
             print "Loading"
 
             nru_freq = self.parami('nru_freq', PerfDefaults.nru_freq)
-            if nru_freq != PerfDefaults.nru_freq:
+            if nru_freq != PerfDefaults.nru_freq \
+                and self.is_leader:
                 self.set_nru_freq(nru_freq)
 
             num_clients = self.parami("num_clients",
@@ -388,7 +389,8 @@ class EPerfMaster(perf.PerfBase):
             mvs = self.min_value_size(self.parami("avg_value_size",
                                       PerfDefaults.avg_value_size))
 
-            if self.parami('nru_task', PerfDefaults.nru_task):
+            if self.parami('nru_task', PerfDefaults.nru_task) \
+                and self.is_leader:
                 self.set_nru_task()
 
             self.loop(num_ops=0,
