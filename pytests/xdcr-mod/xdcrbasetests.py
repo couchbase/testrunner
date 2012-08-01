@@ -12,6 +12,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import VBucketAwareMemcached
 from mc_bin_client import MemcachedError
+from remote.remote_util import RemoteMachineShellConnection
 
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from basetestcase import BaseTestCase
@@ -97,7 +98,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.teardown_extended()
         self._do_cleanup()
 
-        # def test_setUp(self):
+    #def test_setUp(self):
     #    pass
 
 
@@ -247,7 +248,12 @@ class XDCRBaseTest(unittest.TestCase):
                 time.sleep(sleep)
                 return self._poll_for_condition_rec(condition, sleep, (num_itr - 1))
 
-
+    def do_a_warm_up(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.stop_couchbase()
+        time.sleep(5)
+        shell.start_couchbase()
+        shell.disconnect()
 
 #===============================================================================
 # class: XDCRReplicationBaseTest
