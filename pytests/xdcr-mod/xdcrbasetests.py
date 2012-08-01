@@ -4,15 +4,15 @@ import unittest
 import logger
 import copy
 
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 from couchbase.cluster import Cluster
 from TestInput import TestInputSingleton
 from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import VBucketAwareMemcached
-from mc_bin_client import MemcachedError
 from remote.remote_util import RemoteMachineShellConnection
+from mc_bin_client import MemcachedError
 
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from basetestcase import BaseTestCase
@@ -84,8 +84,9 @@ class XDCRBaseTest(unittest.TestCase):
             self._init_clusters()
             self.setup_extended()
             self._log.info("SetUp process completed...")
-        except:
-            self._log.error("Error while setting up clusters: %s", sys.exc_info()[0])
+        except  Exception as e:
+            self._log.error(e.message)
+            self._log.error("Error while setting up clusters: %s", sys.exc_info())
             self._cleanup_broken_setup()
             raise
 
@@ -98,7 +99,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.teardown_extended()
         self._do_cleanup()
 
-    #def test_setUp(self):
+        # def test_setUp(self):
     #    pass
 
 
@@ -112,7 +113,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._servers = self._input.servers
         self._floating_servers_set = self._get_floating_servers() # These are the servers defined in .ini file but not linked to any cluster.
         self._cluster_counter_temp_int = 0 #TODO: fix the testrunner code to pass cluster name in params.
-        self._buckets = {}
+        self._buckets = []
         self._default_bucket = self._input.param("default_bucket", True)
         if self._default_bucket:
             self.default_bucket_name = "default"
@@ -217,9 +218,12 @@ class XDCRBaseTest(unittest.TestCase):
         master_node = nodes[0]
         bucket_size = self._get_bucket_size(master_node, nodes, self._mem_quota_int, self._default_bucket)
 
+        rest=RestConnection(master_node)
+        master_id = rest.get_nodes_self().id
         if self._default_bucket:
             self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
-            self._buckets[self.default_bucket_name] = {1: KVStore()}
+            self._buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                       num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
 
     def _config_cluster(self, nodes):
         task = self._cluster_helper.async_rebalance(nodes, nodes[1:], [])
@@ -254,6 +258,52 @@ class XDCRBaseTest(unittest.TestCase):
         time.sleep(5)
         shell.start_couchbase()
         shell.disconnect()
+
+    def _get_cluster_buckets(self, master_server):
+        rest=RestConnection(master_server)
+        master_id = rest.get_nodes_self().id
+        return [bucket for bucket in self._buckets if bucket.master_id == master_id]
+
+    """merge 2 different kv strores from different clsusters/buckets
+       assume that all elements in the second kvs are more relevant.
+
+    Returns:
+            merged kvs, that we expect to get on both clusters
+    """
+    def merge_keys(self, kv_store_first, kv_store_second, kvs_num=1):
+        valid_keys_first, deleted_keys_first = kv_store_first[kvs_num].key_set()
+        valid_keys_second, deleted_keys_second = kv_store_second[kvs_num].key_set()
+
+        for key in valid_keys_second:
+            #replace the values for each key in first kvs if the keys are presented in second one
+            if key in valid_keys_first:
+                partition1 = kv_store_first[kvs_num].acquire_partition(key)
+                partition2 = kv_store_second[kvs_num].acquire_partition(key)
+                partition1.set(key, partition2.get_valid(key))
+                kv_store_first[1].release_partition(key)
+                kv_store_second[1].release_partition(key)
+            #add keys/values in first kvs if the keys are presented only in second one
+            else :
+                partition1, num_part = kv_store_first[kvs_num].acquire_random_partition()
+                partition2 = kv_store_second[kvs_num].acquire_partition(key)
+                partition1.set(key, partition2.get_valid(key))
+                kv_store_first[kvs_num].release_partition(num_part)
+                kv_store_second[kvs_num].release_partition(key)
+            #add condition when key was deleted in first, but added in second
+
+        for key in deleted_keys_second:
+            # the same keys were deleted in both kvs
+            if key in deleted_keys_first:
+                pass
+            # add deleted keys to first kvs if the where deleted only in second kvs
+            else :
+                partition1 = kv_store_first[kvs_num].acquire_partition(key)
+                partition2 = kv_store_second[kvs_num].acquire_partition(key)
+                partition1.deleted[key] = partition2.get_deleted(key)
+                kv_store_first[kvs_num].release_partition(key)
+                kv_store_second[kvs_num].release_partition(key)
+        # return merged kvs, that we expect to get on both clusters
+        return kv_store_first[kvs_num]
 
 #===============================================================================
 # class: XDCRReplicationBaseTest
@@ -414,11 +464,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1):
         tasks = []
-        for bucket, kv_stores in self._buckets.items():
+        buckets = self._get_cluster_buckets(server)
+        for bucket in buckets:
             gen = copy.deepcopy(kv_gen)
-            tasks.append(self._cluster_helper.async_load_gen_docs(server, bucket, gen,
-                kv_stores[kv_store],
-                op_type, exp))
+            tasks.append(self._cluster_helper.async_load_gen_docs(server, bucket.name, gen,
+                                                          bucket.kvs[kv_store],
+                                                          op_type, exp))
         return tasks
 
 
@@ -429,13 +480,15 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _verify_revIds(self, src_server, dest_server, ops_perf, kv_store=1):
         tasks = []
-        for bucket, kv_stores in self._buckets.items():
-            tasks.append(self._cluster_helper.async_verify_revid(src_server, dest_server, bucket, kv_stores[kv_store], ops_perf))
+        buckets = self._get_cluster_buckets(src_server)
+        for bucket in buckets:
+            tasks.append(self._cluster_helper.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store], ops_perf))
         for task in tasks:
             task.result()
 
     def _expiry_pager(self, master):
-        for bucket in self._buckets:
+        buckets = self._get_cluster_buckets(master)
+        for bucket in buckets:
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 30, bucket)
             self._log.info("wait for expiry pager to run on all these nodes")
             time.sleep(30)
@@ -444,8 +497,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         def verify():
             try:
                 tasks = []
+                buckets = self._get_cluster_buckets(servers[0])
                 for server in servers:
-                    for bucket in self._buckets:
+                    for bucket in buckets:
                         tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, '',
                             'ep_queue_size', '==', 0))
                         tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, '',
@@ -465,8 +519,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         def verify():
             try:
                 tasks = []
-                for bucket, kv_stores in self._buckets.items():
-                    tasks.append(self._cluster_helper.async_verify_data(server, bucket, kv_stores[kv_store]))
+                buckets = self._get_cluster_buckets(server)
+                for bucket in buckets:
+                    tasks.append(self._cluster_helper.async_verify_data(server, bucket, bucket.kvs[kv_store]))
                 for task in tasks:
                     task.result()
                 return True
@@ -483,8 +538,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         def verify():
             try:
                 stats_tasks = []
-                for bucket, kv_stores in self._buckets.items():
-                    items = sum([len(kv_store) for kv_store in kv_stores.values()])
+                buckets = self._get_cluster_buckets(servers[0])
+                for bucket in buckets:
+                    items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                     stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
                         'curr_items', '==', items))
                     stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',

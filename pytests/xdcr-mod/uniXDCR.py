@@ -59,13 +59,16 @@ class unidirectional(XDCRReplicationBaseTest):
                 self._verify_revIds(src_nodes[0], dest_nodes[0], "delete")
 
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
-    subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified byuser. """
+    subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
     def load_with_ops(self):
         ord_keys = self._clusters_keys_olst
         ord_keys_len = len(ord_keys)
 
         src_nodes = self._clusters_dic[0]
         src_master = src_nodes[0]
+
+        dest_nodes = self._clusters_dic[1]
+        dest_master = dest_nodes[0]
 
         """Setting up creates/updates/deletes at source nodes"""
 
@@ -77,6 +80,13 @@ class unidirectional(XDCRReplicationBaseTest):
             if "delete" in self._doc_ops:
                 self._load_all_buckets(src_master, self.gen_delete, "delete", self._expires)
             self._wait_for_stats_all_buckets(src_nodes)
+
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
 
         dest_key_index = 1
         for key in ord_keys[1:]:
@@ -98,6 +108,9 @@ class unidirectional(XDCRReplicationBaseTest):
         src_nodes = self._clusters_dic[0]
         src_master = src_nodes[0]
 
+        dest_nodes = self._clusters_dic[1]
+        dest_master = dest_nodes[0]
+
         self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
         tasks = []
         """Setting up creates/updates/deletes at source nodes"""
@@ -112,6 +125,14 @@ class unidirectional(XDCRReplicationBaseTest):
         time.sleep(5)
         for task in tasks:
             task.result()
+
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
+
         self._wait_for_stats_all_buckets(src_nodes)
 
         dest_key_index = 1
@@ -136,9 +157,10 @@ class unidirectional(XDCRReplicationBaseTest):
         ord_keys_len = len(ord_keys)
 
         src_nodes = self._clusters_dic[0]
-        dest_nodes = self._clusters_dic[1]
         src_master = src_nodes[0]
-        expires = self._expires
+
+        dest_nodes = self._clusters_dic[1]
+        dest_master = dest_nodes[0]
 
         time.sleep(30)
         #warmup
@@ -172,6 +194,13 @@ class unidirectional(XDCRReplicationBaseTest):
             self._wait_for_stats_all_buckets(src_nodes)
 
         time.sleep(60)
+
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -209,9 +238,11 @@ class unidirectional(XDCRReplicationBaseTest):
         ord_keys_len = len(ord_keys)
 
         src_nodes = self._clusters_dic[0]
-        dest_nodes = self._clusters_dic[1]
         src_master = src_nodes[0]
+
+        dest_nodes = self._clusters_dic[1]
         dest_master = dest_nodes[0]
+
         expires = self._expires
 
         time.sleep(30)
@@ -243,6 +274,13 @@ class unidirectional(XDCRReplicationBaseTest):
             self._wait_for_stats_all_buckets(src_nodes)
 
         time.sleep(60)
+
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -280,8 +318,11 @@ class unidirectional(XDCRReplicationBaseTest):
         ord_keys_len = len(ord_keys)
 
         src_nodes = self._clusters_dic[0]
-        dest_nodes = self._clusters_dic[1]
         src_master = src_nodes[0]
+
+        dest_nodes = self._clusters_dic[1]
+        dest_master = dest_nodes[0]
+
         expires = self._expires
 
         self._load_all_buckets(src_master, self.gen_create, "create", expires)
@@ -321,8 +362,15 @@ class unidirectional(XDCRReplicationBaseTest):
             task.result()
 
         time.sleep(30)
-        self._wait_for_stats_all_buckets(src_nodes)
 
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
+
+        self._wait_for_stats_all_buckets(src_nodes)
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -399,8 +447,15 @@ class unidirectional(XDCRReplicationBaseTest):
             task.result()
 
         time.sleep(30)
-        self._wait_for_stats_all_buckets(src_nodes)
 
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
+
+        self._wait_for_stats_all_buckets(src_nodes)
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -474,6 +529,13 @@ class unidirectional(XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
+
         self.verify_xdcr_stats(src_nodes, dest_nodes)
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -524,6 +586,13 @@ class unidirectional(XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
+
         self.verify_xdcr_stats(src_nodes, dest_nodes)
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -563,6 +632,13 @@ class unidirectional(XDCRReplicationBaseTest):
         time.sleep(15)
         for task in tasks:
             task.result()
+
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
 
         if "source" in self._failover:
             self._log.info(" Rebalance out Source Node {0}".format(src_nodes[i].ip))

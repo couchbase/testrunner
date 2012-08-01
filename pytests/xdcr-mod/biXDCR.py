@@ -1,14 +1,13 @@
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from xdcrbasetests import XDCRReplicationBaseTest
 from membase.helper.rebalance_helper import RebalanceHelper
-from remote.remote_util import RemoteMachineShellConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from random import randrange
 
-#Assumption that at least 2 nodes on every cluster
-
 import time
 
+#Assumption that at least 2 nodes on every cluster
+#TODO fail the tests if this condition is not met
 class bidirectional(XDCRReplicationBaseTest):
     def setUp(self):
         super(bidirectional, self).setUp()
@@ -54,14 +53,14 @@ class bidirectional(XDCRReplicationBaseTest):
         self._expiry_pager(dest_nodes[0])
         self._verify_stats_all_buckets(dest_nodes)
         #TODO - Commenting out the KVSTORE check until the kv-store fix is addressed.
-        #        self._verify_all_buckets(dest_nodes[0])
+#        self._verify_all_buckets(dest_nodes[0])
 
         self._wait_for_stats_all_buckets(src_nodes)
         self._verify_stats_all_buckets(src_nodes)
-        #        self._verify_all_buckets(src_nodes[0])
+#        self._verify_all_buckets(src_nodes[0])
 
         if self._doc_ops is not None or self._doc_ops_dest is not None:
-            if "update" in self._doc_ops or "delete" in self._doc_ops_dest:
+            if "update" in self._doc_ops or "update" in self._doc_ops_dest:
                 self._verify_revIds(src_nodes[0], dest_nodes[0], "update")
 
             if "delete" in self._doc_ops or "delete" in self._doc_ops_dest:
@@ -91,6 +90,13 @@ class bidirectional(XDCRReplicationBaseTest):
                 self._load_all_buckets(src_master, self.gen_delete, "delete", self._expires)
             self._wait_for_stats_all_buckets(src_nodes)
 
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    dest_bucket.kvs = src_bucket.kvs
+
         # Setting up doc_ops_dest at destination nodes
         if self._doc_ops_dest is not None:
         # allows multiple of them but one by one
@@ -101,6 +107,11 @@ class bidirectional(XDCRReplicationBaseTest):
             if "delete" in self._doc_ops_dest:
                 self._load_all_buckets(dest_master, self.gen_delete2, "delete", self._expires)
             self._wait_for_stats_all_buckets(dest_nodes)
+
+        for dest_bucket in dest_buckets:
+            for src_bucket in src_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    src_bucket.kvs = dest_bucket.kvs
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -129,7 +140,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops:
             self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
         if "create" in self._doc_ops_dest:
-            self._load_all_buckets(dest_master, gen_create2, "create", self._expires)
+            self._load_all_buckets(dest_master, self.gen_create2, "create", self._expires)
 
         tasks = []
         #Setting up doc-ops at source nodes
@@ -146,6 +157,14 @@ class bidirectional(XDCRReplicationBaseTest):
             time.sleep(5)
             for task in tasks:
                 task.result()
+
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -201,6 +220,14 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             for task in tasks:
                 task.result()
 
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
+
         # Checking replication at destination clusters
         dest_key_index = 1
         for key in ord_keys[1:]:
@@ -211,7 +238,6 @@ Verifying whether XDCR replication is successful on subsequent destination clust
 
             self.verify_xdcr_stats(src_nodes, dest_nodes)
             dest_key_index += 1
-
 
     def load_with_async_ops_with_warmup(self):
 
@@ -252,6 +278,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             self.do_a_warm_up(warmupnodes[1])
         time.sleep(30)
 
+
         tasks = []
         #Setting up doc-ops at source nodes
         if (self._doc_ops is not None or self._doc_ops_dest is not None):
@@ -264,14 +291,39 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", expires))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(dest_master, self.gen_delete2, "delete", expires))
-            time.sleep(60)
 
         for task in tasks:
             task.result()
 
-        time.sleep(30)
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
+
+        time.sleep(60)
         self._wait_for_stats_all_buckets(src_nodes)
         self._wait_for_stats_all_buckets(dest_nodes)
+
+        for server in warmupnodes:
+            mc = MemcachedClientHelper.direct_client(server, "default")
+            start = time.time()
+            while time.time() - start < 150:
+                if mc.stats()["ep_warmup_thread"] == "complete":
+                    self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
+                    ime.sleep(10)
+                    break
+                elif mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                    continue
+                else:
+                     self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
+                     break
+            if mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("ERROR: ep_warmup_thread's status not complete")
+            mc.close()
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -281,27 +333,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             dest_key = ord_keys[dest_key_index]
             dest_nodes = self._clusters_dic[dest_key]
 
-            for server in warmupnodes:
-                mc = MemcachedClientHelper.direct_client(server, "default")
-                start = time.time()
-                while time.time() - start < 150:
-                    if mc.stats()["ep_warmup_thread"] == "complete":
-                        self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
-                        time.sleep(10)
-                        break
-                    elif mc.stats()["ep_warmup_thread"] == "running":
-                        self._log.info(
-                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
-                        continue
-                    else:
-                        self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
-                        break
-                if mc.stats()["ep_warmup_thread"] == "running":
-                    self._log.info("ERROR: ep_warmup_thread's status not complete")
-                mc.close()
-
             self.verify_xdcr_stats(src_nodes, dest_nodes)
             dest_key_index += 1
+
 
     def load_with_async_ops_with_warmup_master(self):
 
@@ -357,8 +391,36 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             task.result()
 
         time.sleep(30)
+
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
+
         self._wait_for_stats_all_buckets(src_nodes)
         self._wait_for_stats_all_buckets(dest_nodes)
+
+
+        for server in warmupnodes:
+            mc = MemcachedClientHelper.direct_client(server, "default")
+            start = time.time()
+            while time.time() - start < 150:
+                if mc.stats()["ep_warmup_thread"] == "complete":
+                    self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
+                    ime.sleep(10)
+                    break
+                elif mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                    continue
+                else:
+                     self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
+                     break
+            if mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("ERROR: ep_warmup_thread's status not complete")
+            mc.close()
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -367,25 +429,6 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 break
             dest_key = ord_keys[dest_key_index]
             dest_nodes = self._clusters_dic[dest_key]
-
-            for server in warmupnodes:
-                mc = MemcachedClientHelper.direct_client(server, "default")
-                start = time.time()
-                while time.time() - start < 150:
-                    if mc.stats()["ep_warmup_thread"] == "complete":
-                        self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
-                        time.sleep(10)
-                        break
-                    elif mc.stats()["ep_warmup_thread"] == "running":
-                        self._log.info(
-                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
-                        continue
-                    else:
-                        self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
-                        break
-                if mc.stats()["ep_warmup_thread"] == "running":
-                    self._log.info("ERROR: ep_warmup_thread's status not complete")
-                mc.close()
 
             self.verify_xdcr_stats(src_nodes, dest_nodes)
             dest_key_index += 1
@@ -447,9 +490,37 @@ Verifying whether XDCR replication is successful on subsequent destination clust
         for task in tasks:
             task.result()
 
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
+
         time.sleep(30)
         self._wait_for_stats_all_buckets(src_nodes)
         self._wait_for_stats_all_buckets(dest_nodes)
+
+
+        for server in warmupnodes:
+            mc = MemcachedClientHelper.direct_client(server, "default")
+            start = time.time()
+            while time.time() - start < 150:
+                if mc.stats()["ep_warmup_thread"] == "complete":
+                    self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
+                    ime.sleep(10)
+                    break
+                elif mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                    continue
+                else:
+                     self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
+                     break
+            if mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("ERROR: ep_warmup_thread's status not complete")
+            mc.close()
+
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -459,27 +530,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             dest_key = ord_keys[dest_key_index]
             dest_nodes = self._clusters_dic[dest_key]
 
-            for server in warmupnodes:
-                mc = MemcachedClientHelper.direct_client(server, "default")
-                start = time.time()
-                while time.time() - start < 150:
-                    if mc.stats()["ep_warmup_thread"] == "complete":
-                        self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
-                        time.sleep(10)
-                        break
-                    elif mc.stats()["ep_warmup_thread"] == "running":
-                        self._log.info(
-                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
-                        continue
-                    else:
-                        self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
-                        break
-                if mc.stats()["ep_warmup_thread"] == "running":
-                    self._log.info("ERROR: ep_warmup_thread's status not complete")
-                mc.close()
-
             self.verify_xdcr_stats(src_nodes, dest_nodes)
             dest_key_index += 1
+
 
     def load_with_async_ops_and_joint_sets_with_warmup_master(self):
 
@@ -536,8 +589,36 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             task.result()
 
         time.sleep(30)
+
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
+
         self._wait_for_stats_all_buckets(src_nodes)
         self._wait_for_stats_all_buckets(dest_nodes)
+
+        for server in warmupnodes:
+            mc = MemcachedClientHelper.direct_client(server, "default")
+            start = time.time()
+            while time.time() - start < 150:
+                if mc.stats()["ep_warmup_thread"] == "complete":
+                    self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
+                    ime.sleep(10)
+                    break
+                elif mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                    continue
+                else:
+                     self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
+                     break
+            if mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("ERROR: ep_warmup_thread's status not complete")
+            mc.close()
+
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -546,25 +627,6 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 break
             dest_key = ord_keys[dest_key_index]
             dest_nodes = self._clusters_dic[dest_key]
-
-            for server in warmupnodes:
-                mc = MemcachedClientHelper.direct_client(server, "default")
-                start = time.time()
-                while time.time() - start < 150:
-                    if mc.stats()["ep_warmup_thread"] == "complete":
-                        self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
-                        time.sleep(10)
-                        break
-                    elif mc.stats()["ep_warmup_thread"] == "running":
-                        self._log.info(
-                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
-                        continue
-                    else:
-                        self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
-                        break
-                if mc.stats()["ep_warmup_thread"] == "running":
-                    self._log.info("ERROR: ep_warmup_thread's status not complete")
-                mc.close()
 
             self.verify_xdcr_stats(src_nodes, dest_nodes)
             dest_key_index += 1
@@ -606,6 +668,13 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             for task in tasks:
                 task.result()
 
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
 
         if "source" in self._failover or "src_master" in self._failover:
             self._log.info(" Rebalance out Source Non-Master Node {0}".format(src_nodes[i].ip))
