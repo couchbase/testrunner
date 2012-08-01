@@ -239,6 +239,19 @@ class EPerfMaster(perf.PerfBase):
             self._exec_and_log(shell, cmd)
             shell.disconnect()
 
+    def set_nru_task(self, tm_hour=0):
+        """UTC/GMT time (hour) to schedule NRU access scanner"""
+        if not tm_hour:
+            gmt = time.gmtime()
+            tm_hour = gmt.tm_hour + 1
+
+        for server in self.input.servers:
+            shell = RemoteMachineShellConnection(server)
+            cmd = "/opt/couchbase/bin/cbepctl localhost:11210 "\
+                  "set flush_param alog_task_time {0}".format(tm_hour)
+            self._exec_and_log(shell, cmd)
+            shell.disconnect()
+
     # Gets the vbucket count
     def gated_start(self, clients):
         """
@@ -374,6 +387,10 @@ class EPerfMaster(perf.PerfBase):
             port = self.input.servers[0].port
             mvs = self.min_value_size(self.parami("avg_value_size",
                                       PerfDefaults.avg_value_size))
+
+            if self.parami('nru_task', PerfDefaults.nru_task):
+                self.set_nru_task()
+
             self.loop(num_ops=0,
                       num_items=items,
                       max_items=items + max_creates + 1,
