@@ -24,7 +24,7 @@ endif
 test-simple:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/simple.conf
 simple-test:
-	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/simple.conf
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/simple.conf
 
 test-views:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view.conf
