@@ -31,7 +31,7 @@ class WarmUpTests(BaseTestCase):
         loaded = False
         count = 0
         gen_load = BlobGenerator('warmup', 'warmup-', self.data_size, start=start, end=self.num_items)
-        while not loaded and count < 10:
+        while not loaded and count < 60:
             try :
                 self._load_all_buckets(self.servers[0], gen_load, op_type, 0)
                 loaded = True
@@ -237,6 +237,8 @@ class WarmUpTests(BaseTestCase):
         self.num_items += 10000
         tasks = self._async_load_doc_data_all_buckets('create', items)
         #wait for draining of data before restart and warm up
+        rest = RestConnection(self.servers[0])
+        self.servers = rest.get_nodes()
         self._wait_for_stats_all_buckets(self.servers)
         self._stats_befor_warmup()
         for task in tasks:
