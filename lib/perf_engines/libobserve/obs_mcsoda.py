@@ -9,7 +9,8 @@ from obs import Observer
 from obs_req import ObserveRequestKey, ObserveRequest
 from obs_res import ObserveResponse
 from obs_def import ObservePktFmt, ObserveStatus, ObserveKeyState
-from obs_helper import VbucketHelper, synchronized, SocketHelper
+from obs_helper import VbucketHelper
+from lib.perf_engines.sys_helper import SocketHelper, synchronized
 
 BACKOFF = 0.2
 MAX_BACKOFF = 1

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 from crc32 import crc32_hash
-from functools import wraps
 from multiprocessing.queues import JoinableQueue
 
 try:
@@ -35,57 +34,6 @@ class UnblockingJoinableQueue(JoinableQueue):
             self._cond.release()
 
         return False
-
-class SocketHelper:
-
-    @staticmethod
-    def send_bytes(skt, buf, timeout=0):
-        """
-        Send bytes to the socket
-        @throws ValueError, IOError, socket.timeout, Exception
-        """
-        if not buf or not skt:
-            raise ValueError("<send_bytes> invalid socket descriptor or buf")
-
-        if timeout:
-            skt.settimeout(timeout)
-        else:
-            skt.settimeout(None)
-
-        length = len(buf)
-        sent_total = 0
-
-        while sent_total < length:
-            sent = skt.send(buf)
-            if not sent:
-                raise IOError("<send_bytes> connection broken")
-            sent_total += sent
-            buf = buf[sent:]
-
-        return sent_total
-
-    @staticmethod
-    def recv_bytes(skt, length, timeout=0):
-        """
-        Receive bytes from the socket
-        @throws ValueError, IOError, socket.timeout, Exception
-        """
-        if not skt or length < 0:
-            raise ValueError("<recv_bytes> invalid socket descriptor or length")
-
-        if timeout:
-            skt.settimeout(timeout)
-        else:
-            skt.settimeout(None)
-
-        buf = ''
-        while len(buf) < length:
-            data = skt.recv(length - len(buf))
-            if not data:
-                raise IOError("<recv_bytes> connection broken")
-            buf += data
-
-        return buf
 
 class SyncDict:
     """
@@ -158,18 +106,3 @@ class SyncDict:
 
     def _size(self):
         return len(self.dict)
-
-def synchronized(lock_name):
-    """synchronized access to class method"""
-    def _outer(func):
-        @wraps(func)
-        def _inner(self, *args, **kwargs):
-            try:
-                lock = self.__getattribute__(lock_name)
-            except AttributeError:
-                print "<synchronized> cannot find lock: %s" % lock_name
-                return _inner
-            with lock:
-                return func(self, *args, **kwargs)
-        return _inner
-    return _outer
