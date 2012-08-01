@@ -44,7 +44,6 @@ class WarmUpTests(BaseTestCase):
 
     def _async_load_doc_data_all_buckets(self, op_type='create', start=0):
         gen_load = BlobGenerator('warmup', 'warmup-', self.data_size, start=start, end=self.num_items)
-        self._load_all_buckets(self.servers[0], gen_load, op_type, 0)
         tasks = self._async_load_all_buckets(self.servers[0], gen_load, op_type, 0)
         return tasks
 
