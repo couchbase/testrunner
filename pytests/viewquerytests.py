@@ -2269,7 +2269,7 @@ class SalesDataSet:
         idx = 0
         for value in docs:
                 value = value.encode("utf-8", "ignore")
-                json_map = json.loads(value, encoding="utf-8")
+                json_map = json.loads(value, encoding="utf-8")[u'json']
                 year = json_map["join_yr"]
                 month = json_map["join_mo"]
                 day = json_map["join_day"]
@@ -2280,7 +2280,6 @@ class SalesDataSet:
                                                   str(month).rjust(2,'0'),
                                                   str(day).rjust(2,'0'))
 
-                del json_map["_id"]
                 smart.memcached(doc_id).set(doc_id, 0, 0, json.dumps(json_map))
                 doc_ids.append(doc_id)
 
