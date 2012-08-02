@@ -8,7 +8,7 @@ if [ -n ${filename} ]; then
   filename=`ls | grep pdf`
   fi
 
-dbname=`echo $filename | cut -d - -f1`
+dbname=`echo $filename | cut -d - -f1 | cut -d . -f1`
 
 if [ -z ${test_id} ]; then
     test_id='unknown'
