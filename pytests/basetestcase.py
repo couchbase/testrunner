@@ -143,7 +143,7 @@ class BaseTestCase(unittest.TestCase):
     def _all_buckets_delete(self, server):
         delete_tasks = []
         for bucket in self.buckets:
-            delete_tasks.append(self.cluster.async_bucket_delete(server, bucket))
+            delete_tasks.append(self.cluster.async_bucket_delete(server, bucket.name))
 
         for task in delete_tasks:
             task.result()
