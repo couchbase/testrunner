@@ -20,7 +20,12 @@ def usage(err=None):
     print " password           saslbucket password ('')"
     print " file               kvstore filename"
     print ""
+    print "Default bucket"
     print "./vbucketpop.py -i 127.0.0.1 -p 11211 -b default -f kvstore"
+    print "Bucket with no password"
+    print "./vbucketpop.py -i 127.0.0.1 -p 11211 -b temp -P '' -f kvstore"
+    print "Sasl bucket with password"
+    print "./vbucketpop.py -i 127.0.0.1 -p 11211 -b temp -P temp -f kvstore"
     sys.exit(err_code)
 
 class Config(object):
