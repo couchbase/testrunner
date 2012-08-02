@@ -16,8 +16,8 @@ class unidirectional(XDCRReplicationBaseTest):
         self.gen_create = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
         self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size,
             start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
-        self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size,
-            end=int(self._num_items * (float)(self._percent_update) / 100) - 1)
+        self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0,
+            end=int(self._num_items * (float)(self._percent_update) / 100))
 
     def tearDown(self):
         super(unidirectional, self).tearDown()
@@ -78,7 +78,7 @@ class unidirectional(XDCRReplicationBaseTest):
             if "update" in self._doc_ops:
                 self._load_all_buckets(src_master, self.gen_update, "update", self._expires)
             if "delete" in self._doc_ops:
-                self._load_all_buckets(src_master, self.gen_delete, "delete", self._expires)
+                self._load_all_buckets(src_master, self.gen_delete, "delete", 0)
             self._wait_for_stats_all_buckets(src_nodes)
 
         src_buckets = self._get_cluster_buckets(src_master)
@@ -111,7 +111,7 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_nodes = self._clusters_dic[1]
         dest_master = dest_nodes[0]
 
-        self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
+        self._load_all_buckets(src_master, self.gen_create, "create", 0)
         tasks = []
         """Setting up creates/updates/deletes at source nodes"""
         if self._doc_ops is not None:
@@ -121,7 +121,7 @@ class unidirectional(XDCRReplicationBaseTest):
             if "create" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(src_master, self.gen_create, "create", self._expires))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", self._expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", 0))
         time.sleep(5)
         for task in tasks:
             task.result()
@@ -173,12 +173,10 @@ class unidirectional(XDCRReplicationBaseTest):
         elif self._warmup == "all":
             warmupnode = src_nodes
             dest_warm_flag = 1
-        _n = randrange(1, len(warmupnode))
-        warmupnodes.append(warmupnode[_n])
+        warmupnodes.append(warmupnode[randrange(1, len(warmupnode))])
         self.do_a_warm_up(warmupnodes[0])
         if dest_warm_flag == 1:
-            _n = randrange(1, len(dest_nodes))
-            warmupnodes.append(dest_nodes[_n])
+            warmupnodes.append(dest_nodes[randrange(1, len(dest_nodes))])
             self.do_a_warm_up(warmupnodes[1])
         time.sleep(30)
 
@@ -186,11 +184,11 @@ class unidirectional(XDCRReplicationBaseTest):
         if (self._doc_ops is not None):
             # allows multiple of them but one by one
             if "create" in self._doc_ops:
-                self._load_all_buckets(src_master, self.gen_create, "create", expires)
+                self._load_all_buckets(src_master, self.gen_create, "create", self._expires)
             if "update" in self._doc_ops:
-                self._load_all_buckets(src_master, self.gen_update, "update", expires)
+                self._load_all_buckets(src_master, self.gen_update, "update", self._expires)
             if "delete" in self._doc_ops:
-                self._load_all_buckets(src_master, self.gen_delete, "delete", expires)
+                self._load_all_buckets(src_master, self.gen_delete, "delete", 0)
             self._wait_for_stats_all_buckets(src_nodes)
 
         time.sleep(60)
@@ -243,8 +241,6 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_nodes = self._clusters_dic[1]
         dest_master = dest_nodes[0]
 
-        expires = self._expires
-
         time.sleep(30)
         #warmup
         warmupnodes = []
@@ -266,11 +262,11 @@ class unidirectional(XDCRReplicationBaseTest):
         if (self._doc_ops is not None):
             # allows multiple of them but one by one
             if "create" in self._doc_ops:
-                self._load_all_buckets(src_master, self.gen_create, "create", expires)
+                self._load_all_buckets(src_master, self.gen_create, "create", 0)
             if "update" in self._doc_ops:
-                self._load_all_buckets(src_master, self.gen_update, "update", expires)
+                self._load_all_buckets(src_master, self.gen_update, "update", self._expires)
             if "delete" in self._doc_ops:
-                self._load_all_buckets(src_master, self.gen_delete, "delete", expires)
+                self._load_all_buckets(src_master, self.gen_delete, "delete", 0)
             self._wait_for_stats_all_buckets(src_nodes)
 
         time.sleep(60)
@@ -323,9 +319,7 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_nodes = self._clusters_dic[1]
         dest_master = dest_nodes[0]
 
-        expires = self._expires
-
-        self._load_all_buckets(src_master, self.gen_create, "create", expires)
+        self._load_all_buckets(src_master, self.gen_create, "create", 0)
 
         time.sleep(30)
         #warmup
@@ -338,12 +332,10 @@ class unidirectional(XDCRReplicationBaseTest):
         elif self._warmup == "all":
             warmupnode = src_nodes
             dest_warm_flag = 1
-        _n = randrange(1, len(warmupnode))
-        warmupnodes.append(warmupnode[_n])
+        warmupnodes.append(warmupnode[randrange(1, len(warmupnode))])
         self.do_a_warm_up(warmupnodes[0])
         if dest_warm_flag == 1:
-            _n = randrange(1, len(dest_nodes))
-            warmupnodes.append(dest_nodes[_n])
+            warmupnodes.append(dest_nodes[randrange(1, len(dest_nodes))])
             self.do_a_warm_up(warmupnodes[1])
         time.sleep(30)
 
@@ -352,11 +344,11 @@ class unidirectional(XDCRReplicationBaseTest):
         if (self._doc_ops is not None):
             # allows multiple of them but one by one
             if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, self.gen_update, "update", expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_update, "update", self._expires))
             if "create" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, self.gen_create, "create", expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_create, "create", self._expires))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", 0))
             time.sleep(60)
         for task in tasks:
             task.result()
@@ -411,9 +403,8 @@ class unidirectional(XDCRReplicationBaseTest):
         dest_nodes = self._clusters_dic[1]
         src_master = src_nodes[0]
         dest_master = dest_nodes[0]
-        expires = self._expires
 
-        self._load_all_buckets(src_master, self.gen_create, "create", expires)
+        self._load_all_buckets(src_master, self.gen_create, "create", 0)
 
         time.sleep(30)
         #warmup
@@ -437,11 +428,11 @@ class unidirectional(XDCRReplicationBaseTest):
         if (self._doc_ops is not None):
             # allows multiple of them but one by one
             if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, self.gen_update, "update", expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_update, "update", self._expires))
             if "create" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, self.gen_create, "create", expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_create, "create", self._expires))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", expires))
+                tasks.extend(self._async_load_all_buckets(src_master, self.gen_delete, "delete", 0))
             time.sleep(60)
         for task in tasks:
             task.result()

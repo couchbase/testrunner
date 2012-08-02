@@ -14,14 +14,14 @@ class bidirectional(XDCRReplicationBaseTest):
         self.gen_create = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
         self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size,
             start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
-        self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size,
-            end=int(self._num_items * (float)(self._percent_update) / 100) - 1)
+        self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0,
+            end=int(self._num_items * (float)(self._percent_update) / 100))
 
         self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
         self.gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
             start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
-        self.gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
-            end=int(self._num_items * (float)(self._percent_update) / 100) - 1)
+        self.gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,
+            end=int(self._num_items * (float)(self._percent_update) / 100))
 
     def tearDown(self):
         super(bidirectional, self).tearDown()
@@ -269,12 +269,10 @@ Verifying whether XDCR replication is successful on subsequent destination clust
         elif self._warmup == "all":
             warmupnode = src_nodes
             dest_warm_flag = 1
-        _n = randrange(1, len(warmupnode))
-        warmupnodes.append(warmupnode[_n])
+        warmupnodes.append(warmupnode[randrange(1, len(warmupnode))])
         self.do_a_warm_up(warmupnodes[0])
         if dest_warm_flag == 1:
-            _n = randrange(1, len(dest_nodes))
-            warmupnodes.append(dest_nodes[_n])
+            warmupnodes.append(dest_nodes[randrange(1, len(dest_nodes))])
             self.do_a_warm_up(warmupnodes[1])
         time.sleep(30)
 
@@ -461,12 +459,10 @@ Verifying whether XDCR replication is successful on subsequent destination clust
         elif self._warmup == "all":
             warmupnode = src_nodes
             dest_warm_flag = 1
-        _n = randrange(1, len(warmupnode))
-        warmupnodes.append(warmupnode[_n])
+        warmupnodes.append(warmupnode[randrange(1, len(warmupnode))])
         self.do_a_warm_up(warmupnodes[0])
         if dest_warm_flag == 1:
-            _n = randrange(1, len(dest_nodes))
-            warmupnodes.append(dest_nodes[_n])
+            warmupnodes.append(dest_nodes[randrange(1, len(dest_nodes))])
             self.do_a_warm_up(warmupnodes[1])
         time.sleep(30)
 

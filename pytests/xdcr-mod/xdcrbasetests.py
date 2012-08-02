@@ -119,7 +119,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.default_bucket_name = "default"
         self._num_replicas = self._input.param("replicas", 1)
         self._num_items = self._input.param("items", 1000)
-        self._value_size = self._input.param("value_size", 128)
+        self._value_size = self._input.param("value_size", 256)
         self._dgm_run_bool = self._input.param("dgm_run", False)
         self._mem_quota_int = 0 # will be set in subsequent methods
 
