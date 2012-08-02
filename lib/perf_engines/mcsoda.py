@@ -44,6 +44,8 @@ from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "A
 from libobserve.obs_mcsoda import McsodaObserver
 from libobserve.obs import Observable
 from libobserve.obs_helper import UnblockingJoinableQueue
+from libstats.carbon_feeder import CarbonFeeder
+from libstats.carbon_key import CarbonKey
 
 LARGE_PRIME = 9576890767
 
@@ -206,6 +208,12 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     xfer_recv_last = 0
     store.why = why
     store.stats_ops = cfg.get("stats_ops", 10000)
+    if cfg.get('carbon', 0):
+        store.c_feeder = \
+            CarbonFeeder(cfg.get('carbon-server', '127.0.0.1'),
+                         port=cfg.get('carbon-port', 2003),
+                         timeout=cfg.get('carbon-timeout', 5),
+                         cache_size=cfg.get('carbon-cache-size', 10))
 
     report = cfg.get('report', 0)
     hot_shift = cfg.get('hot-shift', 0)
@@ -702,13 +710,17 @@ class StoreMemcachedBinary(Store):
         return self.cur.get('batch') or \
                self.cfg.get('batch', 100)
 
-    def header(self, op, key, val, opaque=0, extra='', cas=0,
-               dtype=0, vbucketId=0,
-               fmt=REQ_PKT_FMT,
-               magic=REQ_MAGIC_BYTE):
+    def get_vbucketId(self, key):
         vbuckets = self.cfg.get("vbuckets", 0)
         if vbuckets > 0:
-            vbucketId = crc32.crc32_hash(key) & (vbuckets - 1)
+            return crc32.crc32_hash(key) & (vbuckets - 1)
+        return 0
+
+    def header(self, op, key, val, opaque=0, extra='', cas=0,
+               dtype=0,
+               fmt=REQ_PKT_FMT,
+               magic=REQ_MAGIC_BYTE):
+        vbucketId = self.get_vbucketId(key)
         return struct.pack(fmt, magic, op,
                            len(key), len(extra), dtype, vbucketId,
                            len(key) + len(extra) + len(val), opaque, cas), vbucketId
@@ -813,7 +825,17 @@ class StoreMemcachedBinary(Store):
             self.xfer_sent += self.inflight_send(next_msg)
 
         if latency_cmd:
-            self.add_timing_sample(latency_cmd, latency_end - latency_start)
+            delta = latency_end - latency_start
+            self.add_timing_sample(latency_cmd, delta)
+            if self.cfg.get('carbon', 0):
+                if self.__class__.__name__ == "StoreMemcachedBinary":
+                    server = self.conn.host
+                else:
+                    vbucketId = self.get_vbucketId(key_str)
+                    server = self.awareness.vBucketMap[vbucketId]
+                c_key = CarbonKey("mcsoda", server,
+                                  "latency-" + latency_cmd)
+                self.c_feeder.feed(c_key, delta * 1000)
 
         if self.sc:
             if self.ops - self.previous_ops > self.stats_ops:
