@@ -2,7 +2,8 @@ import time
 
 from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
+from membase.helper.bucket_helper import BucketOperationHelper
 
 class RebalanceInOutTests(RebalanceBaseTest):
 
@@ -11,6 +12,45 @@ class RebalanceInOutTests(RebalanceBaseTest):
 
     def tearDown(self):
         super(RebalanceInOutTests, self).tearDown()
+
+    """Rebalances nodes out and in of the cluster while doing mutations with max
+    number of buckets in the cluster.
+
+    This test begins by creating max number of buckets with bucket_size=100( by default):
+    one default bucket, all other are sasl and standart buckets. Then we load
+    a given number of items into the cluster. It then removes one node,
+    rebalances that node out the cluster, and then rebalances it back
+    in. During the rebalancing we update all of the items in the cluster. Once the
+    node has been removed and added back we  wait for the disk queues to drain, and
+    then verify that there has been no data loss. We then remove and add back two
+    nodes at a time and so on until we have reached the point where we are adding
+    back and removing at least half of the nodes."""
+    def incremental_rebalance_in_out_with_max_buckets_number(self):
+        self.bucket_size = self.input.param("bucket_size", 100)
+        bucket_num = self.quota / self.bucket_size
+        self.log.info('total %s buckets will be created with size %s MB' % (bucket_num, self.bucket_size))
+        self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
+        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+        self._create_sasl_buckets(self.master, (bucket_num -1) / 2)
+
+        self._create_standard_buckets(self.master, bucket_num -1 - (bucket_num -1) / 2)
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
+        gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+
+        for i in reversed(range(self.num_servers)[self.num_servers/2:]):
+            self._async_load_all_buckets(self.master, gen, "update", 0)
+
+            self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
+            time.sleep(5)
+            self._async_load_all_buckets(self.master, gen, "update", 0)
+            self.cluster.rebalance(self.servers[:self.num_servers],
+                                   self.servers[i:self.num_servers], [])
+            self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+            self._verify_all_buckets(self.master)
+            self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
     """Rebalances nodes out and in of the cluster while doing mutations.
 
