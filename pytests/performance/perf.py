@@ -809,7 +809,17 @@ class PerfBase(unittest.TestCase):
                'woq-pattern': self.param('woq_pattern',
                                          PerfDefaults.woq_pattern),
                'woq-verbose': self.param('woq_verbose',
-                                         PerfDefaults.woq_verbose)}
+                                         PerfDefaults.woq_verbose),
+               'carbon': self.parami('carbon', PerfDefaults.carbon),
+               'carbon-server': self.param('carbon_server',
+                                           PerfDefaults.carbon_server),
+               'carbon-port': self.parami('carbon_port',
+                                          PerfDefaults.carbon_port),
+               'carbon-timeout': self.parami('carbon_timeout',
+                                             PerfDefaults.carbon_timeout),
+               'carbon-cache-size': self.parami('carbon_cache_size',
+                                                PerfDefaults.carbon_cache_size)}
+
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
         cfg_params['test_name'] = test_name
