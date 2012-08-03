@@ -36,7 +36,8 @@ class OpsChangeCasTests(CasBaseTest):
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
     def verify_cas(self, ops, generator):
-        """Verify CAS value manipulation
+        """Verify CAS value manipulation. Since for delete and expire, they are
+        negative result test. So the test is expected to fail with an Memcached Error
 
         For update we use the latest CAS value return by set()
         to do the mutation again to see if there is any exceptions.
@@ -61,13 +62,18 @@ class OpsChangeCasTests(CasBaseTest):
                             cas_error_collection.append(cas_old)
                         if d_new != "{0}-{1}".format("mysql-new-value", x):
                             data_error_collection.append((d_new,"{0}-{1}".format("mysql-new-value", x)))
+                        if cas_old != cas_new and d_new == "{0}-{1}".format("mysql-new-value", x):
+                            self.log.info("Use item cas {0} to mutate the same item with key {1} successfully! Now item cas is {2} "
+                                          .format(cas_old, key, cas_new))
                 elif ops == "delete":
                     o, cas, d = self.clients[bucket.name].delete(key)
+                    self.log.info("Delete operation set item cas with key {0} to {1}".format(key, cas))
                     self.clients[bucket.name].cas(key, 0, 0, cas, value)
                     #There is no way to verify CAS value changed by delete until now.
                 elif ops == "expire":
                     o, cas, d = self.clients[bucket.name].set(key, self.expire_time, 0, value)
                     time.sleep(self.expire_time+1)
+                    self.log.info("Try to mutate an expired item with its previous cas {0}".format(cas))
                     self.clients[bucket.name].cas(key, 0, 0, cas, value)
                     #It is expected to raise CAS exception becasue the key is expired.
                     #It is a negative result test.
@@ -75,7 +81,7 @@ class OpsChangeCasTests(CasBaseTest):
             if len(cas_error_collection) > 0:
                 for cas_value in cas_error_collection:
                     self.log.error("Set operation fails to modify the CAS {0}".format(cas_value))
-                raise Exception("set operation fails to modify the CAS value")
+                raise Exception("Set operation fails to modify the CAS value")
             if len(data_error_collection) > 0:
                 for data_value in data_error_collection:
                     self.log.error("Set operation fails. item-value is {0}, expected is {1}".format(data_value[0], data_value[1]))
