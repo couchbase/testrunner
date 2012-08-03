@@ -20,14 +20,8 @@ class bidirectional(XDCRReplicationBaseTest):
     def tearDown(self):
         super(bidirectional, self).tearDown()
 
-        """Verify the stats at the destination cluster
-        1. Data Validity check - using kvstore-node key-value check
-        2. Item count check on source versus destination
-        3. For deleted items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
-        * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
-
     def _async_update_delete_data(self):
-        print "The tasks:-"
+        self._log.info("The tasks:-")
         tasks = []
         #Setting up doc-ops at source nodes
         if self._doc_ops is not None or self._doc_ops_dest is not None:

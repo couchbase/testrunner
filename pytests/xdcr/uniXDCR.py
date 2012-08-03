@@ -28,14 +28,9 @@ class unidirectional(XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
-    """Verify the stats at the destination cluster
-    1. Data Validity check - using kvstore-node key-value check
-    2. Item count check on source versus destination
-    3. For deleted items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
-    * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
-
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
+
     def load_with_ops(self):
         self._modify_src_data()
 
@@ -62,6 +57,7 @@ class unidirectional(XDCRReplicationBaseTest):
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
     Create/Update/Delete are performed after based on doc-ops specified by the user.
     Verifying whether XDCR replication is successful on subsequent destination clusters. """
+
     def load_with_ops_with_warmup(self):
         #warmup
         warmupnodes = []
@@ -224,7 +220,7 @@ class unidirectional(XDCRReplicationBaseTest):
             self._log.info(" Rebalance out Source Master Node {0}".format(self.src_master.ip))
             self._cluster_helper.rebalance(self.src_nodes, [], [self.src_master])
             self.src_nodes.remove(self.src_master)
-            self.src_master=self.src_nodes[0]
+            self.src_master = self.src_nodes[0]
 
         if "destination" in self._failover:
             self._log.info(" Failing over Destination Master Node {0}".format(self.dest_master.ip))
@@ -232,7 +228,7 @@ class unidirectional(XDCRReplicationBaseTest):
             self._log.info(" Rebalance out Destination Master Node {0}".format(self.dest_master.ip))
             self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_master])
             self.dest_nodes.remove(self.dest_master)
-            self.dest_master=self.dest_nodes[0]
+            self.dest_master = self.dest_nodes[0]
 
         time.sleep(10)
 
@@ -245,6 +241,7 @@ class unidirectional(XDCRReplicationBaseTest):
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
     Create/Update/Delete are performed in parallel based on doc-ops specified by the user.
     Verifying whether XDCR replication is successful on subsequent destination clusters. """
+
     def load_with_async_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
 

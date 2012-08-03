@@ -33,7 +33,6 @@ class XDCRConstants:
 
     INPUT_PARAM_SEED_DATA_OPERATION = "sdata_op"
 
-
     INPUT_PARAM_POLL_INTERVAL = "poll_interval" # in seconds
     INPUT_PARAM_POLL_TIMEOUT = "poll_timeout"# in seconds
 
@@ -77,14 +76,14 @@ class XDCRBaseTest(unittest.TestCase):
             self._init_parameters()
             self._cluster_helper = Cluster()
             self._log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
-                      .format(self._case_number, self._testMethodName))
+                .format(self._case_number, self._testMethodName))
             if not self._input.param("skip_cleanup", False):
                 self._cleanup_previous_setup()
 
             self._init_clusters()
             self.setup_extended()
             self._log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
-                      .format(self._case_number, self._testMethodName))
+                .format(self._case_number, self._testMethodName))
             self._log_start(self)
         except  Exception as e:
             self._log.error(e.message)
@@ -95,11 +94,11 @@ class XDCRBaseTest(unittest.TestCase):
     def tearDown(self):
         try:
             self._log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
-                          .format(self._case_number, self._testMethodName))
+                .format(self._case_number, self._testMethodName))
             self.teardown_extended()
             self._do_cleanup()
             self._log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
-                          .format(self._case_number, self._testMethodName))
+                .format(self._case_number, self._testMethodName))
         finally:
             self._cluster_helper.shutdown()
             self._log_finish(self)
@@ -111,7 +110,8 @@ class XDCRBaseTest(unittest.TestCase):
     def _init_parameters(self):
         self._log.info("Initializing input parameters started...")
         self._clusters_dic = self._input.clusters # clusters is declared as dic in TestInput which is unordered.
-        self._clusters_keys_olst = range(len(self._clusters_dic)) #clusters are populated in the dic in testrunner such that ordinal is the key.
+        self._clusters_keys_olst = range(
+            len(self._clusters_dic)) #clusters are populated in the dic in testrunner such that ordinal is the key.
         #orderedDic cannot be used in order to maintain the compability with python 2.6
         self._cluster_counter_temp_int = 0
         self._cluster_names_dic = self._get_cluster_names()
@@ -144,8 +144,8 @@ class XDCRBaseTest(unittest.TestCase):
         self._case_number = self._input.param("case_number", 0)
         self._expires = self._input.param("expires", 0)
         self._timeout = self._input.param("timeout", 60)
-        self._percent_update = self._input.param("upd", 50)
-        self._percent_delete = self._input.param("del", 50)
+        self._percent_update = self._input.param("upd", 30)
+        self._percent_delete = self._input.param("del", 30)
         self._warmup = self._input.param("warm", "all")
         self._failover = self._input.param("failover", None)
         if self._failover is not None:
@@ -156,6 +156,7 @@ class XDCRBaseTest(unittest.TestCase):
             start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
         self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0,
             end=int(self._num_items * (float)(self._percent_update) / 100))
+
 
         self.ord_keys = self._clusters_keys_olst
         self.ord_keys_len = len(self.ord_keys)
@@ -256,12 +257,12 @@ class XDCRBaseTest(unittest.TestCase):
         master_node = nodes[0]
         bucket_size = self._get_bucket_size(master_node, nodes, self._mem_quota_int, self._default_bucket)
 
-        rest=RestConnection(master_node)
+        rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
         if self._default_bucket:
             self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
             self._buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                       num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
+                num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
 
     def _config_cluster(self, nodes):
         task = self._cluster_helper.async_rebalance(nodes, nodes[1:], [])
@@ -298,7 +299,7 @@ class XDCRBaseTest(unittest.TestCase):
         shell.disconnect()
 
     def _get_cluster_buckets(self, master_server):
-        rest=RestConnection(master_server)
+        rest = RestConnection(master_server)
         master_id = rest.get_nodes_self().id
         return [bucket for bucket in self._buckets if bucket.master_id == master_id]
 
@@ -321,26 +322,26 @@ class XDCRBaseTest(unittest.TestCase):
                 kv_store_first[1].release_partition(key)
                 kv_store_second[1].release_partition(key)
             #add keys/values in first kvs if the keys are presented only in second one
-            else :
+            else:
                 partition1, num_part = kv_store_first[kvs_num].acquire_random_partition()
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
                 partition1.set(key, partition2.get_valid(key))
                 kv_store_first[kvs_num].release_partition(num_part)
                 kv_store_second[kvs_num].release_partition(key)
-            #add condition when key was deleted in first, but added in second
+                #add condition when key was deleted in first, but added in second
 
         for key in deleted_keys_second:
             # the same keys were deleted in both kvs
             if key in deleted_keys_first:
                 pass
             # add deleted keys to first kvs if the where deleted only in second kvs
-            else :
+            else:
                 partition1 = kv_store_first[kvs_num].acquire_partition(key)
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
                 partition1.deleted[key] = partition2.get_deleted(key)
                 kv_store_first[kvs_num].release_partition(key)
                 kv_store_second[kvs_num].release_partition(key)
-        # return merged kvs, that we expect to get on both clusters
+            # return merged kvs, that we expect to get on both clusters
         return kv_store_first[kvs_num]
 
     def merge_buckets(self, src_master, dest_master, bidirection=True):
@@ -348,11 +349,16 @@ class XDCRBaseTest(unittest.TestCase):
         dest_buckets = self._get_cluster_buckets(dest_master)
         for src_bucket in src_buckets:
             for dest_bucket in dest_buckets:
-                if src_bucket.name==dest_bucket.name:
+                if src_bucket.name == dest_bucket.name:
                     if bidirection:
                         src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
                     dest_bucket.kvs[1] = src_bucket.kvs[1]
 
+        """Verify the stats at the destination cluster
+        1. Data Validity check - using kvstore-node key-value check
+        2. Item count check on source versus destination
+        3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
+        * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
     def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False):
         if self._num_items in (1000, 10000):
             self._timeout = 180
@@ -360,11 +366,11 @@ class XDCRBaseTest(unittest.TestCase):
             self._timeout = 300
         elif self._num_items in (50000, 100000):
             self._timeout = 500
-        elif self._num_items >=100000:
+        elif self._num_items >= 100000:
             self._timeout = 600
 
         if self._failover is not None:
-            self._timeout*= 2
+            self._timeout *= 3 / 2
         self._log.info("Sleep %s seconds..." % (self._timeout))
         time.sleep(self._timeout)
         self._log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_nodes[0].ip))
@@ -452,8 +458,6 @@ class XDCRBaseTest(unittest.TestCase):
 #===============================================================================
 
 class XDCRReplicationBaseTest(XDCRBaseTest):
-
-
     def setup_extended(self):
         self._setup_topology()
         self._load_data()
@@ -531,9 +535,10 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for key in self._clusters_keys_olst:
             cluster_node = self._clusters_dic[key][0]
             cluster_name = self._cluster_names_dic[key]
-            self._log.info("Starting Load # items {0} node {1} , cluster {2}....".format(self._num_items, cluster_node, cluster_name))
+            self._log.info("Starting Load # items {0} node {1} , cluster {2}....".format(self._num_items, cluster_node,
+                cluster_name))
             self._load_gen_data(cluster_name, cluster_node)
-            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_UNIDIRECTION :
+            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_UNIDIRECTION:
                 break
             self._log.info("Completed Load")
 
@@ -544,7 +549,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
             self._link_clusters(dest_cluster_name, dest_master, src_cluster_name, src_master)
             self._replicate_clusters(dest_master, src_cluster_name)
-
 
 
     def _link_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
@@ -566,7 +570,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for op_type in self._seed_data_ops_lst:
             num_items_ratio = self._get_num_items_ratio(op_type)
             load_gen = BlobGenerator(cname, cname, self._value_size, end=num_items_ratio)
-            self._log.info("Starting Load operation '{0}' for items (ratio) '{1}' on node '{2}'....".format(op_type, num_items_ratio, cname))
+            self._log.info("Starting Load operation '{0}' for items (ratio) '{1}' on node '{2}'....".format(op_type,
+                num_items_ratio, cname))
             if self._seed_data_mode_str == XDCRConstants.SEED_DATA_MODE_SYNC:
                 self._load_all_buckets(node, load_gen, op_type, 0)
                 self._log.info("Completed Load of {0}".format(op_type))
@@ -590,8 +595,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for bucket in buckets:
             gen = copy.deepcopy(kv_gen)
             tasks.append(self._cluster_helper.async_load_gen_docs(server, bucket.name, gen,
-                                                          bucket.kvs[kv_store],
-                                                          op_type, exp))
+                bucket.kvs[kv_store],
+                op_type, exp))
         return tasks
 
 
@@ -604,16 +609,17 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         tasks = []
         buckets = self._get_cluster_buckets(src_server)
         for bucket in buckets:
-            tasks.append(self._cluster_helper.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store], ops_perf))
+            tasks.append(self._cluster_helper.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store],
+                ops_perf))
         for task in tasks:
             task.result()
 
     def _expiry_pager(self, master):
         buckets = self._get_cluster_buckets(master)
         for bucket in buckets:
-            ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 30, bucket)
+            ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 5, bucket)
             self._log.info("wait for expiry pager to run on all these nodes")
-            time.sleep(30)
+            time.sleep(10)
 
     def _wait_for_stats_all_buckets(self, servers):
         def verify():
@@ -631,11 +637,13 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 return True
             except MemcachedError as e:
                 self._log.info("verifying ...")
-                self._log.debug("Not able to fetch data. Error is %s" , (e.message))
+                self._log.debug("Not able to fetch data. Error is %s", (e.message))
                 return False
+
         is_verified = self._poll_for_condition(verify)
         if not is_verified:
-            raise ValueError("Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
+            raise ValueError(
+                "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
     def _verify_all_buckets(self, server, kv_store=1):
         def verify():
@@ -649,11 +657,14 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 return True
             except  MemcachedError as e:
                 self._log.info("verifying ...")
-                self._log.info("Not able to fetch data. Error is %s" , (e.message))
+                self._log.info("Not able to fetch data. Error is %s", (e.message))
                 return False
+
         is_verified = self._poll_for_condition(verify)
         if not is_verified:
-            raise ValueError("Verification process not completed after waiting for {0} seconds. Please check logs".format(self._poll_timeout))
+            raise ValueError(
+                "Verification process not completed after waiting for {0} seconds. Please check logs".format(
+                    self._poll_timeout))
 
 
     def _verify_stats_all_buckets(self, servers):
@@ -684,11 +695,13 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 return True
             except  MemcachedError as e:
                 self._log.info("verifying ...")
-                self._log.debug("Not able to fetch data. Error is %s" , (e.message))
+                self._log.debug("Not able to fetch data. Error is %s", (e.message))
                 return False
+
         is_verified = self._poll_for_condition(verify)
         if not is_verified:
-            raise ValueError("Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
+            raise ValueError(
+                "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
     def _find_cluster_nodes_by_name(self, cluster_name):
         return self._clusters_dic[[k for k, v in self._cluster_names_dic.iteritems() if v == cluster_name][0]]
