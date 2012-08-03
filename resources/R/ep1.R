@@ -284,6 +284,11 @@ ns_server_data $row <- as.numeric(ns_server_data $row)
 ns_server_data $ep_queue_size <- as.numeric(ns_server_data $ep_queue_size)
 ns_server_data $ep_diskqueue_drain <- as.numeric(ns_server_data $ep_diskqueue_drain)
 ns_server_data $ops <- as.numeric(ns_server_data $ops)
+tryCatch({
+    ns_server_data $views_ops <- as.numeric(ns_server_data$couch_views_ops)
+}, error=function(e) {
+    print("Cannot find view read per sec.")
+})
 ns_server_data $ep_bg_fetched <- as.numeric(ns_server_data $ep_bg_fetched)
 ns_server_data $ep_tmp_oom_errors <- as.numeric(ns_server_data $ep_tmp_oom_errors)
 ns_server_data $vb_active_resident_items_ratio <- as.numeric(ns_server_data $vb_active_resident_items_ratio)
@@ -1490,6 +1495,18 @@ if (nrow(ns_server_data) > 0) {
     print(p)
     makeFootnote(footnote)
     makeMetricDef("Number of ops per second")
+
+    if(!is.null(ns_server_data$views_ops)) {
+        cat("generating couch_views_ops \n")
+        p <- ggplot(ns_server_data, aes(row, views_ops, color=buildinfo.version , label=views_ops)) + labs(x="----time (sec)--->", y="QPS")
+        p <- p + geom_point()
+        p <- addopts(p,"View read per sec.")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("All the view reads for all design documents",
+                            "including scatter gather.",
+                            sep="\n"))
+    }
 
     cat("generating ep queue size \n")
     p <- ggplot(ns_server_data, aes(row, ep_queue_size, color=buildinfo.version , label= prettySize(ep_queue_size))) + labs(x="----time (sec)--->", y="ep_queue_size")
