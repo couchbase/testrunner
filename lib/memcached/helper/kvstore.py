@@ -135,4 +135,8 @@ class Partition(object):
         return False
 
     def __len__(self):
-        return len(self.valid.keys())
+        length = 0
+        for key in self.valid.keys():
+            if not self._expired(key):
+                length += 1
+        return length
