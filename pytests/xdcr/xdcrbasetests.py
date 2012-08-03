@@ -1,5 +1,6 @@
 import sys
 import time
+import datetime
 import unittest
 import logger
 import copy
@@ -10,7 +11,7 @@ from TestInput import TestInputSingleton
 from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from memcached.helper.data_helper import VBucketAwareMemcached
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedError
 
@@ -72,18 +73,19 @@ class XDCRBaseTest(unittest.TestCase):
     def setUp(self):
         try:
             self._log = logger.Logger.get_logger()
-            self._log.info("SetUp process started ...")
             self._input = TestInputSingleton.input
-            self._cluster_helper = Cluster()
-
             self._init_parameters()
-
+            self._cluster_helper = Cluster()
+            self._log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
+                      .format(self._case_number, self._testMethodName))
             if not self._input.param("skip_cleanup", False):
                 self._cleanup_previous_setup()
 
             self._init_clusters()
             self.setup_extended()
-            self._log.info("SetUp process completed...")
+            self._log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
+                      .format(self._case_number, self._testMethodName))
+            self._log_start(self)
         except  Exception as e:
             self._log.error(e.message)
             self._log.error("Error while setting up clusters: %s", sys.exc_info())
@@ -91,17 +93,20 @@ class XDCRBaseTest(unittest.TestCase):
             raise
 
     def tearDown(self):
-        self.teardown_extended()
-        self._do_cleanup()
-        self._cluster_helper.shutdown()
+        try:
+            self._log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
+                          .format(self._case_number, self._testMethodName))
+            self.teardown_extended()
+            self._do_cleanup()
+            self._log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
+                          .format(self._case_number, self._testMethodName))
+        finally:
+            self._cluster_helper.shutdown()
+            self._log_finish(self)
 
     def _cleanup_previous_setup(self):
         self.teardown_extended()
         self._do_cleanup()
-
-        # def test_setUp(self):
-    #    pass
-
 
     def _init_parameters(self):
         self._log.info("Initializing input parameters started...")
@@ -136,6 +141,7 @@ class XDCRBaseTest(unittest.TestCase):
         if self._doc_ops_dest is not None:
             self._doc_ops_dest = self._doc_ops_dest.split("-")
 
+        self._case_number = self._input.param("case_number", 0)
         self._expires = self._input.param("expires", 0)
         self._timeout = self._input.param("timeout", 60)
         self._percent_update = self._input.param("upd", 50)
@@ -144,8 +150,40 @@ class XDCRBaseTest(unittest.TestCase):
         self._failover = self._input.param("failover", None)
         if self._failover is not None:
             self._failover = self._failover.split("-")
+
+        self.gen_create = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
+        self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size,
+            start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+        self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0,
+            end=int(self._num_items * (float)(self._percent_update) / 100))
+
+        self.ord_keys = self._clusters_keys_olst
+        self.ord_keys_len = len(self.ord_keys)
+
+        self.src_nodes = self._clusters_dic[0]
+        self.src_master = self.src_nodes[0]
+
+        self.dest_nodes = self._clusters_dic[1]
+        self.dest_master = self.dest_nodes[0]
         self._log.info("Initializing input parameters completed.")
 
+    @staticmethod
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.src_master[0]).log_client_error(msg)
+            RestConnection(self.dest_master[0]).log_client_error(msg)
+        except:
+            pass
+
+    @staticmethod
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.src_master[0]).log_client_error(msg)
+            RestConnection(self.dest_master[0]).log_client_error(msg)
+        except:
+            pass
 
     def _get_floating_servers(self):
         cluster_nodes = []
@@ -305,6 +343,96 @@ class XDCRBaseTest(unittest.TestCase):
         # return merged kvs, that we expect to get on both clusters
         return kv_store_first[kvs_num]
 
+    def merge_buckets(self, src_master, dest_master, bidirection=True):
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name==dest_bucket.name:
+                    if bidirection:
+                        src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
+
+    def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False):
+        if self._num_items in (1000, 10000):
+            self._timeout = 180
+        elif self._num_items in (10000, 50000):
+            self._timeout = 300
+        elif self._num_items in (50000, 100000):
+            self._timeout = 500
+        elif self._num_items >=100000:
+            self._timeout = 600
+
+        if self._failover is not None:
+            self._timeout*= 2
+        self._log.info("Sleep %s seconds..." % (self._timeout))
+        time.sleep(self._timeout)
+        self._log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_nodes[0].ip))
+        self._log.info("Waiting for for {0} seconds, for replication to catchup ...".format(self._timeout))
+        if verify_src:
+            self._wait_for_stats_all_buckets(self.dest_nodes)
+        self._wait_for_stats_all_buckets(self.src_nodes)
+        self._expiry_pager(self.src_nodes[0])
+        self._expiry_pager(self.dest_nodes[0])
+        if verify_src:
+            self._verify_stats_all_buckets(self.src_nodes)
+        self._verify_stats_all_buckets(self.dest_nodes)
+
+        if self._doc_ops is not None or self._doc_ops_dest is not None:
+            if "update" in self._doc_ops or (self._doc_ops_dest is not None and "update" in self._doc_ops_dest):
+                self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "update")
+
+            if "delete" in self._doc_ops or (self._doc_ops_dest is not None and "delete" in self._doc_ops_dest):
+                self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "delete")
+
+    def verify_results(self, verify_src=False):
+        # Checking replication at destination clusters
+        dest_key_index = 1
+        for key in self.ord_keys[1:]:
+            if dest_key_index == self.ord_keys_len:
+                break
+            dest_key = self.ord_keys[dest_key_index]
+            self.dest_nodes = self._clusters_dic[dest_key]
+
+            self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
+            dest_key_index += 1
+
+    def wait_warmup_completed(self, warmupnodes, bucket_names=["default"]):
+        if isinstance(bucket_names, str):
+            bucket_names = [bucket_names]
+        for server in warmupnodes:
+            for bucket in bucket_names:
+                mc = MemcachedClientHelper.direct_client(server, bucket)
+                start = time.time()
+                while time.time() - start < 150:
+                    if mc.stats()["ep_warmup_thread"] == "complete":
+                        self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
+                        time.sleep(10)
+                        break
+                    elif mc.stats()["ep_warmup_thread"] == "running":
+                        self._log.info(
+                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                        continue
+                    else:
+                        self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
+                        break
+                if mc.stats()["ep_warmup_thread"] == "running":
+                    self._log.info("ERROR: ep_warmup_thread's status not complete")
+                mc.close
+
+
+    def _modify_src_data(self):
+        """Setting up creates/updates/deletes at source nodes"""
+
+        if self._doc_ops is not None:
+            if "create" in self._doc_ops:
+                self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+            if "update" in self._doc_ops:
+                self._load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
+            if "delete" in self._doc_ops:
+                self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
+            self._wait_for_stats_all_buckets(self.src_nodes)
+
 #===============================================================================
 # class: XDCRReplicationBaseTest
 # This class links the different clusters defined in ".ini" file and starts the
@@ -379,13 +507,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             if dest_key_index == ord_keys_len:
                 break
             dest_key = ord_keys[dest_key_index]
-            dest_nodes = self._clusters_dic[dest_key]
-            src_nodes = self._clusters_dic[src_key]
-            src_master = src_nodes[0]
-            dest_master = dest_nodes[0]
             src_cluster_name = self._cluster_names_dic[src_key]
             dest_cluster_name = self._cluster_names_dic[dest_key]
-            self._join_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
+            self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             dest_key_index += 1
 
 
@@ -394,14 +518,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for key in self._clusters_keys_olst:
             nodes = self._clusters_dic[key]
             if not src_master_identified:
-                src_master = nodes[0]
                 src_cluster_name = self._cluster_names_dic[key]
                 print src_cluster_name
                 src_master_identified = True
                 continue
             dest_cluster_name = self._cluster_names_dic[key]
-            dest_master = nodes[0]
-            self._join_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
+            self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             time.sleep(30)
 
 
