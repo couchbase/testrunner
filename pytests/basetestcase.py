@@ -238,7 +238,7 @@ class BaseTestCase(unittest.TestCase):
         server - A server in the cluster. (TestInputServer)
         kv_store - The kv store index to check. (int)
     """
-    def _verify_all_buckets(self, server, kv_store=1, timeout=120):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=180):
         tasks = []
         for bucket in self.buckets:
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store]))
