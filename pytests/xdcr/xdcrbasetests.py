@@ -617,9 +617,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _expiry_pager(self, master):
         buckets = self._get_cluster_buckets(master)
         for bucket in buckets:
-            ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 5, bucket)
+            ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 10, bucket)
             self._log.info("wait for expiry pager to run on all these nodes")
-            time.sleep(10)
+            time.sleep(30)
 
     def _wait_for_stats_all_buckets(self, servers):
         def verify():
