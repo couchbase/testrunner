@@ -1,0 +1,338 @@
+import unittest
+import sys
+import time
+import types
+import logger
+import json
+from collections import defaultdict
+
+from view.view_base import ViewBaseTest
+from TestInput import TestInputSingleton
+from viewtests import ViewBaseTests
+from couchbase.document import View
+from membase.api.rest_client import RestConnection, Bucket
+from membase.helper.cluster_helper import ClusterOperationHelper
+from mc_bin_client import MemcachedClient
+from memcached.helper.data_helper import MemcachedClientHelper
+from basetestcase import BaseTestCase
+from membase.api.exception import QueryViewException
+from membase.helper.rebalance_helper import RebalanceHelper
+
+
+class ViewMergingTests(BaseTestCase):
+    skip_setup_failed  = False
+
+    @unittest.skipIf(skip_setup_failed, "setup was failed")
+    def setUp(self):
+        try:
+            if 'first_case' not in TestInputSingleton.input.test_params:
+                TestInputSingleton.input.test_params['default_bucket'] = False
+                TestInputSingleton.input.test_params['skip_cleanup'] = True
+            self.default_bucket_name = 'default'
+            super(ViewMergingTests, self).setUp()
+            if 'first_case' in TestInputSingleton.input.test_params:
+                self.cluster.rebalance(self.servers[:], self.servers[1:], [])
+            # We use only one bucket in this test suite
+            self.rest = RestConnection(self.master)
+            self.bucket = self.rest.get_bucket(Bucket(name=self.default_bucket_name))
+            # num_docs must be a multiple of the number of vbuckets
+            self.num_docs = self.input.param("num_docs_per_vbucket", 1) * \
+                            len(self.bucket.vbuckets)
+            self.is_dev_view = self.input.param("is_dev_view", True)
+            self.map_view_name = 'mapview1'
+            self.red_view_name = 'redview1'
+            self.clients = self.init_clients()
+            if 'first_case' in TestInputSingleton.input.test_params:
+                 self.create_ddocs()
+        except Exception as ex:
+            skip_setup_failed = True
+            self.fail(ex)
+
+    def tearDown(self):
+        # clean up will only performed on the last run
+        if 'last_case' in TestInputSingleton.input.test_params:
+            TestInputSingleton.input.test_params['skip_cleanup'] = False
+            super(ViewMergingTests, self).tearDown()
+        else:
+            self.cluster.shutdown(force=True)
+            self._log_finish(self)
+
+    def test_empty_vbuckets(self):
+        results = self.merged_query(self.map_view_name)
+        self.assertEquals(results.get(u'total_rows', None), 0)
+        self.assertEquals(len(results.get(u'rows', None)), 0)
+
+    def test_nonexisting_views(self):
+        view_names = ['mapview2','mapview3', 'mapview4', 'mapview5']
+        for view_name in view_names:
+            with self.assertRaises(QueryViewException):
+                results = self.merged_query(view_name)
+
+    def test_non_empty_view(self):
+        num_vbuckets = len(self.rest.get_vbuckets(self.bucket))
+        docs = ViewMergingTests.make_docs(1, self.num_docs + 1)
+        self.populate_sequenced(num_vbuckets, docs)
+        results = self.merged_query(self.map_view_name)
+        self.assertEquals(results.get(u'total_rows', 0), self.num_docs)
+        self.assertEquals(len(results.get(u'rows', [])), self.num_docs)
+
+    def test_queries(self):
+        all_query_params = ['skip', 'limit', 'startkey', 'endkey', 'startkey_docid',
+                        'endkey_docid', 'inclusive_end', 'descending', 'key']
+        current_params = {}
+        for key in self.input.test_params:
+            if key in all_query_params:
+                current_params[key] = str(self.input.test_params[key])
+        results = self.merged_query(self.map_view_name, current_params)
+        self.verify_results(results, current_params)
+
+    def test_keys(self):
+        keys = [5, 3, 10, 39, 666666, 21]
+        results = self.merged_query(self.map_view_name,
+                                    {"keys": keys})
+        self.verify_results(results, {"keys": keys})
+
+    def test_include_docs(self):
+        results = self.merged_query(self.map_view_name,
+                                    {"include_docs": "true"})
+        self.verify_results(results, {"include_docs": "true"})
+        num = 1
+        for row in results.get(u'rows', []):
+            self.assertEquals(row['doc']['json']['integer'], num)
+            self.assertEquals(row['doc']['json']['string'], str(num))
+            self.assertEquals(row['doc']['meta']['id'], str(num))
+            num +=1
+
+    def test_queries_reduce(self):
+        all_query_params = ['skip', 'limit', 'startkey', 'endkey', 'startkey_docid',
+                        'endkey_docid', 'inclusive_end', 'descending', 'reduce',
+                        'group','group_level']
+        current_params = {}
+        for key in self.input.test_params:
+            if key in all_query_params:
+                current_params[key] = str(self.input.test_params[key])
+        results = self.merged_query(self.red_view_name, current_params)
+        self.verify_results_reduce(results, current_params)
+
+    def test_stale_ok_alternated_docs(self):
+        num_vbuckets = len(self.rest.get_vbuckets(self.bucket))
+        docs = ViewMergingTests.make_docs(self.num_docs + 1, self.num_docs + 3)
+        self.populate_alternated(num_vbuckets, docs)
+        results = self.merged_query(self.map_view_name, {'stale': 'ok'})
+        self.assertEquals(results.get(u'total_rows', None), self.num_docs)
+        self.assertEquals(len(results.get(u'rows', None)), self.num_docs)
+        self.verify_keys_are_sorted(results)
+
+    def test_stale_update_after_alternated_docs(self):
+        results = self.merged_query(self.map_view_name, {'stale': 'update_after'})
+        self.assertEquals(results.get(u'total_rows', None), self.num_docs)
+        self.assertEquals(len(results.get(u'rows', None)), self.num_docs)
+        time.sleep(1)
+        results = self.merged_query(self.map_view_name, {'stale': 'ok'})
+        self.assertEquals(results.get(u'total_rows', None), self.num_docs + 2)
+        self.assertEquals(len(results.get(u'rows', None)), self.num_docs + 2)
+        self.verify_keys_are_sorted(results)
+
+    def calculate_matching_keys(self, params):
+        keys = range(1, self.num_docs + 1)
+        if 'descending' in params:
+            keys.reverse()
+        if 'startkey' in params:
+            if params['startkey'].find('[') > -1:
+                key = eval(params['startkey'])[0]
+            else:
+                key = int(params['startkey'])
+            keys = keys[keys.index(key):]
+            if 'startkey_docid' in params:
+                if params['startkey_docid'] > params['startkey']:
+                    keys = keys[1:]
+        if 'endkey' in params:
+            if params['endkey'].find('[') > -1:
+                key = eval(params['endkey'])[0]
+            else:
+                key = int(params['endkey'])
+            keys = keys[:keys.index(key) + 1]
+            if 'endkey_docid' in params:
+                if params['endkey_docid'] < params['endkey']:
+                    keys = keys[:-1]
+        if 'inclusive_end' in params and params['inclusive_end'] == 'false':
+            keys = keys[:-1]
+        if 'skip' in params:
+            keys = keys[(int(params['skip'])):]
+        if 'limit' in params:
+            keys = keys[:(int(params['limit']))]
+        if 'key' in params:
+            if int(params['key']) <= self.num_docs:
+                keys = [int(params['key']),]
+            else:
+                keys = []
+        if 'keys' in params:
+            keys = []
+            for k in params['keys']:
+                if int(k) <= self.num_docs:
+                    keys.append(int(k))
+            # When ?keys=[...] parameter is sent, rows are not guaranteed to come
+            # sorted by key.
+            keys.sort()
+        return keys
+
+    def verify_results(self, results, params):
+        expected = self.calculate_matching_keys(params)
+        self.assertEquals(results.get(u'total_rows', 0), self.num_docs,
+                          "total_rows parameter is wrong, expected %d, actual %d"
+                          % (self.num_docs, results.get(u'total_rows', 0)))
+        self.assertEquals(len(results.get(u'rows', [])), len(expected),
+                          "Rows number is wrong, expected %d, actual %d"
+                          % (len(expected), len(results.get(u'rows', []))))
+        if expected:
+            if 'keys' not in params:
+                # first
+                self.assertEquals(results.get(u'rows', [])[0]['key'], expected[0],
+                                  "First row key is wrong, expected %d, actual %d"
+                                  % (expected[0], results.get(u'rows', [])[0]['key']))
+                # last
+                self.assertEquals(results.get(u'rows', [])[-1]['key'], expected[-1],
+                                  "Last row key is wrong, expected %d, actual %d"
+                                  % (expected[-1], results.get(u'rows', [])[-1]['key']))
+                desc = 'descending' in params and params['descending'] == 'true'
+                self.verify_keys_are_sorted(results, desc=desc)
+            else:
+                actual = sorted([row[u'key'] for row in results.get(u'rows', [])])
+                self.assertEquals(actual, expected,
+                                  "Results are wrong, expected %s, actual %s"
+                                  % (expected, results.get(u'rows', [])))
+
+    def verify_results_reduce(self, results, params):
+        if 'reduce' in params and params['reduce'] == 'false' or \
+          'group_level' in params or 'group' in params and params['group'] == 'true':
+            expected = self.calculate_matching_keys(params)
+            self.assertEquals(len(results.get(u'rows', [])), len(expected),
+                          "Rows number is wrong, expected %d, actual %d"
+                          % (len(expected), len(results.get(u'rows', []))))
+            if expected:
+                #first
+                self.assertEquals(results.get(u'rows', [])[0]['key'][0], expected[0],
+                                  "First element is wrong, expected %d, actual %d"
+                                  % (expected[0], results.get(u'rows', [])[0]['key'][0]))
+                #last
+                self.assertEquals(results.get(u'rows', [])[-1]['key'][0], expected[-1],
+                                  "Last element is wrong, expected %d, actual %d"
+                                  % (expected[-1], results.get(u'rows', [])[-1]['key'][0]))
+        else:
+            expected = self.calculate_matching_keys(params)
+            self.assertEquals(results.get(u'rows', [])[0][u'value'], len(expected),
+                              "Value for reduce is incorrect. Expected %s, actual %s"
+                              % (len(expected),results.get(u'rows', [])[0][u'value']))
+
+    def create_ddocs(self):
+        mapview = View(self.map_view_name, '''function(doc) {
+             emit(doc.integer, doc.string);
+          }''', dev_view=self.is_dev_view)
+        self.cluster.create_view(self.master, 'test', mapview)
+        redview = View(self.red_view_name, '''function(doc) {
+             emit([doc.integer, doc.string], doc.integer);
+          }''', '''_count''', dev_view=self.is_dev_view)
+        self.cluster.create_view(self.master, 'test', redview)
+        RebalanceHelper.wait_for_persistence(self.master, self.bucket, 0)
+
+    def init_clients(self):
+        """Initialise clients for all servers there are vBuckets on
+
+        It returns a dict with 'ip:port' as key (this information is also
+        stored this way in every vBucket in the `master` property) and
+        the MemcachedClient as the value
+        """
+        clients = {}
+
+        for vbucket in self.bucket.vbuckets:
+            if vbucket.master not in clients:
+                ip, port = vbucket.master.split(':')
+                clients[vbucket.master] =  MemcachedClient(ip, int(port))
+        return clients
+
+    def populate_alternated(self, num_vbuckets, docs):
+        """Every vBucket gets a doc first
+
+        Populating the vBuckets alternated means that every vBucket gets
+        a document first, before it receives the second one and so on.
+
+        For example if we have 6 documents named doc-1 ... doc-6 and 3
+        vBuckets the result will be:
+
+            vbucket-1: doc-1, doc-4
+            vbucket-2: doc-2, doc-5
+            vbucket-3: doc-3, doc-6
+        """
+        for i, doc in enumerate(docs):
+            self.insert_into_vbucket(i % num_vbuckets, doc)
+        RebalanceHelper.wait_for_persistence(self.master, self.bucket, 0)
+
+    def populate_sequenced(self, num_vbuckets, docs):
+        """vBuckets get filled up one by one
+
+        Populating the vBuckets sequenced means that the vBucket gets
+        a certain number of documents, before the next one gets some.
+
+        For example if we have 6 documents named doc-1 ... doc-6 and 3
+        vBuckets the result will be:
+
+            vbucket-1: doc-1, doc-2
+            vbucket-2: doc-3, doc-4
+            vbucket-3: doc-5, doc-5
+        """
+        docs_per_vbucket = len(docs) / num_vbuckets
+
+        for vbucket in range(num_vbuckets):
+            start = vbucket * docs_per_vbucket
+            end = start + docs_per_vbucket
+            for doc in docs[start:end]:
+                    self.insert_into_vbucket(vbucket, doc)
+        RebalanceHelper.wait_for_persistence(self.master, self.bucket, 0)
+
+    def insert_into_vbucket(self, vbucket_id, doc):
+        """Insert a document into a certain vBucket
+
+        The memcached clients must already been initialised in the
+        self.clients property.
+        """
+        vbucket = self.bucket.vbuckets[vbucket_id]
+        client = self.clients[vbucket.master]
+
+        client.set(doc['json']['key'], 0, 0, json.dumps(doc['json']['body']).encode("ascii", "ignore"), vbucket_id)
+
+    @staticmethod
+    def make_docs(start, end):
+        """Create documents
+
+        `key` will be used as a key and won't end up in the final
+        document body.
+        `body` will be used as the document body
+        """
+        docs = []
+        for i in range(start, end):
+            doc = {
+                'key': str(i),
+                'body': { 'integer': i, 'string': str(i)}}
+
+            docs.append({"meta":{"id": str(i)}, "json": doc })
+        return docs
+
+    def merged_query(self, view_name, params={}, ddoc='test'):
+       params['full_set'] = 'true'
+       bucket = self.default_bucket_name
+       if not 'stale' in params:
+           params['stale'] = 'false'
+       ddoc = ("","dev_")[self.is_dev_view] + ddoc
+       return self.rest.query_view(ddoc, view_name, bucket, params)
+
+    def verify_keys_are_sorted(self, results, desc=False):
+        current_keys = [row['key'] for row in results['rows']]
+        self.assertTrue(ViewMergingTests._verify_list_is_sorted(current_keys, desc=desc), 'keys are not sorted')
+        self.log.info('rows are sorted by key')
+
+    @staticmethod
+    def _verify_list_is_sorted(keys, key = lambda x: x, desc=False):
+        if desc:
+            return all([key(keys[i]) >= key(keys[i + 1]) for i in xrange(len(keys) - 1)])
+        else:
+            return all([key(keys[i]) <= key(keys[i + 1]) for i in xrange(len(keys) - 1)])
