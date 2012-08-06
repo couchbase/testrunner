@@ -170,6 +170,7 @@ class TestInputParser():
         moxi_ips = []
         client_ips = []
         input.dashboard = []
+        input.ui_conf = {}
         for section in sections:
             result = re.search('^cluster', section)
             if section == 'servers':
@@ -186,6 +187,8 @@ class TestInputParser():
                     global_properties[option] = config.get(section, option)
             elif section == 'dashboard':
                 input.dashboard = TestInputParser.get_server_ips(config, section)
+            elif section == 'uiconf':
+                input.ui_conf = TestInputParser.get_ui_tests_config(config, section)
             elif result is not None:
                 cluster_list = TestInputParser.get_server_ips(config, section)
                 cluster_ips.extend(cluster_list)
@@ -247,6 +250,14 @@ class TestInputParser():
         for option in options:
             ips.append(config.get(section, option))
         return ips
+
+    @staticmethod
+    def get_ui_tests_config(config, section):
+        conf = {}
+        options = config.options(section)
+        for option in options:
+            conf[option] = config.get(section, option)
+        return conf
 
     @staticmethod
     def get_server(ip, config):

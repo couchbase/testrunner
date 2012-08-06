@@ -1,0 +1,282 @@
+import logger
+import time
+import unittest
+import os
+import urllib2
+import commands
+import types
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.common.exceptions import NoSuchElementException
+from threading import Thread
+import ConfigParser
+from TestInput import TestInputSingleton,TestInputParser
+from couchbase.cluster import Cluster
+from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+
+
+class BaseUITestCase(unittest.TestCase):
+    skip_setup_failed  = False
+    # selenium thread
+
+    def _start_selenium(self):
+        host = self.input.ui_conf['selenium_ip']
+        if host in ['localhost', '127.0.0.1']:
+            os.system("java -jar ~/Downloads/selenium-server-standalone-2.24.1.jar -Dwebdriver.chrome.driver=%s > selenium.log 2>&1"
+                      % self.input.ui_conf['chrome_path'])
+        else:
+            os.system("ssh {0}@{1} 'bash -s' < 'java -jar ~/Downloads/selenium-server-standalone-2.24.1.jar -Dwebdriver.chrome.driver={2}' > /tmp/selenium.log 2>&1".format(self.input.servers[0].ssh_username, host, self.input.ui_conf['chrome_path']))
+
+    def _wait_for_selenium_is_started(self, timeout=10):
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            log = open("/tmp/selenium.log")
+            if log.read().find('Started org.openqa.jetty.jetty.Server') > -1:
+                log.close()
+                if self._is_selenium_running():
+                    time.sleep(1)
+                    return
+            time.sleep(1)
+
+    def _start_selenium_thread(self):
+        self.t = Thread(target=self._start_selenium,
+                       name="selenium",
+                       args=())
+        self.t.start()
+
+    def _is_selenium_running(self):
+        host = self.input.ui_conf['selenium_ip']
+        if host in ['localhost', '127.0.0.1']:
+             cmd = 'ps -ef|grep selenium-server'
+        else:
+            cmd = "ssh {0}@{1} 'bash -s' < 'ps -ef|grep selenium-server'"
+        output = commands.getstatusoutput(cmd)
+        if str(output).find('selenium-server-standalone') > -1:
+            return True
+        return False
+
+    @unittest.skipIf(skip_setup_failed, "setup was failed")
+    def setUp(self):
+        try:
+            self.log = logger.Logger.get_logger()
+            self.input = TestInputSingleton.input
+            self.servers = self.input.servers
+            self.browser = self.input.ui_conf['browser']
+            self.replica  = self.input.param("replica", 1)
+            self.case_number = self.input.param("case_number", 0)
+            self.cluster = Cluster()
+            #avoid clean up if the previous test has been tear down
+            if not self.input.param("skip_cleanup", True) \
+                                            or self.case_number == 1:
+                self.tearDown()
+            self._log_start(self)
+            #thread for selenium server
+            if not self._is_selenium_running():
+                self.log.info('start selenium')
+                self._start_selenium_thread()
+                self._wait_for_selenium_is_started()
+            self.log.info('start selenium session')
+            if self.browser == 'ff':
+                self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
+                                               .format(self.input.ui_conf['selenium_ip'],
+                                                       self.input.ui_conf['selenium_port']),
+                                               desired_capabilities=DesiredCapabilities.FIREFOX)
+            elif self.browser == 'chrome':
+                self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
+                                               .format(self.input.ui_conf['selenium_ip'],
+                                                       self.input.ui_conf['selenium_port']),
+                                               desired_capabilities=DesiredCapabilities.CHROME)
+            self.log.info('start selenium started')
+            self.driver.get("http://{0}:{1}".format(self.servers[0].ip,
+                                                    self.servers[0].port))
+            self.driver.maximize_window()
+        except Exception as ex:
+            skip_setup_failed = True
+            self.fail(ex)
+
+    @staticmethod
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(),
+                                              self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+    @staticmethod
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(),
+                                               self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+    def tearDown(self):
+        try:
+            path_screen = self.input.param('screenshots', 'logs/screens')
+            full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
+            self.log.info('screenshot is available: %s' % full_path)
+            if not os.path.exists(path_screen):
+                os.mkdir(path_screen)
+            self.driver.get_screenshot_as_file(os.path.abspath(full_path))
+            rest = RestConnection(self.servers[0])
+            if rest._rebalance_progress_status() == 'running':
+                stopped = rest.stop_rebalance()
+                self.assertTrue(stopped, msg="unable to stop rebalance")
+            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+            #for server in self.servers:
+            #    ClusterOperationHelper.cleanup_cluster([server])
+            #ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+            self.driver.close()
+        finally:
+            self.cluster.shutdown()
+
+class Control():
+    def __init__(self, selenium, by=None, web_element=None):
+        self.selenium = selenium
+        self.by = by
+        if by:
+            try:
+                self.web_element = self.selenium.find_element_by_xpath(by)
+                self.present = True
+                if self.web_element is None:
+                    self.present = False
+            except NoSuchElementException as ex:
+                self.present = False
+        else:
+            self.web_element = web_element
+            self.present = True
+
+    def highlightElement(self):
+        if self.by:
+            self.selenium.execute_script("document.evaluate(\"{0}\",document,null,XPathResult.ANY_TYPE, null).iterateNext().setAttribute('style','background-color:yellow');".format(self.by))
+
+    def type_native(self, text):
+        ActionChains(self.selenium).click(self.web_element).perform()
+        ActionChains(self.selenium).key_down(Keys.CONTROL).perform()
+        ActionChains(self.selenium).send_keys('a').perform()
+        ActionChains(self.selenium).key_up(Keys.CONTROL).perform()
+        ActionChains(self.selenium).send_keys(Keys.DELETE).perform()
+        ActionChains(self.selenium).send_keys(text).perform()
+
+    def click(self):
+        self.highlightElement()
+        self.web_element.click()
+
+    def type(self, message):
+        if message:
+            self.highlightElement()
+            self.web_element.clear()
+            if type(message) == types.StringType and message.find('\\') > -1:
+                for symb in list(message):
+                    if symb == '\\':
+                        self.web_element.send_keys(Keys.DIVIDE)
+                    else:
+                        self.web_element.send_keys(symb)
+            else:
+                self.web_element.send_keys(message)
+
+    def check(self, setTrue=True):
+        if setTrue:
+            if not self.is_checked():
+                self.click()
+        else:
+            if self.is_checked():
+                self.click()
+
+    def is_present(self):
+        return self.present
+
+    def is_displayed(self):
+        return self.present and self.web_element.is_displayed()
+
+    def is_checked(self):
+        checked = self.web_element.get_attribute("checked")
+        return checked is not None
+
+    def get_text(self):
+        self.highlightElement()
+        return self.web_element.text
+
+    def get_attribute(self, atr):
+        return self.web_element.get_attribute(atr)
+
+    def select(self, label):
+        element = Select(self.web_element)
+        element.select_by_visible_text(label)
+
+    def mouse_over(self):
+        ActionChains(self.selenium).move_to_element(self.web_element).perform()
+
+class ControlsHelper():
+    def __init__(self, driver):
+        self.driver = driver
+        file = "pytests/uilocators.conf"
+        config = ConfigParser.ConfigParser()
+        config.read(file)
+        self.locators = config
+
+    def find_control(self, section, locator, parent_locator=None, text=None):
+        by = self._find_by(section, locator, parent_locator)
+        if text:
+            by = by.format(text)
+        return Control(self.driver, by=by)
+
+    def find_controls(self, section, locator, parent_locator=None):
+        by = self._find_by(section, locator, parent_locator)
+        controls = []
+        elements = self.driver.find_elements_by_xpath(by)
+        for element in elements:
+            controls.append(Control(self.driver, web_element=element))
+        return controls
+
+    def find_first_visible(self, section, locator, parent_locator=None, text=None):
+        by = self._find_by(section, locator, parent_locator)
+        if text:
+            by = by.format(text)
+        controls = []
+        elements = self.driver.find_elements_by_xpath(by)
+        for element in elements:
+            try:
+                if element.is_displayed():
+                    return Control(self.driver, web_element=element)
+            except StaleElementReferenceException:
+                pass
+        return None
+
+    def _find_by(self, section, locator, parent_locator=None):
+        if parent_locator:
+            return self.locators.get(section, parent_locator) + \
+                    self.locators.get(section, locator)
+        else:
+            return self.locators.get(section, locator)
+
+class BaseHelperControls():
+     def __init__(self, driver):
+        helper = ControlsHelper(driver)
+        self._user_field = helper.find_control('login', 'user_field')
+        self._user_password = helper.find_control('login', 'password_field')
+        self._login_btn = helper.find_control('login', 'login_btn')
+
+class BaseHelper():
+    def __init__(self, tc):
+        self.tc = tc
+        self.controls = BaseHelperControls(tc.driver)
+
+    def login(self, user = None, password = None):
+        self.tc.log.info("Try to login to application")
+        if not user:
+            user =  self.tc.input.membase_settings.rest_username
+        if not password:
+            password = self.tc.input.membase_settings.rest_password
+        self.controls._user_field.type(user)
+        self.controls._user_password.type(password)
+        self.controls._login_btn.click()
+        self.tc.log.info("user %s is logged in" % user)
