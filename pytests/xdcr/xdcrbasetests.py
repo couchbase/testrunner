@@ -273,7 +273,7 @@ class XDCRBaseTest(unittest.TestCase):
     def _create_sasl_buckets(self, server, server_id, bucket_size):
         bucket_tasks = []
         for i in range(self._sasl_buckets):
-            name = "sasl_bucket_" + str(i+1)
+            name = "sasl_bucket_" + str(i + 1)
             bucket_tasks.append(self._cluster_helper.async_create_sasl_bucket(server, name, 'password',
                 bucket_size, self._num_replicas))
             self._buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
@@ -285,7 +285,7 @@ class XDCRBaseTest(unittest.TestCase):
     def _create_standard_buckets(self, server, server_id, bucket_size):
         bucket_tasks = []
         for i in range(self._standard_buckets):
-            name = "standard_bucket_" + str(i+1)
+            name = "standard_bucket_" + str(i + 1)
             bucket_tasks.append(self._cluster_helper.async_create_standard_bucket(server, name,
                 11214 + i, bucket_size, self._num_replicas))
             self._buckets.append(Bucket(name=name, authType=None, saslPassword=None,
@@ -299,7 +299,7 @@ class XDCRBaseTest(unittest.TestCase):
             self._mem_quota_int = 256
         master_node = nodes[0]
         bucket_size = self._get_bucket_size(master_node, nodes, self._mem_quota_int, self._default_bucket)
-        rest=RestConnection(master_node)
+        rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
 
         if self._sasl_buckets > 0:
@@ -414,29 +414,36 @@ class XDCRBaseTest(unittest.TestCase):
         3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
         * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
     def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False):
-        if self._num_items in (1000, 10000):
-            self._timeout = 180
-        elif self._num_items in (10000, 50000):
-            self._timeout = 300
-        elif self._num_items in (50000, 100000):
-            self._timeout = 500
+        if self._num_items in range(0, 10000):
+            timeout = 120
+        elif self._num_items in range(10000, 50000):
+            timeout = 300
+        elif self._num_items in range(50000, 100000):
+            timeout = 500
         elif self._num_items >= 100000:
-            self._timeout = 600
+            timeout = 600
 
         if self._failover is not None:
-            self._timeout *= 3 / 2
-        self._log.info("Sleep %s seconds..." % (self._timeout))
-        time.sleep(self._timeout)
+            timeout *= 3 / 2
+
+        end_time = time.time() + timeout
         self._log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_nodes[0].ip))
-        self._log.info("Waiting for for {0} seconds, for replication to catchup ...".format(self._timeout))
         if verify_src:
-            self._wait_for_stats_all_buckets(self.dest_nodes)
-        self._wait_for_stats_all_buckets(self.src_nodes)
+            timeout = max(120, end_time - time.time())
+            self._wait_for_stats_all_buckets(self.src_nodes, timeout=timeout)
+        timeout = max(120, end_time - time.time())
+        self._wait_for_stats_all_buckets(self.dest_nodes, timeout=timeout)
         self._expiry_pager(self.src_nodes[0])
         self._expiry_pager(self.dest_nodes[0])
         if verify_src:
-            self._verify_stats_all_buckets(self.src_nodes)
-        self._verify_stats_all_buckets(self.dest_nodes)
+            timeout = max(120, end_time - time.time())
+            self._verify_stats_all_buckets(self.src_nodes, timeout=timeout)
+            timeout = max(120, end_time - time.time())
+            self._verify_all_buckets(self.src_master, timeout=timeout)
+        timeout = max(120, end_time - time.time())
+        self._verify_stats_all_buckets(self.dest_nodes, timeout=timeout)
+        timeout = max(120, end_time - time.time())
+        self._verify_all_buckets(self.dest_master, timeout=timeout)
 
         errors_caught = 0
         if self._doc_ops is not None or self._doc_ops_dest is not None:
@@ -684,7 +691,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._log.info("wait for expiry pager to run on all these nodes")
             time.sleep(30)
 
-    def _wait_for_stats_all_buckets(self, servers):
+    def _wait_for_stats_all_buckets(self, servers, timeout=120):
         def verify():
             try:
                 tasks = []
@@ -696,7 +703,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                         tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, '',
                             'ep_flusher_todo', '==', 0))
                 for task in tasks:
-                    task.result()
+                    task.result(timeout)
                 return True
             except MemcachedError as e:
                 self._log.info("verifying ...")
@@ -708,7 +715,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             raise ValueError(
                 "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
-    def _verify_all_buckets(self, server, kv_store=1):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=120):
         def verify():
             try:
                 tasks = []
@@ -716,7 +723,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 for bucket in buckets:
                     tasks.append(self._cluster_helper.async_verify_data(server, bucket, bucket.kvs[kv_store]))
                 for task in tasks:
-                    task.result()
+                    task.result(timeout)
                 return True
             except  MemcachedError as e:
                 self._log.info("verifying ...")
@@ -730,7 +737,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     self._poll_timeout))
 
 
-    def _verify_stats_all_buckets(self, servers):
+    def _verify_stats_all_buckets(self, servers, timeout=120):
         def verify():
             try:
                 stats_tasks = []
@@ -754,7 +761,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                         'curr_items_tot', '==', items * (available_replicas + 1)))
 
                 for task in stats_tasks:
-                    task.result(120)
+                    task.result(timeout)
                 return True
             except  MemcachedError as e:
                 self._log.info("verifying ...")
