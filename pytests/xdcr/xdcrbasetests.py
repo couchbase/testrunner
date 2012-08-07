@@ -119,9 +119,18 @@ class XDCRBaseTest(unittest.TestCase):
         self._floating_servers_set = self._get_floating_servers() # These are the servers defined in .ini file but not linked to any cluster.
         self._cluster_counter_temp_int = 0 #TODO: fix the testrunner code to pass cluster name in params.
         self._buckets = []
+
         self._default_bucket = self._input.param("default_bucket", True)
+
+        """
+        ENTER: sasl_buckets=[no.] or standard_buckets=[no.]
+        """
+        self._standard_buckets = self._input.param("standard_buckets", 0)
+        self._sasl_buckets = self._input.param("sasl_buckets", 0)
+
         if self._default_bucket:
             self.default_bucket_name = "default"
+
         self._num_replicas = self._input.param("replicas", 1)
         self._num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 256)
@@ -151,6 +160,11 @@ class XDCRBaseTest(unittest.TestCase):
         if self._failover is not None:
             self._failover = self._failover.split("-")
 
+        """
+        CREATE's a set of items,
+        UPDATE's UPD% of the items starting from 0,
+        DELETE's DEL% of the items starting from the end (count(items)).
+        """
         self.gen_create = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
         self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size,
             start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
@@ -251,14 +265,42 @@ class XDCRBaseTest(unittest.TestCase):
             if mem_quota_node < self._mem_quota_int or self._mem_quota_int == 0:
                 self._mem_quota_int = mem_quota_node
 
+    def _create_sasl_buckets(self, server, server_id, bucket_size):
+        bucket_tasks = []
+        for i in range(self._sasl_buckets):
+            name = "sasl_bucket_" + str(i+1)
+            bucket_tasks.append(self._cluster_helper.async_create_sasl_bucket(server, name, 'password',
+                bucket_size, self._num_replicas))
+            self._buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
+                num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=server_id))
+
+        for task in bucket_tasks:
+            task.result()
+
+    def _create_standard_buckets(self, server, server_id, bucket_size):
+        bucket_tasks = []
+        for i in range(self._standard_buckets):
+            name = "standard_bucket_" + str(i+1)
+            bucket_tasks.append(self._cluster_helper.async_create_standard_bucket(server, name,
+                11214 + i, bucket_size, self._num_replicas))
+            self._buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+                num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=server_id))
+
+        for task in bucket_tasks:
+            task.result()
+
     def _create_buckets(self, nodes):
         if self._dgm_run_bool:
             self._mem_quota_int = 256
         master_node = nodes[0]
         bucket_size = self._get_bucket_size(master_node, nodes, self._mem_quota_int, self._default_bucket)
-
-        rest = RestConnection(master_node)
+        rest=RestConnection(master_node)
         master_id = rest.get_nodes_self().id
+
+        if self._sasl_buckets > 0:
+            self._create_sasl_buckets(master_node, master_id, bucket_size)
+        if self._standard_buckets > 0:
+            self._create_standard_buckets(master_node, master_id, bucket_size)
         if self._default_bucket:
             self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
             self._buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
@@ -304,10 +346,10 @@ class XDCRBaseTest(unittest.TestCase):
         #verify if node_ids were changed for cluster_run
         for bucket in self._buckets:
             if ("127.0.0.1" in bucket.master_id and "127.0.0.1" not in master_id) or \
-                ("localhost" in bucket.master_id and "localhost" not in master_id):
+               ("localhost" in bucket.master_id and "localhost" not in master_id):
                 new_ip = master_id[master_id.index("@") + 1:]
                 bucket.master_id = bucket.master_id.replace("127.0.0.1", new_ip).\
-                    replace("localhost", new_ip)
+                replace("localhost", new_ip)
         return [bucket for bucket in self._buckets if bucket.master_id == master_id]
 
     """merge 2 different kv strores from different clsusters/buckets
@@ -335,7 +377,7 @@ class XDCRBaseTest(unittest.TestCase):
                 partition1.set(key, partition2.get_valid(key))
                 kv_store_first[kvs_num].release_partition(num_part)
                 kv_store_second[kvs_num].release_partition(key)
-                #add condition when key was deleted in first, but added in second
+            #add condition when key was deleted in first, but added in second
 
         for key in deleted_keys_second:
             # the same keys were deleted in both kvs
@@ -567,10 +609,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _replicate_clusters(self, src_master, dest_cluster_name):
         rest_conn_src = RestConnection(src_master)
-        (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
-            "default",
-            dest_cluster_name)
-        self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
+        for bucket in self._get_cluster_buckets(src_master):
+            (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
+                bucket.name, dest_cluster_name)
+            time.sleep(5)
+        if self._get_cluster_buckets(src_master):
+            self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
 
 
     def _load_gen_data(self, cname, node):
