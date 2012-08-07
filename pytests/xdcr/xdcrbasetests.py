@@ -438,12 +438,16 @@ class XDCRBaseTest(unittest.TestCase):
             self._verify_stats_all_buckets(self.src_nodes)
         self._verify_stats_all_buckets(self.dest_nodes)
 
+        errors_caught = 0
         if self._doc_ops is not None or self._doc_ops_dest is not None:
             if "update" in self._doc_ops or (self._doc_ops_dest is not None and "update" in self._doc_ops_dest):
-                self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "update")
+                errors_caught = self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "update")
 
             if "delete" in self._doc_ops or (self._doc_ops_dest is not None and "delete" in self._doc_ops_dest):
-                self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "delete")
+                errors_caught = self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "delete")
+
+        if errors_caught > 0:
+            self.fail("MISMATCHES FOUND BETWEEN REPLICATED DATA AND ORIGINAL DATA!")
 
     def verify_results(self, verify_src=False):
         # Checking replication at destination clusters
@@ -665,10 +669,13 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         tasks = []
         buckets = self._get_cluster_buckets(src_server)
         for bucket in buckets:
-            tasks.append(self._cluster_helper.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store],
-                ops_perf))
+            task_info = self._cluster_helper.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store],
+                ops_perf)
+            tasks.append(task_info)
         for task in tasks:
             task.result()
+
+        return task_info.err_count
 
     def _expiry_pager(self, master):
         buckets = self._get_cluster_buckets(master)
