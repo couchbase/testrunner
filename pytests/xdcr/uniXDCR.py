@@ -34,7 +34,7 @@ class unidirectional(XDCRReplicationBaseTest):
     def load_with_ops(self):
         self._modify_src_data()
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self.verify_results()
 
@@ -46,7 +46,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._async_modify_data()
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self._wait_for_stats_all_buckets(self.src_nodes)
 
@@ -78,7 +78,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._wait_for_stats_all_buckets(self.src_nodes)
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self.wait_warmup_completed(warmupnodes)
 
@@ -103,7 +103,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._modify_src_data()
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self.wait_warmup_completed(warmupnodes)
 
@@ -133,7 +133,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         time.sleep(30)
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self._wait_for_stats_all_buckets(self.src_nodes)
         self.wait_warmup_completed(warmupnodes)
@@ -163,7 +163,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         time.sleep(30)
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self._wait_for_stats_all_buckets(self.src_nodes)
 
@@ -193,7 +193,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._async_modify_data()
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self.verify_results()
 
@@ -225,7 +225,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._async_modify_data()
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self.verify_results()
 
@@ -253,7 +253,7 @@ class unidirectional(XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
-        self.merge_buckets(self.src_master, self.dest_master)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         if "source" in self._failover:
             self._log.info(" Rebalance out Source Node {0}".format(self.src_nodes[i].ip))
