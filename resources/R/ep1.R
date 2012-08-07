@@ -139,9 +139,9 @@ addopts <- function(aplot,atitle) {
 
 prettySize <- function(s, fmt="%.2f") {
     sizes <- c('', 'K', 'M', 'G', 'T', 'P', 'E')
-    f <- ifelse(s == 0, NA, e <- floor(log(s, 1024)))
-    suffix <- ifelse(s == 0, '', sizes[f+1])
-	prefix <- ifelse(s == 0, s, sprintf(fmt, s/(1024 ^ floor(e))))
+    f <- ifelse(s < 1, NA, e <- floor(log(s, 1024)))
+    suffix <- ifelse(s < 1, '', sizes[f+1])
+    prefix <- ifelse(s < 1, s, sprintf(fmt, s/(1024 ^ floor(e))))
     paste(prefix, suffix, sep="")
 }
 
