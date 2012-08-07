@@ -34,8 +34,6 @@ class unidirectional(XDCRReplicationBaseTest):
     def load_with_ops(self):
         self._modify_src_data()
 
-        time.sleep(60)
-
         self.merge_buckets(self.src_master, self.dest_master)
 
         self.verify_results()
@@ -78,8 +76,6 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._modify_src_data()
 
-        time.sleep(60)
-
         self._wait_for_stats_all_buckets(self.src_nodes)
 
         self.merge_buckets(self.src_master, self.dest_master)
@@ -107,8 +103,6 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._modify_src_data()
 
-        time.sleep(60)
-
         self.merge_buckets(self.src_master, self.dest_master)
 
         self.wait_warmup_completed(warmupnodes)
@@ -117,7 +111,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_ops_with_warmup(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        time.sleep(30)
+
         #warmup
         warmupnodes = []
         dest_warm_flag = 0
@@ -149,7 +143,6 @@ class unidirectional(XDCRReplicationBaseTest):
     def load_with_async_ops_with_warmup_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
 
-        time.sleep(30)
         #warmup
         warmupnodes = []
         dest_warm_flag = 0
@@ -180,7 +173,6 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        time.sleep(60)
 
         if "source" in self._failover:
             i = randrange(1, len(self.src_nodes))
@@ -211,7 +203,6 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_failover_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        time.sleep(60)
 
         if "source" in self._failover:
             i = randrange(1, len(self.src_nodes))
@@ -244,8 +235,6 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-
-        time.sleep(60)
 
         tasks = []
         """Setting up failover while creates/updates/deletes at source nodes"""

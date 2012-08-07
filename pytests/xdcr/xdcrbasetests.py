@@ -157,8 +157,13 @@ class XDCRBaseTest(unittest.TestCase):
         self._percent_delete = self._input.param("del", 30)
         self._warmup = self._input.param("warm", "all")
         self._failover = self._input.param("failover", None)
+        self._rebalance = self._input.param("rebalance", None)
         if self._failover is not None:
             self._failover = self._failover.split("-")
+        if self._rebalance is not None:
+            self._rebalance = self._rebalance.split("-")
+            self._num_rebalance = self._input.param("num_rebalance", 1)
+
 
         """
         CREATE's a set of items,
@@ -754,6 +759,15 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             raise ValueError(
                 "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
+    def _async_failover(self, src_nodes, failover_node):
+        tasks = []
+        tasks.append(self._cluster_helper.async_failover(src_nodes, failover_node))
+        return tasks
+
+    def _async_rebalance(self, src_nodes, to_add_node, to_remove_node):
+        tasks = []
+        tasks.append(self._cluster_helper.async_rebalance(src_nodes, to_add_node, to_remove_node))
+        return tasks
     def _find_cluster_nodes_by_name(self, cluster_name):
         return self._clusters_dic[[k for k, v in self._cluster_names_dic.iteritems() if v == cluster_name][0]]
 
