@@ -987,7 +987,7 @@ class ViewBasicTests(unittest.TestCase):
         bucket = "default"
         function = '{"views":[]}'
 
-        api = rest.baseUrl + 'couchBase/{0}/_design/{1}'.format(bucket, view)
+        api = rest.capiBaseUrl + '/{0}/_design/{1}'.format(bucket, view)
         status, content, header = rest._http_request(api, 'PUT', function, headers=rest._create_capi_headers())
         if not status:
             json_parsed = json.loads(content)

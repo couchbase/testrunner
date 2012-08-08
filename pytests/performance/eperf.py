@@ -486,8 +486,8 @@ class EPerfMaster(perf.PerfBase):
                 d = copy.copy(d)
                 d["language"] = "javascript"
                 d_json = json.dumps(d)
-                api = "{0}couchBase/{1}/_design/{2}".format(self.rest.baseUrl,
-                                                            bucket, ddoc_name)
+                api = "{0}{1}/_design/{2}".format(self.rest.capiBaseUrl,
+                                                  bucket, ddoc_name)
                 self.rest._http_request(api, 'PUT', d_json,
                                         headers=self.rest._create_capi_headers())
 
@@ -1626,7 +1626,7 @@ class ViewGen:
                 'language': 'javascript',
                 '_id': '_design/items'}
 
-        api = '{0}couchBase/{1}/_design/items'.format(rest.baseUrl, bucket)
+        api = '{0}{1}/_design/items'.format(rest.capiBaseUrl, bucket)
 
         rest._http_request(api, 'PUT', json.dumps(ddoc),
                            headers=rest._create_capi_headers())

@@ -149,13 +149,21 @@ class RestHelper(object):
 
 class RestConnection(object):
     #port is always 8091
+    # deprecated, should be removed in the future?
     def __init__(self, ip, username='Administrator', password='password'):
         #throw some error here if the ip is null ?
         self.ip = ip
         self.username = username
         self.password = password
-        self.baseUrl = "http://{0}:8091/".format(self.ip)
         self.port = 8091
+        self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
+        self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
+        http_res = self.init_http_request(self.baseUrl + 'nodes/self')
+        #if node was not initialized we can't get response from 'nodes/self'
+        if http_res == '"unknown pool"':
+            self.capiBaseUrl = self.baseUrl + "/couchBase"
+        else:
+            self.capiBaseUrl = http_res["couchApiBase"]
 
 
     def __init__(self, serverInfo):
@@ -171,10 +179,28 @@ class RestConnection(object):
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
+        self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
+        #determine the real couchApiBase for cluster_run
+        http_res = self.init_http_request(self.baseUrl + 'nodes/self')
+        #if node was not initialized we can't get response from 'nodes/self'
+        if http_res == '"unknown pool"':
+            self.capiBaseUrl = self.baseUrl + "/couchBase"
+        else:
+            self.capiBaseUrl = http_res["couchApiBase"]
 
+
+    def init_http_request(self, api):
+        try:
+            status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
+            if content == '"unknown pool"':
+                return content
+            json_parsed = json.loads(content)
+        except ValueError:
+            return ""
+        return json_parsed
 
     def active_tasks(self, serverInfo):
-        api = self.baseUrl + 'couchBase/_active_tasks'
+        api = self.capiBaseUrl + "/active_tasks"
 
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
@@ -199,7 +225,7 @@ class RestConnection(object):
 
     def create_ddoc(self, design_doc_name, bucket_name, views):
         design_doc = DesignDocument(design_doc_name, views)
-        api = '%scouchBase/%s/_design/%s' % (self.baseUrl, bucket_name, design_doc_name)
+        api = '%s/%s/_design/%s' % (self.capiBaseUrl, bucket_name, design_doc_name)
 
         status, content, header = self._http_request(api, 'PUT', str(design_doc),
                                             headers=self._create_capi_headers())
@@ -210,9 +236,9 @@ class RestConnection(object):
 
     def create_design_document(self, bucket, design_doc):
         design_doc_name = design_doc.id
-        api = '%scouchBase/%s/%s' % (self.baseUrl, bucket, design_doc_name)
+        api = '%s/%s/%s' % (self.capiBaseUrl, bucket, design_doc_name)
         if isinstance(bucket, Bucket):
-            api = '%scouchBase/%s/%s' % (self.baseUrl, bucket.name, design_doc_name)
+            api = '%s/%s/%s' % (self.capiBaseUrl, bucket.name, design_doc_name)
 
         if isinstance(bucket, Bucket) and bucket.authType == "sasl":
             status, content, header = self._http_request(api, 'PUT', str(design_doc),
@@ -233,15 +259,15 @@ class RestConnection(object):
         return json.loads(content)
 
     def _query(self, design_doc_name, view_name, bucket, view_type, query, timeout):
-        api = '{%scouchBase/%s/_design/%s/_%s/%s?%s' % (self.baseUrl, bucket,
-                                                                 design_doc_name, view_type,
-                                                                 view_name,
-                                                                 urllib.urlencode(query))
+        api = '{%s/%s/_design/%s/_%s/%s?%s' % (self.capiBaseUrl, bucket,
+                                               design_doc_name, view_type,
+                                               view_name,
+                                               urllib.urlencode(query))
         if isinstance(bucket, Bucket):
-            api = '%scouchBase/%s/_design/%s/_%s/%s?%s' % (self.baseUrl, bucket.name,
-                                                                 design_doc_name, view_type,
-                                                                 view_name,
-                                                                 urllib.urlencode(query))
+            api = '%s/%s/_design/%s/_%s/%s?%s' % (self.capiBaseUrl, bucket.name,
+                                                  design_doc_name, view_type,
+                                                  view_name,
+                                                  urllib.urlencode(query))
         log.info("index query url: {0}".format(api))
         if isinstance(bucket, Bucket) and bucket.authType == "sasl":
             status, content, header = self._http_request(api, headers=self._create_capi_headers_with_auth(
@@ -286,7 +312,7 @@ class RestConnection(object):
 
 
     def run_view(self, bucket, view, name):
-        api = self.baseUrl + 'couchBase/%s/_design/%s/_view/%s' % (bucket, view, name)
+        api = self.capiBaseUrl + '/%s/_design/%s/_view/%s' % (bucket, view, name)
 
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
 
@@ -348,12 +374,12 @@ class RestConnection(object):
     def _index_results(self, bucket, type_, ddoc_name, params, limit, timeout=120,
                        view_name=None):
         if type_ == 'all_docs':
-            api = self.baseUrl + 'couchBase/{0}/_all_docs'.format(bucket)
+            api = self.capiBaseUrl + '/{0}/_all_docs'.format(bucket)
         else:
             if view_name is None:
                 view_name = ddoc_name
-            query = 'couchBase/{0}/_design/{1}/_{2}/{3}'
-            api = self.baseUrl + query.format(bucket, ddoc_name, type_, view_name)
+            query = '/{0}/_design/{1}/_{2}/{3}'
+            api = self.capiBaseUrl + query.format(bucket, ddoc_name, type_, view_name)
 
         num_params = 0
         if limit != None:
@@ -379,7 +405,7 @@ class RestConnection(object):
         return status, json_parsed
 
     def all_docs(self, bucket, params={}, limit=None, timeout=120):
-        api = self.baseUrl + 'couchBase/{0}/_all_docs?{1}'.format(bucket, urllib.urlencode(params))
+        api = self.capiBaseUrl + '/{0}/_all_docs?{1}'.format(bucket, urllib.urlencode(params))
         log.info("query all_docs url: {0}".format(api))
 
         status, content, header = self._http_request(api, headers=self._create_capi_headers(),
@@ -394,7 +420,7 @@ class RestConnection(object):
     def get_couch_doc(self, doc_id, bucket="default", timeout=120):
         """ use couchBase uri to retrieve document from a bucket """
 
-        api = self.baseUrl + 'couchBase/%s/%s' % (bucket, doc_id)
+        api = self.capiBaseUrl + '/%s/%s' % (bucket, doc_id)
         status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                              timeout=timeout)
 
@@ -404,7 +430,7 @@ class RestConnection(object):
         return  json.loads(content)
 
     def _create_design_doc(self, bucket, name, function):
-        api = self.baseUrl + 'couchBase/%s/_design/%s' % (bucket, name)
+        api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
         status, content, header = self._http_request(
             api, 'PUT', function, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
@@ -412,9 +438,9 @@ class RestConnection(object):
 
 
     def _get_design_doc(self, bucket, name):
-        api = self.baseUrl + 'couchBase/%s/_design/%s' % (bucket, name)
+        api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
         if isinstance(bucket, Bucket):
-            api = self.baseUrl + 'couchBase/%s/_design/%s' % (bucket.name, name)
+            api = self.capiBaseUrl + '/%s/_design/%s' % (bucket.name, name)
 
         if isinstance(bucket, Bucket) and bucket.authType == "sasl" and bucket.name != "default":
             status, content, header = self._http_request(api, headers=self._create_capi_headers_with_auth(
@@ -433,9 +459,9 @@ class RestConnection(object):
         if not status:
             raise Exception("unable to delete design document")
 
-        api = self.baseUrl + 'couchBase/%s/_design/%s' % (bucket, name)
+        api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
         if isinstance(bucket, Bucket):
-            api = self.baseUrl + 'couchBase/%s/_design/%s' % (bucket.name, name)
+            api = self.capiBaseUrl + '/%s/_design/%s' % (bucket.name, name)
 
         if isinstance(bucket, Bucket) and bucket.authType == "sasl" and bucket.name != "default":
             status, content, header = self._http_request(api, 'DELETE', headers=self._create_capi_headers_with_auth(
@@ -449,10 +475,10 @@ class RestConnection(object):
 
 
     def spatial_compaction(self, bucket, design_name):
-        api = self.baseUrl + 'couchBase/%s/_design/%s/_spatial/_compact' % (bucket, design_name)
+        api = self.capiBaseUrl + '/%s/_design/%s/_spatial/_compact' % (bucket, design_name)
         if isinstance(bucket, Bucket):
-            api = self.baseUrl + \
-            'couchBase/%s/_design/%s/_spatial/_compact' % (bucket.name, design_name)
+            api = self.capiBaseUrl + \
+            '/%s/_design/%s/_spatial/_compact' % (bucket.name, design_name)
 
         if isinstance(bucket, Bucket) and bucket.authType == "sasl":
             status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers_with_auth(
@@ -466,10 +492,10 @@ class RestConnection(object):
 
     # Make a _design/_info request
     def set_view_info(self, bucket, design_name):
-        api = self.baseUrl + 'couchBase/_set_view/%s/_design/%s/_info' % (bucket, design_name)
+        api = self.capiBaseUrl + '/_set_view/%s/_design/%s/_info' % (bucket, design_name)
         if isinstance(bucket, Bucket):
-            api = self.baseUrl + \
-            'couchBase/_set_view/%s/_design/%s/_info' % (bucket, design_name)
+            api = self.capiBaseUrl + \
+            '/_set_view/%s/_design/%s/_info' % (bucket, design_name)
 
         if isinstance(bucket, Bucket) and bucket.authType == "sasl":
             status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers_with_auth(
@@ -484,8 +510,8 @@ class RestConnection(object):
 
     # Make a _spatial/_info request
     def spatial_info(self, bucket, design_name):
-        api = self.baseUrl + \
-            'couchBase/%s/_design/%s/_spatial/_info' % (bucket, design_name)
+        api = self.capiBaseUrl + \
+            '/%s/_design/%s/_spatial/_info' % (bucket, design_name)
 
         status, content, header = self._http_request(
             api, 'GET', headers=self._create_capi_headers())
@@ -535,11 +561,11 @@ class RestConnection(object):
                     log.error('{0} error {1} reason: {2} {3}'.format(api, response['status'], reason, content.rstrip('\n')))
                     return False, content, response
             except socket.error as e:
-                log.error("socket error while connecting to {0}:{1} error {2}: ".format(self.ip, self.port, e))
+                log.error("socket error while connecting to {0} error {1} ".format(api, e))
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
             except httplib2.ServerNotFoundError as e:
-                log.error("ServerNotFoundError error while connecting to {0}:{1} error {2}: ".format(self.ip, self.port, e))
+                log.error("ServerNotFoundError error while connecting to {0} error {1} ".format(api, e))
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
             time.sleep(1)
@@ -547,7 +573,7 @@ class RestConnection(object):
 
     def init_cluster(self, username='Administrator', password='password'):
         api = self.baseUrl + 'settings/web'
-        params = urllib.urlencode({'port': str(self.port),
+        params = urllib.urlencode({'port': "8091",
                                    'username': username,
                                    'password': password})
 
@@ -1293,7 +1319,7 @@ class RestConnection(object):
     def check_compaction_status(self, bucket):
         vbucket = self.get_vbuckets(bucket)
         for i in range(len(vbucket)):
-            api = self.baseUrl + "couchBase/{0}%2F{1}".format(bucket, i)
+            api = self.capiBaseUrl + "/{0}%2F{1}".format(bucket, i)
             status, content = httplib2.Http().request(api, "GET")
             data = json.loads(content)
             if "compact_running" in data and data["compact_running"]:
