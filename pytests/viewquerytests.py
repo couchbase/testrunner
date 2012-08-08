@@ -151,7 +151,8 @@ class ViewQueryTests(unittest.TestCase):
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_startkey_endkey_queries()
-        self._query_test_init(data_set)
+        data_set.load(self, data_set.views[0])
+        self._query_all_views(data_set.views, verify_expected_keys=True)
 
     def test_employee_dataset_alldocs_queries(self):
         docs_per_day = self.input.param('docs-per-day', 200)
