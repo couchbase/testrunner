@@ -1317,6 +1317,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST')
         if not status:
             raise CompactViewFailed(design_doc_id, content)
+        log.info("compaction for ddoc '%s' was triggered" % design_doc_id)
 
     def check_compaction_status(self, bucket):
         vbucket = self.get_vbuckets(bucket)
@@ -1387,6 +1388,7 @@ class RestConnection(object):
             params["allowedTimePeriod[abortOutside]"] = allowedTimePeriodAbort
 
         params = urllib.urlencode(params)
+        log.info("'%s' bucket's settings were changed with parameters: %s" % (bucket, params))
         return self._http_request(api, "POST", params)
 
     def set_global_loglevel(self, loglevel='error'):

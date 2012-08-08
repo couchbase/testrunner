@@ -7,6 +7,7 @@ import copy
 
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase.cluster import Cluster
+from couchbase.document import View
 from TestInput import TestInputSingleton
 from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -185,6 +186,17 @@ class XDCRBaseTest(unittest.TestCase):
 
         self.dest_nodes = self._clusters_dic[1]
         self.dest_master = self.dest_nodes[0]
+
+        self._defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
+        self._default_view_name = "default_view"
+        self._default_view = View(self._default_view_name, self._defaul_map_func, None)
+        self._num_views = self._input.param("num_views", 5)
+        self._is_dev_ddoc = self._input.param("is_dev_ddoc", True)
+
+        self.fragmentation_value = self._input.param("fragmentation_value", 80)
+        self.disable_src_comp = self._input.param("disable_src_comp", True)
+        self.disable_dest_comp = self._input.param("disable_dest_comp", True)
+
         self._log.info("Initializing input parameters completed.")
 
     @staticmethod
@@ -357,6 +369,7 @@ class XDCRBaseTest(unittest.TestCase):
                 replace("localhost", new_ip)
         return [bucket for bucket in self._buckets if bucket.master_id == master_id]
 
+
     """merge 2 different kv strores from different clsusters/buckets
        assume that all elements in the second kvs are more relevant.
 
@@ -503,6 +516,31 @@ class XDCRBaseTest(unittest.TestCase):
             if "delete" in self._doc_ops:
                 self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
             self._wait_for_stats_all_buckets(self.src_nodes)
+
+    def disable_compaction(self, server=None, bucket="default"):
+        server = server or self.src_master
+        new_config = {"viewFragmntThresholdPercentage" : None,
+                      "dbFragmentThresholdPercentage" :  None,
+                      "dbFragmentThreshold" : None,
+                      "viewFragmntThreshold" : None}
+        self._cluster_helper.modify_fragmentation_config(server, new_config, bucket)
+
+    def make_default_views(self, prefix, count, is_dev_ddoc=False,):
+        ref_view = self._default_view
+        ref_view.name = (prefix, ref_view.name)[prefix is None]
+        return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
+
+
+    def async_create_views(self, server, design_doc_name, views, bucket="default"):
+        tasks = []
+        if len(views):
+            for view in views:
+                t_ = self._cluster_helper.async_create_view(server, design_doc_name, view, bucket)
+                tasks.append(t_)
+        else:
+            t_ = self._cluster_helper.async_create_view(server, design_doc_name, None, bucket)
+            tasks.append(t_)
+        return tasks
 
 #===============================================================================
 # class: XDCRReplicationBaseTest

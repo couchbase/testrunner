@@ -247,3 +247,149 @@ class bidirectional(XDCRReplicationBaseTest):
             self.dest_nodes.pop(i)
 
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
+
+
+    """Replication with compaction ddocs and view queries on both clusters.
+
+    This test begins by loading a given number of items on both clusters.
+    It creates _num_views as development/production view with default
+    map view funcs(_is_dev_ddoc = True by default) on both clusters.
+    Then we disabled compaction for ddoc on src cluster. While we don't reach
+    expected fragmentation for ddoc on src cluster we update docs and perform
+    view queries for all views. Then we start compaction when fragmentation
+    was reached fragmentation_value. When compaction was completed we perform
+    a full verification: wait for the disk queues to drain
+    and then verify that there has been no data loss on both clusters."""
+    def replication_with_ddoc_compaction(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+        src_buckets = self._get_cluster_buckets(self.src_master)
+        for bucket in src_buckets:
+            views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+        ddoc_name = "ddoc1"
+        prefix = ("", "dev_")[self._is_dev_ddoc]
+
+        query = {"full_set" : "true", "stale" : "false"}
+
+        tasks = []
+        tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
+        tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
+        for task in tasks:
+            task.result(self._poll_timeout)
+        self.disable_compaction()
+        fragmentation_monitor = self._cluster_helper.async_monitor_view_fragmentation(self.src_master,
+                         prefix + ddoc_name, self.fragmentation_value, "default", timeout=20)
+        # generate load until fragmentation reached
+        while fragmentation_monitor.state != "FINISHED":
+            # update docs to create fragmentation
+            self._load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
+            for view in views:
+                # run queries to create indexes
+                self._cluster_helper.query_view(self.src_master, prefix + ddoc_name, view.name, query)
+                self._cluster_helper.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+        fragmentation_monitor.result()
+
+        compaction_task = self._cluster_helper.async_compact_view(self.src_master, prefix + ddoc_name, 'default')
+
+        result = compaction_task.result()
+        self.assertTrue(result)
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+
+        self.verify_results(verify_src=True)
+
+
+    def replication_with_view_queries_and_ops(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", self._expires)
+        self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+        src_buckets = self._get_cluster_buckets(self.src_master)
+        dest_buckets = self._get_cluster_buckets(self.src_master)
+        for bucket in src_buckets:
+            views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+        for bucket in src_buckets:
+            views_dest = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+        ddoc_name = "ddoc1"
+        prefix = ("", "dev_")[self._is_dev_ddoc]
+
+        query = {"full_set" : "true", "stale" : "false"}
+
+        tasks = []
+        tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
+        tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
+        for task in tasks:
+            task.result(self._poll_timeout)
+
+        #self._async_update_delete_data()
+        #self._cluster_helper.query_view(self.src_master, prefix + ddoc_name, view.name, query)
+        #self._cluster_helper.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+
+        tasks = []
+        #Setting up doc-ops at source nodes
+        if self._doc_ops is not None or self._doc_ops_dest is not None:
+            # allows multiple of them but one by one on either of the clusters
+            if "update" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
+            if "update" in self._doc_ops_dest:
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", 0))
+            if "delete" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", self._expires))
+            if "delete" in self._doc_ops_dest:
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
+            time.sleep(5)
+        while True:
+            for view in views:
+                self._cluster_helper.query_view(self.src_master, prefix + ddoc_name, view.name, query)
+                self._cluster_helper.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+            for task in tasks:
+                if task.state != "FINISHED":
+                    continue;
+            break;
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+
+        tasks = []
+        for view in views:
+            tasks.append(self._cluster_helper.async_query_view(self.src_master, prefix + ddoc_name, view.name, query, src_buckets[0].kvs[1].__len__()))
+            tasks.append(self._cluster_helper.async_query_view(self.dest_master, prefix + ddoc_name, view.name, query, dest_buckets[0].kvs[1].__len__()))
+
+        for task in tasks:
+            task.result(self._poll_timeout)
+
+        self.verify_results(verify_src=True)
+
+
+    """Replication with disabled/enabled ddoc compaction on both clusters.
+
+    This test begins by loading a given number of items on both clusters.
+    Then we disabled or enabled compaction on both clusters( set via params).
+    Then we mutate and delete data on clusters 3 times. After deletion we recreate
+    deleted items. When data was changed 3 times we perform
+    a full verification: wait for the disk queues to drain
+    and then verify that there has been no data loss on both clusters."""
+    def replication_with_disabled_ddoc_compaction(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", self._expires)
+        self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+        disable_src_comp = self._input.param("disable_src_comp", True)
+        disable_dest_comp = self._input.param("disable_dest_comp", True)
+        if disable_src_comp:
+            self.disable_compaction(self.src_master)
+        if disable_dest_comp:
+            self.disable_compaction(self.dest_master)
+
+        # perform doc's ops 3 times to increase rev number
+        for i in range(3):
+            self._async_update_delete_data()
+            tasks = []
+            #restore deleted items
+            if self._doc_ops is not None or self._doc_ops_dest is not None:
+                if "delete" in self._doc_ops:
+                    tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "create", 0))
+                if "delete" in self._doc_ops_dest:
+                    tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "create", 0))
+                time.sleep(5)
+                for task in tasks:
+                    task.result()
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+
+        self.verify_results(verify_src=True)

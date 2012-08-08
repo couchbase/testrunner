@@ -1089,7 +1089,6 @@ class ViewCompactionTask(Task):
         try:
             self.num_of_compactions, self.precompacted_frag_val = \
                 self._get_compaction_details()
-            self.log.info("begin compacting design doc %s" % self.design_doc_name)
             rest.ddoc_compaction(self.ddoc_id)
             self.state = CHECKING
             task_manager.schedule(self, 2)
