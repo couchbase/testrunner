@@ -1021,6 +1021,16 @@ for(build in levels(builds)) {
     }
 
     fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ep_diskqueue_drain!=0, ]
+    fi_0 <- ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$ep_diskqueue_drain==0, ]
+
+    print(paste("disk drain log: ", build))
+    num_zero = length(fi_0$ep_diskqueue_drain)
+    num_samples = num_zero + length(fi$ep_diskqueue_drain)
+
+    print(paste("num of samples: ", num_samples))
+    print(paste("num of 0s: ", num_zero))
+    print(paste("percentage - 0s: ", num_zero/num_samples, "%"))
+
     d <- mean(fi$ep_diskqueue_drain)
     print(d)
     if(build == baseline){
