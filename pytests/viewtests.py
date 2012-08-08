@@ -188,7 +188,6 @@ class ViewBaseTests(unittest.TestCase):
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, len(doc_names), extra_params=params)
         view_time = results['view_time']
 
-        # self._verify_views_replicated(bucket, view_name, map_fn)
         keys = ViewBaseTests._get_keys(self, results)
 
         RebalanceHelper.wait_for_persistence(master, bucket, 0)
@@ -236,7 +235,6 @@ class ViewBaseTests(unittest.TestCase):
             value = {"name": doc_name, "age": i}
             smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_docs))
-        #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
         value = ViewBaseTests._get_built_in_reduce_results(self, results)
         results_without_reduce = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs,
@@ -293,7 +291,6 @@ class ViewBaseTests(unittest.TestCase):
             sum += rand
             smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_docs))
-        #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, num_docs)
         value = ViewBaseTests._get_built_in_reduce_results(self, results)
 
@@ -341,7 +338,6 @@ class ViewBaseTests(unittest.TestCase):
             value = {"name": doc_name, "age": 1000}
             smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(num_docs))
-        #        self._verify_views_replicated(bucket, view_name, map_fn)
         updated_view_prefix = "{0}-{1}-updated".format(view_name, prefix)
         for i in range(0, updated_num_docs):
             key = updated_doc_name = "{0}-{1}-updated-{2}".format(view_name, prefix, i)
@@ -351,7 +347,6 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("inserted {0} json documents".format(updated_num_docs))
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + updated_view_prefix + "\") != -1) { emit(doc.name, doc);}}"
         rest.create_view(view_name, bucket, [View(view_name, map_fn)])
-        #        self._verify_views_replicated(bucket, view_name, map_fn)
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, updated_num_docs)
         keys = ViewBaseTests._get_keys(self, results)
 
@@ -420,41 +415,6 @@ class ViewBaseTests(unittest.TestCase):
             value = None
         return value
 
-    @staticmethod
-    def _verify_views_replicated(self, bucket, view_name, map_fn):
-        # max 1 minutes
-        rest = RestConnection(self.servers[0])
-        views_per_vbucket = rest.get_views_per_vbucket(bucket, view_name)
-        start = time.time()
-        while time.time() - start < 120:
-            views_per_vbucket = rest.get_views_per_vbucket(bucket, view_name)
-            if len(views_per_vbucket) != len(rest.get_vbuckets(bucket)):
-                self.log.info("view is not replicated to all vbuckets yet. try again in 5 seconds")
-                time.sleep(5)
-            else:
-                all_valid = True
-                for vb in views_per_vbucket:
-                    view_definition = views_per_vbucket[vb]["json"]
-                    self.log.info(
-                        "{0} {1}".format(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn))
-                    if view_definition["views"][view_name]["map"].encode("ascii", "ignore") != map_fn:
-                        self.log.info("view map_function is not replicated to all vbuckets yet. try again in 5 seconds")
-                        all_valid = False
-                        time.sleep(5)
-                        break
-
-                if all_valid:
-                    delta = time.time() - start
-                    self.log.info("view was replicated to all vbuckets after {0} seconds".format(delta))
-                    break
-        msg = "len(views_per_vbucket) : {0} , len(rest.get_vbuckets(bucket)) : {1}"
-        self.log.info(msg.format(len(views_per_vbucket), len(rest.get_vbuckets(bucket))))
-        self.assertEquals(len(views_per_vbucket), len(rest.get_vbuckets(bucket))
-                          , msg="view is not replicated to all vbuckets")
-        for vb in views_per_vbucket:
-            view_definition = views_per_vbucket[vb]["json"]
-            self.assertEquals(views_per_vbucket[vb]["meta"]["id"], "_design/{0}".format(view_name))
-            self.assertEquals(view_definition["views"][view_name]["map"].encode("ascii", "ignore"), map_fn)
 
     @staticmethod
     def _get_view_results(self, rest, bucket, view, limit=20, extra_params={}, type_="view", invalid_results=False):
@@ -1054,7 +1014,6 @@ class ViewBasicTests(unittest.TestCase):
             self.assertTrue(response)
             self.assertEquals(meta["id"], "_design/{0}".format(view))
             self.log.info(response)
-            #            self._verify_views_replicated(bucket, view, map_fn)
 
     def test_view_on_x_docs_y_design_docs(self):
         ViewBaseTests._test_view_on_multiple_docs_multiple_design_docs(self, self.num_docs, self.num_design_docs)

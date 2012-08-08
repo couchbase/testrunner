@@ -259,35 +259,6 @@ class RestConnection(object):
             raise Exception("unable to obtain view results")
         return json
 
-    def get_views_per_vbucket(self, bucket, view):
-        vBuckets = self.get_vbuckets(bucket)
-        views_not_found = []
-        views_per_vbucket = {}
-        for vBucket in vBuckets:
-            masterIp = vBucket.master.split(":")[0]
-            vb = vBucket.id
-            api = "http://{0}:{1}/".format(masterIp, self.port)
-            api += 'couchBase/{0}%2F{1}/_design/{2}'.format(bucket, vb, view)
-            try:
-                response, content = httplib2.Http().request(api, headers=self._create_capi_headers())
-                if response['status'] == '404' or response['status'] == '400':
-                    json_parsed = json.loads(content)
-                    if "error" in json_parsed:
-#                        msg = "unable to retrieve the view : {0} , reason {1}"
-#                        log.error(msg.format(view, json_parsed["reason"]))
-                        views_not_found.append(vb)
-                elif response['status'] == '200':
-                    json_parsed = json.loads(content)
-                    views_per_vbucket[vb] = json_parsed
-            except socket.error as socket_error:
-                log.error(socket_error)
-                raise ServerUnavailableException(ip=self.ip)
-            except httplib2.ServerNotFoundError:
-                raise ServerUnavailableException(ip=self.ip)
-        if views_not_found:
-            log.error("unable to get view for vbucket : {0}".format(views_not_found))
-        return views_per_vbucket
-
 
     # DEPRECATED: Incorrectly named function kept for backwards compatibility.
     def get_view(self, bucket, view):
