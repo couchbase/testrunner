@@ -1744,6 +1744,7 @@ class EmployeeDataSet:
         vfn2 = 'function (doc) { if(doc.job_title !== undefined) { var myregexp = new RegExp("^System "); if(doc.job_title.match(myregexp)){ emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}}'
         vfn3 = 'function (doc) { if(doc.job_title !== undefined) { var myregexp = new RegExp("^Senior "); if(doc.job_title.match(myregexp)){ emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}}'
         vfn4 = 'function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] ); }'
+        vfn5 = 'function (doc, meta) { if(doc.job_title !== undefined) { var myregexp = new RegExp("^admin"); if(meta.id.match(myregexp)) { emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}}'
 
         full_index_size = self.calc_total_doc_count()
         partial_index_size = full_index_size/3
@@ -1752,7 +1753,8 @@ class EmployeeDataSet:
                 QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn1, type_filter = "ui"),
                 QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn2, type_filter = "admin"),
                 QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn3, type_filter = "arch"),
-                QueryView(rest, full_index_size,    bucket=bucket, fn_str = vfn4, reduce_fn="_count")]
+                QueryView(rest, full_index_size,    bucket=bucket, fn_str = vfn4, reduce_fn="_count"),
+                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn5, type_filter = "admin")]
 
     def get_data_sets(self):
         return [self.sys_admin_info, self.ui_eng_info, self.senior_arch_info]
