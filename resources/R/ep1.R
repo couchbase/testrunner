@@ -1498,7 +1498,7 @@ if (nrow(ns_server_data) > 0) {
 
     if(!is.null(ns_server_data$views_ops)) {
         cat("generating couch_views_ops \n")
-        p <- ggplot(ns_server_data, aes(row, views_ops, color=buildinfo.version , label=views_ops)) + labs(x="----time (sec)--->", y="QPS")
+        p <- ggplot(ns_server_data, aes(row, views_ops, color=buildinfo.version , label=views_ops)) + labs(x="----time (sec)--->", y="Queries/sec")
         p <- p + geom_point()
         p <- addopts(p,"View read per sec.")
         print(p)
