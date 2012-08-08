@@ -36,8 +36,8 @@ test-views-pre-merge:
 e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 
-test-xdcr-basic:
-	scripts/start_cluster_and_run_tests.sh b/resources/dev-2-nodes-xdcr.ini conf/xdcr-basic.conf
+test-xdcr-simple:
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/simple-xdcr.conf
 
 # Note: remove the comment after all advanced unit tests pass
 #test-xdcr-adv:
