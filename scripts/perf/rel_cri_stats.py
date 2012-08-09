@@ -62,6 +62,12 @@ class CBStatsCollector:
             subprocess.call("{0} {1}:{2} {3} >> {4}"
                 .format(cb_exc, server.ip, port, "timings", "./cb_stats_timings.log"), shell=True)
 
+            # cbstats ip:port kvtimings
+            subprocess.call("echo \"\nServer: {0} ({1}):\" >> {2}"
+                .format(server.ip, cur_time, "./cb_stats_kvtimings.log"), shell=True)
+            subprocess.call("{0} {1}:{2} {3} >> {4}"
+                .format(cb_exc, server.ip, port, "kvtimings", "./cb_stats_kvtimings.log"), shell=True)
+
             # cbstats ip:port dispacher logs
             subprocess.call("echo \"\nServer: {0} ({1}):\" >> {2}"
                 .format(server.ip, cur_time, "./cb_stats_disp_logs.log"), shell=True)
