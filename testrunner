@@ -8,7 +8,7 @@ import urllib2
 import uuid
 import sys
 from os.path import basename, splitext
-sys.path = ["lib","pytests"] + sys.path
+sys.path = ["lib", "pytests"] + sys.path
 
 if sys.hexversion < 0x02060000:
     print "Testrunner requires version 2.6+ of python"
@@ -54,10 +54,10 @@ def parse_args(argv):
     parser.add_option("-p", "--params",
                       dest="params", help="Optional key=value parameters, comma-separated -p k=v,k2=v2,...",
                       default="")
-    parser.add_option("-n", "--noop",action="store_true",
+    parser.add_option("-n", "--noop", action="store_true",
                       help="NO-OP - emit test names, but don't actually run them e.g -n true")
     parser.add_option("-l", "--log-level",
-                      dest="loglevel", default="INFO",help="e.g -l info,warning,error")
+                      dest="loglevel", default="INFO", help="e.g -l info,warning,error")
     options, args = parser.parse_args()
 
     tests = []
@@ -84,7 +84,7 @@ def parse_args(argv):
 
     return tests, test_params, options.ini, options.params , options
 
-def create_log_file(log_config_file_name,log_file_name,level):
+def create_log_file(log_config_file_name, log_file_name, level):
     tmpl_log_file = open("logging.conf.sample")
     log_file = open(log_config_file_name, "w")
     log_file.truncate()
@@ -104,7 +104,7 @@ def append_test(tests, name):
         tests.append(name)
 
 def locate_conf_file(filename):
-    print "filename:%s" %filename
+    print "filename:%s" % filename
     if filename:
         if os.path.exists(filename):
             return file(filename)
@@ -304,17 +304,17 @@ if __name__ == "__main__":
             # the test has failed or has errors
             if "get-logs" in TestInputSingleton.input.test_params:
                 get_server_logs(TestInputSingleton.input, logs_folder)
-
+            errors = []
             for failure in result.failures:
                 test_case, failure_string = failure
-                xunit.add_test(name=name, status='fail', time=time_taken,
-                               errorType='membase.error', errorMessage=failure_string, params=params)
+                errors.append(failure_string)
                 break
             for error in result.errors:
                 test_case, error_string = error
-                xunit.add_test(name=name, status='fail', time=time_taken,
-                               errorType='membase.error', errorMessage=error_string, params=params)
+                errors.append(error_string)
                 break
+            xunit.add_test(name=name, status='fail', time=time_taken,
+                               errorType='membase.error', errorMessage=str(errors), params=params)
             results.append({"result": "fail", "name": name})
         else:
             xunit.add_test(name=name, time=time_taken, params=params)
@@ -329,9 +329,9 @@ if __name__ == "__main__":
         fail_count = 0
         for result in results:
             if result["result"] == "fail":
-                print result["name"]," fail "
+                print result["name"], " fail "
                 fail_count += 1
             else:
-               print result["name"]," pass"
+               print result["name"], " pass"
         if fail_count > 0:
             sys.exit(1)
