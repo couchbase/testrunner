@@ -36,7 +36,7 @@ class PerfDefaults:
     cb_stats_freq       =    1200        # collect cbstats every 20 minutes
 
     # carbon stats
-    carbon              =    1           # save realtime stats to carbon server, 1: enabled, 0: disabled
+    carbon              =    0           # save realtime stats to carbon server, 1: enabled, 0: disabled
     carbon_server       =    "127.0.0.1" # ip/hostname of carbon server
     carbon_port         =    2003        # port number of carbon server
     carbon_timeout      =    5           # socket timeout value if carbon server is not responsive
