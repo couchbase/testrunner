@@ -68,6 +68,9 @@ class NodeInitializeTask(Task):
         password = self.server.rest_password
         rest.init_cluster(username, password)
         info = rest.get_nodes_self()
+        if info is None:
+            self.state = FINISHED
+            self.set_exception(Exception('unable to get information on a server %s, it is available?' % (self.server.ip)))
         self.quota = int(info.mcdMemoryReserved * 2 / 3)
         rest.init_cluster_memoryQuota(username, password, self.quota)
         self.state = CHECKING
@@ -1246,14 +1249,14 @@ class GenerateExpectedViewResultsTask(Task):
         # parse query flags
         descending_set = 'descending' in query and query['descending'] == "true"
         startkey_set, endkey_set = 'startkey' in query, 'endkey' in query
-        startkey_docid_set, endkey_docid_set =  'startkey_docid' in query, 'endkey_docid' in query
+        startkey_docid_set, endkey_docid_set = 'startkey_docid' in query, 'endkey_docid' in query
         inclusive_end_false = 'inclusive_end' in query and query['inclusive_end'] == "false"
         key_set = 'key' in query
 
         # sort expected results to match view results
         expected_rows = sorted(self.emitted_rows,
                                cmp=GenerateExpectedViewResultsTask.cmp_result_rows,
-                               reverse = descending_set)
+                               reverse=descending_set)
 
         # filter rows according to query flags
         if startkey_set:
@@ -1347,7 +1350,7 @@ class ViewQueryVerificationTask(Task):
             * check couch
     """
     def __init__(self, server, design_doc_name, view_name, query, expected_rows,
-                num_verified_docs = 20, bucket = "default", query_timeout = 120):
+                num_verified_docs=20, bucket="default", query_timeout=120):
 
         Task.__init__(self, "view_query_verification_task")
         self.server = server
@@ -1379,7 +1382,7 @@ class ViewQueryVerificationTask(Task):
             self.state = FINISHED
 
 
-        msg = "Checking view query results: (%d keys expected) vs (%d keys returned)" %\
+        msg = "Checking view query results: (%d keys expected) vs (%d keys returned)" % \
             (len(self.expected_rows), len(self.results['rows']))
         self.log.info(msg)
 
@@ -1504,7 +1507,7 @@ class ViewQueryVerificationTask(Task):
                 # compare doc content
                 for key in mc_doc.keys():
                     if(mc_doc[key] != view_doc[key]):
-                        err_msg =\
+                        err_msg = \
                             "error verifying document id %s: retrieved value %s expected %s \n" % \
                                 (doc_id, mc_doc[key], view_doc[key])
                         doc_integrity_errors.append(err_msg)
