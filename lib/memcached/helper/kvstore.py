@@ -61,13 +61,14 @@ class Partition(object):
         self.valid = {}
         self.deleted = {}
 
-    def set(self, key, value, exp=0):
+    def set(self, key, value, exp=0, flag=0):
         if key in self.deleted:
             del self.deleted[key]
         if exp != 0:
             exp = (time.time() + exp)
         self.valid[key] = {"value"   : value,
-                           "expires" : exp}
+                           "expires" : exp,
+                           "flag"    : flag}
 
     def delete(self, key):
         if key in self.valid:
@@ -101,6 +102,12 @@ class Partition(object):
             return random.choice(self.deleted.keys())
         except IndexError:
             return None
+
+    def get_flag(self, key):
+        if key in self.valid:
+            if not self._expired(key):
+                return self.valid[key]["flag"]
+        return None
 
     def valid_key_set(self):
         key_set = []

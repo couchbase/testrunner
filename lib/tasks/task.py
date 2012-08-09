@@ -337,8 +337,8 @@ class GenericLoadingTask(Thread, Task):
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
 
         try:
-            self.client.set(key, self.exp, 0, value)
-            partition.set(key, value, self.exp)
+            self.client.set(key, self.exp, self.flag, value)
+            partition.set(key, value, self.exp, self.flag)
         except MemcachedError as error:
             self.state = FINISHED
             self.set_exception(error)
@@ -366,8 +366,8 @@ class GenericLoadingTask(Thread, Task):
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
 
         try:
-            self.client.set(key, self.exp, 0, value)
-            partition.set(key, value, self.exp)
+            self.client.set(key, self.exp, self.flag, value)
+            partition.set(key, value, self.exp, self.flag)
         except MemcachedError as error:
             self.state = FINISHED
             self.set_exception(error)
@@ -384,11 +384,12 @@ class GenericLoadingTask(Thread, Task):
                 self.set_exception(error)
 
 class LoadDocumentsTask(GenericLoadingTask):
-    def __init__(self, server, bucket, generator, kv_store, op_type, exp):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.generator = generator
         self.op_type = op_type
         self.exp = exp
+        self.flag = flag
 
     def has_next(self):
         return self.generator.has_next()
@@ -518,7 +519,8 @@ class ValidateDataTask(GenericLoadingTask):
         partition = self.kv_store.acquire_partition(key)
 
         value = partition.get_valid(key)
-        if value is None:
+        flag = partition.get_flag(key)
+        if value is None or flag is None:
             self.kv_store.release_partition(key)
             return
         value = json.dumps(value)
@@ -528,6 +530,10 @@ class ValidateDataTask(GenericLoadingTask):
             if d != json.loads(value):
                 self.state = FINISHED
                 self.set_exception(Exception('Bad result: %s != %s' % (json.dumps(d), value)))
+            if o != flag:
+                self.state = FINISHED
+                self.set_exception(Exception('Bad result for flag value: %s != the value we set: %s' % (o, flag)))
+
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
                 pass

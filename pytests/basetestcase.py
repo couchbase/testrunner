@@ -187,13 +187,13 @@ class BaseTestCase(unittest.TestCase):
     Returns:
         A list of all of the tasks created.
     """
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1):
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0):
         tasks = []
         for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
             tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                           bucket.kvs[kv_store],
-                                                          op_type, exp))
+                                                          op_type, exp, flag))
         return tasks
 
     """Synchronously applys load generation to all bucekts in the cluster.
@@ -205,8 +205,8 @@ class BaseTestCase(unittest.TestCase):
         exp - The expiration for the items if updated or created (int)
         kv_store - The index of the bucket's kv_store to use. (int)
     """
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1):
-        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store)
+    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0):
+        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag)
         for task in tasks:
             task.result()
 
