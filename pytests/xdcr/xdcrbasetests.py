@@ -452,7 +452,7 @@ class XDCRBaseTest(unittest.TestCase):
         elif self._num_items >= 100000:
             timeout = 600
 
-        if self._failover is not None:
+        if self._failover is not None or self._rebalance is not None:
             timeout *= 3 / 2
 
         #for verification src and dest clusters need more time
@@ -481,13 +481,13 @@ class XDCRBaseTest(unittest.TestCase):
         errors_caught = 0
         if self._doc_ops is not None or self._doc_ops_dest is not None:
             if "update" in self._doc_ops or (self._doc_ops_dest is not None and "update" in self._doc_ops_dest):
-                errors_caught += self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "update")
+                errors_caught = self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "update")
 
             if "delete" in self._doc_ops or (self._doc_ops_dest is not None and "delete" in self._doc_ops_dest):
-                errors_caught += self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "delete")
+                errors_caught = self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "delete")
 
         if errors_caught > 0:
-            self.fail("MISMATCHES FOUND BETWEEN REPLICATED DATA AND ORIGINAL DATA!")
+            self.fail("Mismatches on Meta Information on xdcr-replicated items!")
 
     def verify_results(self, verify_src=False):
         # Checking replication at destination clusters
