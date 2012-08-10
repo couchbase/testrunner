@@ -412,6 +412,14 @@ class XDCRBaseTest(unittest.TestCase):
         return kv_store_first[kvs_num]
 
     def merge_buckets(self, src_master, dest_master, bidirection=True):
+        if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
+            self.do_merge_buckets(src_master, dest_master, bidirection)
+        elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
+            for i in range(1,len(self._clusters_dic)):
+                dest_cluster = self._clusters_dic[i]
+                self.do_merge_buckets(src_master, dest_cluster[0], bidirection)
+
+    def do_merge_buckets(self, src_master, dest_master, bidirection):
         src_buckets = self._get_cluster_buckets(src_master)
         dest_buckets = self._get_cluster_buckets(dest_master)
         for src_bucket in src_buckets:
@@ -626,10 +634,11 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             nodes = self._clusters_dic[key]
             if not src_master_identified:
                 src_cluster_name = self._cluster_names_dic[key]
-                print src_cluster_name
+                self.src_master = nodes[0]
                 src_master_identified = True
                 continue
             dest_cluster_name = self._cluster_names_dic[key]
+            self.dest_master = nodes[0]
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             time.sleep(30)
 
