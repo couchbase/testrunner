@@ -175,6 +175,15 @@ class PerfBase(unittest.TestCase):
                 rc.set_environment_variable('MAX_CONCURRENT_REPS_PER_DOC',
                                             max_concurrent_reps_per_doc)
 
+    def set_ep_compaction(self, comp_ratio):
+        """Set up ep_engine side compaction ratio"""
+        for server in self.input.servers:
+            shell = RemoteMachineShellConnection(server)
+            cmd = "/opt/couchbase/bin/cbepctl localhost:11210 "\
+                  "set flush_param db_frag_threshold {0}".format(comp_ratio)
+            self._exec_and_log(shell, cmd)
+            shell.disconnect()
+
     def set_autocompaction(self, disable_view_compaction=False):
         """Set custom auto-compaction settings"""
 
@@ -185,6 +194,14 @@ class PerfBase(unittest.TestCase):
             # Database fragmentation threshold
             db_compaction = self.parami("db_compaction",
                                         PerfDefaults.db_compaction)
+            print "[perf.setUp] database compaction = %d" %db_compaction
+
+            # ep_engine fragementation threshold
+            ep_compaction = self.parami("ep_compaction",
+                                        PerfDefaults.ep_compaction)
+            self.set_ep_compaction(ep_compaction)
+            print "[perf.setUp] ep_engine compaction = %d" %ep_compaction
+
             # View fragmentation threshold
             if disable_view_compaction:
                 view_compaction = 100

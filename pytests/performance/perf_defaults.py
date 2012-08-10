@@ -50,6 +50,7 @@ class PerfDefaults:
     # control
     avg_value_size          =   2048     # average size of document body
     db_compaction           =   2        # db fragmentation percentage triggers compaction
+    ep_compaction           =   50       # ep_engine side fragmentation percentage which triggers compaction
     load_wait_until_drained =   1        # wait to be drained on the load phase, 1: enabled, 0: disabled
     loop_wait_until_drained =   0        # wait to be drained on the access phase, 1: enabled, 0: disabled
     mcsoda_heartbeat        =   0        # health check heartbeat message for mcsoda. 0: no heartbeat, ~: in sec
