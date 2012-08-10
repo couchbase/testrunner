@@ -15,4 +15,3 @@ VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 2
 MAX_COMPACTION_THRESHOLD = 100
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
-WIN_COUCHBASE_BIN_PATH = "C:\program files\couchbase\server\bin\"
