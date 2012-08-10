@@ -571,7 +571,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                 return True
             return False
         elif self.ops_perf == "update":
-            if self.itr < self.num_valid_keys:
+            if self.itr < (self.num_valid_keys + self.num_deleted_keys):
                 return True
             return False
 
@@ -583,6 +583,9 @@ class VerifyRevIdTask(GenericLoadingTask):
         elif self.ops_perf == "update":
             if self.itr < self.num_valid_keys:
                 self._check_key_revId(self.valid_keys[self.itr])
+            elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
+                # verify deleted keys
+                self._check_key_revId(self.deleted_keys[(self.itr - self.num_valid_keys)])
             self.itr += 1
 
     def _check_key_revId(self, key):
