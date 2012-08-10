@@ -61,6 +61,10 @@ class ViewQueryTests(unittest.TestCase):
                 self.cluster.rebalance(self.servers[:], self.servers[1:], [])
         except Exception as ex:
             skip_setup_failed = True
+            try:
+                self.tearDown()
+            except:
+                pass
             self.fail(ex)
 
     def tearDown(self):
