@@ -221,11 +221,11 @@ class RemoteMachineShellConnection:
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
-                return False
+                return True
         elif info.type.lower() == "linux":
             if self.file_exists(testconstants.LINUX_CB_PATH, testconstants.VERSION_FILE):
-                return False
-        return True
+                return True
+        return False
 
     # /opt/moxi/bin/moxi -Z port_listen=11211 -u root -t 4 -O /var/log/moxi/moxi.log
     def start_moxi(self, ip, bucket, port, user=None, threads=4, log_file="/var/log/moxi.log"):
@@ -1007,7 +1007,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         else:
             log.info('No couchbase server on this server')
 
-    def membase_uninstall(self, save_upgrade_config = False):
+    def membase_uninstall(self, save_upgrade_config=False):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*"]
         terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
@@ -1340,7 +1340,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             remote_command.append(" " + process_pid)
 
         if info.type.lower() == "windows":
-            o,r = self.execute_command(remote_command)
+            o, r = self.execute_command(remote_command)
             if r:
                 log.error("Command didn't run successfully. Error: {0}".format(r))
             return o;

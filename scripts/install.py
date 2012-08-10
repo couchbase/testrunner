@@ -230,7 +230,7 @@ class MembaseServerInstaller(Installer):
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]
-        while time.time() < (start_time + (10 * 60)):
+        while time.time() < (start_time + (5 * 60)):
             rest = RestConnection(server)
             try:
                 if server.data_path:
@@ -307,7 +307,7 @@ class CouchbaseServerInstaller(Installer):
         cluster_initialized = False
         server = params["server"]
         remote_client = RemoteMachineShellConnection(params["server"])
-        while time.time() < start_time + 10 * 60:
+        while time.time() < start_time + 5 * 60:
             try:
                 # Optionally change node name and restart server
                 if params.get('use_domain_names', 0):
@@ -440,7 +440,7 @@ class CouchbaseSingleServerInstaller(Installer):
         remote_client.start_couchbase()
         couchdb_ok = False
 
-        while time.time() < (start_time + (1 * 60)):
+        while time.time() < (start_time + 60):
             try:
                 couch_ip = "http://{0}:5984/".format(server.ip)
                 log.info("connecting to couch @ {0}".format(couch_ip))
@@ -621,3 +621,12 @@ if __name__ == "__main__":
         InstallerJob().parallel_install(input.servers, input.test_params)
     else:
         InstallerJob().sequential_install(input.test_params)
+
+    if "product" in input.test_params and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
+        print "verify installation..."
+        success = True
+        for server in input.servers:
+            success &= RemoteMachineShellConnection(server).is_membase_installed()
+            if not success:
+                print "some nodes were not install successfully!"
+                sys.exit(1)
