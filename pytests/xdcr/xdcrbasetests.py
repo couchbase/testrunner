@@ -253,6 +253,14 @@ class XDCRBaseTest(unittest.TestCase):
             nodes = self._clusters_dic[key]
             BucketOperationHelper.delete_all_buckets_or_assert(nodes, self)
             ClusterOperationHelper.cleanup_cluster(nodes)
+            #doesn't work with cluster_run
+#            for _, clusters in self._clusters_dic.items():
+#                remote = RemoteMachineShellConnection(clusters[0])
+#                cmd = "wget -O- -vvd --user={0} --password={1} \
+#                    --post-data='gen_server:cast(ns_cluster, leave).' http://{2}:8091/diag/eval".\
+#                    format(clusters[0].rest_password, clusters[0].rest_password, clusters[0].ip)
+#                self._log.info('Executing command to clean node {0}'.format(cmd))
+#                remote.execute_command(cmd, debug=True)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(nodes, self)
 
     def _cleanup_broken_setup(self):
@@ -415,7 +423,7 @@ class XDCRBaseTest(unittest.TestCase):
         if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
             self.do_merge_buckets(src_master, dest_master, bidirection)
         elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
-            for i in range(1,len(self._clusters_dic)):
+            for i in range(1, len(self._clusters_dic)):
                 dest_cluster = self._clusters_dic[i]
                 self.do_merge_buckets(src_master, dest_cluster[0], bidirection)
 
@@ -575,9 +583,14 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
 
     def teardown_extended(self):
-        for (rest_conn, cluster_ref, rep_database, rep_id) in self._cluster_state_arr:
-            rest_conn.stop_replication(rep_database, rep_id)
-            rest_conn.remove_remote_cluster(cluster_ref)
+        for _, clusters in self._clusters_dic.items():
+            rest = RestConnection(clusters[0])
+            rest.remove_all_remote_clusters()
+            rest.remove_all_replications()
+#            #TODO should be added 'stop replication' when API to stop will be implemented
+#        for (rest_conn, cluster_ref, rep_database, rep_id) in self._cluster_state_arr:
+#            rest_conn.stop_replication(rep_database, rep_id)
+            #rest_conn.remove_remote_cluster(cluster_ref)
 
 
     def init_parameters_extended(self):

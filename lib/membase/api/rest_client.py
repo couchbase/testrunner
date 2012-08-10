@@ -633,10 +633,25 @@ class RestConnection(object):
 
         return remoteCluster
 
+    def get_remote_clusters(self):
+        remote_clusters = []
+        api = self.baseUrl + 'pools/default/remoteClusters/'
+        params = urllib.urlencode({})
+        status, content, header = self._http_request(api, 'GET', params)
+        if status:
+            remote_clusters = json.loads(content)
+        return remote_clusters
+
+
+    def remove_all_remote_clusters(self):
+        remote_clusters = self.get_remote_clusters()
+        for remote_cluster in remote_clusters:
+            self.remove_remote_cluster(remote_cluster["name"])
+
+
 
     def remove_remote_cluster(self, name):
         #example : name:two
-        otpNode = None
         msg = "removing remote cluster name:{0}".format(name)
         log.info(msg)
         api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(name)
@@ -647,7 +662,7 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
         else:
-            log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
+            log.error("failed to remove remote cluster: status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'remove cluster' failed")
 
         return json_parsed
@@ -674,7 +689,7 @@ class RestConnection(object):
             create_replication_response = json_parsed
         else:
             log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
-            raise Exception("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
+            raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
 
         return create_replication_response
 
@@ -691,6 +706,22 @@ class RestConnection(object):
             log = logger.Logger().get_logger()
             log.error("failed to start replication: {0}".format(json_resp))
 
+
+    def get_replications(self):
+        replications = []
+        api = self.capiBaseUrl + '_replicator/_design/_replicator_info/_view/infos?group_level=1'
+        params = urllib.urlencode({})
+        status, content, header = self._http_request(api, 'GET', params)
+        if status:
+            replications = json.loads(content)["rows"]
+        return replications
+
+
+    def remove_all_replications(self):
+        replications = self.get_replications()
+        for replication in replications:
+            if replication["value"]["have_replicator_doc"] == True:
+                self.stop_replication(self.capiBaseUrl + '_replicator', replication["value"]["replication_fields"]["_id"])
 
     def stop_replication(self, database, rep_id):
         self._http_request(database + "/{0}".format(rep_id), 'DELETE', None, self._create_capi_headers())
@@ -732,7 +763,6 @@ class RestConnection(object):
                 raise AddNodeException(nodeIp=self.ip,
                                           remoteIp=remoteIp,
                                           reason=content)
-
         return otpNode
 
 
