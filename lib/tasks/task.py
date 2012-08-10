@@ -597,10 +597,15 @@ class VerifyRevIdTask(GenericLoadingTask):
 
             if seqno_src != seqno_dest:
                 self.err_count += 1
-
                 self.log.error(
                     "Mismatch on sequence numbers for key {0}\t Source Sequence Num:{1}\t Destination Sequence Num:{2}\tError Count{3}".format(
                         key, seqno_src, seqno_dest, self.err_count))
+
+                self.log.error(
+                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
+                self.log.error(
+                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
+
                 self.state = FINISHED
             elif cas_src != cas_dest:
                 self.err_count += 1
@@ -608,6 +613,12 @@ class VerifyRevIdTask(GenericLoadingTask):
                     "Mismatch on CAS for key {0}\t Source CAS:{1}\t Destination CAS:{2}\tError Count{3}".format(key,
                         cas_src,
                         cas_dest, self.err_count))
+
+                self.log.error(
+                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
+                self.log.error(
+                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
+
                 self.state = FINISHED
             elif exp_src != exp_dest:
                 self.err_count += 1
@@ -615,6 +626,12 @@ class VerifyRevIdTask(GenericLoadingTask):
                     "Mismatch on Expiry Flags for key {0}\t Source Expiry Flags:{1}\t Destination Expiry Flags:{2}\tError Count{3}".format(
                         key,
                         exp_src, exp_dest, self.err_count))
+
+                self.log.error(
+                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
+                self.log.error(
+                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
+
                 self.state = FINISHED
             elif flags_src != flags_dest:
                 self.err_count += 1
@@ -622,6 +639,12 @@ class VerifyRevIdTask(GenericLoadingTask):
                     "Mismatch on Flags for key {0}\t Source Flags:{1}\t Destination Flags:{2}\tError Count{3}".format(
                         key,
                         flags_src, flags_dest, self.err_count))
+
+                self.log.error(
+                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
+                self.log.error(
+                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
+
                 self.state = FINISHED
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND:
