@@ -681,7 +681,9 @@ class RestConnection(object):
 
 
     #replicationType:continuous toBucket:default toCluster:two fromBucket:default
-    def create_replication(self, replicationType, fromBucket, toBucket, toCluster):
+    def start_replication(self, replicationType, fromBucket, toCluster, toBucket=None):
+        toBucket = toBucket or fromBucket
+
         msg = "starting replication type:{0} from {1} to {2} in the remote cluster {3}"
         create_replication_response = {}
         log.info(msg.format(replicationType, fromBucket, toBucket, toCluster))
@@ -693,30 +695,13 @@ class RestConnection(object):
 
         status, content, header = self._http_request(api, 'POST', params)
         #respone : {"database":"http://127.0.0.1:9500/_replicator",
-        # "document":{"type":"xdc","source":"default","targetBucket":"default",
-        # "target":"http://Administrator:asdasd@127.0.0.1:9002/pools/default/buckets/default",
-        # "continuous":true}}
+        # "id": "replication_id"}
         if status:
             json_parsed = json.loads(content)
-            create_replication_response = json_parsed
+            return (json_parsed['database'], json_parsed['id'])
         else:
             log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
             raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
-
-        return create_replication_response
-
-
-    def start_replication(self, type, bucket, dest_ref):
-        controller_resp = self.create_replication(type, bucket, bucket, dest_ref)
-        document = controller_resp[u'document']
-        database = controller_resp[u'database']
-        (true, json_resp, header) = self._http_request(database, 'POST', json.dumps(document), self._create_capi_headers())
-        resp = json.loads(json_resp)
-        if resp["ok"] == true:
-            return (database, resp["id"])
-        else:
-            log = logger.Logger().get_logger()
-            log.error("failed to start replication: {0}".format(json_resp))
 
 
     def get_replications(self):
