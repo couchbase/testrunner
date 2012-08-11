@@ -1411,39 +1411,52 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         self.delete_backupFile(backup_location)
         self.create_directory(backup_location)
 
-        backup_command = testconstants.LINUX_CBBACKUP_COMMAND_PATH
-        info = self.extract_remote_info()
-        type = info.type.lower()
-        if type == 'windows':
-            backup_command = testconstants.WIN_CBBACKUP_COMMAND_PATH
+        backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        #info = self.extract_remote_info()
+        #type = info.type.lower()
+        #if type == 'windows':
+            #backup_command = "%scbbackup.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
         command_options_string = ""
         if command_options is not None:
             command_options_string = ' '.join(command_options)
 
-        command = "{0} {1}{2}@{3}:{4} {5} {6}".format(backup_command, "http://", login_info,
-                                                      self.ip, self.port, backup_location, command_options_string)
+        command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
+                                           self.ip, self.port, backup_location, command_options_string)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
     def restore_backupFile(self, login_info, backup_location, buckets):
-        restore_command = testconstants.LINUX_CBRESTORE_COMMAND_PATH
-        info = self.extract_remote_info()
-        type = info.type.lower()
-        if type == 'windows':
-            restore_command = WIN_CBRESTORE_COMMAND_PATH
+        restore_command = "%scbrestore" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        #info = self.extract_remote_info()
+        #type = info.type.lower()
+            #if type == 'windows':
+            #restore_command = "%scbrestore.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
         for bucket in buckets:
-            command = "{0} {1} {2}{3}@{4}:{5} {6} {7}".format(restore_command, backup_location, "http://",
-                                                              login_info, self.ip, self.port, "-x try_xwm=0 -b", bucket)
+            command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_location, "http://",
+                                                  login_info, self.ip, self.port, "-x try_xwm=0 -b", bucket)
             output, error = self.execute_command(command.format(command))
             self.log_command_output(output, error)
 
     def delete_backupFile(self, backup_location):
-        command = "{0}{1}".format("rm -r ", backup_location)
+        command = "%s%s" % ("rm -r ", backup_location)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
+    def execute_cbtransfer(self, source, destination):
+        transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        #info = self.extract_remote_info()
+        #type = info.type.lower()
+        #if type == 'windows':
+            #transfer_command = "%scbtransfer.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+
+        command = "%s %s %s" % (transfer_command, source, destination)
+        output, error = self.execute_command(command.format(command))
+        self.log_command_output(output, error)
 
 class RemoteUtilHelper(object):
 
