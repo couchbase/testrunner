@@ -15,7 +15,9 @@ class CbKarmaClient(RestConnection):
         hostname -- dashboard hostname/ip address
         port -- dashboard port
         """
-        self.baseUrl = "http://{0}:{1}/".format(hostname, port)
+        self.username = ''
+        self.password = ''
+        self.baseUrl = 'http://{0}:{1}/'.format(hostname, port)
 
     def init(self):
         """Get initial test id (optional)"""
