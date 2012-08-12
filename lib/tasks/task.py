@@ -1035,13 +1035,11 @@ class MonitorViewFragmentationTask(Task):
         rest = RestConnection(self.server)
 
         content = rest.get_bucket_json(self.bucket)
-        if content["autoCompactionSettings"] != False:
-            auto_compact_percentage = \
-                content["autoCompactionSettings"]["viewFragmentationThreshold"]["percentage"]
-        else:
+        if content["autoCompactionSettings"] == False:
             # try to read cluster level compaction settings
             content = rest.cluster_status()
-            auto_compact_percentage = \
+
+        auto_compact_percentage = \
                 content["autoCompactionSettings"]["viewFragmentationThreshold"]["percentage"]
 
         return auto_compact_percentage
@@ -1074,8 +1072,8 @@ class MonitorViewFragmentationTask(Task):
             status, content = rest.set_view_info(bucket, design_doc_name)
             if status:
                 info.append(content)
-
         return info
+
     @staticmethod
     def calc_ddoc_fragmentation(rest, design_doc_name, bucket="default"):
 

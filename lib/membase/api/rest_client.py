@@ -259,12 +259,12 @@ class RestConnection(object):
         return json.loads(content)
 
     def _query(self, design_doc_name, view_name, bucket, view_type, query, timeout):
-        api = '{%s/%s/_design/%s/_%s/%s?%s' % (self.capiBaseUrl, bucket,
+        api = self.capiBaseUrl + '%s/_design/%s/_%s/%s?%s' % (bucket,
                                                design_doc_name, view_type,
                                                view_name,
                                                urllib.urlencode(query))
         if isinstance(bucket, Bucket):
-            api = '%s/%s/_design/%s/_%s/%s?%s' % (self.capiBaseUrl, bucket.name,
+            api = self.capiBaseUrl + '%s/_design/%s/_%s/%s?%s' % (bucket.name,
                                                   design_doc_name, view_type,
                                                   view_name,
                                                   urllib.urlencode(query))
@@ -492,7 +492,7 @@ class RestConnection(object):
 
     # Make a _design/_info request
     def set_view_info(self, bucket, design_name):
-        api = self.capiBaseUrl + '/_set_view/%s/_design/%s/_info' % (bucket, design_name)
+        api = self.capiBaseUrl + '_set_view/%s/_design/%s/_info' % (bucket, design_name)
         if isinstance(bucket, Bucket):
             api = self.capiBaseUrl + \
             '/_set_view/%s/_design/%s/_info' % (bucket, design_name)
