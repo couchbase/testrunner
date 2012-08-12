@@ -4,6 +4,7 @@ import urllib
 from membase.api.rest_client import RestConnection
 from membase.api.exception import ServerUnavailableException
 
+
 class CbKarmaClient(RestConnection):
     """Performance dashboard (cbkarma) REST API"""
 
@@ -14,12 +15,10 @@ class CbKarmaClient(RestConnection):
         hostname -- dashboard hostname/ip address
         port -- dashboard port
         """
-
         self.baseUrl = "http://{0}:{1}/".format(hostname, port)
 
     def init(self):
         """Get initial test id (optional)"""
-
         api = self.baseUrl + 'init'
         try:
             return self._http_request(api, 'GET', timeout=30)
@@ -40,7 +39,6 @@ class CbKarmaClient(RestConnection):
 
         Return tuple with status and test id.
         """
-
         api = self.baseUrl + 'update'
 
         params = {'phase': phase,
