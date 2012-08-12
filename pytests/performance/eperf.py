@@ -269,12 +269,7 @@ class EPerfMaster(perf.PerfBase):
                     # Create new rest client if it doesn't exist
                     if not hasattr(self, 'cbkarma_client'):
                         hostname, port = self.input.dashboard[0].split(':')
-                        try:
-                            self.cbkarma_client = CbKarmaClient(hostname, port)
-                        except Exception, e:
-                            print "unable to start cbkarma: %s" %e
-                            # Execute current phase
-                            return function(self, *args, **kargs)
+                        self.cbkarma_client = CbKarmaClient(hostname, port)
 
                     # Define new test id if it doesn't exist
                     if not hasattr(self, 'test_id'):
@@ -1398,8 +1393,7 @@ class EVPerfClient(EPerfClient):
                 time.sleep(1)
 
         # Send histograms to dashboard
-        if self.input.dashboard and why == "loop"\
-            and hasattr(self, 'cbkarma_client'):
+        if self.input.dashboard and why == "loop":
             description = socket.gethostname() + '-fg'
             self.cbkarma_client.histo(self.test_id, description, rv_cur)
             description = socket.gethostname() + '-bg'
