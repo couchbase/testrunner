@@ -566,18 +566,18 @@ class InstallerJob(object):
         for t in uninstall_threads:
             t.start()
         for t in uninstall_threads:
-            print "thread {0} finished".format(t.name)
             t.join()
+            print "thread {0} finished".format(t.name)
         for t in install_threads:
             t.start()
         for t in install_threads:
-            print "thread {0} finished".format(t.name)
             t.join()
+            print "thread {0} finished".format(t.name)
         for t in initializer_threads:
             t.start()
         for t in initializer_threads:
-            print "thread {0} finished".format(t.name)
             t.join()
+            print "thread {0} finished".format(t.name)
 
 
 def check_build(input):

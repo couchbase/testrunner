@@ -160,7 +160,7 @@ class RestConnection(object):
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         http_res = self.init_http_request(self.baseUrl + 'nodes/self')
         #if node was not initialized we can't get response from 'nodes/self'
-        if not http_res:
+        if not http_res or http_res["version"][0:2] == "1.":
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
             try:
@@ -186,8 +186,8 @@ class RestConnection(object):
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         #determine the real couchApiBase for cluster_run
         http_res = self.init_http_request(self.baseUrl + 'nodes/self')
-        #if node was not initialized we can't get response from 'nodes/self'
-        if not http_res:
+        #couchApiBase appeared in version 2.*
+        if not http_res or http_res["version"][0:2] == "1.":
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
             try:
