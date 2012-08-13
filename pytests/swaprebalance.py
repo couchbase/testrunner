@@ -18,15 +18,18 @@ class SwapRebalanceBase(unittest.TestCase):
         self.servers = self.input.servers
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
+        self.case_number = self.input.param("case_number", 0)
 
         # Clear the state from Previous invalid run
         rest.stop_rebalance()
         self.load_started = False
         self.loaders = []
+        self.log.info("==============  SwapRebalanceBase setup was started for test #{0} {1}=============="\
+                      .format(self.case_number, self._testMethodName))
         SwapRebalanceBase.reset(self)
 
         # Initialize test params
-        self.replica  = self.input.param("replica", 1)
+        self.replica = self.input.param("replica", 1)
         self.keys_count = self.input.param("keys-count", 100000)
         self.load_ratio = self.input.param("load-ratio", 1)
         self.ratio_expiry = self.input.param("ratio-expiry", 0.03)
@@ -49,14 +52,20 @@ class SwapRebalanceBase(unittest.TestCase):
         info = rest.get_nodes_self()
         rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
+        self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
+                      .format(self.case_number, self._testMethodName))
+        SwapRebalanceBase._log_start(self)
 
     @staticmethod
     def common_tearDown(self):
         if not self.skip_cleanup:
             SwapRebalanceBase.reset(self)
+            SwapRebalanceBase._log_finish(self)
 
     @staticmethod
     def reset(self):
+        self.log.info("==============  SwapRebalanceBase cleanup was started for test #{0} {1} =============="\
+                          .format(self.case_number, self._testMethodName))
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
@@ -66,6 +75,25 @@ class SwapRebalanceBase(unittest.TestCase):
         self.log.info("Stopping load in Teardown")
         SwapRebalanceBase.stop_load(self.loaders)
         ClusterHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        self.log.info("==============  SwapRebalanceBase cleanup was finished for test #{0} {1} =============="\
+                          .format(self.case_number, self._testMethodName))
+
+
+    @staticmethod
+    def _log_start(self):
+        try:
+            msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
+
+    @staticmethod
+    def _log_finish(self):
+        try:
+            msg = "{0} : {1} finished ".format(datetime.datetime.now(), self._testMethodName)
+            RestConnection(self.servers[0]).log_client_error(msg)
+        except:
+            pass
 
     @staticmethod
     def _create_default_bucket(self, replica=1):
@@ -115,7 +143,7 @@ class SwapRebalanceBase(unittest.TestCase):
                 password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["json"] = 0
-            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
+            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_' + bucket.name)
             loader["thread"].daemon = True
             loaders.append(loader)
         for loader in loaders:
@@ -128,7 +156,7 @@ class SwapRebalanceBase(unittest.TestCase):
         rest = RestConnection(master)
         for bucket in rest.get_buckets():
             loader = dict()
-            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count/2, bucket=bucket.name,
+            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count / 2, bucket=bucket.name,
                     password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
@@ -136,7 +164,7 @@ class SwapRebalanceBase(unittest.TestCase):
             loader["mcsoda"].cfg["ratio-deletes"] = self.ratio_deletes
             loader["mcsoda"].cfg["ratio-expirations"] = self.ratio_expiry
             loader["mcsoda"].cfg["json"] = 0
-            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_'+bucket.name)
+            loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_' + bucket.name)
             loader["thread"].daemon = True
             loaders.append(loader)
         for loader in loaders:
@@ -156,7 +184,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def create_buckets(self):
-        if self.num_buckets==1:
+        if self.num_buckets == 1:
             SwapRebalanceBase._create_default_bucket(self, replica=self.replica)
         else:
             SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
@@ -174,7 +202,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
-        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -201,7 +229,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
 
-        new_swap_servers = self.servers[num_initial_servers:num_initial_servers+self.num_swap]
+        new_swap_servers = self.servers[num_initial_servers:num_initial_servers + self.num_swap]
         for server in new_swap_servers:
             otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip)
             msg = "unable to add node {0} to the cluster"
@@ -274,7 +302,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
-        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -301,7 +329,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for node in optNodesIds:
             self.log.info("removing node {0} and rebalance afterwards".format(node))
 
-        new_swap_servers = self.servers[num_initial_servers:num_initial_servers+self.num_swap]
+        new_swap_servers = self.servers[num_initial_servers:num_initial_servers + self.num_swap]
         for server in new_swap_servers:
             otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip)
             msg = "unable to add node {0} to the cluster"
@@ -320,7 +348,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Rebalance is failed at 20%, 40% and 60% completion
         for i in [1, 2, 3]:
-            expected_progress = 20*i
+            expected_progress = 20 * i
             self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(expected_progress))
             RestHelper(rest).rebalance_reached(expected_progress)
             command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
@@ -357,7 +385,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all servers
         self.log.info("INITIAL REBALANCE PHASE")
-        RebalanceHelper.rebalance_in(self.servers, len(self.servers)-1)
+        RebalanceHelper.rebalance_in(self.servers, len(self.servers) - 1)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -398,7 +426,7 @@ class SwapRebalanceBase(unittest.TestCase):
             self.log.info("failover node {0} and rebalance afterwards".format(node))
             rest.fail_over(node)
 
-        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], \
             ejectedNodes=optNodesIds)
 
         self.assertTrue(rest.monitorRebalance(),
@@ -460,7 +488,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
-        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs)-1)
+        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
 
         self.log.info("DATA LOAD PHASE")
         loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -485,7 +513,7 @@ class SwapRebalanceBase(unittest.TestCase):
             self.log.info("failover node {0} and rebalance afterwards".format(node))
             rest.fail_over(node)
 
-        new_swap_servers = self.servers[num_initial_servers:num_initial_servers+self.failover_factor]
+        new_swap_servers = self.servers[num_initial_servers:num_initial_servers + self.failover_factor]
         for server in new_swap_servers:
             otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip)
             msg = "unable to add node {0} to the cluster"
@@ -498,7 +526,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.log.info("DATA ACCESS PHASE")
         loaders = SwapRebalanceBase.start_access_phase(self, master)
 
-        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], \
             ejectedNodes=optNodesIds)
 
         self.assertTrue(rest.monitorRebalance(),
