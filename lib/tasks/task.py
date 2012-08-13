@@ -5,6 +5,7 @@ import string
 import copy
 import json
 import re
+import math
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
 from membase.api.rest_client import RestConnection, Bucket
@@ -593,6 +594,9 @@ class VerifyRevIdTask(GenericLoadingTask):
                 # verify deleted keys
                 self._check_key_revId(self.deleted_keys[(self.itr - self.num_valid_keys)])
             self.itr += 1
+        if math.fmod(self.itr, 100000) == 0.0:
+            self.log.info("{0} items have been verified".format(self.itr))
+
 
     def _check_key_revId(self, key):
         try:
@@ -601,6 +605,24 @@ class VerifyRevIdTask(GenericLoadingTask):
             seqno_src, cas_src, exp_src, flags_src = src.getRev(key)
             seqno_dest, cas_dest, exp_dest, flags_dest = dest.getRev(key)
 
+            ## seqno number should never be zero
+            if seqno_src == 0:
+                self.err_count += 1
+                self.log.error(
+                    "(Source) Sequence numbers for key {0}\t is 0, Error Count{1}".format(key, self.err_count))
+                self.log.error(
+                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
+                self.state = FINISHED
+
+            if seqno_dest == 0:
+                self.err_count += 1
+                self.log.error(
+                    "(Dest) Sequence numbers for key {0}\t is 0,  Error Count{1}".format(key, self.err_count))
+                self.log.error(
+                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
+                self.state = FINISHED
+
+            ## verify all metadata
             if seqno_src != seqno_dest:
                 self.err_count += 1
                 self.log.error(
