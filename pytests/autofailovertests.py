@@ -9,7 +9,9 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-
+from membase.helper.rebalance_helper import RebalanceHelper
+from couchbase.documentgenerator import BlobGenerator
+from basetestcase import BaseTestCase
 
 class AutoFailoverBaseTest(unittest.TestCase):
     # start from 1..n
@@ -35,7 +37,10 @@ class AutoFailoverBaseTest(unittest.TestCase):
         time.sleep(10)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         try:
-            MemcachedClientHelper.flush_bucket(servers[0], 'default')
+            rest = RestConnection(self._servers[0])
+            buckets = rest.get_buckets()
+            for bucket in buckets:
+                MemcachedClientHelper.flush_bucket(servers[0], bucket.name)
         except Exception:
             pass
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
@@ -332,7 +337,31 @@ class AutoFailoverTests(unittest.TestCase):
         shell.log_command_output(o, r)
         shell.disconnect()
 
+    def load_data(self, master, bucket, keys_count):
+        log = logger.Logger.get_logger()
+#        gen_create = BlobGenerator("loadONE", "loadONE-", 256, start=0, end=keys_count)
+#        BaseTestCase._load_all_buckets(master, gen_create, "create", 0)
+        inserted_keys_cnt = 0
+        while inserted_keys_cnt < keys_count:
+            keys_cnt, rejected_keys_cnt =\
+            MemcachedClientHelper.load_bucket(servers=[master],
+                name=bucket,
+                number_of_items=keys_count,
+                number_of_threads=5,
+                write_only=True)
+            inserted_keys_cnt += keys_cnt
+        log.info("wait until data is completely persisted on the disk")
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
+        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        return inserted_keys_cnt
+
     def _cluster_setup(self):
+        log = logger.Logger.get_logger()
+
+        replicas = self._input.param("replicas", 1)
+        keys_count = self._input.param("keys-count", 0)
+        num_buckets = self._input.param("num-buckets", 1)
+
         bucket_name = "default"
         master = self._servers[0]
         credentials = self._input.membase_settings
@@ -344,12 +373,32 @@ class AutoFailoverTests(unittest.TestCase):
         rest.reset_autofailover()
         ClusterOperationHelper.add_all_nodes_or_assert(master, self._servers, credentials, self)
         bucket_ram = info.memoryQuota * 2 / 3
-        rest.create_bucket(bucket=bucket_name,
-                           ramQuotaMB=bucket_ram,
-                           proxyPort=info.moxi)
-        ready = BucketOperationHelper.wait_for_memcached(master, bucket_name)
-        nodes = rest.node_statuses()
-        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+
+        if num_buckets == 1:
+            rest.create_bucket(bucket=bucket_name,
+                               ramQuotaMB=bucket_ram,
+                               replicaNumber=replicas,
+                               proxyPort=info.moxi)
+            ready = BucketOperationHelper.wait_for_memcached(master, bucket_name)
+            nodes = rest.node_statuses()
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+            buckets = rest.get_buckets()
+        else:
+            created = BucketOperationHelper.create_multiple_buckets(master, replicas, howmany=num_buckets)
+            self.assertTrue(created, "unable to create multiple buckets")
+            buckets = rest.get_buckets()
+            for bucket in buckets:
+                ready = BucketOperationHelper.wait_for_memcached(master, bucket.name)
+                self.assertTrue(ready, msg="wait_for_memcached failed")
+                nodes = rest.node_statuses()
+                rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+
+#        self.load_data(master, bucket_name, keys_count)
+
+        for bucket in buckets:
+            inserted_keys_cnt = self.load_data(master, bucket.name, keys_count)
+            log.info('inserted {0} keys'.format(inserted_keys_cnt))
+
         msg = "rebalance failed after adding these nodes {0}".format(nodes)
         self.assertTrue(rest.monitorRebalance(), msg=msg)
         self.assertTrue(ready, "wait_for_memcached failed")
