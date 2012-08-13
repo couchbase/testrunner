@@ -160,10 +160,14 @@ class RestConnection(object):
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         http_res = self.init_http_request(self.baseUrl + 'nodes/self')
         #if node was not initialized we can't get response from 'nodes/self'
-        if http_res == '"unknown pool"':
+        if not http_res:
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
-            self.capiBaseUrl = http_res["couchApiBase"]
+            try:
+                self.capiBaseUrl = http_res["couchApiBase"]
+            except Exception as e:
+                log.error("unexpected response was gotten: {0}" % http_res)
+                raise Exception(e)
 
 
     def __init__(self, serverInfo):
@@ -183,21 +187,23 @@ class RestConnection(object):
         #determine the real couchApiBase for cluster_run
         http_res = self.init_http_request(self.baseUrl + 'nodes/self')
         #if node was not initialized we can't get response from 'nodes/self'
-        if http_res == '"unknown pool"':
+        if not http_res:
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
-            self.capiBaseUrl = http_res["couchApiBase"]
+            try:
+                self.capiBaseUrl = http_res["couchApiBase"]
+            except Exception as e:
+                log.error("unexpected response was gotten: {0}" % http_res)
+                raise Exception(e)
 
 
     def init_http_request(self, api):
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
-            if content == '"unknown pool"':
-                return content
             json_parsed = json.loads(content)
+            return json_parsed
         except ValueError:
             return ""
-        return json_parsed
 
     def active_tasks(self, serverInfo):
         api = self.capiBaseUrl + "/active_tasks"
@@ -1168,9 +1174,9 @@ class RestConnection(object):
 
 
     def delete_bucket(self, bucket='default'):
-        api = '%s%s%s' % (self.baseUrl, '/pools/default/buckets/', bucket)
+        api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
-            api = '%s%s%s' % s (self.baseUrl, '/pools/default/buckets/', bucket.name)
+            api = '%s%s%s' % s (self.baseUrl, 'pools/default/buckets/', bucket.name)
 
         status, content, header = self._http_request(api, 'DELETE')
         return status
@@ -1185,7 +1191,7 @@ class RestConnection(object):
                       proxyPort=11211,
                       bucketType='membase',
                       replica_index=1):
-        api = '{0}{1}'.format(self.baseUrl, '/pools/default/buckets')
+        api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
         #this only works for default bucket ?
         if bucket == 'default':
@@ -1223,11 +1229,12 @@ class RestConnection(object):
 
         create_start_time = time.time()
         status, content, header = self._http_request(api, 'POST', params)
-        create_time = time.time() - create_start_time
-        log.info("{0} seconds to create bucket {1}".format(create_time, bucket))
 
         if not status:
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
+
+        create_time = time.time() - create_start_time
+        log.info("{0} seconds to create bucket {1}".format(create_time, bucket))
 
         return status
 
