@@ -1,7 +1,10 @@
+import json
+import time
 import socket
 import functools
 from multiprocessing import Process, Event
 from multiprocessing.sharedctypes import Value
+from collections import defaultdict
 
 from membase.api import httplib2
 from membase.api.rest_client import RestConnection
@@ -149,6 +152,20 @@ class PerfWrapper(object):
         return decorator
 
     @staticmethod
+    def xperf_load(test):
+        @functools.wraps(test)
+        def wrapper(self, *args, **kargs):
+                """Run load phase, start unidirectional replication, collect
+                and print XDCR related metrics"""
+                PerfWrapper.multiply(test)(self, *args, **kargs)
+
+                self.start_replication(self.input.clusters[0][0],
+                                       self.input.clusters[1][0])
+
+                self.collect_stats()
+        return wrapper
+
+    @staticmethod
     def rebalance(test):
         @functools.wraps(test)
         def wrapper(self, *args, **kargs):
@@ -258,12 +275,83 @@ class XPerfTests(EVPerfClient):
         else:
             return 'east'
 
+    def get_samples(self, rest, server='explorer'):
+        # TODO: fix hardcoded cluster names
+
+        api = rest.baseUrl + \
+            "pools/default/buckets/default/" + \
+            "nodes/{0}.server.1:8091/stats?zoom=minute".format(server)
+
+        _, content, _ = rest._http_request(api)
+
+        return json.loads(content)['op']['samples']
+
+    def collect_stats(self):
+        # TODO: fix hardcoded cluster names
+
+        # Initialize rest connection to master and slave servers
+        master_rest_conn = RestConnection(self.input.clusters[0][0])
+        slave_rest_conn = RestConnection(self.input.clusters[1][0])
+
+        # Define list of metrics and stats containers
+        metrics = ('mem_used', 'curr_items', 'vb_active_ops_create',
+                   'ep_bg_fetched', 'cpu_utilization_rate')
+        stats = {'slave': defaultdict(list), 'master': defaultdict(list)}
+
+        # Calculate approximate number of relicated items per node
+        num_nodes = self.parami('num_nodes', 1) / 2
+        total_items = self.parami('items', 1000000)
+        items = 0.99 * total_items / num_nodes
+
+        # Get number of relicated items
+        curr_items = self.get_samples(slave_rest_conn)['curr_items']
+
+        # Collect stats until all items are replicated
+        while curr_items[-1] < items:
+            # Collect stats every 20 seconds
+            time.sleep(19)
+
+            # Slave stats
+            samples = self.get_samples(slave_rest_conn)
+            for metric in metrics:
+                stats['slave'][metric].extend(samples[metric][:20])
+
+            # Master stats
+            samples = self.get_samples(master_rest_conn, 'nirvana')
+            for metric in metrics:
+                stats['master'][metric].extend(samples[metric][:20])
+
+            # Update number of replicated items
+            curr_items = stats['slave']['curr_items']
+
+        # Aggregate and display stats
+        vb_active_ops_create = sum(stats['slave']['vb_active_ops_create']) /\
+            len(stats['slave']['vb_active_ops_create'])
+        print "slave> AVG vb_active_ops_create: {0}, items/sec"\
+            .format(vb_active_ops_create)
+
+        ep_bg_fetched = sum(stats['slave']['ep_bg_fetched']) /\
+            len(stats['slave']['ep_bg_fetched'])
+        print "slave> AVG ep_bg_fetched: {0}, reads/sec".format(ep_bg_fetched)
+
+        for server in stats:
+            mem_used = max(stats[server]['mem_used'])
+            print "{0}> MAX memory used: {1}, MB".format(server,
+                                                         mem_used / 1024 ** 2)
+            cpu_rate = sum(stats[server]['cpu_utilization_rate']) /\
+                len(stats[server]['cpu_utilization_rate'])
+            print "{0}> AVG CPU rate: {1}, %".format(server, cpu_rate)
+
     @PerfWrapper.xperf()
     def test_vperf_unidir(self):
         super(XPerfTests, self).test_vperf2()
 
     @PerfWrapper.xperf(bidir=True)
     def test_vperf_bidir(self):
+        super(XPerfTests, self).test_vperf2()
+
+    @PerfWrapper.xperf_load
+    def test_vperf_load(self):
         super(XPerfTests, self).test_vperf2()
 
 
