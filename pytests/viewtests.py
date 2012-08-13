@@ -421,7 +421,7 @@ class ViewBaseTests(unittest.TestCase):
         # increase number of try to 40 to test on windows
         num_tries = self.input.param('num-tries', 40)
         timeout = self.input.param('timeout', 10)
-        results = None
+        results = json.loads("{}")
         #if view name starts with "dev" then we should append the full_set
         for i in range(0, num_tries):
             try:
