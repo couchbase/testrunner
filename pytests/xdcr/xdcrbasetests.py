@@ -455,6 +455,10 @@ class XDCRBaseTest(unittest.TestCase):
         if self._failover is not None:
             timeout *= 3 / 2
 
+        #for verification src and dest clusters need more time
+        if verify_src:
+            timeout *= 3 / 2
+
         end_time = time.time() + timeout
         self._log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_nodes[0].ip))
         if verify_src:
