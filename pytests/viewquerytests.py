@@ -2005,10 +2005,22 @@ class EmployeeDataSet:
             query.expected_keys = query.expected_keys[int(q_params['skip']) + 1:]
 
         # note: inclusive end check must occur after descending
-        if 'inclusive_end' in q_params  and q_params['inclusive_end'] is not None:
+        if 'inclusive_end' in q_params  and q_params['inclusive_end']:
             inclusive_end = json.loads(q_params['inclusive_end'])
             if inclusive_end == False and 'endkey_docid' not in q_params:
-                query.expected_keys = query.expected_keys[:-1]
+                end_key = eval(q_params['end_key'])
+                query.expected_keys.reverse()
+                end_idx = -1
+                for key in query.expected_keys:
+                    if key.find("{0}_{1}_{2}".format(end_key[0],
+                                                     str(end_key[1]).zfill(2),
+                                                     str(end_key[2]).zfill(2))) > -1:
+                        end_idx = query.expected_keys.index(key)
+                    else:
+                        break
+                if end_idx > -1:
+                    query.expected_keys = query.expected_keys[end_idx + 1:]
+                query.expected_keys.reverse()
 
 class SimpleDataSet:
     def __init__(self, rest, num_docs, limit = None, reduce_fn=None):
