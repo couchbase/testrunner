@@ -36,9 +36,9 @@ class OpsDuringBackupTests(BackupBaseTest):
 
         backup_thread.start()
         data_load_thread.start()
+        data_load_thread.join()
         backup_thread.join()
         #TODO: implement a mechanism to check the backup progress to prevent backup_thread hangs up
-        data_load_thread.join()
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         kvs_before = {}

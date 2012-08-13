@@ -109,7 +109,6 @@ class RecoveryUseTransferTests(TransferBaseTest):
                 self._load_all_buckets(self.server_origin, gen_update, "update", 0)
             if("delete" in self.doc_ops):
                 self._load_all_buckets(self.server_origin, gen_delete, "delete", 0)
-                extra_items_deleted_flag = 1
             if("expire" in self.doc_ops):
                 self._load_all_buckets(self.server_origin, gen_expire, "update", self.expire_time)
                 time.sleep(self.expire_time + 1)
