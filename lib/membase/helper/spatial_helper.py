@@ -157,6 +157,10 @@ class SpatialHelper:
                 # Make "full_set=true" the default
                 if not "full_set" in params:
                     params["full_set"] = True
+                # stale=update_after is the default, but for tests it's
+                # easier to work with stale=false
+                if not "stale" in params:
+                    params["stale"] = False
                 results = self.rest.spatial_results(self.bucket, spatial,
                                                     params, limit)
                 delta = time.time() - start
