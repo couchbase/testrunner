@@ -32,6 +32,8 @@ class unidirectional(XDCRReplicationBaseTest):
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
 
     def load_with_ops(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+
         self._modify_src_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
