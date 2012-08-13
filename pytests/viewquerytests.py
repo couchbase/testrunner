@@ -156,6 +156,7 @@ class ViewQueryTests(unittest.TestCase):
 
         data_set.add_startkey_endkey_queries()
         data_set.load(self, data_set.views[0])
+        data_set.preload_matching_query_keys()
         self._query_all_views(data_set.views, verify_expected_keys=True)
 
     def test_employee_dataset_alldocs_queries(self):
@@ -1162,7 +1163,7 @@ class QueryView:
                                 result_count_stats[num_keys] += 1
                         time.sleep(delay)
 
-                    if num_keys == expected_num_docs and verify_expected_keys:
+                    if num_keys == expected_num_docs and verify_expected_keys and not self.reduce_fn:
                         QueryHelper.verify_query_ids_full(rest, query, results)
                         self.log.info("Keys in query results are equal to expected")
 
@@ -1919,26 +1920,6 @@ class EmployeeDataSet:
                 q_start_mo, q_end_mo = q_end_mo, q_start_mo
                 q_start_day, q_end_day = q_end_day, q_start_day
 
-        # note: inclusive end check must occur after descending
-        if 'inclusive_end' in q_params  and q_params['inclusive_end']:
-            inclusive_end = json.loads(q_params['inclusive_end'])
-            if inclusive_end == False and 'endkey_docid' not in q_params:
-                if descending == False:
-                    # decrement end_key
-                    if q_end_day <= 1:
-                        q_end_mo -= 1
-                        q_end_day = 28
-                    else:
-                        q_end_day -= 1
-                else:
-                    # increment start_key
-                    if q_start_day == 28:
-                        q_start_mo += 1
-                        q_start_day = 1
-                    else:
-                        q_start_day += 1
-
-
         if type_filter is None:
             types = [type_ for type_ in self.doc_id_map]
         else:
@@ -2023,6 +2004,11 @@ class EmployeeDataSet:
         if 'skip' in q_params:
             query.expected_keys = query.expected_keys[int(q_params['skip']) + 1:]
 
+        # note: inclusive end check must occur after descending
+        if 'inclusive_end' in q_params  and q_params['inclusive_end'] is not None:
+            inclusive_end = json.loads(q_params['inclusive_end'])
+            if inclusive_end == False and 'endkey_docid' not in q_params:
+                query.expected_keys = query.expected_keys[:-1]
 
 class SimpleDataSet:
     def __init__(self, rest, num_docs, limit = None, reduce_fn=None):
