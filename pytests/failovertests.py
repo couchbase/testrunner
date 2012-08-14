@@ -127,11 +127,11 @@ class FailoverTests(unittest.TestCase):
         FailoverBaseTest.common_setup(self._input, self)
 
     def tearDown(self):
-        curr_servers = []
         for server in self._servers:
-            if server.ip not in self._failed_nodes:
-                curr_servers.append(server)
-        FailoverBaseTest.common_tearDown(curr_servers, self)
+            if server.ip in self._failed_nodes:
+                shell = RemoteMachineShellConnection(server)
+                shell.start_server()
+        FailoverBaseTest.common_tearDown(self._servers, self)
 
     def test_failover_firewall(self):
         keys_count, replica, load_ratio = FailoverBaseTest.get_test_params(self._input)
