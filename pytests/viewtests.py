@@ -124,7 +124,8 @@ class ViewBaseTests(unittest.TestCase):
             if(available_ram < 256):
                 available_ram = 256
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
-            ready = BucketOperationHelper.wait_for_memcached(master, name)
+            msg = 'This not_my_vbucket error is part of wait_for_memcached method, not an issue'
+            ready = BucketOperationHelper.wait_for_memcached(master, name, log=msg)
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),
                         msg="unable to create {0} bucket".format(name))

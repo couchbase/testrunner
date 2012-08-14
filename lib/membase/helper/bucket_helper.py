@@ -184,7 +184,7 @@ class BucketOperationHelper():
         return False
 
     @staticmethod
-    def wait_for_vbuckets_ready_state(node, bucket, timeout_in_seconds=300):
+    def wait_for_vbuckets_ready_state(node, bucket, timeout_in_seconds=300, log=''):
         log = logger.Logger.get_logger()
         start_time = time.time()
         end_time = start_time + timeout_in_seconds
@@ -214,7 +214,7 @@ class BucketOperationHelper():
                     try:
                         (a, b, c) = client.get_vbucket_state(i)
                     except mc_bin_client.MemcachedError as e:
-                        log.error(e)
+                        log.error("%s: %s" % (log, e))
                         continue
                     if c.find("\x01") > 0 or c.find("\x02") > 0:
                         ready_vbuckets[i] = True
@@ -228,12 +228,12 @@ class BucketOperationHelper():
     #try to insert key in all vbuckets before returning from this function
     #bucket { 'name' : 90,'password':,'port':1211'}
     @staticmethod
-    def wait_for_memcached(node, bucket, timeout_in_seconds=300):
+    def wait_for_memcached(node, bucket, timeout_in_seconds=300, log=''):
         log = logger.Logger.get_logger()
         msg = "waiting for memcached bucket : {0} in {1} to accept set ops"
         log.info(msg.format(bucket, node.ip))
         all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
-                                                                                 bucket, timeout_in_seconds)
+                                                                                 bucket, timeout_in_seconds, log)
         #return (counter == vbucket_count) and all_vbuckets_ready
         return all_vbuckets_ready
 
