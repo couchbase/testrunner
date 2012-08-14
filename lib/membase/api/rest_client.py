@@ -166,7 +166,7 @@ class RestConnection(object):
             try:
                 self.capiBaseUrl = http_res["couchApiBase"]
             except Exception as e:
-                log.error("unexpected response was gotten: {0}" % http_res)
+                log.error("unexpected response was gotten: %s " % http_res)
                 raise Exception(e)
 
 
@@ -193,7 +193,7 @@ class RestConnection(object):
             try:
                 self.capiBaseUrl = http_res["couchApiBase"]
             except Exception as e:
-                log.error("unexpected response was gotten: {0}" % http_res)
+                log.error("unexpected response was gotten: %s " % http_res)
                 raise Exception(e)
 
 
