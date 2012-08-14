@@ -395,6 +395,12 @@ class EPerfMaster(perf.PerfBase):
             if self.parami('nru_task', PerfDefaults.nru_task) \
                 and self.is_leader:
                 self.set_nru_task()
+                self.nru_monitor = NRUMonitor(
+                    self.parami("nru_polling_freq", PerfDefaults.nru_polling_freq),
+                    self.parami("nru_reb_delay", PerfDefaults.nru_reb_delay),
+                    self)
+                self.nru_monitor.daemon = True
+                self.nru_monitor.start()
 
             self.loop(num_ops=0,
                       num_items=items,
@@ -696,9 +702,11 @@ class EPerfMaster(perf.PerfBase):
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes),
                         items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
-        rebalance_after = self.parami("rebalance_after",
+
+        if not self.parami('nru_task', PerfDefaults.nru_task):
+            rebalance_after = self.parami("rebalance_after",
                                       PerfDefaults.rebalance_after)
-        self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
+            self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                 getattr(self, "latched_rebalance"))]
 
         if self.parami("access_phase", 1) == 1:
