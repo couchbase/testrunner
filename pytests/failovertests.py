@@ -68,17 +68,22 @@ class FailoverBaseTest(unittest.TestCase):
     @staticmethod
     def load_data(master, bucket, keys_count=-1, load_ratio=-1):
         log = logger.Logger.get_logger()
-        inserted_keys, rejected_keys =\
-        MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
-                                                              name=bucket,
-                                                              ram_load_ratio=load_ratio,
-                                                              number_of_items=keys_count,
-                                                              number_of_threads=2,
-                                                              write_only=True)
+        inserted_keys_cnt = 0
+        total_inserted_keys = []
+        while inserted_keys_cnt < keys_count:
+            inserted_keys, rejected_keys_cnt =\
+            MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
+                                                                  name=bucket,
+                                                                  ram_load_ratio=load_ratio,
+                                                                  number_of_items=keys_count,
+                                                                  number_of_threads=5,
+                                                                  write_only=True)
+            total_inserted_keys.extend(inserted_keys)
+            inserted_keys_cnt = len(total_inserted_keys)
         log.info("wait until data is completely persisted on the disk")
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
-        return inserted_keys
+        return total_inserted_keys
 
     @staticmethod
     def verify_data(master, inserted_keys, bucket, test):
@@ -117,11 +122,16 @@ class FailoverTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self.bidirectional  = self._input.param("bidirectional", False)
         self._servers = self._input.servers
+        self._failed_nodes = []
         self.log = logger.Logger().get_logger()
         FailoverBaseTest.common_setup(self._input, self)
 
     def tearDown(self):
-        FailoverBaseTest.common_tearDown(self._servers, self)
+        curr_servers = []
+        for server in self._servers:
+            if server.ip not in self._failed_nodes:
+                curr_servers.append(server)
+        FailoverBaseTest.common_tearDown(curr_servers, self)
 
     def test_failover_firewall(self):
         keys_count, replica, load_ratio = FailoverBaseTest.get_test_params(self._input)
@@ -174,18 +184,20 @@ class FailoverTests(unittest.TestCase):
             msg = "replication state after waiting for up to 15 minutes : {0}"
             self.log.info(msg.format(final_replication_state))
             chosen = RebalanceHelper.pick_nodes(master, howmany=replica)
+            failed_nodes = []
             for node in chosen:
                 #let's do op
                 if failover_reason == 'stop_server':
-                    self.stop_server(node)
+                    self.stop_server(node, failed_nodes)
                     log.info("10 seconds delay to wait for membase-server to shutdown")
                     #wait for 5 minutes until node is down
                     self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
-                                    msg="node status is not unhealthy even after waiting for 5 minutes")
+                        msg="node status is not unhealthy even after waiting for 5 minutes")
+                #TODO: Refactor this piece of code
                 elif failover_reason == "firewall":
-                    RemoteUtilHelper.enable_firewall(self._servers, node, bidirectional=self.bidirectional)
+                    RemoteUtilHelper.enable_firewall(self._servers, node, failed_nodes, bidirectional=self.bidirectional)
                     self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
-                                    msg="node status is not unhealthy even after waiting for 5 minutes")
+                        msg="node status is not unhealthy even after waiting for 5 minutes")
 
                 failed_over = rest.fail_over(node.id)
                 if not failed_over:
@@ -195,11 +207,13 @@ class FailoverTests(unittest.TestCase):
                     failed_over = rest.fail_over(node.id)
                 self.assertTrue(failed_over, "unable to failover node after {0}".format(failover_reason))
                 log.info("failed over node : {0}".format(node.id))
+                failed_nodes.append(node.ip)
+            self._failed_nodes = failed_nodes
             #REMOVEME -
             log.info("10 seconds sleep after failover before invoking rebalance...")
             time.sleep(10)
             rest.rebalance(otpNodes=[node.id for node in nodes],
-                           ejectedNodes=[node.id for node in chosen])
+                ejectedNodes=[node.id for node in chosen])
             msg = "rebalance failed while removing failover nodes {0}".format(chosen)
             self.assertTrue(rest.monitorRebalance(stop_if_loop=True), msg=msg)
             FailoverBaseTest.replication_verification(master, bucket, replica, inserted_count, self)
@@ -207,20 +221,20 @@ class FailoverTests(unittest.TestCase):
             nodes = rest.node_statuses()
         FailoverBaseTest.verify_data(master, inserted_keys, bucket, self)
 
-    def stop_server(self, node):
+    def stop_server(self, node, failed_node=[]):
         log = logger.Logger.get_logger()
         for server in self._servers:
-            rest = RestConnection(server)
-            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
-                continue
-            server_ip = rest.get_nodes_self().ip
-            if server_ip == node.ip:
-                shell = RemoteMachineShellConnection(server)
-                if shell.is_membase_installed():
-                    shell.stop_membase()
-                    log.info("Membase stopped")
-                else:
-                    shell.stop_couchbase()
-                    log.info("Couchbase stopped")
-                shell.disconnect()
-                break
+            if server.ip not in failed_node:
+                rest = RestConnection(server)
+                log.info("Connected to server: {0}".format(server.ip))
+                server_ip = rest.get_nodes_self().ip
+                if server_ip == node.ip:
+                    shell = RemoteMachineShellConnection(server)
+                    if shell.is_membase_installed():
+                        shell.stop_membase()
+                        log.info("Membase stopped")
+                    else:
+                        shell.stop_couchbase()
+                        log.info("Couchbase stopped")
+                    shell.disconnect()
+                    break
