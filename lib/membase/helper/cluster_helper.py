@@ -234,7 +234,7 @@ class ClusterOperationHelper(object):
         rest = RestConnection(master)
         servers = rest.get_nodes()
         for server in servers:
-            _server = {"ip": server.ip, "port": master.port,
+            _server = {"ip": server.ip, "port": server.port,
                        "username": master.rest_username,
                        "password": master.rest_password}
             ClusterOperationHelper.flushctl_set_per_node(_server, key, val, bucket)
