@@ -197,6 +197,8 @@ class ClusterOperationHelper(object):
         master_id = rest.get_nodes_self().id
         if len(nodes) > 1:
             log.info("rebalancing all nodes in order to remove nodes")
+            rest.log_client_error("Starting rebalance from test, ejected nodes %s" %\
+                                                             [node.id for node in nodes if node.id != master_id])
             removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
                                           ejectedNodes=[node.id for node in nodes if node.id != master_id],
                                           wait_for_rebalance=wait_for_rebalance)
