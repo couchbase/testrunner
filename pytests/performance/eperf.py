@@ -241,16 +241,19 @@ class EPerfMaster(perf.PerfBase):
 
     def set_nru_task(self, tm_hour=0):
         """UTC/GMT time (hour) to schedule NRU access scanner"""
+        gmt = time.gmtime()
         if not tm_hour:
-            gmt = time.gmtime()
             tm_hour = gmt.tm_hour + 1
 
+        min_left = 60 - gmt.tm_min
         for server in self.input.servers:
             shell = RemoteMachineShellConnection(server)
             cmd = "/opt/couchbase/bin/cbepctl localhost:11210 "\
                   "set flush_param alog_task_time {0}".format(tm_hour)
             self._exec_and_log(shell, cmd)
             shell.disconnect()
+            print "access scanner will be executed on %s in %d minutes, " \
+                "at %d UTC" % (server.ip, min_left, tm_hour)
 
     # Gets the vbucket count
     def gated_start(self, clients):
