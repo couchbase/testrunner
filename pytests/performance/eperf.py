@@ -1672,3 +1672,69 @@ class ViewGen:
         queries = queries.replace(']', '%5D')
         queries = queries.replace(',', '%2C')
         return queries
+
+class NRUMonitor(threading.Thread):
+
+     CMD = "/opt/couchbase/bin/cbstats localhost:11210 "\
+           "all | grep ep_num_access_scanner_runs"
+
+     def __init__(self, freq, reb_delay, eperf):
+         self.freq = freq
+         self.reb_delay = reb_delay
+         self.eperf = eperf
+         self.shell = None
+         super(NRUMonitor, self).__init__()
+
+     def run(self):
+         print "[NRUMonitor] started running"
+
+         # TODO: evaluate all servers, smarter polling freq
+         server = self.eperf.input.servers[0]
+         self.shell = RemoteMachineShellConnection(server)
+
+         nru_num = self.nru_num = self.get_nru_num()
+         if self.nru_num < 0:
+             return
+
+         while nru_num <= self.nru_num:
+             print "[NRUMonitor] nru_num = %d, sleep for %d seconds" \
+                % (nru_num, self.freq)
+             time.sleep(self.freq)
+             nru_num = self.get_nru_num()
+             if nru_num < 0:
+                 break
+
+         self.shell.disconnect()
+
+         print "[NRUMonitor] scheduled rebalance after %d seconds"\
+             % self.reb_delay
+         self.eperf.latched_rebalance(self.reb_delay, sync=True)
+
+         print "[NRUMonitor] stopped running"
+
+     def get_nru_num(self):
+         """Retrieve how many times nru access scanner has been run"""
+         output, error = self.shell.execute_command(NRUMonitor.CMD)
+
+         if error:
+             print "unable to get nru number from %s: %s" \
+                % (self.shell.ip, error)
+             return -1
+
+         if not output:
+             print "unable to get nru number from %s: empty output" \
+                % self.shell.ip
+             return -1
+
+         try:
+             num = int(output[0].split(":")[1])
+         except  (AttributeError, IndexError, ValueError), e:
+             print "unable to get nru number from %s: output - %s, error - %s"\
+                % (self.shell.ip, output, e)
+             return -1
+
+         if num < 0:
+             print "invalid nru number: %d" % num
+             return -1
+
+         return num
