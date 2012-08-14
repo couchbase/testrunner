@@ -726,13 +726,18 @@ class PerfBase(unittest.TestCase):
         sc.reb_stats(start_time, end_time - start_time)
 
     def delayed_rebalance(self, num_nodes, delay_seconds=10,
-                          max_retries=PerfDefaults.reb_max_retries):
+                          max_retries=PerfDefaults.reb_max_retries,
+                          sync=False):
         print "delayed_rebalance"
-        t = threading.Thread(target=PerfBase.delayed_rebalance_worker,
-                             args=(self.input.servers, num_nodes,
-                             delay_seconds, self.sc, max_retries))
-        t.daemon = True
-        t.start()
+        if sync:
+            PerfBase.delayed_rebalance_worker(self.input.servers,
+                    num_nodes, delay_seconds, self.sc, max_retries)
+        else:
+            t = threading.Thread(target=PerfBase.delayed_rebalance_worker,
+                                 args=(self.input.servers, num_nodes,
+                                 delay_seconds, self.sc, max_retries))
+            t.daemon = True
+            t.start()
 
     @staticmethod
     def set_auto_compaction(server, parallel_compaction, percent_threshold):
