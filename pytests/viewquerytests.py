@@ -1705,12 +1705,12 @@ class EmployeeDataSet:
         when summed, should add up to the number of indexed docs
     """
     def add_group_count_queries(self, views=None, limit=None):
-        if views is None:
-            views = [self.views[-1]]
         if limit is None:
             limit = self.limit
 
-        for view in views:
+        for view in self.views:
+            if view.reduce_fn is None:
+                continue
             if limit:
                 view.queries += [QueryHelper({"group" : "true", "limit" : limit},
                                              min(limit,view.index_size),
