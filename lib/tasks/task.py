@@ -72,6 +72,7 @@ class NodeInitializeTask(Task):
         if info is None:
             self.state = FINISHED
             self.set_exception(Exception('unable to get information on a server %s, it is available?' % (self.server.ip)))
+            return
         self.quota = int(info.mcdMemoryReserved * 2 / 3)
         rest.init_cluster_memoryQuota(username, password, self.quota)
         self.state = CHECKING
