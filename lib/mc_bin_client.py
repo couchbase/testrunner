@@ -24,12 +24,12 @@ class MemcachedError(exceptions.Exception):
 
     def __init__(self, status, msg):
         error_msg = error_to_str(status)
-        supermsg='Memcached error #' + `status` + ' ' + `error_msg`
+        supermsg = 'Memcached error #' + `status` + ' ' + `error_msg`
         if msg: supermsg += ":  " + msg
         exceptions.Exception.__init__(self, supermsg)
 
-        self.status=status
-        self.msg=msg
+        self.status = status
+        self.msg = msg
 
     def __repr__(self):
         return "<MemcachedError #%d ``%s''>" % (self.status, self.msg)
@@ -44,11 +44,11 @@ class MemcachedClient(object):
         self.port = port
         self.timeout = timeout
         self._createConn()
-        self.r=random.Random()
+        self.r = random.Random()
         self.vbucket_count = 1024
 
     def _createConn(self):
-        self.s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         return self.s.connect_ex((self.host, self.port))
 
@@ -69,7 +69,7 @@ class MemcachedClient(object):
     def _sendMsg(self, cmd, key, val, opaque, extraHeader='', cas=0,
                  dtype=0, vbucketId=0,
                  fmt=REQ_PKT_FMT, magic=REQ_MAGIC_BYTE):
-        msg=struct.pack(fmt, magic,
+        msg = struct.pack(fmt, magic,
             cmd, len(key), len(extraHeader), dtype, vbucketId,
                 len(key) + len(extraHeader) + len(val), opaque, cas)
         _, w, _ = select.select([], [self.s], [], self.timeout)
@@ -90,7 +90,7 @@ class MemcachedClient(object):
             else:
                 raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
         assert len(response) == MIN_RECV_PACKET
-        magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas=\
+        magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas = \
             struct.unpack(RES_PKT_FMT, response)
 
         rv = ""
@@ -114,7 +114,7 @@ class MemcachedClient(object):
             "expected opaque %x, got %x" % (myopaque, opaque)
         if errcode:
             rv += " for vbucket :{0} to mc {1}:{2}".format(self.vbucketId, self.host, self.port)
-            raise MemcachedError(errcode,  rv)
+            raise MemcachedError(errcode, rv)
         return cmd, opaque, cas, keylen, extralen, rv
 
     def _handleSingleResponse(self, myopaque):
@@ -123,7 +123,7 @@ class MemcachedClient(object):
 
     def _doCmd(self, cmd, key, val, extraHeader='', cas=0):
         """Send a command and await its response."""
-        opaque=self.r.randint(0, 2**32)
+        opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(cmd, key, val, opaque, extraHeader, cas)
         return self._handleSingleResponse(opaque)
 
@@ -134,79 +134,88 @@ class MemcachedClient(object):
     def _cat(self, cmd, key, cas, val):
         return self._doCmd(cmd, key, val, '', cas)
 
-    def append(self, key, value, cas=0, vbucket=-1):
+    def append(self, key, value, cas=0, vbucket= -1):
         self._set_vbucket(key, vbucket)
         return self._cat(memcacheConstants.CMD_APPEND, key, cas, value)
 
-    def prepend(self, key, value, cas=0, vbucket=-1):
+    def prepend(self, key, value, cas=0, vbucket= -1):
         self._set_vbucket(key, vbucket)
         return self._cat(memcacheConstants.CMD_PREPEND, key, cas, value)
 
     def __incrdecr(self, cmd, key, amt, init, exp):
-        something, cas, val=self._doCmd(cmd, key, '',
+        something, cas, val = self._doCmd(cmd, key, '',
             struct.pack(memcacheConstants.INCRDECR_PKT_FMT, amt, init, exp))
         return struct.unpack(INCRDECR_RES_FMT, val)[0], cas
 
-    def incr(self, key, amt=1, init=0, exp=0, vbucket=-1):
+    def incr(self, key, amt=1, init=0, exp=0, vbucket= -1):
         """Increment or create the named counter."""
         self._set_vbucket(key, vbucket)
         return self.__incrdecr(memcacheConstants.CMD_INCR, key, amt, init, exp)
 
-    def decr(self, key, amt=1, init=0, exp=0, vbucket=-1):
+    def decr(self, key, amt=1, init=0, exp=0, vbucket= -1):
         """Decrement or create the named counter."""
         self._set_vbucket(key, vbucket)
         return self.__incrdecr(memcacheConstants.CMD_DECR, key, amt, init, exp)
 
-    def set(self, key, exp, flags, val, vbucket=-1):
+    def set(self, key, exp, flags, val, vbucket= -1):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
         return self._mutate(memcacheConstants.CMD_SET, key, exp, flags, 0, val)
 
-    def send_set(self, key, exp, flags, val, vbucket=-1):
+    def send_set(self, key, exp, flags, val, vbucket= -1):
         """Set a value in the memcached server without handling the response"""
         self._set_vbucket(key, vbucket)
         opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(memcacheConstants.CMD_SET, key, val, opaque, struct.pack(SET_PKT_FMT, flags, exp), 0)
 
-    def add(self, key, exp, flags, val, vbucket=-1):
+    def add(self, key, exp, flags, val, vbucket= -1):
         """Add a value in the memcached server iff it doesn't already exist."""
         self._set_vbucket(key, vbucket)
         return self._mutate(memcacheConstants.CMD_ADD, key, exp, flags, 0, val)
 
-    def replace(self, key, exp, flags, val, vbucket=-1):
+    def replace(self, key, exp, flags, val, vbucket= -1):
         """Replace a value in the memcached server iff it already exists."""
         self._set_vbucket(key, vbucket)
         return self._mutate(memcacheConstants.CMD_REPLACE, key, exp, flags, 0,
             val)
+    def observe(self, key, vbucket= -1):
+        """Observe a key for persistence and replication."""
+        self._set_vbucket(key, vbucket)
+        value = struct.pack('>HH', self.vbucketId, len(key)) + key
+        opaque, cas, data = self._doCmd(memcacheConstants.CMD_OBSERVE, '', value)
+        rep_time = (cas & 0xFFFFFFFF)
+        persist_time = (cas >> 32) & 0xFFFFFFFF
+        persisted = struct.unpack('>B', data[4 + len(key)])[0]
+        return opaque, rep_time, persist_time, persisted
 
     def __parseGet(self, data, klen=0):
-        flags=struct.unpack(memcacheConstants.GET_RES_FMT, data[-1][:4])[0]
+        flags = struct.unpack(memcacheConstants.GET_RES_FMT, data[-1][:4])[0]
         return flags, data[1], data[-1][4 + klen:]
 
-    def get(self, key, vbucket=-1):
+    def get(self, key, vbucket= -1):
         """Get the value for a given key within the memcached server."""
         self._set_vbucket(key, vbucket)
-        parts=self._doCmd(memcacheConstants.CMD_GET, key, '')
+        parts = self._doCmd(memcacheConstants.CMD_GET, key, '')
 
         return self.__parseGet(parts)
 
-    def send_get(self, key, vbucket=-1):
+    def send_get(self, key, vbucket= -1):
         """ sends a get message without parsing the response """
         self._set_vbucket(key, vbucket)
         opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(memcacheConstants.CMD_GET, key, '', opaque)
 
-    def getl(self, key, exp=15, vbucket=-1):
+    def getl(self, key, exp=15, vbucket= -1):
         """Get the value for a given key within the memcached server."""
         self._set_vbucket(key, vbucket)
-        parts=self._doCmd(memcacheConstants.CMD_GET_LOCKED, key, '',
+        parts = self._doCmd(memcacheConstants.CMD_GET_LOCKED, key, '',
             struct.pack(memcacheConstants.GETL_PKT_FMT, exp))
         return self.__parseGet(parts)
 
-    def getr(self, key, vbucket=-1):
+    def getr(self, key, vbucket= -1):
         """Get the value for a given key within the memcached server from a replica vbucket."""
         self._set_vbucket(key, vbucket)
-        parts=self._doCmd(memcacheConstants.CMD_GET_REPLICA, key, '')
+        parts = self._doCmd(memcacheConstants.CMD_GET_REPLICA, key, '')
         return self.__parseGet(parts, len(key))
 
     def __parseMeta(self, data):
@@ -216,15 +225,15 @@ class MemcachedClient(object):
         meta = data[-1][6:6 + length]
         return (meta_type, flags, meta)
 
-    def getMeta(self, key, vbucket=-1):
+    def getMeta(self, key, vbucket= -1):
         """Get the metadata for a given key within the memcached server."""
         self._set_vbucket(key, vbucket)
-        parts=self._doCmd(memcacheConstants.CMD_GET_META, key, '')
+        parts = self._doCmd(memcacheConstants.CMD_GET_META, key, '')
         return self.__parseMeta(parts)
 
-    def getRev(self, key, vbucket=-1):
+    def getRev(self, key, vbucket= -1):
         """Get the revision for a given key within the memcached server."""
-        (meta_type, flags, meta_data) = self.getMeta(key, vbucket=-1)
+        (meta_type, flags, meta_data) = self.getMeta(key, vbucket= -1)
         if meta_type != memcacheConstants.META_REVID:
             raise ValueError("Invalid meta type %x" % meta_type)
         try:
@@ -238,22 +247,22 @@ class MemcachedClient(object):
                 "Error unpacking rev: ({0}) Rev parts we have:: seqno: {1} cas: {2} exp: {3} flags_other: {4}".format(ex, seqno, cas, exp_flags, flags_other))
         return (seqno, cas, exp_flags, flags_other)
 
-    def cas(self, key, exp, flags, oldVal, val, vbucket=-1):
+    def cas(self, key, exp, flags, oldVal, val, vbucket= -1):
         """CAS in a new value for the given key and comparison value."""
         self._set_vbucket(key, vbucket)
         self._mutate(memcacheConstants.CMD_SET, key, exp, flags,
             oldVal, val)
 
-    def touch(self, key, exp, vbucket=-1):
+    def touch(self, key, exp, vbucket= -1):
         """Touch a key in the memcached server."""
         self._set_vbucket(key, vbucket)
         return self._doCmd(memcacheConstants.CMD_TOUCH, key, '',
             struct.pack(memcacheConstants.TOUCH_PKT_FMT, exp))
 
-    def gat(self, key, exp, vbucket=-1):
+    def gat(self, key, exp, vbucket= -1):
         """Get the value for a given key and touch it within the memcached server."""
         self._set_vbucket(key, vbucket)
-        parts=self._doCmd(memcacheConstants.CMD_GAT, key, '',
+        parts = self._doCmd(memcacheConstants.CMD_GAT, key, '',
             struct.pack(memcacheConstants.GAT_PKT_FMT, exp))
         return self.__parseGet(parts)
 
@@ -334,19 +343,19 @@ class MemcachedClient(object):
         self.vbucketId = vbucket
         return self._doCmd(memcacheConstants.CMD_DELETE_VBUCKET, '', '')
 
-    def evict_key(self, key, vbucket=-1):
+    def evict_key(self, key, vbucket= -1):
         self._set_vbucket(key, vbucket)
         return self._doCmd(memcacheConstants.CMD_EVICT_KEY, key, '')
 
-    def getMulti(self, keys, vbucket=-1):
+    def getMulti(self, keys, vbucket= -1):
         """Get values for any available keys in the given iterable.
 
         Returns a dict of matched keys to their values."""
-        opaqued=dict(enumerate(keys))
-        terminal=len(opaqued)+10
+        opaqued = dict(enumerate(keys))
+        terminal = len(opaqued) + 10
         # Send all of the keys in quiet
         vbs = set()
-        for k,v in opaqued.iteritems():
+        for k, v in opaqued.iteritems():
             self._set_vbucket(v, vbucket)
             vbs.add(self.vbucketId)
             self._sendCmd(memcacheConstants.CMD_GETQ, v, '', k)
@@ -356,20 +365,20 @@ class MemcachedClient(object):
             self._sendCmd(memcacheConstants.CMD_NOOP, '', '', terminal)
 
         # Handle the response
-        rv={}
+        rv = {}
         for vb in vbs:
             self.vbucketId = vb
-            done=False
+            done = False
             while not done:
-                opaque, cas, data=self._handleSingleResponse(None)
+                opaque, cas, data = self._handleSingleResponse(None)
                 if opaque != terminal:
-                    rv[opaqued[opaque]]=self.__parseGet((opaque, cas, data))
+                    rv[opaqued[opaque]] = self.__parseGet((opaque, cas, data))
                 else:
-                    done=True
+                    done = True
 
         return rv
 
-    def setMulti(self, exp, flags, items, vbucket=-1):
+    def setMulti(self, exp, flags, items, vbucket= -1):
         """Multi-set (using setq).
 
         Give me (key, value) pairs."""
@@ -378,13 +387,13 @@ class MemcachedClient(object):
         if hasattr(items, 'iteritems'):
             items = items.iteritems()
 
-        opaqued=dict(enumerate(items))
-        terminal=len(opaqued)+10
-        extra=struct.pack(SET_PKT_FMT, flags, exp)
+        opaqued = dict(enumerate(items))
+        terminal = len(opaqued) + 10
+        extra = struct.pack(SET_PKT_FMT, flags, exp)
 
         # Send all of the keys in quiet
         vbs = set()
-        for opaque,kv in opaqued.iteritems():
+        for opaque, kv in opaqued.iteritems():
             self._set_vbucket(kv[0], vbucket)
             vbs.add(self.vbucketId)
             self._sendCmd(memcacheConstants.CMD_SETQ, kv[0], kv[1], opaque, extra)
@@ -397,7 +406,7 @@ class MemcachedClient(object):
         failed = []
         for vb in vbs:
             self.vbucketId = vb
-            done=False
+            done = False
             while not done:
                 try:
                     opaque, cas, data = self._handleSingleResponse(None)
@@ -409,7 +418,7 @@ class MemcachedClient(object):
 
     def stats(self, sub=''):
         """Get stats."""
-        opaque=self.r.randint(0, 2**32)
+        opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(memcacheConstants.CMD_STAT, sub, '', opaque)
         done = False
         rv = {}
@@ -425,7 +434,7 @@ class MemcachedClient(object):
         """Send a noop command."""
         return self._doCmd(memcacheConstants.CMD_NOOP, '', '')
 
-    def delete(self, key, cas=0, vbucket=-1):
+    def delete(self, key, cas=0, vbucket= -1):
         """Delete the value for a given key within the memcached server."""
         self._set_vbucket(key, vbucket)
         return self._doCmd(memcacheConstants.CMD_DELETE, key, '', '', cas)
@@ -543,7 +552,7 @@ class MemcachedClient(object):
         """Reset the replication chain."""
         return self._doCmd(memcacheConstants.CMD_RESET_REPLICATION_CHAIN, '', '', '', 0)
 
-    def _set_vbucket(self, key, vbucket=-1):
+    def _set_vbucket(self, key, vbucket= -1):
         if vbucket < 0:
             self.vbucketId = (((zlib.crc32(key)) >> 16) & 0x7fff) & (self.vbucket_count - 1)
         else:
