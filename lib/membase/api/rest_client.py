@@ -187,14 +187,14 @@ class RestConnection(object):
         #determine the real couchApiBase for cluster_run
         http_res = self.init_http_request(self.baseUrl + 'nodes/self')
         #couchApiBase appeared in version 2.*
-        if not http_res or http_res["version"][0:2] == "1.":
-            self.capiBaseUrl = self.baseUrl + "/couchBase"
-        else:
-            try:
+        try:
+            if not http_res or http_res["version"][0:2] == "1.":
+                self.capiBaseUrl = self.baseUrl + "/couchBase"
+            else:
                 self.capiBaseUrl = http_res["couchApiBase"]
-            except Exception as e:
-                log.error("unexpected response was gotten: %s " % http_res)
-                raise Exception(e)
+        except Exception as e:
+            log.error("unexpected response was gotten: %s " % http_res)
+            raise Exception(e)
 
 
     def init_http_request(self, api):
