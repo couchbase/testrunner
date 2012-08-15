@@ -3,6 +3,7 @@ from transfer.transfer_base import TransferBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, Bucket
+import time
 
 class RecoveryUseTransferTests(TransferBaseTest):
 
