@@ -19,10 +19,12 @@ class RecoveryUseTransferTests(TransferBaseTest):
             if times_tear_down_called > 1 :
                 self.shell.delete_backupFile(self.backup_location)
                 self.shell.disconnect()
+                del self.buckets
         if self.input.param("skip_cleanup", True):
             if self.case_number > 1 or self.times_teardown_called >1:
                 self.shell.delete_backupFile(self.backup_location)
                 self.shell.disconnect()
+                del self.buckets
         self.times_teardown_called +=1
 
     def recover_to_cbserver(self):
@@ -55,9 +57,10 @@ class RecoveryUseTransferTests(TransferBaseTest):
                                                                                  self.server_recovery.port,
                                                                                  bucket.name, bucket.name)
             self.shell.execute_cbtransfer(transfer_source, transfer_destination)
+        del kvs_before
 
         self._wait_for_stats_all_buckets([self.server_recovery])
-        self._verify_all_buckets(self.server_recovery, timeout=self.wait_timeout*4)
+        self._verify_all_buckets(self.server_recovery, timeout=self.wait_timeout*50)
         self._verify_stats_all_buckets([self.server_recovery])
 
     def recover_to_backupdir(self):
@@ -91,10 +94,11 @@ class RecoveryUseTransferTests(TransferBaseTest):
         self._create_standard_buckets(self.server_origin, self.standard_buckets)
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
+        del kvs_before
 
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
         self._wait_for_stats_all_buckets([self.server_origin])
-        self._verify_all_buckets(self.server_origin, timeout=self.wait_timeout*4)
+        self._verify_all_buckets(self.server_origin, timeout=self.wait_timeout*50)
         self._verify_stats_all_buckets([self.server_origin])
 
     def load_data(self):
