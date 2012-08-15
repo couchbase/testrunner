@@ -44,26 +44,24 @@ class OpsDuringBackupTests(BackupBaseTest):
         kvs_before = {}
         for bucket in self.buckets:
             kvs_before[bucket.name] = bucket.kvs[2]
-
         self._all_buckets_delete(self.master)
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
         for bucket in self.buckets:
             bucket.kvs[2] = kvs_before[bucket.name]
-
+        del kvs_before
         bucket_names = [bucket.name for bucket in self.buckets]
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
 
         for bucket in self.buckets:
             del bucket.kvs[1]
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-        self._verify_all_buckets(self.master, 2, timeout=self.wait_timeout*4) #do verification only with kvstores[2]
+        self._verify_all_buckets(self.master, 2, timeout=self.wait_timeout*50) #do verification only with kvstores[2]
 
     def CreateUpdateDeleteExpireDuringBackup(self):
         """Backup the items during mutation on existing items is running.
@@ -106,18 +104,17 @@ class OpsDuringBackupTests(BackupBaseTest):
         kvs_before = {}
         for bucket in self.buckets:
             kvs_before[bucket.name] = bucket.kvs[1]
-
         self._all_buckets_delete(self.master)
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
+        del kvs_before
         bucket_names = [bucket.name for bucket in self.buckets]
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
 

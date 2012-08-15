@@ -6,6 +6,7 @@ from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, Bucket
 from memcached.helper.data_helper import VBucketAwareMemcached
+import gc
 
 class OpsBeforeBackupTests(BackupBaseTest):
 
@@ -48,6 +49,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
             kvs_before[bucket.name] = bucket.kvs[1]
         bucket_names = [bucket.name for bucket in self.buckets]
         self._all_buckets_delete(self.master)
+        gc.collect()
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
@@ -58,6 +60,8 @@ class OpsBeforeBackupTests(BackupBaseTest):
 
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
+        del kvs_before
+        gc.collect()
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
@@ -94,8 +98,8 @@ class OpsBeforeBackupTests(BackupBaseTest):
         kvs_before = {}
         for bucket in self.buckets:
             kvs_before[bucket.name] = bucket.kvs[1]
-
         self._all_buckets_delete(self.master)
+        gc.collect()
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
@@ -106,6 +110,8 @@ class OpsBeforeBackupTests(BackupBaseTest):
 
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
+        del kvs_before
+        gc.collect()
         bucket_names = [bucket.name for bucket in self.buckets]
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
 
@@ -150,7 +156,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
                         partition.delete(key)  #we delete keys whose prefix does not match the value assigned to -k in KVStore
                         bucket.kvs[kv_store].release_partition(key)
         if single_node_flag is False:
-            self._verify_all_buckets(server, timeout=self.wait_timeout*4)
+            self._verify_all_buckets(server, timeout=self.wait_timeout*50)
         else:
             self.verify_single_node(server)
 
@@ -182,4 +188,4 @@ class OpsBeforeBackupTests(BackupBaseTest):
                     partition.delete(key)
                     bucket.kvs[kv_store].release_partition(key)
 
-        self._verify_all_buckets(server, timeout=self.wait_timeout*4)
+        self._verify_all_buckets(server, timeout=self.wait_timeout*50)
