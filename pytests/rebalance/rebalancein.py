@@ -273,7 +273,7 @@ class RebalanceInTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 2)
         self.disable_compaction()
         fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.servers[0],
-                         prefix + ddoc_name, fragmentation_value, self.default_bucket_name, timeout=20)
+                         prefix + ddoc_name, fragmentation_value, self.default_bucket_name)
         end_time = time.time() + self.wait_timeout * 10
         # generate load until fragmentation reached
         while fragmentation_monitor.state != "FINISHED" and end_time > time.time():

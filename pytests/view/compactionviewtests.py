@@ -37,8 +37,7 @@ class CompactionViewTests(ViewBaseTest):
         fragmentation_monitor = \
             self.cluster.async_monitor_view_fragmentation(server,
                                                           ddoc_name,
-                                                          fragmentation_value = 80,
-                                                          timeout = 20)
+                                                          fragmentation_value=80)
 
         # generate load until fragmentation reached
         while fragmentation_monitor.state != "FINISHED":

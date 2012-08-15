@@ -90,7 +90,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp = 0, flag=0):
+    def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, flag=0):
         _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag)
         self.task_manager.schedule(_task)
         return _task
@@ -232,7 +232,7 @@ class Cluster(object):
         _task = self.async_rebalance(servers, to_add, to_remove)
         return _task.result(timeout)
 
-    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp = 0, timeout=None, flag=0):
+    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, timeout=None, flag=0):
         _task = self.async_load_gen_docs(server, bucket, generator, kv_store, op_type, exp, flag)
         return _task.result(timeout)
 
@@ -270,7 +270,7 @@ class Cluster(object):
     def shutdown(self, force=False):
         self.task_manager.shutdown(force)
 
-    def async_create_view(self, server, design_doc_name, view, bucket = "default"):
+    def async_create_view(self, server, design_doc_name, view, bucket="default"):
         """Asynchronously creates a views in a design doc
 
         Parameters:
@@ -285,7 +285,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def create_view(self, server, design_doc_name, view, bucket = "default", timeout=None):
+    def create_view(self, server, design_doc_name, view, bucket="default", timeout=None):
         """Synchronously creates a views in a design doc
 
         Parameters:
@@ -299,7 +299,7 @@ class Cluster(object):
         _task = self.async_create_view(server, design_doc_name, view, bucket)
         return _task.result(timeout)
 
-    def async_delete_view(self, server, design_doc_name, view, bucket = "default"):
+    def async_delete_view(self, server, design_doc_name, view, bucket="default"):
         """Asynchronously deletes a views in a design doc
 
         Parameters:
@@ -314,7 +314,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def delete_view(self, server, design_doc_name, view, bucket = "default", timeout=None):
+    def delete_view(self, server, design_doc_name, view, bucket="default", timeout=None):
         """Synchronously deletes a views in a design doc
 
         Parameters:
@@ -330,7 +330,7 @@ class Cluster(object):
 
 
     def async_query_view(self, server, design_doc_name, view_name, query,
-                         expected_rows = None, bucket = "default", retry_time = 2):
+                         expected_rows=None, bucket="default", retry_time=2):
         """Asynchronously query a views in a design doc
 
         Parameters:
@@ -348,7 +348,7 @@ class Cluster(object):
         return _task
 
     def query_view(self, server, design_doc_name, view_name, query,
-                   expected_rows = None, bucket = "default", retry_time = 2, timeout=None):
+                   expected_rows=None, bucket="default", retry_time=2, timeout=None):
         """Synchronously query a views in a design doc
 
         Parameters:
@@ -365,7 +365,7 @@ class Cluster(object):
         return _task.result(timeout)
 
 
-    def modify_fragmentation_config(self, server, config, bucket = "default", timeout=None):
+    def modify_fragmentation_config(self, server, config, bucket="default", timeout=None):
         """Synchronously modify fragmentation configuration spec
 
         Parameters:
@@ -384,8 +384,7 @@ class Cluster(object):
     def async_monitor_view_fragmentation(self, server,
                                          design_doc_name,
                                          fragmentation_value,
-                                         bucket = "default",
-                                         timeout = None):
+                                         bucket="default"):
         """Asynchronously monitor view fragmentation.
 
            When <fragmentation_value> is reached on the
@@ -405,6 +404,7 @@ class Cluster(object):
                                              fragmentation_value, bucket)
         self.task_manager.schedule(_task)
         return _task
+
     def async_generate_expected_view_results(self, doc_generators, view, query):
         """Asynchronously generate expected view query results
 
@@ -420,7 +420,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def generate_expected_view_query_results(self, doc_generators, view, query, timeout = None):
+    def generate_expected_view_query_results(self, doc_generators, view, query, timeout=None):
         """Synchronously generate expected view query results
 
         Parameters:
@@ -435,7 +435,7 @@ class Cluster(object):
         return _task.result(timeout)
 
 
-    def async_view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs = 20, bucket = "default", query_timeout = 20):
+    def async_view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs=20, bucket="default", query_timeout=20):
         """Asynchronously query a views in a design doc and does full verification of results
 
         Parameters:
@@ -455,7 +455,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs = 20, bucket = "default", query_timeout = 20, timeout = None):
+    def view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs=20, bucket="default", query_timeout=20, timeout=None):
         """Synchronously query a views in a design doc and does full verification of results
 
         Parameters:
@@ -479,8 +479,8 @@ class Cluster(object):
     def monitor_view_fragmentation(self, server,
                                    design_doc_name,
                                    fragmentation_value,
-                                   bucket = "default",
-                                   timeout = None):
+                                   bucket="default",
+                                   timeout=None):
         """Synchronously monitor view fragmentation.
 
            When <fragmentation_value> is reached on the
@@ -502,7 +502,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task.result(timeout)
 
-    def async_compact_view(self, server, design_doc_name, bucket = "default"):
+    def async_compact_view(self, server, design_doc_name, bucket="default"):
         """Asynchronously run view compaction.
 
         Compacts index file represented by views within the specified <design_doc_name>
@@ -520,7 +520,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def compact_view(self, server, design_doc_name, bucket = "default", timeout=None):
+    def compact_view(self, server, design_doc_name, bucket="default", timeout=None):
         """Synchronously run view compaction.
 
         Compacts index file represented by views within the specified <design_doc_name>

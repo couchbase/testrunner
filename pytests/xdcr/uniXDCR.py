@@ -299,7 +299,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self.disable_compaction()
         fragmentation_monitor = self._cluster_helper.async_monitor_view_fragmentation(self.src_master,
-            prefix + ddoc_name, self.fragmentation_value, "default", timeout=20)
+            prefix + ddoc_name, self.fragmentation_value, "default")
 
         #generate load until fragmentation reached
         while fragmentation_monitor.state != "FINISHED":

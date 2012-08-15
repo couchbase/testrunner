@@ -637,8 +637,7 @@ class CreateDeleteViewTests(ViewBaseTest):
                 fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
                                                                                       ddoc_name,
                                                                                       self.fragmentation_value,
-                                                                                      'default',
-                                                                                      timeout=20)
+                                                                                      'default')
                 # generate load until fragmentation reached
                 while fragmentation_monitor.state != "FINISHED":
                     # update docs to create fragmentation
