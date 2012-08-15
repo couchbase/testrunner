@@ -27,8 +27,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     Once all nodes have been rebalanced the test is finished."""
     def rebalance_out_with_ops(self):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
-        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items *3 / 2)
-        servs_out = [self.servers[self.num_servers -i -1] for i in range(self.nodes_out)]
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
+        servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
         rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
         # define which doc's ops will be performed during rebalancing
         # allows multiple of them but one by one
@@ -55,14 +55,14 @@ class RebalanceOutTests(RebalanceBaseTest):
     than we wait for the disk queues to drain,
     and then verify that there has been no data loss."""
     def rebalance_out_get_random_key(self):
-        servs_out = [self.servers[self.num_servers -i -1] for i in range(self.nodes_out)]
+        servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
         # get random keys for new added nodes
         rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.num_servers)]
         list_threads = []
         for rest in rest_cons:
               t = Thread(target=rest.get_random_key,
                        name="get_random_key",
-                       args=(self.default_bucket_name, ))
+                       args=(self.default_bucket_name,))
               list_threads.append(t)
               t.start()
         [t.join() for t in list_threads]
@@ -80,7 +80,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             for rest in rest_cons:
                 t = Thread(target=rest.get_random_key,
                        name="get_random_key",
-                       args=(self.default_bucket_name, ))
+                       args=(self.default_bucket_name,))
                 list_threads.append(t)
                 temp_result.append(rest.get_random_key(self.default_bucket_name))
 
@@ -119,12 +119,12 @@ class RebalanceOutTests(RebalanceBaseTest):
                     self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
                 elif("create" in self.doc_ops):
                     # 1/2th of initial data will be added in each iteration
-                    gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items*(1 +i ) / 2.0 , end=self.num_items * (1 + i / 2.0))
+                    gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (1 + i) / 2.0 , end=self.num_items * (1 + i / 2.0))
                     self._load_all_buckets(self.servers[0], gen_create, "create", 0)
                 elif("delete" in self.doc_ops):
                     # 1/(num_servers) of initial data will be removed after each iteration
                     # at the end we should get empty base( or couple items)
-                    gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers -1.0))) + 1, end=int(self.num_items *( 1- (i - 1) / (self.num_servers -1.0))))
+                    gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
                     self._load_all_buckets(self.servers[0], gen_delete, "delete", 0)
             rebalance.result()
             self._wait_for_stats_all_buckets(self.servers[:i])
@@ -158,7 +158,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         for task in tasks:
             task.result(self.wait_timeout * 2)
         self.perform_verify_queries(num_views, prefix, ddoc_name, query)
-        servs_out=self.servers[-self.nodes_out:]
+        servs_out = self.servers[-self.nodes_out:]
         rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
         time.sleep(self.wait_timeout / 5)
         #see that the result of view queries are the same as expected during the test
@@ -221,7 +221,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         if master_restart:
             warmup_node = self.master
         else:
-            warmup_node = self.servers[len(self.servers) - self.nodes_out -1]
+            warmup_node = self.servers[len(self.servers) - self.nodes_out - 1]
         servs_out = self.servers[len(self.servers) - self.nodes_out:]
         shell = RemoteMachineShellConnection(warmup_node)
         shell.stop_couchbase()
@@ -248,7 +248,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     def rebalance_out_with_ddoc_compaction(self):
         num_views = self.input.param("num_views", 5)
         fragmentation_value = self.input.param("fragmentation_value", 80)
-        is_dev_ddoc = self.input.param("is_dev_ddoc", True)
+        # now dev_ indexes are not auto-updated, doesn't work with dev view
+        is_dev_ddoc = False
         views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
@@ -263,19 +264,23 @@ class RebalanceOutTests(RebalanceBaseTest):
         self.disable_compaction()
         fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.servers[0],
                          prefix + ddoc_name, fragmentation_value, self.default_bucket_name, timeout=20)
+        end_time = time.time() + self.wait_timeout * 10
         # generate load until fragmentation reached
-        while fragmentation_monitor.state != "FINISHED":
+        while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
             # update docs to create fragmentation
             self._load_all_buckets(self.master, self.gen_update, "update", 0)
             for view in views:
                 # run queries to create indexes
                 query = {"stale" : "false"}
                 self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+
+        if end_time < time.time():
+            self.fail("impossible to reach compaction value after %s sec" % self.wait_timeout * 10)
         fragmentation_monitor.result()
 
         compaction_task = self.cluster.async_compact_view(self.servers[0], prefix + ddoc_name, self.default_bucket_name)
 
-        servs_out=self.servers[-self.nodes_out:]
+        servs_out = self.servers[-self.nodes_out:]
         rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
         result = compaction_task.result()
         self.assertTrue(result)
