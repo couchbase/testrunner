@@ -173,19 +173,19 @@ class ClusterOperationHelper(object):
     def start_cluster(servers):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
-            if shell.is_membase_installed():
-                shell.start_membase()
-            else:
+            if shell.is_couchbase_installed():
                 shell.start_couchbase()
+            else:
+                shell.start_membase()
 
     @staticmethod
     def stop_cluster(servers):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
-            if shell.is_membase_installed():
-                shell.stop_membase()
-            else:
+            if shell.is_couchbase_installed():
                 shell.stop_couchbase()
+            else:
+                shell.stop_membase()
 
     @staticmethod
     def cleanup_cluster(servers, wait_for_rebalance=True):
@@ -197,7 +197,7 @@ class ClusterOperationHelper(object):
         master_id = rest.get_nodes_self().id
         if len(nodes) > 1:
             log.info("rebalancing all nodes in order to remove nodes")
-            rest.log_client_error("Starting rebalance from test, ejected nodes %s" %\
+            rest.log_client_error("Starting rebalance from test, ejected nodes %s" % \
                                                              [node.id for node in nodes if node.id != master_id])
             removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
                                           ejectedNodes=[node.id for node in nodes if node.id != master_id],

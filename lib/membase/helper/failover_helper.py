@@ -27,7 +27,7 @@ class FailoverHelper(object):
             self.test.fail(num_nodes_mismatch.format(len(nodes), howmany))
         master_node = rest.get_nodes_self()
         #when selecting make sure we dont pick the master node
-        selection=[n for n in nodes if n.id!=master_node.id]
+        selection = [n for n in nodes if n.id != master_node.id]
 
         shuffle(selection)
         failed = selection[0:howmany]
@@ -75,13 +75,12 @@ class FailoverHelper(object):
                 # if its 8091 then do ssh otherwise use ns_servr
                 if node.port == 8091:
                     shell = RemoteMachineShellConnection(server)
-                    if shell.is_membase_installed():
-                        shell.stop_membase()
-                        self.log.info("Membase stopped")
-                    else:
+                    if shell.is_couchbase_installed():
                         shell.stop_couchbase()
                         self.log.info("Couchbase stopped")
-                    shell.disconnect()
+                    else:
+                        shell.stop_membase()
+                        self.log.info("Membase stopped")
                     break
                 else:
                     self.log.info("running {0}".format(stop_cluster.format(node.id)))

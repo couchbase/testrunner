@@ -194,13 +194,13 @@ class PerfBase(unittest.TestCase):
             # Database fragmentation threshold
             db_compaction = self.parami("db_compaction",
                                         PerfDefaults.db_compaction)
-            print "[perf.setUp] database compaction = %d" %db_compaction
+            print "[perf.setUp] database compaction = %d" % db_compaction
 
             # ep_engine fragementation threshold
             ep_compaction = self.parami("ep_compaction",
                                         PerfDefaults.ep_compaction)
             self.set_ep_compaction(ep_compaction)
-            print "[perf.setUp] ep_engine compaction = %d" %ep_compaction
+            print "[perf.setUp] ep_engine compaction = %d" % ep_compaction
 
             # View fragmentation threshold
             if disable_view_compaction:
@@ -343,16 +343,7 @@ class PerfBase(unittest.TestCase):
     def get_data_files(self, remote, bucket, num_nodes, db_size):
         base = 'https://s3.amazonaws.com/database-analysis'
         dir = '/tmp/'
-        if remote.is_membase_installed():
-            dir = dir + '/membase/{0}-{1}-{2}/'.format(num_nodes, 1024,
-                                                       db_size)
-            output, error = remote.execute_command('mkdir -p {0}'.format(dir))
-            remote.log_command_output(output, error)
-            file = '{0}_mb.tar.gz'.format(bucket)
-            base_url = base + '/membase/{0}-{1}-{2}/{3}'.format(num_nodes,
-                                                                1024, db_size,
-                                                                file)
-        else:
+        if remote.is_couchbase_installed():
             dir = dir + '/couchbase/{0}-{1}-{2}/'.format(num_nodes, 256,
                                                          db_size)
             output, error = remote.execute_command('mkdir -p {0}'.format(dir))
@@ -361,6 +352,16 @@ class PerfBase(unittest.TestCase):
             base_url = base + '/couchbase/{0}-{1}-{2}/{3}'.format(num_nodes,
                                                                   256, db_size,
                                                                   file)
+        else:
+            dir = dir + '/membase/{0}-{1}-{2}/'.format(num_nodes, 1024,
+                                                       db_size)
+            output, error = remote.execute_command('mkdir -p {0}'.format(dir))
+            remote.log_command_output(output, error)
+            file = '{0}_mb.tar.gz'.format(bucket)
+            base_url = base + '/membase/{0}-{1}-{2}/{3}'.format(num_nodes,
+                                                                1024, db_size,
+                                                                file)
+
 
         info = remote.extract_remote_info()
         wget_command = 'wget'
@@ -382,16 +383,16 @@ class PerfBase(unittest.TestCase):
             output, error = remote.execute_command(command)
             remote.log_command_output(output, error)
 
-        if remote.is_membase_installed():
-            if info.type.lower() == 'windows':
-                destination_folder = testconstants.WIN_MEMBASE_DATA_PATH
-            else:
-                destination_folder = testconstants.MEMBASE_DATA_PATH
-        else:
+        if remote.is_couchbase_installed():
             if info.type.lower() == 'windows':
                 destination_folder = testconstants.WIN_COUCHBASE_DATA_PATH
             else:
                 destination_folder = testconstants.COUCHBASE_DATA_PATH
+        else:
+            if info.type.lower() == 'windows':
+                destination_folder = testconstants.WIN_MEMBASE_DATA_PATH
+            else:
+                destination_folder = testconstants.MEMBASE_DATA_PATH
         if self.data_path:
             destination_folder = self.data_path
         untar_command = 'cd {1}; tar -xzf {0}'.format(dir + file,
@@ -575,7 +576,7 @@ class PerfBase(unittest.TestCase):
              doc_cache=1,
              use_direct=True,
              report=0,
-             start_at=-1,
+             start_at= -1,
              collect_server_stats=True,
              is_eperf=False,
              hot_shift=0):
@@ -625,7 +626,7 @@ class PerfBase(unittest.TestCase):
         if is_eperf:
             collect_server_stats = self.parami("prefix", 0) == 0
             client_id = self.parami("prefix", 0)
-            sc = self.start_stats("{0}.{1}".format(self.spec_reference, phase),  # stats spec e.x: testname.load
+            sc = self.start_stats("{0}.{1}".format(self.spec_reference, phase), # stats spec e.x: testname.load
                                   test_params=cfg_params, client_id=client_id,
                                   collect_server_stats=collect_server_stats)
 
@@ -783,7 +784,7 @@ class PerfBase(unittest.TestCase):
              doc_cache=1,
              use_direct=True,
              collect_server_stats=True,
-             start_at=-1,
+             start_at= -1,
              report=0,
              ctl=None,
              hot_shift=0,

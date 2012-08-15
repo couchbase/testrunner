@@ -626,7 +626,7 @@ if __name__ == "__main__":
         print "verify installation..."
         success = True
         for server in input.servers:
-            success &= RemoteMachineShellConnection(server).is_membase_installed()
+            success &= RemoteMachineShellConnection(server).is_couchbase_installed()
             if not success:
                 print "some nodes were not install successfully!"
                 sys.exit(1)

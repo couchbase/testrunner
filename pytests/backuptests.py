@@ -37,9 +37,8 @@ class BackupRestoreTests(unittest.TestCase):
         self.remote_tmp_folder = "{2}/{0}-{1}".format("backup", uuid.uuid4(), data_path)
         self.is_membase = False
         self.perm_command = "mkdir -p {0}".format(self.remote_tmp_folder)
-        if self.shell.is_membase_installed():
+        if not self.shell.is_couchbase_installed():
             self.is_membase = True
-            self.perm_command = "mkdir -p {0}".format(self.remote_tmp_folder)
 
 
     def common_setUp(self):

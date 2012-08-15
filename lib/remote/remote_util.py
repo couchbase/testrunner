@@ -180,12 +180,11 @@ class RemoteMachineShellConnection:
                 o, r = self.execute_command("net start membaseserver")
                 self.log_command_output(o, r)
         elif os == "unix":
-            if self.is_membase_installed():
-                o, r = self.execute_command("/etc/init.d/membase-server start")
-                self.log_command_output(o, r)
-            else:
+            if self.is_couchbase_installed():
                 o, r = self.execute_command("/etc/init.d/couchbase-server start")
-                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("/etc/init.d/membase-server start")
+            self.log_command_output(o, r)
         else:
             self.log.error("don't know operating system or product version")
 
@@ -199,12 +198,11 @@ class RemoteMachineShellConnection:
                 o, r = self.execute_command("net stop membaseserver")
                 self.log_command_output(o, r)
         elif os == "unix":
-            if self.is_membase_installed():
-                o, r = self.execute_command("/etc/init.d/membase-server stop")
-                self.log_command_output(o, r)
-            else:
+            if self.is_couchbase_installed():
                 o, r = self.execute_command("/etc/init.d/couchbase-server stop")
-                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("/etc/init.d/membase-server stop")
+            self.log_command_output(o, r)
         else:
             self.log.error("don't know operating system or product version")
 
@@ -217,7 +215,7 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c schtasks /end /tn upgrademe")
         self.log_command_output(output, error)
 
-    def is_membase_installed(self):
+    def is_couchbase_installed(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
@@ -229,10 +227,10 @@ class RemoteMachineShellConnection:
 
     # /opt/moxi/bin/moxi -Z port_listen=11211 -u root -t 4 -O /var/log/moxi/moxi.log
     def start_moxi(self, ip, bucket, port, user=None, threads=4, log_file="/var/log/moxi.log"):
-        if self.is_membase_installed():
-            prod = "membase"
-        else:
+        if self.is_couchbase_installed():
             prod = "couchbase"
+        else:
+            prod = "membase"
         cli_path = "/opt/" + prod + "/bin/moxi"
         args = ""
         args += "http://{0}:8091/pools/default/bucketsStreaming/{1} ".format(ip, bucket)
@@ -1508,10 +1506,10 @@ class RemoteUtilHelper(object):
     def common_basic_setup(servers):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
-            if shell.is_membase_installed():
-                shell.start_membase()
-            else:
+            if shell.is_couchbase_installed():
                 shell.start_couchbase()
+            else:
+                shell.start_membase()
             shell.disable_firewall()
             shell.unpause_memcached()
             shell.unpause_beam()

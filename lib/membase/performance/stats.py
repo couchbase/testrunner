@@ -47,7 +47,7 @@ class StatsCollector(object):
     #this function starts collecting stats from all nodes with the given
     #frequency
     def start(self, nodes, bucket, pnames, name, frequency, client_id='',
-              collect_server_stats = True):
+              collect_server_stats=True):
         self._task = {"state": "running", "threads": []}
         self._task["name"] = name
         self._task["time"] = time.time()
@@ -217,13 +217,14 @@ class StatsCollector(object):
             except:
                 pass
         paths = []
-        if shells[0].is_membase_installed():
-            paths.append(self.data_path+'/{0}-data'.format(bucket))
-        else:
-            bucket_path = self.data_path+'/{0}'.format(bucket)
+        if shells[0].is_couchbase_installed():
+            bucket_path = self.data_path + '/{0}'.format(bucket)
             paths.append(bucket_path)
-            view_path = bucket_path +'/set_view_{0}_design'.format(bucket)
+            view_path = bucket_path + '/set_view_{0}_design'.format(bucket)
             paths.append(view_path)
+        else:
+            paths.append(self.data_path + '/{0}-data'.format(bucket))
+
 
         d = {"snapshots": []}
         start_time = str(self._task["time"])
@@ -234,7 +235,7 @@ class StatsCollector(object):
             i = 0
             for shell in shells:
                 node = nodes[i]
-                unique_id = node.ip+'-'+start_time
+                unique_id = node.ip + '-' + start_time
                 value = {}
                 for path in paths:
                     size = shell.get_data_file_size(path)
@@ -244,7 +245,7 @@ class StatsCollector(object):
                     value["time"] = current_time
                     value["ip"] = node.ip
                     d["snapshots"].append(value.copy())
-                i +=  1
+                i += 1
         self._task["data_size_stats"] = d["snapshots"]
         print " finished data_size_stats"
 
@@ -290,7 +291,7 @@ class StatsCollector(object):
         delta = 0
         for i in range(499):
             current = self._task["ops-temp"][i]
-            next = self._task["ops-temp"][i+1]
+            next = self._task["ops-temp"][i + 1]
             totalgets += current["tot-gets"]
             totalsets += current["tot-sets"]
             totalqueries += current["tot-queries"]
@@ -307,11 +308,11 @@ class StatsCollector(object):
         ops_stat["time"] = time.time()
         self._task["totalops"].append(ops_stat)
 
-    def build_stats(self,nodes):
+    def build_stats(self, nodes):
         json_response = StatUtil.build_info(nodes[0])
         self._task["buildstats"] = json_response
 
-    def machine_stats(self,nodes):
+    def machine_stats(self, nodes):
         machine_stats = StatUtil.machine_info(nodes[0])
         self._task["machinestats"] = machine_stats
 
@@ -353,7 +354,7 @@ class StatsCollector(object):
             i = 0
             for shell in shells:
                 node = nodes[i]
-                unique_id = node.ip+'-'+start_time
+                unique_id = node.ip + '-' + start_time
                 for pname in pnames:
                     obj = RemoteMachineHelper(shell).is_process_running(pname)
                     if obj and obj.pid:
@@ -364,7 +365,7 @@ class StatsCollector(object):
                         value["time"] = current_time
                         value["ip"] = node.ip
                         d["snapshots"].append(value)
-                i +=  1
+                i += 1
         self._task["systemstats"] = d["snapshots"]
         print " finished system_stats"
 
@@ -395,7 +396,7 @@ class StatsCollector(object):
         print "[capture_mb_snapshot] memcache stats snapshot captured"
         return True
 
-    def membase_stats(self,nodes, bucket, frequency, verbose=False):
+    def membase_stats(self, nodes, bucket, frequency, verbose=False):
         mcs = []
         for node in nodes:
             try:
@@ -453,7 +454,7 @@ class StatsCollector(object):
         start_time = str(self._task["time"])
         for mc in mcs:
             ip = mc.host
-            unique_id = ip+'-'+start_time
+            unique_id = ip + '-' + start_time
             current_time = time.time()
             if self._mb_stats["snapshots"]:
                 # use manually captured stats

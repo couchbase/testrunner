@@ -69,10 +69,10 @@ class ViewBaseTests(unittest.TestCase):
                 if server.port != '8091':
                     continue
                 shell = RemoteMachineShellConnection(server)
-                if shell.is_membase_installed():
-                    shell.start_membase()
-                else:
+                if shell.is_couchbase_installed():
                     shell.start_couchbase()
+                else:
+                    shell.start_membase()
                 shell.disconnect()
 
             rest = RestConnection(master)

@@ -66,9 +66,9 @@ class FailoverBaseTest(unittest.TestCase):
                                       msg=msg.format(stats["curr_items"], inserted_count))
 
     @staticmethod
-    def load_data(master, bucket, keys_count=-1, load_ratio=-1):
+    def load_data(master, bucket, keys_count= -1, load_ratio= -1):
         log = logger.Logger.get_logger()
-        inserted_keys, rejected_keys =\
+        inserted_keys, rejected_keys = \
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
                                                               name=bucket,
                                                               ram_load_ratio=load_ratio,
@@ -115,7 +115,7 @@ class FailoverBaseTest(unittest.TestCase):
 class FailoverTests(unittest.TestCase):
     def setUp(self):
         self._input = TestInputSingleton.input
-        self.bidirectional  = self._input.param("bidirectional", False)
+        self.bidirectional = self._input.param("bidirectional", False)
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
         FailoverBaseTest.common_setup(self._input, self)
@@ -216,11 +216,12 @@ class FailoverTests(unittest.TestCase):
             server_ip = rest.get_nodes_self().ip
             if server_ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
-                if shell.is_membase_installed():
-                    shell.stop_membase()
-                    log.info("Membase stopped")
+                if shell.is_couchbase_installed():
+                   shell.stop_couchbase()
+                   log.info("Couchbase stopped")
                 else:
-                    shell.stop_couchbase()
-                    log.info("Couchbase stopped")
+                   shell.stop_membase()
+                   log.info("Membase stopped")
+
                 shell.disconnect()
                 break

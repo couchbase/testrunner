@@ -11,9 +11,9 @@ from TestInput import TestInputParser
 if __name__ == "__main__":
     input = TestInputParser.get_test_input(sys.argv)
     remote = RemoteMachineShellConnection(input.servers[0])
-    server_type = 'couchbase'
-    if remote.is_membase_installed():
-        server_type = 'membase'
+    server_type = 'membase'
+    if remote.is_couchbase_installed():
+        server_type = 'couchbase'
     for serverInfo in input.servers:
         try:
             remote = RemoteMachineShellConnection(serverInfo)
