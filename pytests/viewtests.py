@@ -1,6 +1,6 @@
 import json
 import random
-from threading import Thread
+from threading import Thread, Event
 import unittest
 import uuid
 from TestInput import TestInputSingleton
@@ -91,8 +91,7 @@ class ViewBaseTests(unittest.TestCase):
             stopped = rest.stop_rebalance()
             self.assertTrue(stopped, msg="unable to stop rebalance")
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-        for server in self.servers:
-            ClusterOperationHelper.cleanup_cluster([server])
+        ClusterOperationHelper.cleanup_cluster(self.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
     @staticmethod
@@ -820,6 +819,8 @@ class ViewBaseTests(unittest.TestCase):
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
         except:
             self.log.error("rebalance failed, trying again after 5 seconds")
+            if hasattr(self, 'thread_crashed'):
+                self.thread_crashed.set()
             time.sleep(timeout)
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
 
@@ -1091,6 +1092,7 @@ class ViewRebalanceTests(unittest.TestCase):
 
     def setUp(self):
         ViewBaseTests.common_setUp(self)
+        self.thread_crashed = Event()
 
     def tearDown(self):
         ViewBaseTests.common_tearDown(self)
@@ -1229,6 +1231,8 @@ class ViewRebalanceTests(unittest.TestCase):
         rebalance_thread.start()
         view_name = ViewBaseTests._create_view_doc_name(self, prefix)
         rebalance_thread.join()
+        if self.thread_crashed.is_set():
+            self.fail("Rebalance thread was crashed")
         ViewBaseTests._end_rebalance(self)
 
         ViewBaseTests._verify_views_from_all(self, master, 'default', view_name, self.num_docs, doc_names)
