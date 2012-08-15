@@ -1458,6 +1458,21 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
+    def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
+        cbdocloader_command = "%stools/cbdocloader" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+
+#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        #info = self.extract_remote_info()
+        #type = info.type.lower()
+        #if type == 'windows':
+            #cbdocloader_command = "%stools/cbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
+                                                                            username, password, self.ip,
+                                                                            self.port, bucket, memory_quota,
+                                                                            testconstants.LINUX_CB_PATH, file)
+        output, error = self.execute_command(command.format(command))
+        self.log_command_output(output, error)
+
 class RemoteUtilHelper(object):
 
     @staticmethod
