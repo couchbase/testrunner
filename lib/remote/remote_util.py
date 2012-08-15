@@ -221,11 +221,11 @@ class RemoteMachineShellConnection:
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
-                return False
+                return True
         elif info.type.lower() == "linux":
             if self.file_exists(testconstants.LINUX_CB_PATH, testconstants.VERSION_FILE):
-                return False
-        return True
+                return True
+        return False
 
     # /opt/moxi/bin/moxi -Z port_listen=11211 -u root -t 4 -O /var/log/moxi/moxi.log
     def start_moxi(self, ip, bucket, port, user=None, threads=4, log_file="/var/log/moxi.log"):
@@ -1461,33 +1461,33 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 class RemoteUtilHelper(object):
 
     @staticmethod
-    def enable_firewall(servers, node, failed_node=[], bidirectional=False):
+    def enable_firewall(servers, node, bidirectional=False):
         for server in servers:
-            if server.ip not in failed_node:
-                rest = RestConnection(server)
-                log.info("Connected to server: {0}".format(server.ip))
-                server_ip = rest.get_nodes_self().ip
-                if  server_ip == node.ip:
-                    shell = RemoteMachineShellConnection(server)
-                    info = shell.extract_remote_info()
-                    if info.type.lower() == "windows":
-                        shell.execute_command('netsh advfirewall set publicprofile state on')
-                        shell.execute_command('netsh advfirewall set privateprofile state on')
-                    else:
-                        # Reject incoming connections on port 1000->60000
-                        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+            rest = RestConnection(server)
+            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
+                continue
+            server_ip = rest.get_nodes_self().ip
+            if server_ip == node.ip:
+                shell = RemoteMachineShellConnection(server)
+                info = shell.extract_remote_info()
+                if info.type.lower() == "windows":
+                    shell.execute_command('netsh advfirewall set publicprofile state on')
+                    shell.execute_command('netsh advfirewall set privateprofile state on')
+                else:
+                    # Reject incoming connections on port 1000->6000
+                    o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+                    shell.log_command_output(o, r)
+
+                    # Reject outgoing connections on port 1000->6000
+                    if bidirectional:
+                        o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:60000 -j REJECT")
                         shell.log_command_output(o, r)
 
-                        # Reject outgoing connections on port 1000->60000
-                        if bidirectional:
-                            o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:60000 -j REJECT")
-                            shell.log_command_output(o, r)
-
-                        log.info("enabled firewall on {0}".format(server))
-                        o, r = shell.execute_command("/sbin/iptables --list")
-                        shell.log_command_output(o, r)
-                    shell.disconnect()
-                    break
+                    log.info("enabled firewall on {0}".format(server))
+                    o, r = shell.execute_command("/sbin/iptables --list")
+                    shell.log_command_output(o, r)
+                shell.disconnect()
+                break
 
     @staticmethod
     def common_basic_setup(servers):
