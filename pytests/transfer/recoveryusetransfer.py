@@ -59,6 +59,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
                                                                                  bucket.name, bucket.name)
             self.shell.execute_cbtransfer(transfer_source, transfer_destination)
         del kvs_before
+        time.sleep(self.expire_time + 1)
 
         self._wait_for_stats_all_buckets([self.server_recovery])
         self._verify_all_buckets(self.server_recovery, timeout=self.wait_timeout*50)
@@ -93,11 +94,13 @@ class RecoveryUseTransferTests(TransferBaseTest):
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
         self._create_sasl_buckets(self.server_origin, self.sasl_buckets)
         self._create_standard_buckets(self.server_origin, self.standard_buckets)
+
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
         del kvs_before
-
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+        time.sleep(self.expire_time + 1)
+
         self._wait_for_stats_all_buckets([self.server_origin])
         self._verify_all_buckets(self.server_origin, timeout=self.wait_timeout*50)
         self._verify_stats_all_buckets([self.server_origin])
@@ -116,5 +119,4 @@ class RecoveryUseTransferTests(TransferBaseTest):
                 self._load_all_buckets(self.server_origin, gen_delete, "delete", 0)
             if("expire" in self.doc_ops):
                 self._load_all_buckets(self.server_origin, gen_expire, "update", self.expire_time)
-                time.sleep(self.expire_time + 1)
         self._wait_for_stats_all_buckets([self.server_origin])
