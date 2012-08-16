@@ -30,8 +30,18 @@ test-views:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view.conf
 test-viewquery:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-viewquery.conf
+
+# required before merging changes to view engine
 test-views-pre-merge:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view-pre-merge.conf
+
+# required before merging changes to view engine
+test-viewmerge:
+	echo "Running view merge tests with single node cluster"
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-single-node.ini conf/py-viewmerge.conf
+	echo "Running view merge tests with 4 nodes cluster"
+	sleep 3
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-viewmerge.conf
 
 e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
