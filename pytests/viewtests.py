@@ -736,7 +736,7 @@ class ViewBaseTests(unittest.TestCase):
         return view_name
 
     @staticmethod
-    def _load_docs(self, num_docs, prefix, verify=True, bucket='default'):
+    def _load_docs(self, num_docs, prefix, verify=True, bucket='default', expire=0):
         master = self.servers[0]
         rest = RestConnection(master)
         smart = VBucketAwareMemcached(rest, bucket)
@@ -745,7 +745,7 @@ class ViewBaseTests(unittest.TestCase):
             key = doc_name = "{0}-{1}".format(prefix, i)
             doc_names.append(doc_name)
             value = {"name": doc_name, "age": i}
-            smart.set(key, 0, 0, json.dumps(value))
+            smart.set(key, expire, 0, json.dumps(value))
             # loop till value is set
         RebalanceHelper.wait_for_persistence(master, bucket)
         self.log.info("inserted {0} json documents".format(num_docs))

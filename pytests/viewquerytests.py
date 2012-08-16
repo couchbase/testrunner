@@ -1485,6 +1485,10 @@ class ViewQueryTests(unittest.TestCase):
         data_set.load(self, data_set.views[0], docs_per_day)
         self._query_all_views(data_set.views, limit=self.limit)
 
+    def test_expiration_docs_queries(self):
+        data_set = ExpirationDataSet(self._rconn(),self.num_docs)
+        data_set.load(self, data_set.views[0])
+        data_set.query_verify_value(self)
 
     ###
     # load the data defined for this dataset.
@@ -1951,6 +1955,7 @@ class EmployeeDataSet:
                                           "end_key"   : endkey,
                                           "endkey_docid"   : endkey_docid},
                                          expected_num_keys)]
+
             if extra_params_dict:
                 for q in view.queries:
                     q.params.update(extra_params_dict)
@@ -2889,6 +2894,49 @@ class SalesDataSet:
            stats[group]['sumsqr'] =  math.fsum(map(lambda x: x * x, groups_docs[group]))
 
         return stats
+
+class ExpirationDataSet:
+    def __init__(self, rest, num_docs = 10000, bucket = "default", expire=60):
+        self.num_docs = num_docs
+        self.bucket = bucket
+        self.rest = rest
+        self.views = self.create_views(rest)
+        self.name = "expiration_dataset"
+        self.kv_store = None
+        self.docs_set = []
+        self.expire = expire
+        self.expire_millis = 0
+
+    def create_views(self, rest):
+        view_fn = 'function (doc, meta) {if(doc.age !== undefined) { emit(doc.age, meta.expiration);}}'
+        return [QueryView(self.rest, self.num_docs, fn_str = view_fn)]
+
+    def load(self, tc, view):
+        try:
+            docs = ViewBaseTests._load_docs(tc, self.num_docs, 'exp_',
+                                            bucket=self.bucket, expire=self.expire)
+            self.expire_millis = int(time.time() + self.expire)
+            return docs
+        except Exception as ex:
+            view.results.addError(tc, sys.exc_info())
+            tc.log.error("At least one of load data threads is crashed: {0}".format(ex))
+            tc.thread_crashed.set()
+            raise ex
+        finally:
+            if not tc.thread_stopped.is_set():
+                tc.thread_stopped.set()
+
+    def query_verify_value(self,tc):
+        for view in self.views:
+            #query view
+            results = ViewBaseTests._get_view_results(tc, self.rest, self.bucket, view.name,
+                                                      extra_params={"stale" : "false"})
+            tc.assertEquals(len(results.get(u'rows', 0)), view.index_size,
+                              "Returned number of items is incorrect")
+            for row in results.get(u'rows',0):
+                tc.assertTrue(row['value'] in xrange(self.expire_millis -100, self.expire_millis + 100),
+                                  "Expiration should be %s, but actual is %s" %\
+                                   (self.expire, row['value']))
 
 class DataLoadHelper:
     @staticmethod
