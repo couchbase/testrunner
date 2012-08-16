@@ -1471,6 +1471,17 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
+    def execute_cbcollect_info(self, file):
+        cbcollect_command = "%scbcollect_info" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        #info = self.extract_remote_info()
+        #type = info.type.lower()
+        #if type == 'windows':
+            #cbcollect_command = "%scbcollect_info" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        command = "%s %s" % (cbcollect_command, file)
+        output, error = self.execute_command(command.format(command))
+        self.log_command_output(output, error)
+
 class RemoteUtilHelper(object):
 
     @staticmethod
