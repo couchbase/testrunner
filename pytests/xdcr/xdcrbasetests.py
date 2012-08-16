@@ -219,16 +219,16 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _get_floating_servers(self):
         cluster_nodes = []
-        for key, nodes in self._clusters_dic.items():
-            cluster_nodes.extend(nodes)
-            #return set(self._servers[:]).difference(cluster_nodes)
-        temp_list_cluster = []
-        for i in cluster_nodes:
-            temp_list_cluster.append(i.ip)
-        floating_servers = []
-        for i in self._servers:
-            if not i.ip in temp_list_cluster:
-                floating_servers.append(i)
+        floating_servers = self._servers
+
+        for key, node in self._clusters_dic.items():
+            cluster_nodes.extend(node)
+
+        for c_node in cluster_nodes:
+            for node in floating_servers:
+                if node.ip in str(c_node) and node.port in str(c_node):
+                    floating_servers.remove(node)
+
         return floating_servers
 
 

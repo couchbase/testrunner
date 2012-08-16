@@ -199,11 +199,25 @@ class RebalanceTask(Task):
     def start_rebalance(self, task_manager):
         rest = RestConnection(self.servers[0])
         nodes = rest.node_statuses()
+
+        #Determine whether its a cluster_run/not
+        self.nodes_on_same_ip = True
+
+        firstIp = self.servers[0].ip
+        for node in self.servers:
+            if node.ip != firstIp:
+                self.nodes_on_same_ip = False
+                break
         ejectedNodes = []
+
         for server in self.to_remove:
             for node in nodes:
-                if server.ip == node.ip and int(server.port) == int(node.port):
-                    ejectedNodes.append(node.id)
+                if self.nodes_on_same_ip:
+                    if int(server.port) == int(node.port):
+                        ejectedNodes.append(node.id)
+                else:
+                    if server.ip == node.ip and int(server.port) == int(node.port):
+                        ejectedNodes.append(node.id)
         rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
 
     def check(self, task_manager):
