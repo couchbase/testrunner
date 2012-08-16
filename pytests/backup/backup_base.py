@@ -9,6 +9,7 @@ class BackupBaseTest(BaseTestCase):
         super(BackupBaseTest, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
         self.value_size = self.input.param("value_size", 256)
+        self.expire_time = self.input.param("expire_time", 10)
         self.couchbase_login_info = self.input.param("login_info", "Administrator:password")
         self.backup_location = self.input.param("backup_location", "/tmp/backup")
         self.command_options = self.input.param("command_options", None)

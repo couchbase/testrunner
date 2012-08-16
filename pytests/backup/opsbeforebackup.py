@@ -54,7 +54,6 @@ class OpsBeforeBackupTests(BackupBaseTest):
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
@@ -89,8 +88,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
             if("expire" in self.doc_ops):
                 if extra_items_deleted_flag == 1:
                     self._load_all_buckets(self.master, gen_extra, "create", 0)
-                self._load_all_buckets(self.master, gen_extra, "update", 5)
-                time.sleep(5)
+                self._load_all_buckets(self.master, gen_extra, "update", self.expire_time)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
@@ -104,7 +102,6 @@ class OpsBeforeBackupTests(BackupBaseTest):
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
@@ -114,6 +111,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
         gc.collect()
         bucket_names = [bucket.name for bucket in self.buckets]
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+        time.sleep(self.expire_time) #system sleeps for expired items
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.master)

@@ -4,6 +4,7 @@ from backup.backup_base import BackupBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import Bucket
 from remote.remote_util import RemoteMachineShellConnection
+import gc
 
 class OpsDuringBackupTests(BackupBaseTest):
 
@@ -45,6 +46,7 @@ class OpsDuringBackupTests(BackupBaseTest):
         for bucket in self.buckets:
             kvs_before[bucket.name] = bucket.kvs[2]
         self._all_buckets_delete(self.master)
+        gc.collect()
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
@@ -55,6 +57,7 @@ class OpsDuringBackupTests(BackupBaseTest):
         for bucket in self.buckets:
             bucket.kvs[2] = kvs_before[bucket.name]
         del kvs_before
+        gc.collect()
         bucket_names = [bucket.name for bucket in self.buckets]
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
 
@@ -72,7 +75,6 @@ class OpsDuringBackupTests(BackupBaseTest):
         gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items/2-1))
         gen_expire = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items/2, end=(self.num_items*3/4-1))
         gen_delete = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items*3/4, end=self.num_items)
-
         self._load_all_buckets(self.master, gen_load, "create", 0)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
@@ -89,7 +91,7 @@ class OpsDuringBackupTests(BackupBaseTest):
             if("expire" in self.doc_ops):
                 mutate_threads.append(Thread(target=self._load_all_buckets,
                                              name="expire",
-                                             args=(self.master, gen_expire, "update", 5)))
+                                             args=(self.master, gen_expire, "update", self.expire_time)))
         for t in mutate_threads:
             t.start()
 
@@ -105,6 +107,7 @@ class OpsDuringBackupTests(BackupBaseTest):
         for bucket in self.buckets:
             kvs_before[bucket.name] = bucket.kvs[1]
         self._all_buckets_delete(self.master)
+        gc.collect()
 
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
@@ -115,8 +118,9 @@ class OpsDuringBackupTests(BackupBaseTest):
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
         del kvs_before
+        gc.collect()
         bucket_names = [bucket.name for bucket in self.buckets]
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
-
+        time.sleep(self.expire_time) #system sleeps for expired items
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         #TODO implement verification for this test case
