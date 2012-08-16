@@ -74,5 +74,5 @@ class docloaderTests(CliBaseTest):
             number_of_items = a - b #design doc create views not items in cluster
             self.shell.delete_backupFile(file)
             return number_of_items
-        elif os == "windows":
+        #elif os == "windows":
             # try to figure out work works for windows
