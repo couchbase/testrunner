@@ -543,7 +543,7 @@ class EPerfMaster(perf.PerfBase):
                 self.log.info(subset)
                 self.log.info(data)
 
-    def latched_rebalance(self, delay=0.01, sync=False):
+    def latched_rebalance(self, cur=None, delay=0.01, sync=False):
         if not self.latched_rebalance_done:
             self.latched_rebalance_done = True
             self.delayed_rebalance(self.parami("num_nodes_after",
@@ -1716,7 +1716,7 @@ class NRUMonitor(threading.Thread):
 
          print "[NRUMonitor] scheduled rebalance after %d seconds"\
              % self.reb_delay
-         self.eperf.latched_rebalance(self.reb_delay, sync=True)
+         self.eperf.latched_rebalance(delay=self.reb_delay, sync=True)
 
          print "[NRUMonitor] stopped running"
 
