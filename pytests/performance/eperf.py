@@ -246,6 +246,7 @@ class EPerfMaster(perf.PerfBase):
             tm_hour = (gmt.tm_hour + 1) % 24
 
         min_left = 60 - gmt.tm_min
+        gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
         for server in self.input.servers:
             shell = RemoteMachineShellConnection(server)
             cmd = "/opt/couchbase/bin/cbepctl localhost:11210 "\
@@ -253,7 +254,8 @@ class EPerfMaster(perf.PerfBase):
             self._exec_and_log(shell, cmd)
             shell.disconnect()
             print "access scanner will be executed on %s in %d minutes, " \
-                "at %d UTC" % (server.ip, min_left, tm_hour)
+                  "at %d UTC, curr_time is %s" \
+                   % (server.ip, min_left, tm_hour, gmt_now)
 
     # Gets the vbucket count
     def gated_start(self, clients):
@@ -1714,9 +1716,15 @@ class NRUMonitor(threading.Thread):
 
          self.shell.disconnect()
 
+         gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
+         print "[NRUMonitor] access scanner finished: %s" % gmt_now
          print "[NRUMonitor] scheduled rebalance after %d seconds"\
              % self.reb_delay
+
          self.eperf.latched_rebalance(delay=self.reb_delay, sync=True)
+
+         gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
+         print "[NRUMonitor] rebalance finished: %s" % gmt_now
 
          print "[NRUMonitor] stopped running"
 

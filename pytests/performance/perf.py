@@ -708,6 +708,9 @@ class PerfBase(unittest.TestCase):
     def delayed_rebalance_worker(servers, num_nodes, delay_seconds, sc,
                                  max_retries=PerfDefaults.reb_max_retries):
         time.sleep(delay_seconds)
+        gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
+        print "[delayed_rebalance_worker] rebalance started: %s" % gmt_now
+
         if not sc:
             print "[delayed_rebalance_worker] invalid stats collector"
             return
