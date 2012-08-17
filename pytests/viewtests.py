@@ -1277,6 +1277,7 @@ class ViewFailoverTests(unittest.TestCase):
 
             for key, value in view_names.items():
                 ViewBaseTests._verify_docs_doc_name(self, value, key)
+
         finally:
             stopped_servers = []
             for node in failover_nodes:
@@ -1287,6 +1288,8 @@ class ViewFailoverTests(unittest.TestCase):
             for server in stopped_servers:
                 shell = RemoteMachineShellConnection(server)
                 shell.start_couchbase()
+                #Wait 10 seconds for server to start back up
+                time.sleep(10)
                 shell.disconnect()
 
     def test_view_with_failed_over_node(self):

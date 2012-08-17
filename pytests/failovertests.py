@@ -117,10 +117,15 @@ class FailoverTests(unittest.TestCase):
         self._input = TestInputSingleton.input
         self.bidirectional = self._input.param("bidirectional", False)
         self._servers = self._input.servers
+        self._failed_nodes = []
         self.log = logger.Logger().get_logger()
         FailoverBaseTest.common_setup(self._input, self)
 
     def tearDown(self):
+        for server in self._servers:
+            if server.ip in self._failed_nodes:
+                shell = RemoteMachineShellConnection(server)
+                shell.start_server()
         FailoverBaseTest.common_tearDown(self._servers, self)
 
     def test_failover_firewall(self):
@@ -195,7 +200,8 @@ class FailoverTests(unittest.TestCase):
                     failed_over = rest.fail_over(node.id)
                 self.assertTrue(failed_over, "unable to failover node after {0}".format(failover_reason))
                 log.info("failed over node : {0}".format(node.id))
-            #REMOVEME -
+                self._failed_nodes.append(node.ip)
+
             log.info("10 seconds sleep after failover before invoking rebalance...")
             time.sleep(10)
             rest.rebalance(otpNodes=[node.id for node in nodes],
@@ -210,18 +216,13 @@ class FailoverTests(unittest.TestCase):
     def stop_server(self, node):
         log = logger.Logger.get_logger()
         for server in self._servers:
-            rest = RestConnection(server)
-            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
-                continue
-            server_ip = rest.get_nodes_self().ip
-            if server_ip == node.ip:
+            if server.ip == node.ip:
                 shell = RemoteMachineShellConnection(server)
                 if shell.is_couchbase_installed():
-                   shell.stop_couchbase()
-                   log.info("Couchbase stopped")
+                    shell.stop_couchbase()
+                    log.info("Couchbase stopped")
                 else:
-                   shell.stop_membase()
-                   log.info("Membase stopped")
-
+                    shell.stop_membase()
+                    log.info("Membase stopped")
                 shell.disconnect()
                 break

@@ -257,36 +257,46 @@ class ViewQueryTests(unittest.TestCase):
 
             servers=self.servers;
 
+            failover_nodes = []
             # incrementaly failover nodes and verify loaded data
             for i in range(self.failover_factor):
                 failover_helper = FailoverHelper(servers, self)
-                failover_nodes = failover_helper.failover(1)
+                failover_nodes.extend(failover_helper.failover(1))
                 self.log.info("10 seconds sleep after failover before invoking rebalance...")
                 time.sleep(10)
 
                 rest=RestConnection(self.servers[0])
                 nodes = rest.node_statuses()
                 rest.rebalance(otpNodes=[node.id for node in nodes],
-                           ejectedNodes=[node.id for node in failover_nodes])
+                           ejectedNodes=[failover_nodes[i].id])
 
                 self._query_all_views(data_set.views)
 
+                temp_node_ips = []
+                for item in failover_nodes:
+                    temp_node_ips.append(item.ip)
+
                 temp=[]
                 for server in servers:
-                    rest = RestConnection(server)
-                    if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=1):
-                        continue
-                    temp.append(server)
+                    if server.ip not in temp_node_ips:
+                        rest = RestConnection(server)
+                        if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=1):
+                            continue
+                        temp.append(server)
                 servers=temp
 
                 msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
                 self.assertTrue(RestConnection(self.servers[0]).monitorRebalance(), msg=msg)
+
         finally:
             for server in [server for server in self.servers
                            for node in failover_nodes
                            if node.ip == server.ip and str(node.port) == server.port]:
                 shell = RemoteMachineShellConnection(server)
                 shell.start_couchbase()
+                self.log.info("10 seconds for couchbase server to startup...")
+                time.sleep(10)
+                shell.disconnect()
 
     def test_employee_dataset_alldocs_queries_start_stop_rebalance_in_incremental(self):
         docs_per_day = self.input.param('docs-per-day', 20)
