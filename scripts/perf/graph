@@ -1,8 +1,7 @@
 #!/bin/sh
 
 git clean -dfx
-cd resources/R/
-Rscript ep1.R ${baseline_build} ${target_build} ${test_case}.loop 10.5.2.41 eperf ${run_id} ${filename}
+Rscript resources/R/ep1.R ${baseline_build} ${target_build} ${test_case}.loop 10.5.2.41 eperf ${run_id} ${filename}
 
 if [ -n ${filename} ]; then
   filename=`ls | grep pdf`
@@ -14,4 +13,4 @@ if [ -z ${test_id} ]; then
     test_id='unknown'
 fi
 
-../../scripts/perf/graph_poster.py -n http://10.5.2.41:5984 -d ${dbname} -f ${filename} -t ${test_id}
+python -m scripts.perf.graph_poster -n http://10.5.2.41:5984 -d ${dbname} -f ${filename} -t ${test_id}

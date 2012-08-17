@@ -1,4 +1,4 @@
-source("executive.R")
+source("resources/R/executive.R")
 
 require(reshape, quietly=TRUE)
 require(plyr, quietly=TRUE)
@@ -2382,11 +2382,11 @@ if (nrow(throughput_query) > 0) {
 # print(p)
 # makeFootnote(footnote)
 
-conf_file = buildPath(test_name, "../../conf/perf/", ".conf")
+conf_file = buildPath(test_name, "conf/perf/", ".conf")
 dumpTextFile(conf_file)
 
 if (builds_list$cluster_name != "") {
-    ini_file = buildPath(builds_list$cluster_name, "../../resources/perf/", ".ini")
+    ini_file = buildPath(builds_list$cluster_name, resources/perf/", ".ini")
     dumpTextFile(ini_file)
 }
 

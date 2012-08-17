@@ -8,7 +8,7 @@ from couchdbkit import Server
 from optparse import OptionParser
 import sys
 
-sys.path.append("../../lib")
+sys.path.append('lib')
 
 from cbkarma.rest_client import CbKarmaClient
 
