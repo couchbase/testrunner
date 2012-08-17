@@ -243,7 +243,7 @@ class EPerfMaster(perf.PerfBase):
         """UTC/GMT time (hour) to schedule NRU access scanner"""
         gmt = time.gmtime()
         if not tm_hour:
-            tm_hour = gmt.tm_hour + 1
+            tm_hour = (gmt.tm_hour + 1) % 24
 
         min_left = 60 - gmt.tm_min
         for server in self.input.servers:
