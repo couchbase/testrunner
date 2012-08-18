@@ -1372,6 +1372,12 @@ class RestConnection(object):
         cmd = 'ns_config:set(ensure_full_commit_enabled, {0}).'.format(value)
         return self.diag_eval(cmd)
 
+    def set_reb_cons_view(self, disable=True):
+        """Enable/disable consistent view for rebalance tasks"""
+        cmd = 'ns_config:set(index_aware_rebalance_disabled, %s).'\
+                % str(disable).lower()
+        return self.diag_eval(cmd)
+
     def set_auto_compaction(self, parallelDBAndVC="false",
                             dbFragmentThreshold=None,
                             viewFragmntThreshold=None,

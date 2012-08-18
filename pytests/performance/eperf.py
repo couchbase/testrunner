@@ -257,6 +257,11 @@ class EPerfMaster(perf.PerfBase):
                   "at %d UTC, curr_time is %s" \
                    % (server.ip, min_left, tm_hour, gmt_now)
 
+    def set_reb_cons_view(self, node, disable=True):
+        """Set up consistent view for rebalance task"""
+        rest = RestConnection(node)
+        rest.set_reb_cons_view(disable=disable)
+
     # Gets the vbucket count
     def gated_start(self, clients):
         """
@@ -710,6 +715,9 @@ class EPerfMaster(perf.PerfBase):
                                       PerfDefaults.rebalance_after)
             self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                 getattr(self, "latched_rebalance"))]
+
+        if self.parami("reb_cons_view", PerfDefaults.reb_cons_view):
+            self.set_reb_cons_view(self.input.servers[0], disable=False)
 
         if self.parami("access_phase", 1) == 1:
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
