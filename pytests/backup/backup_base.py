@@ -1,7 +1,11 @@
+import gc
+import re
+import crc32
+from memcached.helper.kvstore import KVStore
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
-from memcached.helper.kvstore import KVStore
-import gc
+from membase.api.rest_client import RestConnection, Bucket
+from memcached.helper.data_helper import VBucketAwareMemcached
 
 class BackupBaseTest(BaseTestCase):
     def setUp(self):
@@ -38,3 +42,74 @@ class BackupBaseTest(BaseTestCase):
                 del self.buckets
                 gc.collect()
         self.times_teardown_called +=1
+
+    def verify_results(self, server, kv_store=1):
+        """This is the verification function for test cases of backup/restore.
+
+        Args:
+          server: the master server in the cluster as self.master.
+          kv_store: default value is 1. This is the key of the kv_store of each bucket.
+
+        if the command line assign command options -k and/or -b and/or --single-node, in the verification function
+        key_name indicates which keys we need to verify and bucket_name indicates which bucket we need to verify.
+        If single node flag is true, the we only need to verify all the buckets at the master node"""
+
+        key_name = None
+        bucket_name = None
+        single_node_flag = False
+        if self.command_options is not None:
+            for s in self.command_options:
+                if s.find("-k") != -1:
+                    sub = s.find(" ")
+                    key_name = s[sub+1:]
+                if s.find("-b") != -1:
+                    sub = s.find(" ")
+                    bucket_name = s[sub+1:]
+                if "--single-node" in self.command_options:
+                    single_node_flag = True
+
+        #we delete the buckets whose name does not match the name assigned to -b in KVStore
+        self.buckets = [bucket for bucket in self.buckets if bucket_name is None or bucket.name == bucket_name]
+        for bucket in self.buckets:
+             if key_name is not None:
+                valid_keys, deleted_keys = bucket.kvs[kv_store].key_set()
+                for key in valid_keys:
+                    matchObj = re.search(key_name, key, re.M|re.S) #use regex match to find out keys we need to verify
+                    if matchObj is None:
+                        partition = bucket.kvs[kv_store].acquire_partition(key)
+                        partition.delete(key)  #we delete keys whose prefix does not match the value assigned to -k in KVStore
+                        bucket.kvs[kv_store].release_partition(key)
+        if single_node_flag is False:
+            self._verify_all_buckets(server, kv_store, timeout=self.wait_timeout*50)
+        else:
+            self.verify_single_node(server, kv_store)
+
+    def verify_single_node(self, server, kv_store=1):
+        """This is the verification function for single node backup.
+
+        Args:
+          server: the master server in the cluster as self.master.
+          kv_store: default value is 1. This is the key of the kv_store of each bucket.
+
+        If --single-node flag appears in backup commad line, we just backup all the items
+        from a single node (the master node in this case). For each bucket, we request for the vBucketMap. For every key
+        in the kvstore of that bucket, we use hash function to get the vBucketId corresponding to that
+        key. By using the vBucketMap, we can know whether that key is in master node or not.
+        If yes, keep it. Otherwise delete it."""
+
+        rest = RestConnection(server)
+        for bucket in self.buckets:
+            VBucketAware = VBucketAwareMemcached(rest, bucket.name)
+            memcacheds, vBucketMap, vBucketMapReplica = VBucketAware.request_map(rest, bucket.name)
+            valid_keys, deleted_keys = bucket.kvs[kv_store].key_set()
+            for key in valid_keys:
+                vBucketId = crc32.crc32_hash(key) & (len(vBucketMap) - 1)
+                which_server = vBucketMap[vBucketId]
+                sub = which_server.find(":")
+                which_server_ip = which_server[:sub]
+                if which_server_ip != server.ip:
+                    partition = bucket.kvs[kv_store].acquire_partition(key)
+                    partition.delete(key)
+                    bucket.kvs[kv_store].release_partition(key)
+
+        self._verify_all_buckets(server, kv_store, timeout=self.wait_timeout*50)

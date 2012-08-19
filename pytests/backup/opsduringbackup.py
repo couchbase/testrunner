@@ -1,10 +1,9 @@
 import time
+import gc
 from threading import Thread
 from backup.backup_base import BackupBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import Bucket
-from remote.remote_util import RemoteMachineShellConnection
-import gc
 
 class OpsDuringBackupTests(BackupBaseTest):
 
@@ -64,7 +63,7 @@ class OpsDuringBackupTests(BackupBaseTest):
         for bucket in self.buckets:
             del bucket.kvs[1]
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-        self._verify_all_buckets(self.master, 2, timeout=self.wait_timeout*50) #do verification only with kvstores[2]
+        self.verify_results(self.master, 2) #do verification only with kvstores[2]
 
     def CreateUpdateDeleteExpireDuringBackup(self):
         """Backup the items during mutation on existing items is running.
