@@ -1406,7 +1406,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         self.start_couchbase()
 
     def execute_cluster_backup(self, login_info, backup_location, command_options):
-        self.delete_backupFile(backup_location)
+        self.delete_files(backup_location)
         self.create_directory(backup_location)
 
         backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
