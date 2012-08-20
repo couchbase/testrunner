@@ -47,7 +47,7 @@ class StatsCollector(object):
     #this function starts collecting stats from all nodes with the given
     #frequency
     def start(self, nodes, bucket, pnames, name, frequency, client_id='',
-              collect_server_stats=True):
+              collect_server_stats=True, ddoc=None):
         self._task = {"state": "running", "threads": []}
         self._task["name"] = name
         self._task["time"] = time.time()
@@ -81,6 +81,13 @@ class StatsCollector(object):
             self._task["threads"] = [sysstats_thread, ns_server_stats_thread, bucket_size_thead,
                                      mbstats_thread]
                                      #data_size_thread ]
+            if ddoc is not None:
+                view_stats_thread = Thread(target=self.collect_indexing_stats ,
+                                           args=(nodes, bucket, ddoc, frequency))
+                view_stats_thread.start()
+                self._task["threads"].append(view_stats_thread)
+
+
             # Getting build/machine stats from only one node in the cluster
             self.build_stats(nodes)
             self.machine_stats(nodes)
@@ -139,6 +146,7 @@ class StatsCollector(object):
                "info": test_params,
                "ns_server_data": self._task.get("ns_server_stats", []),
                "ns_server_data_system": self._task.get("ns_server_stats_system", []),
+               "view_info": self._task.get("view_info", []),
                "timings": self._task.get("timings", []),
                "dispatcher": self._task.get("dispatcher", []),
                "bucket-size":self._task.get("bucket_size", []),
@@ -505,6 +513,29 @@ class StatsCollector(object):
                self._task["ns_server_stats_system"].append(snapshot)
 
         print " finished ns_server_stats"
+
+    def collect_indexing_stats(self, nodes, bucket, ddoc, frequency):
+        """Collect view indexing stats"""
+        self._task['view_info'] = list()
+
+        while not self._aborted():
+            time.sleep(frequency)
+            print "Collecting view indexing stats"
+            for node in nodes:
+                rest = RestConnection(node)
+                data = rest.set_view_info(bucket, ddoc)
+                update_history = data[1]['stats']['update_history']
+                try:
+                    indexing_time = \
+                        [event['indexing_time'] for event in update_history]
+                    avg_time = sum(indexing_time) / len(indexing_time)
+                except (IndexError, KeyError):
+                    avg_time = 0
+                finally:
+                    self._task['view_info'].append({'node': node.ip,
+                                                    'indexing_time': avg_time})
+
+        print "Finished collecting view indexing stats"
 
     def _aborted(self):
         return self._task["state"] == "stopped"

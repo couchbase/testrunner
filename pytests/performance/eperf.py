@@ -383,7 +383,8 @@ class EPerfMaster(perf.PerfBase):
                      ratio_queries=0,
                      queries=None,
                      proto_prefix="membase-binary",
-                     host=None):
+                     host=None,
+                     ddoc=None):
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
             items = self.parami("items", items)
@@ -437,7 +438,8 @@ class EPerfMaster(perf.PerfBase):
                       hot_shift=self.parami('hot_shift', hot_shift),
                       is_eperf=True,
                       ratio_queries=ratio_queries,
-                      queries=queries)
+                      queries=queries,
+                      ddoc=ddoc)
 
     # restart the cluster and wait for it to warm up
     @_dashboard(phase='warmup')
@@ -826,7 +828,8 @@ class EPerfMaster(perf.PerfBase):
                           ratio_queries=self.paramf('ratio_queries', 0.3571),
                           queries=queries,
                           proto_prefix="couchbase",
-                          host=host)
+                          host=host,
+                          ddoc=view_gen.DDOC_NAMES[0])
 
     def test_evperf_workload3(self):
         """Like workload 2 but has queries on view with reduce step"""
@@ -872,7 +875,8 @@ class EPerfMaster(perf.PerfBase):
                           ratio_queries=self.paramf('ratio_queries', 0.3571),
                           queries=queries,
                           proto_prefix='couchbase',
-                          host=host)
+                          host=host,
+                          ddoc=view_gen.DDOC_NAMES[0])
 
     def test_vperf1(self):
         """1 design document, 1 view"""
@@ -926,7 +930,8 @@ class EPerfMaster(perf.PerfBase):
                                                   PerfDefaults.max_creates),
                           queries=queries,
                           proto_prefix="couchbase",
-                          host=host)
+                          host=host,
+                          ddoc=view_gen.DDOC_NAMES[0])
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -979,7 +984,8 @@ class EPerfMaster(perf.PerfBase):
                           ratio_queries=self.paramf('ratio_queries', 0.3571),
                           queries=queries,
                           proto_prefix="couchbase",
-                          host=host)
+                          host=host,
+                          ddoc=view_gen.DDOC_NAMES[0])
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1028,7 +1034,8 @@ class EPerfMaster(perf.PerfBase):
                           ratio_queries=self.paramf('ratio_queries', 0.3571),
                           queries=queries,
                           proto_prefix="couchbase",
-                          host=host)
+                          host=host,
+                          ddoc=view_gen.DDOC_NAMES[0])
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1078,7 +1085,8 @@ class EPerfMaster(perf.PerfBase):
                           ratio_queries=self.paramf('ratio_queries', 0.3571),
                           queries=queries,
                           proto_prefix="couchbase",
-                          host=host)
+                          host=host,
+                          ddoc=view_gen.DDOC_NAMES[0])
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1126,7 +1134,8 @@ class EPerfMaster(perf.PerfBase):
                           ratio_queries=self.paramf('ratio_queries', 0.3571),
                           queries=queries,
                           proto_prefix="couchbase",
-                          host=host)
+                          host=host,
+                          ddoc=view_gen.DDOC_NAMES[0])
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1176,7 +1185,8 @@ class EPerfMaster(perf.PerfBase):
                           ratio_queries=self.paramf('ratio_queries', 0.3571),
                           queries=queries,
                           proto_prefix="couchbase",
-                          host=host)
+                          host=host,
+                          ddoc=view_gen.DDOC_NAMES[0])
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1234,7 +1244,8 @@ class EPerfMaster(perf.PerfBase):
                                                       PerfDefaults.max_creates),
                               queries=queries,
                               proto_prefix="couchbase",
-                              host=host)
+                              host=host,
+                              ddoc=view_gen.DDOC_NAMES[0])
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)

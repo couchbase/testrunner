@@ -539,7 +539,7 @@ class PerfBase(unittest.TestCase):
     def start_stats(self, stats_spec, servers=None,
                     process_names=['memcached', 'beam.smp', 'couchjs'],
                     test_params=None, client_id='',
-                    collect_server_stats=True):
+                    collect_server_stats=True, ddoc=None):
         if self.parami('stats', 1) == 0:
             return None
 
@@ -547,7 +547,7 @@ class PerfBase(unittest.TestCase):
         sc = self.mk_stats(False)
         bucket = self.param("bucket", "default")
         sc.start(servers, bucket, process_names, stats_spec, 10, client_id,
-                 collect_server_stats=collect_server_stats)
+                 collect_server_stats=collect_server_stats, ddoc=ddoc)
         test_params['testrunner'] = self._get_src_version()
         self.test_params = test_params
         self.sc = sc
@@ -797,7 +797,8 @@ class PerfBase(unittest.TestCase):
              hot_shift=0,
              is_eperf=False,
              ratio_queries=0,
-             queries=0):
+             queries=0,
+             ddoc=None):
         num_items = num_items or self.num_items_loaded
 
         cfg = {'max-items': max_items or num_items,
@@ -862,7 +863,8 @@ class PerfBase(unittest.TestCase):
         if self.parami("collect_stats", 1):
             sc = self.start_stats(self.spec_reference + ".loop",
                                   test_params=cfg_params, client_id=client_id,
-                                  collect_server_stats=collect_server_stats)
+                                  collect_server_stats=collect_server_stats,
+                                  ddoc=ddoc)
 
         cur = {'cur-items': num_items}
         if start_at >= 0:

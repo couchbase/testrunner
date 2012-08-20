@@ -197,6 +197,15 @@ if __name__ == "__main__":
                 row.update({"row": index})
             del input_json["membasestats"]
 
+        if "view_info" in input_json:
+            print "flattening view info"
+            attachments["view_info"] = input_json["view_info"]
+            index = 1
+            for index, row in enumerate(attachments["view_info"], start=1):
+                row.update(z)
+                row.update({"row": index})
+            del input_json["view_info"]
+
         for histogram in input_json.keys():
             if histogram.startswith("latency") and histogram.endswith("histogram"):
                 print "flattening {0} snapshot".format(histogram)
