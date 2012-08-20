@@ -381,7 +381,7 @@ cat(paste("result has ", nrow(result)," rows \n"))
 ns_server_data_system <- result
 ns_server_data_system $row <- as.numeric(ns_server_data_system $row)
 ns_server_data_system $cpu_util <- as.numeric(ns_server_data_system $cpu_util)
-# ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
+ns_server_data_system $swap_used <- as.numeric(ns_server_data_system $swap_used)
 
 cat("generating system stats\n")
 result <- data.frame()
@@ -1817,6 +1817,16 @@ for(ns_node in levels(nodes)) {
     makeFootnote(footnote)
 }
 
+cat("generating swap_used \n")
+for(ns_node in levels(nodes)) {
+    node_system_stats = subset(ns_server_data_system, node==ns_node)
+    p <- ggplot(node_system_stats, aes(row, swap_used, color=buildinfo.version, label=swap_used))
+    p <- p + labs(x="----time (min)--->", y="Bytes")
+    p <- p + geom_point()
+    p <- addopts(p, paste("SWAP Usage", ns_node, sep=" - "))
+    print(p)
+    makeFootnote(footnote)
+}
 
 cat("Generating Memory/CPU usage for beam.smp and memcached\n")
 
@@ -2348,14 +2358,6 @@ if (nrow(throughput_query) > 0) {
         makeFootnote(footnote)
     }
 }
-
-# cat("generating swap_used \n")
-# p <- ggplot(ns_server_data_system, aes(row, swap_used, color=buildinfo.version , label= swap_used)) + labs(x="----time (sec)--->", y="swap_used")
-# p <- p + geom_point()
-# p <- addopts(p,"swap_used")
-# print(p)
-# makeFootnote(footnote)
-
 
 #memcached stats
 
