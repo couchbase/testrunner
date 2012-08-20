@@ -116,8 +116,8 @@ if __name__ == "__main__":
         if "ns_server_data_system" in input_json:
             print "flattening ns_server_data_system"
             attachments["ns_server_data_system"] = []
-            index = 1
-            for row in input_json["ns_server_data_system"]:
+            for index, row in enumerate(input_json["ns_server_data_system"],
+                                        start=1):
                 temp_row = convert(row)
                 values = temp_row.get('nodes', {})
                 for row in values:
@@ -135,34 +135,27 @@ if __name__ == "__main__":
                     row_dict.update(z)
                     row_dict.update({"row": index})
                     attachments["ns_server_data_system"].append(row_dict)
-                index += 1
             del input_json["ns_server_data_system"]
         if "dispatcher" in input_json:
             print "flattening dispatcher"
             attachments["dispatcher"] = input_json["dispatcher"]
-            index = 1
-            for row in attachments["dispatcher"]:
+            for index, row in enumerate(attachments["dispatcher"], start=1):
                 row.update(z)
                 row.update({"row": index})
-                index += 1
             del input_json["dispatcher"]
         if "timings" in input_json:
             print "flattening timings"
             attachments["timings"] = input_json["timings"]
-            index = 1
-            for row in attachments["timings"]:
+            for index, row in enumerate(attachments["timings"], start=1):
                 row.update(z)
                 row.update({"row": index})
-                index += 1
             del input_json["timings"]
         if "ops" in input_json:
             print "flattening ops"
             attachments["ops"] = input_json["ops"]
-            index = 1
-            for row in attachments["ops"]:
+            for index, row in enumerate(attachments["ops"], start=1):
                 row.update(z)
                 row.update({"row": index})
-                index += 1
             del input_json["ops"]
         if "qps" in input_json:
             print "flattening qps"
@@ -172,44 +165,36 @@ if __name__ == "__main__":
         if "systemstats" in input_json:
             print "flattening systemstats"
             attachments["systemstats"] = input_json["systemstats"]
-            index = 1
-            for row in attachments["systemstats"]:
+            for index, row in enumerate(attachments["systemstats"], start=1):
                 row.update(z)
                 row.update({"row": index})
                 print row["stime"], row["comm"], row["row"]
-                index += 1
             del input_json["systemstats"]
         if "data-size" in input_json:
             print "flattening data-size"
             attachments["data-size"] = input_json["data-size"]
-            index = 1
-            for row in attachments["data-size"]:
+            for index, row in enumerate(attachments["data-size"], start=1):
                 row.update(z)
                 row.update({"row": index})
-                index += 1
             del input_json["data-size"]
         if "bucket-size" in input_json:
             print "flattening bucket-size"
             values = input_json["bucket-size"]
-            index = 1
             bucket_sizes = []
-            for row in values:
+            for index, row in enumerate(values, start=1):
                 row_dict = {}
                 row_dict['size'] = row
                 row_dict.update(z)
                 row_dict.update({"row": index})
-                index += 1
                 bucket_sizes.append(row_dict.copy())
             del input_json["bucket-size"]
         attachments["bucket-size"] = bucket_sizes
         if "membasestats" in input_json:
             print "flattening membasestats"
             attachments["membasestats"] = input_json["membasestats"]
-            index = 1
-            for row in attachments["membasestats"]:
+            for index, row in enumerate(attachments["membasestats"], start=1):
                 row.update(z)
                 row.update({"row": index})
-                index += 1
             del input_json["membasestats"]
 
         for histogram in input_json.keys():
