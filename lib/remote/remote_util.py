@@ -1439,8 +1439,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             output, error = self.execute_command(command.format(command))
             self.log_command_output(output, error)
 
-    def delete_backupFile(self, backup_location):
-        command = "%s%s" % ("rm -r ", backup_location)
+    def delete_files(self, file_location):
+        command = "%s%s" % ("rm -r ", file_location)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
