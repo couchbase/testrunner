@@ -169,7 +169,7 @@ class ViewBaseTests(unittest.TestCase):
         bucket = "default"
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, dev_view=False)])
         self.created_views[view_name] = bucket
         rest = RestConnection(self.servers[0])
         smart = VBucketAwareMemcached(rest, bucket)
@@ -222,7 +222,7 @@ class ViewBaseTests(unittest.TestCase):
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc.age);}}"
         reduce_fn = "_count"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn, reduce_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, reduce_fn, dev_view=False)])
         self.created_views[view_name] = bucket
         smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
@@ -275,7 +275,7 @@ class ViewBaseTests(unittest.TestCase):
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc.age);}}"
         reduce_fn = "_sum"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn, reduce_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, reduce_fn, dev_view=False)])
         self.created_views[view_name] = bucket
         smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
@@ -323,7 +323,7 @@ class ViewBaseTests(unittest.TestCase):
         bucket = "default"
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, dev_view=False)])
         self.created_views[view_name] = bucket
         smart = VBucketAwareMemcached(rest, bucket)
         doc_names = []
@@ -345,7 +345,7 @@ class ViewBaseTests(unittest.TestCase):
             smart.set(key, 0, 0, json.dumps(value))
         self.log.info("inserted {0} json documents".format(updated_num_docs))
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + updated_view_prefix + "\") != -1) { emit(doc.name, doc);}}"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, dev_view=False)])
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, updated_num_docs)
         keys = ViewBaseTests._get_keys(self, results)
 
@@ -492,7 +492,7 @@ class ViewBaseTests(unittest.TestCase):
         bucket = "default"
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, dev_view=False)])
         self.created_views[view_name] = bucket
         doc_names = []
         prefix = str(uuid.uuid4())[:7]
@@ -598,7 +598,7 @@ class ViewBaseTests(unittest.TestCase):
         view_name = "dev_test_view_on_{1}_docs-{0}".format(str(uuid.uuid4())[:7], self.num_docs)
         prefix = str(uuid.uuid4())[:7]
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + view_name + "\") != -1) { emit(doc.name, doc);}}"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, dev_view=False)])
         self.created_views[view_name] = bucket
         self.shutdown_load_data = False
         self.docs_inserted = []
@@ -682,7 +682,7 @@ class ViewBaseTests(unittest.TestCase):
         rest = RestConnection(master)
         view_name = "dev_test_view-{0}".format(prefix)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "-\") != -1) { emit(doc.name, doc);}}"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, dev_view=False)])
         self.created_views[view_name] = bucket
         return view_name
 
@@ -934,7 +934,7 @@ class ViewBaseTests(unittest.TestCase):
         self.log.info("description : create a view")
         _view_name = view_name or "dev_test_view-{0}".format(prefix)
         map_fn = "function (doc) {if(doc.name.indexOf(\"" + prefix + "\") != -1) { emit(doc.name, doc);}}"
-        rest.create_view(_view_name, bucket, [View(_view_name, map_fn)])
+        rest.create_view(_view_name, bucket, [View(_view_name, map_fn, dev_view=False)])
         self.created_views[_view_name] = bucket
 
 
@@ -1010,7 +1010,7 @@ class ViewBasicTests(unittest.TestCase):
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
 
         for view in view_names:
-            rest.create_view(view, bucket, [View(view, map_fn)])
+            rest.create_view(view, bucket, [View(view, map_fn, dev_view=False)])
             self.created_views[view] = bucket
             response, meta = rest.get_view(bucket, view)
             self.assertTrue(response)
@@ -1030,7 +1030,7 @@ class ViewBasicTests(unittest.TestCase):
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, doc);}"
-            rest.create_view(view, bucket, [View(view, map_fn)])
+            rest.create_view(view, bucket, [View(view, map_fn, dev_view=False)])
             self.created_views[view] = bucket
             response, meta = rest.get_view(bucket, view)
             self.assertTrue(response)
@@ -1041,7 +1041,7 @@ class ViewBasicTests(unittest.TestCase):
         view_names = ["dev_test_map_multiple_keys-{0}-{1}".format(i, prefix) for i in range(0, num_views)]
         for view in view_names:
             map_fn = "function (doc) {emit(doc._id, null);}"
-            rest.create_view(view, bucket, [View(view, map_fn)])
+            rest.create_view(view, bucket, [View(view, map_fn, dev_view=False)])
             self.created_views[view] = bucket
             response, meta = rest.get_view(bucket, view)
             self.assertTrue(response)
@@ -1062,7 +1062,7 @@ class ViewBasicTests(unittest.TestCase):
         mc.set(key, 0, 0, json.dumps(value))
         mc.get(key)
         map_fn = "function (doc) { if (doc.name == \"" + doc_name + "\") { emit(doc.name, doc.age);}}"
-        rest.create_view(view_name, bucket, [View(view_name, map_fn)])
+        rest.create_view(view_name, bucket, [View(view_name, map_fn, dev_view=False)])
         self.created_views[view_name] = bucket
         results = ViewBaseTests._get_view_results(self, rest, bucket, view_name)
         self.assertTrue(results, "results are null")

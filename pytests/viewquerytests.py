@@ -740,14 +740,14 @@ class ViewQueryTests(unittest.TestCase):
         #update/delete
         if action == 'update':
             view_map_func_new = "function (doc) {if(doc.age !== undefined) { emit(doc.age);}}"
-            views = [View(view.name, view_map_func_new, None, True) for view in data_set.views]
+            views = [View(view.name, view_map_func_new, None, False) for view in data_set.views]
             for view in views:
-                tasks.append(self.cluster.async_create_view(self.servers[0], view.name[4:], view))
+                tasks.append(self.cluster.async_create_view(self.servers[0], view.name, view))
                 self._query_all_views(data_set.views)
         if action == 'delete':
-            views = [View(view.name, None, None, True) for view in data_set.views]
+            views = [View(view.name, None, None, False) for view in data_set.views]
             for view in views:
-                tasks.append(self.cluster.async_delete_view(self.servers[0], view.name[4:], view))
+                tasks.append(self.cluster.async_delete_view(self.servers[0], view.name, view))
                 time.sleep(1)
                 for view in data_set.views:
                     for q in view.queries:
@@ -868,7 +868,7 @@ class ViewQueryTests(unittest.TestCase):
         #create ddoc
         view_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
         ddoc_name = "ddoc_test"
-        view = View(ddoc_name, view_map_func, None, True)
+        view = View(ddoc_name, view_map_func, None, False)
 
         tasks = []
         for i in xrange(ddoc_num):
@@ -912,9 +912,9 @@ class ViewQueryTests(unittest.TestCase):
         #update/delete
         if action == 'update':
             view_map_func_new = "function (doc) {if(doc.age !== undefined) { emit(doc.age);}}"
-            views = [View(view.name, view_map_func_new, None, True) for view in data_set.views]
+            views = [View(view.name, view_map_func_new, None, False) for view in data_set.views]
             for view in views:
-                tasks.append(self.cluster.async_create_view(self.servers[0], view.name[4:], view))
+                tasks.append(self.cluster.async_create_view(self.servers[0], view.name, view))
                 self._query_all_views(data_set.views)
         if action == 'delete':
             for view in data_set.views:
@@ -1071,7 +1071,7 @@ class QueryView:
 
         self.bucket = bucket
         self.prefix = (prefix, default_prefix)[prefix is None]
-        default_name = "dev_test_view-{0}".format(self.prefix)
+        default_name = "test_view-{0}".format(self.prefix)
         self.name = (name, default_name)[name is None]
         self.fn_str = (fn_str, default_fn_str)[fn_str is None]
         self.reduce_fn = reduce_fn
@@ -1082,7 +1082,7 @@ class QueryView:
         self.queries = (queries, list())[queries is None]
 
         if create_on_init:
-            rest.create_view(self.name, self.bucket, [View(self.name, self.fn_str, self.reduce_fn)])
+            rest.create_view(self.name, self.bucket, [View(self.name, self.fn_str, self.reduce_fn, dev_view=False)])
 
     # query this view
     def run_queries(self, tc, verify_results = False, kv_store = None, limit=None,
