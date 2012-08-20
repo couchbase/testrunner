@@ -12,6 +12,7 @@ from bz2 import BZ2Compressor
 
 log = Logger.get_logger()
 
+
 def compress(data):
     try:
         bc = BZ2Compressor()
@@ -19,12 +20,14 @@ def compress(data):
         attachment = bc.flush()
         return attachment
     except Exception as ex:
-        log.error("unable to bzip data",ex)
+        log.error("unable to bzip data", ex)
+
 
 def sortedDictValues1(adict):
     items = adict.items()
     items.sort()
     return [value for key, value in items]
+
 
 def convert(data):
     if isinstance(data, unicode):
@@ -37,15 +40,15 @@ def convert(data):
         return data
 
 
-def flatten(keys,json):
+def flatten(keys, json):
     result = {}
     for key in keys:
         if key in json:
             print key
             for _k in json[key]:
                 print _k
-                if not isinstance(json[key][_k],dict):
-                    result["{0}.{1}".format(key,_k)] = json[key][_k]
+                if not isinstance(json[key][_k], dict):
+                    result["{0}.{1}".format(key, _k)] = json[key][_k]
     return result
 
 if __name__ == "__main__":
@@ -73,7 +76,7 @@ if __name__ == "__main__":
         build_info = flatten(["buildinfo"], input_json)
         info = flatten(["info"], input_json)
         info = {"info.test_time": info["info.test_time"]}
-        name = {"name":input_json["name"]}
+        name = {"name": input_json["name"]}
         z = dict(build_info.items() + info.items() + name.items())
         if "buildinfo.thisNode" in z:
             del z["buildinfo.thisNode"]
@@ -97,14 +100,14 @@ if __name__ == "__main__":
                     for sample in samples:
                         if len(samples[sample]) > max_length:
                             max_length = len(samples[sample])
-                    print "max_length",max_length
+                    print "max_length", max_length
                     for i in range(0, max_length):
                         _new_sample = {}
                         for sample in samples:
                             if len(samples[sample]) > i:
                                 _new_sample[sample] = samples[sample][i]
                         _new_sample.update(z)
-                        _new_sample.update({"row":index})
+                        _new_sample.update({"row": index})
 #                        _new_sample = sortedDictValues1(_new_sample)
 #                        print _new_sample
                         attachments["ns_server_data"].append(_new_sample)
@@ -124,13 +127,13 @@ if __name__ == "__main__":
                     if 'swap_used' in row['systemStats']:
                         row_dict['swap_used'] = row['systemStats']['swap_used']
                     if not 'vb_replica_curr_items' in row['interestingStats']:
-                       continue
+                        continue
                     row_dict['vb_replica_curr_items'] = row['interestingStats']['vb_replica_curr_items']
                     row_dict['curr_items_tot'] = row['interestingStats']['curr_items_tot']
                     row_dict['curr_items'] = row['interestingStats']['curr_items']
                     row_dict['node'] = row['hostname']
                     row_dict.update(z)
-                    row_dict.update({"row":index})
+                    row_dict.update({"row": index})
                     attachments["ns_server_data_system"].append(row_dict)
                 index += 1
             del input_json["ns_server_data_system"]
@@ -140,7 +143,7 @@ if __name__ == "__main__":
             index = 1
             for row in attachments["dispatcher"]:
                 row.update(z)
-                row.update({"row":index})
+                row.update({"row": index})
                 index += 1
             del input_json["dispatcher"]
         if "timings" in input_json:
@@ -149,7 +152,7 @@ if __name__ == "__main__":
             index = 1
             for row in attachments["timings"]:
                 row.update(z)
-                row.update({"row":index})
+                row.update({"row": index})
                 index += 1
             del input_json["timings"]
         if "ops" in input_json:
@@ -158,7 +161,7 @@ if __name__ == "__main__":
             index = 1
             for row in attachments["ops"]:
                 row.update(z)
-                row.update({"row":index})
+                row.update({"row": index})
                 index += 1
             del input_json["ops"]
         if "qps" in input_json:
@@ -172,8 +175,8 @@ if __name__ == "__main__":
             index = 1
             for row in attachments["systemstats"]:
                 row.update(z)
-                row.update({"row":index})
-                print row["stime"],row["comm"],row["row"]
+                row.update({"row": index})
+                print row["stime"], row["comm"], row["row"]
                 index += 1
             del input_json["systemstats"]
         if "data-size" in input_json:
@@ -182,7 +185,7 @@ if __name__ == "__main__":
             index = 1
             for row in attachments["data-size"]:
                 row.update(z)
-                row.update({"row":index})
+                row.update({"row": index})
                 index += 1
             del input_json["data-size"]
         if "bucket-size" in input_json:
@@ -194,7 +197,7 @@ if __name__ == "__main__":
                 row_dict = {}
                 row_dict['size'] = row
                 row_dict.update(z)
-                row_dict.update({"row":index})
+                row_dict.update({"row": index})
                 index += 1
                 bucket_sizes.append(row_dict.copy())
             del input_json["bucket-size"]
@@ -205,7 +208,7 @@ if __name__ == "__main__":
             index = 1
             for row in attachments["membasestats"]:
                 row.update(z)
-                row.update({"row":index})
+                row.update({"row": index})
                 index += 1
             del input_json["membasestats"]
 
@@ -224,10 +227,10 @@ if __name__ == "__main__":
                 attachments[histogram] = []
                 index = 1
                 for key, value in input_json[histogram].iteritems():
-                    lr = {"row":index,
-                          "time":key,
-                          "count":value,
-                          "client_id":client_id}
+                    lr = {"row": index,
+                          "time": key,
+                          "count": value,
+                          "client_id": client_id}
                     lr.update(z)
                     attachments[histogram].append(lr)
                     index += 1
@@ -239,46 +242,42 @@ if __name__ == "__main__":
                 attachments[latency] = []
                 index = 1
                 for row in input_json[latency]:
-                    if isinstance(row[0],list):
-                        lr = {"percentile_90th":row[0][1],
-                              "percentile_95th":0,
-                              "percentile_99th":row[1][1],
-                              "client_id":"UNKNOWN",
-                              "mystery":""}
+                    if isinstance(row[0], list):
+                        lr = {"percentile_90th": row[0][1],
+                              "percentile_95th": 0,
+                              "percentile_99th": row[1][1],
+                              "client_id": "UNKNOWN",
+                              "mystery": ""}
                         lr.update(z)
-                        lr.update({"row":index})
+                        lr.update({"row": index})
                         index += 1
                         attachments[latency].append(lr)
                     else:
                     #create a new dict
-                        lr = {"percentile_80th":row[0],
-                              "percentile_90th":row[1],
-                              "percentile_95th":row[2],
-                              "percentile_99th":row[3],
-                              "percentile_999th":row[4],
-                              "client_id":row[5],
+                        lr = {"percentile_80th": row[0],
+                              "percentile_90th": row[1],
+                              "percentile_95th": row[2],
+                              "percentile_99th": row[3],
+                              "percentile_999th": row[4],
+                              "client_id": row[5],
                               "time": row[6],
-                              "mystery":row[7]}
+                              "mystery": row[7]}
                         lr.update(z)
-                        lr.update({"row":index})
+                        lr.update({"row": index})
                         index += 1
                         attachments[latency].append(lr)
                 del input_json[latency]
 
         log.info("attachments has {0} objects".format(len(attachments)))
-        res = db.save_doc(input_json,force_update=True)
+        res = db.save_doc(input_json, force_update=True)
         doc_id = res["id"]
         rev_id = res["rev"]
         msg = "inserted document with id : {0} and rev : {1}in database {2}"
         log.info(msg.format(doc_id, rev_id, options.database))
         for name in attachments:
             log.info("inserting attachment with name : {0}".format(name))
-            db.put_attachment(input_json,attachments[name],name,"text/plain")
-
+            db.put_attachment(input_json, attachments[name], name, "text/plain")
 
     except Exception as ex:
         print ex
         log.error("unable to connect to {0}".format(options.node))
-
-
-
