@@ -108,7 +108,7 @@ if __name__ == "__main__":
 #                        _new_sample = sortedDictValues1(_new_sample)
 #                        print _new_sample
                         attachments["ns_server_data"].append(_new_sample)
-                        index = index + 1
+                        index += 1
             del input_json["ns_server_data"]
         if "ns_server_data_system" in input_json:
             print "flattening ns_server_data_system"
@@ -132,7 +132,7 @@ if __name__ == "__main__":
                     row_dict.update(z)
                     row_dict.update({"row":index})
                     attachments["ns_server_data_system"].append(row_dict)
-                index = index + 1
+                index += 1
             del input_json["ns_server_data_system"]
         if "dispatcher" in input_json:
             print "flattening dispatcher"
@@ -141,7 +141,7 @@ if __name__ == "__main__":
             for row in attachments["dispatcher"]:
                 row.update(z)
                 row.update({"row":index})
-                index = index + 1
+                index += 1
             del input_json["dispatcher"]
         if "timings" in input_json:
             print "flattening timings"
@@ -150,7 +150,7 @@ if __name__ == "__main__":
             for row in attachments["timings"]:
                 row.update(z)
                 row.update({"row":index})
-                index = index + 1
+                index += 1
             del input_json["timings"]
         if "ops" in input_json:
             print "flattening ops"
@@ -159,7 +159,7 @@ if __name__ == "__main__":
             for row in attachments["ops"]:
                 row.update(z)
                 row.update({"row":index})
-                index = index + 1
+                index += 1
             del input_json["ops"]
         if "qps" in input_json:
             print "flattening qps"
@@ -174,7 +174,7 @@ if __name__ == "__main__":
                 row.update(z)
                 row.update({"row":index})
                 print row["stime"],row["comm"],row["row"]
-                index = index + 1
+                index += 1
             del input_json["systemstats"]
         if "data-size" in input_json:
             print "flattening data-size"
@@ -183,7 +183,7 @@ if __name__ == "__main__":
             for row in attachments["data-size"]:
                 row.update(z)
                 row.update({"row":index})
-                index = index + 1
+                index += 1
             del input_json["data-size"]
         if "bucket-size" in input_json:
             print "flattening bucket-size"
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                 row_dict['size'] = row
                 row_dict.update(z)
                 row_dict.update({"row":index})
-                index = index + 1
+                index += 1
                 bucket_sizes.append(row_dict.copy())
             del input_json["bucket-size"]
         attachments["bucket-size"] = bucket_sizes
@@ -206,7 +206,7 @@ if __name__ == "__main__":
             for row in attachments["membasestats"]:
                 row.update(z)
                 row.update({"row":index})
-                index = index + 1
+                index += 1
             del input_json["membasestats"]
 
         for histogram in input_json.keys():
@@ -247,7 +247,7 @@ if __name__ == "__main__":
                               "mystery":""}
                         lr.update(z)
                         lr.update({"row":index})
-                        index = index + 1
+                        index += 1
                         attachments[latency].append(lr)
                     else:
                     #create a new dict
@@ -261,7 +261,7 @@ if __name__ == "__main__":
                               "mystery":row[7]}
                         lr.update(z)
                         lr.update({"row":index})
-                        index = index + 1
+                        index += 1
                         attachments[latency].append(lr)
                 del input_json[latency]
 
