@@ -53,7 +53,7 @@ class docloaderTests(CliBaseTest):
     def get_number_of_files(self, file):
         os = "linux"
         zip_file = "%s.zip" % (file)
-        self.shell.delete_backupFile(file)
+        self.shell.delete_files(file)
 #TODO: implement a new function under RestConnectionHelper to use ip:port/nodes/self info to get os info
 #We can have cli test work on LINUX first
         if os == "linux":
@@ -72,7 +72,7 @@ class docloaderTests(CliBaseTest):
             b = int(output[0])
 
             number_of_items = a - b #design doc create views not items in cluster
-            self.shell.delete_backupFile(file)
+            self.shell.delete_files(file)
             return number_of_items
         #elif os == "windows":
             # try to figure out work works for windows
