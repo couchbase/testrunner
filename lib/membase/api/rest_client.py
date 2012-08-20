@@ -498,16 +498,22 @@ class RestConnection(object):
 
     # Make a _design/_info request
     def set_view_info(self, bucket, design_name):
-        api = self.capiBaseUrl + '_set_view/%s/_design/%s/_info' % (bucket, design_name)
+        """Get view diagnostic info (node specific)"""
+        api = self.capiBaseUrl
         if isinstance(bucket, Bucket):
-            api = self.capiBaseUrl + \
-            '/_set_view/%s/_design/%s/_info' % (bucket, design_name)
+            api += '/_set_view/{0}/_design/{1}/_info'.format(bucket, design_name)
+        else:
+            api += '_set_view/{0}/_design/{1}/_info'.format(bucket, design_name)
 
         if isinstance(bucket, Bucket) and bucket.authType == "sasl":
-            status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers_with_auth(
-                                                username=bucket.name, password=bucket.saslPassword))
+            headers = self._create_capi_headers_with_auth(
+                username=bucket.name, password=bucket.saslPassword)
+            status, content, header = self._http_request(api, 'POST',
+                                                         headers=headers)
         else:
-            status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
+            headers = self._create_capi_headers()
+            status, content, header = self._http_request(api, 'GET',
+                                                         headers=headers)
 
         if not status:
             raise SetViewInfoNotFound(design_name, content)
