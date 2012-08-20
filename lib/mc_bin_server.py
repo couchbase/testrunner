@@ -13,9 +13,9 @@ import struct
 import time
 import hmac
 import heapq
+import sys
 
 import memcacheConstants
-
 from memcacheConstants import MIN_RECV_PACKET, REQ_PKT_FMT, RES_PKT_FMT
 from memcacheConstants import INCRDECR_RES_FMT
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, EXTRA_HDR_FMTS
@@ -384,7 +384,6 @@ class MemcachedServer(asyncore.dispatcher):
         self.handler(channel, self.backend)
 
 if __name__ == '__main__':
-    import sys
     if len(sys.argv) > 1:
         port = int(sys.argv[1])
     else:
