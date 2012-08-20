@@ -205,8 +205,8 @@ class RestConnection(object):
         except ValueError:
             return ""
 
-    def active_tasks(self, serverInfo):
-        api = self.capiBaseUrl + "/active_tasks"
+    def active_tasks(self):
+        api = self.capiBaseUrl + "_active_tasks"
 
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())

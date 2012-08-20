@@ -56,7 +56,7 @@ class MemcapableTestBase(object):
 
     def set_test(self, key, exp, flags, values):
         serverInfo = self.master
-        client = MemcachedClientHelper.proxy_client(serverInfo, self.bucket_name, )
+        client = MemcachedClientHelper.proxy_client(serverInfo, self.bucket_name,)
         #            self.log.info('Waitting 15 seconds for memcached started')
         #            time.sleep(15)
         for v in values:
@@ -674,7 +674,7 @@ class GetrTests(unittest.TestCase):
         for i in range(item_count):
             try:
                 value = client.get(prefix + "_key_" + str(i))[2]
-                assert(value==vprefix + "_value_" + str(i))
+                assert(value == vprefix + "_value_" + str(i))
                 get_count += 1
             except Exception as e:
                 last_error = "failed to getr key {0}, error: {1}".format(prefix + "_key_" + str(i), e)
@@ -699,7 +699,7 @@ class GetrTests(unittest.TestCase):
                     client = awareness.memcached(key, r)
                     try:
                         value = client.getr(prefix + "_key_" + str(i))[2]
-                        assert(value==vprefix + "_value_" + str(i))
+                        assert(value == vprefix + "_value_" + str(i))
                         get_count += 1
                         retry = False
                     except mc_bin_client.MemcachedError as e:
@@ -885,7 +885,7 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         self.onenodemc.flush(1)
         time.sleep(2)
         rest = RestConnection(self.master)
-        tasks = rest.active_tasks(self.master)
+        tasks = rest.active_tasks()
         while tasks:
             self.log.info("found active tasks, waiting for them to complete. {0}".format(tasks))
             time.sleep(10)
@@ -962,7 +962,7 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
         RebalanceHelper.wait_for_stats(self.master, 'default', 'curr_items', len(keys))
         RebalanceHelper.wait_for_stats(self.master, 'default', 'ep_queue_size', 0)
         rest = RestConnection(self.master)
-        tasks = rest.active_tasks(self.master)
+        tasks = rest.active_tasks()
         while tasks:
             self.log.info("found active tasks, waiting for them to complete. {0}".format(tasks))
             time.sleep(10)
@@ -1051,8 +1051,8 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
             end = time.time()
             msg = "set iteration #{0} took {1} seconds to iterate over {2} items"
             self.log.info(msg.format(iteration, (end - start), items))
-            ops_per_second.append(len(keys)/float(end-start))
-        self.ops_per_second = sum(ops_per_second)/float(iterations)
+            ops_per_second.append(len(keys) / float(end - start))
+        self.ops_per_second = sum(ops_per_second) / float(iterations)
 
     def _get_data(self, keys, iterations):
         iteration = 0
@@ -1066,8 +1066,8 @@ class StatsAggregationDuringMemcachedOps(unittest.TestCase):
             end = time.time()
             msg = "get iteration #{0} took {1} seconds to iterate over {2} items"
             self.log.info(msg.format(iteration, (end - start), len(keys)))
-            ops_per_second.append(len(keys)/float(end-start))
-        self.ops_per_second = sum(ops_per_second)/float(iterations)
+            ops_per_second.append(len(keys) / float(end - start))
+        self.ops_per_second = sum(ops_per_second) / float(iterations)
 
 class AppendTests(unittest.TestCase):
     def setUp(self):
