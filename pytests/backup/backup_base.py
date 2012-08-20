@@ -31,13 +31,13 @@ class BackupBaseTest(BaseTestCase):
         super(BackupBaseTest, self).tearDown()
         if not self.input.param("skip_cleanup", True):
             if times_tear_down_called > 1 :
-                self.shell.delete_backupFile(self.backup_location)
+                self.shell.delete_files(self.backup_location)
                 self.shell.disconnect()
                 del self.buckets
                 gc.collect()
         if self.input.param("skip_cleanup", True):
             if self.case_number > 1 or self.times_teardown_called >1:
-                self.shell.delete_backupFile(self.backup_location)
+                self.shell.delete_files(self.backup_location)
                 self.shell.disconnect()
                 del self.buckets
                 gc.collect()

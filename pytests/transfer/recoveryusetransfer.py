@@ -18,12 +18,12 @@ class RecoveryUseTransferTests(TransferBaseTest):
         super(RecoveryUseTransferTests, self).tearDown()
         if not self.input.param("skip_cleanup", True):
             if times_tear_down_called > 1 :
-                self.shell.delete_backupFile(self.backup_location)
+                self.shell.delete_files(self.backup_location)
                 self.shell.disconnect()
                 del self.buckets
         if self.input.param("skip_cleanup", True):
             if self.case_number > 1 or self.times_teardown_called >1:
-                self.shell.delete_backupFile(self.backup_location)
+                self.shell.delete_files(self.backup_location)
                 self.shell.disconnect()
                 del self.buckets
         self.times_teardown_called +=1
@@ -78,7 +78,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
         kvs_before = {}
         bucket_names = []
 
-        self.shell.delete_backupFile(self.backup_location)
+        self.shell.delete_files(self.backup_location)
         self.shell.create_directory(self.backup_location)
 
         for bucket in self.buckets:
