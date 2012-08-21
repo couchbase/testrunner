@@ -2406,7 +2406,7 @@ conf_file = buildPath(test_name, "conf/perf/", ".conf")
 dumpTextFile(conf_file)
 
 if (builds_list$cluster_name != "") {
-    ini_file = buildPath(builds_list$cluster_name, resources/perf/", ".ini")
+    ini_file = buildPath(builds_list$cluster_name, "resources/perf/", ".ini")
     dumpTextFile(ini_file)
 }
 
