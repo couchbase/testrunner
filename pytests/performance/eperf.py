@@ -1696,6 +1696,12 @@ class NRUMonitor(threading.Thread):
      CMD_NUM_RUNS = "/opt/couchbase/bin/cbstats localhost:11210 "\
            "all | grep ep_num_access_scanner_runs"
 
+     CMD_NUM_ITEMS = "/opt/couchbase/bin/cbstats localhost:11210 "\
+            "all | grep ep_access_scanner_num_items"
+
+     CMD_RUNTIME = "/opt/couchbase/bin/cbstats localhost:11210 "\
+            "all | grep ep_access_scanner_last_runtime"
+
      def __init__(self, freq, reb_delay, eperf):
          self.freq = freq
          self.reb_delay = reb_delay
@@ -1714,7 +1720,7 @@ class NRUMonitor(threading.Thread):
          if self.nru_num < 0:
              return
 
-         while nru_num <= self.nru_num:
+         while nru_num > self.nru_num:
              print "[NRUMonitor] nru_num = %d, sleep for %d seconds" \
                 % (nru_num, self.freq)
              time.sleep(self.freq)
@@ -1722,13 +1728,17 @@ class NRUMonitor(threading.Thread):
              if nru_num < 0:
                  break
 
-         self.shell.disconnect()
-
          gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
-         print "[NRUMonitor] access scanner finished: %s" % gmt_now
+         speed, num_items, run_time =  self.get_nru_speed()
+
+         print "[NRUMonitor] access scanner finished at: %s, speed: %s, "\
+            "num_items: %s, run_time: %s" \
+            % (gmt_now, speed, num_items, run_time)
+
          print "[NRUMonitor] scheduled rebalance after %d seconds"\
              % self.reb_delay
 
+         self.shell.disconnect()
          self.eperf.latched_rebalance(delay=self.reb_delay, sync=True)
 
          gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
@@ -1739,6 +1749,27 @@ class NRUMonitor(threading.Thread):
      def get_nru_num(self):
          """Retrieve how many times nru access scanner has been run"""
          return self._get_shell_int(NRUMonitor.CMD_NUM_RUNS)
+
+     def get_nru_speed(self):
+         """
+         Retrieve runtime and num_items for the last access scanner run
+         Calculate access running speed
+
+         @return (speed, num_items, run_time)
+         """
+         num_items = self._get_shell_int(NRUMonitor.CMD_NUM_ITEMS)
+
+         if num_items <= 0:
+             return -1, -1, -1
+
+         run_time = self._get_shell_int(NRUMonitor.CMD_RUNTIME)
+
+         if run_time <= 0:
+             return -1, num_items, -1
+
+         speed = num_items / run_time
+
+         return speed, num_items, run_time
 
      def _get_shell_int(self, cmd):
          """
