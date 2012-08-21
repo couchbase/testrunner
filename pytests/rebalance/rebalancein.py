@@ -5,6 +5,7 @@ from rebalance.rebalance_base import RebalanceBaseTest
 from membase.api.rest_client import RestConnection
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
+from tasks.task import MonitorActiveTask
 
 class RebalanceInTests(RebalanceBaseTest):
 
@@ -281,15 +282,20 @@ class RebalanceInTests(RebalanceBaseTest):
             self._load_all_buckets(self.master, self.gen_update, "update", 0)
             for view in views:
                 # run queries to create indexes
-                query = {"stale" : "false"}
                 self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
         if end_time < time.time():
             self.fail("impossible to reach compaction value after %s sec" % self.wait_timeout * 10)
 
         fragmentation_monitor.result()
 
-        compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name, self.default_bucket_name)
+        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
+        result = active_task.result()
+        self.assertTrue(result)
 
+        query["stale"] = "false"
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 2)
+
+        compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name, self.default_bucket_name)
         servs_in = self.servers[1:self.nodes_in + 1]
         rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         result = compaction_task.result()
