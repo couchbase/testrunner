@@ -32,15 +32,15 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-        self._create_sasl_buckets(self.master, (bucket_num -1) / 2)
+        self._create_sasl_buckets(self.master, (bucket_num - 1) / 2)
 
-        self._create_standard_buckets(self.master, bucket_num -1 - (bucket_num -1) / 2)
+        self._create_standard_buckets(self.master, bucket_num - 1 - (bucket_num - 1) / 2)
         self.cluster.rebalance(self.servers[:self.num_servers],
                                self.servers[1:self.num_servers], [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
 
-        for i in reversed(range(self.num_servers)[self.num_servers/2:]):
+        for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             self._async_load_all_buckets(self.master, gen, "update", 0)
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
@@ -49,7 +49,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-            self._verify_all_buckets(self.master)
+            self._verify_all_buckets(self.master, max_verify=self.max_verify)
             self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
     """Rebalances nodes out and in of the cluster while doing mutations.
@@ -67,7 +67,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
 
-        for i in reversed(range(self.num_servers)[self.num_servers/2:]):
+        for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             self._async_load_all_buckets(self.master, gen, "update", 0)
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
@@ -76,7 +76,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-            self._verify_all_buckets(self.master)
+            self._verify_all_buckets(self.master, max_verify=self.max_verify)
             self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
     """Start-stop rebalance in/out with adding/removing aditional after stopping rebalance.
@@ -99,8 +99,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
         servs_in = [self.servers[i + nodes_init] for i in range(self.nodes_in)]
         servs_out = [self.servers[nodes_init - i - 1] for i in range(self.nodes_out)]
         extra_servs_in = [self.servers[i + nodes_init + self.nodes_in] for i in range(extra_nodes_in)]
-        extra_servs_out = [self.servers[nodes_init - i - 1 -self.nodes_out] for i in range(extra_nodes_out)]
-        rest=RestConnection(self.master)
+        extra_servs_out = [self.servers[nodes_init - i - 1 - self.nodes_out] for i in range(extra_nodes_out)]
+        rest = RestConnection(self.master)
         self.cluster.rebalance(self.servers[:1], servs_init[1:], [])
         self._wait_for_stats_all_buckets(servs_init)
         self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
@@ -110,7 +110,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         result_nodes = set(servs_init + servs_in) - set(servs_out)
         #the latest iteration will be with i=5, for this case rebalance should be completed, that also is verified and tracked
         for i in range(1, 6):
-            if i==1:
+            if i == 1:
                 rebalance = self.cluster.async_rebalance(servs_init[:nodes_init], servs_in, servs_out)
             else:
                 self.cluster.async_rebalance(servs_init[:nodes_init] + servs_in, add_in_once, servs_out + extra_servs_out)
@@ -125,13 +125,13 @@ class RebalanceInOutTests(RebalanceBaseTest):
             time.sleep(1)
             if RestHelper(rest).is_cluster_rebalanced():
                 self._wait_for_stats_all_buckets(result_nodes)
-                self._verify_all_buckets(self.master)
+                self._verify_all_buckets(self.master, max_verify=self.max_verify)
                 self._verify_stats_all_buckets(result_nodes)
                 self.log.info("rebalance was completed when tried to stop rebalance on {0}%".format(str(expected_progress)))
                 break
             else:
                 self._wait_for_stats_all_buckets(servs_init)
-                self._verify_all_buckets(self.master)
+                self._verify_all_buckets(self.master, max_verify=self.max_verify)
 
     """Rebalances nodes in and out of the cluster while doing mutations.
 
@@ -160,7 +160,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
             self._wait_for_stats_all_buckets(self.servers[:init_num_nodes])
-            self._verify_all_buckets(self.master)
+            self._verify_all_buckets(self.master, max_verify=self.max_verify)
             self._verify_stats_all_buckets(self.servers[:init_num_nodes])
 
 
@@ -181,7 +181,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
 
-        for i in reversed(range(self.num_servers)[self.num_servers/2:]):
+        for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0))
 
@@ -193,7 +193,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 task.result()
             self._load_all_buckets(self.master, gen_delete, "create", 0)
             self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-            self._verify_all_buckets(self.master)
+            self._verify_all_buckets(self.master, max_verify=self.max_verify)
             self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
     """Rebalances nodes into and out of the cluster while doing mutations and
@@ -213,7 +213,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
 
-        for i in reversed(range(self.num_servers)[self.num_servers/2:]):
+        for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             tasks.extend(self._async_load_all_buckets(self.master, gen_expire, "update", 5))
 
@@ -225,5 +225,5 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 task.result()
             self._load_all_buckets(self.master, gen_expire, "create", 0)
             self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-            self._verify_all_buckets(self.master)
+            self._verify_all_buckets(self.master, max_verify=self.max_verify)
             self._verify_stats_all_buckets(self.servers[:self.num_servers])

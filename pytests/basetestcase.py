@@ -35,6 +35,8 @@ class BaseTestCase(unittest.TestCase):
         self.num_replicas = self.input.param("replicas", 1)
         self.num_items = self.input.param("items", 1000)
         self.dgm_run = self.input.param("dgm_run", False)
+        #max items number to verify in ValidateDataTask, None - verify all
+        self.max_verify = self.input.param("max_verify", None)
         self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
         #avoid clean up if the previous test has been tear down
@@ -238,15 +240,15 @@ class BaseTestCase(unittest.TestCase):
         server - A server in the cluster. (TestInputServer)
         kv_store - The kv store index to check. (int)
     """
-    def _verify_all_buckets(self, server, kv_store=1, timeout=180):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None):
         tasks = []
         for bucket in self.buckets:
-            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store]))
+            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify))
         for task in tasks:
             task.result(timeout)
 
 
-    def disable_compaction(self, server = None, bucket = "default"):
+    def disable_compaction(self, server=None, bucket="default"):
 
         server = server or self.servers[0]
         new_config = {"viewFragmntThresholdPercentage" : None,
