@@ -184,7 +184,7 @@ class BucketOperationHelper():
         return False
 
     @staticmethod
-    def wait_for_vbuckets_ready_state(node, bucket, timeout_in_seconds=300, log=''):
+    def wait_for_vbuckets_ready_state(node, bucket, timeout_in_seconds=300, log_msg=''):
         log = logger.Logger.get_logger()
         start_time = time.time()
         end_time = start_time + timeout_in_seconds
@@ -214,7 +214,7 @@ class BucketOperationHelper():
                     try:
                         (a, b, c) = client.get_vbucket_state(i)
                     except mc_bin_client.MemcachedError as e:
-                        log.error("%s: %s" % (log, e))
+                        log.error("%s: %s" % (log_msg, e))
                         continue
                     if c.find("\x01") > 0 or c.find("\x02") > 0:
                         ready_vbuckets[i] = True
