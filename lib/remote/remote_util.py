@@ -1482,6 +1482,26 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
+    def execute_cbepctl(self, bucket, persistence, param_type, param, value):
+        cbepctl_command = "%scbepctl" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        #TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        #info = self.extract_remote_info()
+        #type = info.type.lower()
+        #if type == 'windows':
+        #cbcollect_command = "%scbepctl" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if persistence != "":
+            command = "%s %s:11210 -b %s -p \"%s\" %s" % (cbepctl_command, self.ip,
+                                                          bucket.name, bucket.saslPassword,
+                                                          persistence)
+        else:
+            command = "%s %s:11210 -b %s -p \"%s\" %s %s %s" % (cbepctl_command, self.ip,
+                                                                bucket.name, bucket.saslPassword,
+                                                                param_type, param, value )
+        output, error = self.execute_command(command.format(command))
+        self.log_command_output(output, error)
+        return output, error
+
+
 class RemoteUtilHelper(object):
 
     @staticmethod
