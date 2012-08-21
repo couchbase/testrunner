@@ -1207,7 +1207,7 @@ nodes = factor(ns_server_data_system$node)
 first_node_stats = subset(ns_server_data_system, node==levels(nodes)[1])
 
 for(build in levels(builds)) {
-	data <-first_node_stats[first_node_stats$buildinfo.version==build]
+	data <- subset(first_node_stats, buildinfo.version==build)
 	average_cpu <- mean(data$cpu_util)
 	if(build == baseline){
 		row <-c ("baseline", "Average CPU rate", as.numeric(average_cpu))
