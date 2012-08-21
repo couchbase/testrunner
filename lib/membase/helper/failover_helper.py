@@ -66,7 +66,14 @@ class FailoverHelper(object):
     def _stop_server(self, node):
         master_rest = RestConnection(self.servers[0])
         for server in self.servers:
-            rest = RestConnection(server)
+            try:
+                rest = RestConnection(server)
+            except Exception as ex:
+                if ex.find('Connection refused') > -1:
+                    self.log.info("server %s is already stopped" % server.ip)
+                    continue
+                else:
+                    raise ex
             self.log.info("see if server {0}:{1} is running".format(server.ip, server.port))
             if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
                 continue
