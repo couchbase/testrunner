@@ -1,0 +1,99 @@
+from clitest.cli_base import CliBaseTest
+from couchbase.documentgenerator import BlobGenerator
+from membase.api.rest_client import RestConnection, Bucket
+import testconstants
+import time
+import logger
+
+LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log",
+                      "ns_server.couchdb.log", "ns_server.debug.log",
+                      "ns_server.error.log", "ns_server.info.log",
+                      "ns_server.views.log", "stats.log"]
+
+class collectinfoTests(CliBaseTest):
+
+    def setUp(self):
+        super(collectinfoTests, self).setUp()
+        self.log_filename = self.input.param("filename", "info")
+        self.doc_ops = self.input.param("doc_ops", None)
+        self.expire_time = self.input.param("expire_time", 5)
+        self.value_size = self.input.param("value_size", 256)
+        if self.doc_ops is not None:
+            self.doc_ops = self.doc_ops.split(";")
+
+    def tearDown(self):
+        super(collectinfoTests, self).tearDown()
+
+    def collectinfo_test(self):
+        """We use cbcollect_info to automatically collect the logs for server node
+
+        First we load some items to the node. Optionally you can do some mutation
+        against these items. Then we use cbcollect_info the automatically generate
+        the zip file containing all the logs about the node. We want to verify we have
+        all the log files according to the LOG_FILE_NAME_LIST and in stats.log, we have
+        stats for all the buckets we have created"""
+
+        gen_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
+        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items/2-1))
+        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items/2, end=(self.num_items*3/4-1))
+        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items*3/4, end=self.num_items)
+        self._load_all_buckets(self.master, gen_load, "create", 0)
+
+        if(self.doc_ops is not None):
+            if("update" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_update, "update", 0)
+            if("delete" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_delete, "delete", 0)
+            if("expire" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_expire, "update", self.expire_time)
+                time.sleep(self.expire_time + 1)
+        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+
+        self.shell.delete_files("%s.zip" % (self.log_filename))
+        self.shell.delete_files("cbcollect_info*") #This is the folder generated after unzip the log package
+        self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
+        self.verify_results(self.log_filename)
+
+    def verify_results(self, file):
+        os = "linux"
+        zip_file = "%s.zip" % (file)
+#TODO: implement a new function under RestConnectionHelper to use ip:port/nodes/self info to get os info
+#We can have cli test work on LINUX first
+        if os == "linux":
+            command = "unzip %s" % (zip_file)
+            output, error = self.shell.execute_command(command.format(command))
+            self.shell.log_command_output(output, error)
+            if len(error) > 0:
+                raise Exception("uable to unzip the files. Check unzip command output for help")
+
+            command = "ls cbcollect_info*/"
+            output, error = self.shell.execute_command(command.format(command))
+            self.shell.log_command_output(output, error)
+            if len(error) > 0:
+                raise Exception("uable to list the files. Check ls command output for help")
+            missing_logs = False
+            for x in LOG_FILE_NAME_LIST:
+                if output[0].find(x) == -1 and output[1].find(x) == -1:
+                   missing_logs = True
+                   self.log.error("The log zip file miss %s" % (x))
+
+            missing_buckets = False
+            for bucket in self.buckets:
+                command = "grep %s cbcollect_info*/stats.log" % (bucket.name)
+                output, error = self.shell.execute_command(command.format(command))
+                self.shell.log_command_output(output, error)
+                if len(error) > 0:
+                    raise Exception("uable to grep key words. Check grep command output for help")
+                if len(output) == 0:
+                    missing_buckets = True
+                    self.log.error("%s stats are missed in stats.log" % (bucket.name))
+
+            if missing_logs is True:
+                raise Exception("Bad log file package generated. Missing logs")
+            if missing_buckets is True:
+                raise Exception("Bad stats.log which miss some bucket information")
+        #elif os == "windows":
+            # try to figure out what command works for windows
+
+        self.shell.delete_files(zip_file)
+        self.shell.delete_files("cbcbcollect_info*")
