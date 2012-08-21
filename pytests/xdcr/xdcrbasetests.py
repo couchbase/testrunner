@@ -278,8 +278,8 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _setup_cluster(self, nodes):
         self._init_nodes(nodes)
-        self._create_buckets(nodes)
         self._config_cluster(nodes)
+        self._create_buckets(nodes)
 
     def _init_nodes(self, nodes):
         _tasks = []
