@@ -512,15 +512,20 @@ class WorkloadTask(GenericLoadingTask):
         self.kv_store.release_partition(part_num)
 
 class ValidateDataTask(GenericLoadingTask):
-    def __init__(self, server, bucket, kv_store):
+    def __init__(self, server, bucket, kv_store, max_verify=None):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
+        self.max_verify = self.num_valid_keys + self.num_deleted_keys
+        if max_verify is not None:
+            self.max_verify = min(max_verify, self.max_verify)
+        self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
 
     def has_next(self):
-        if self.itr < (self.num_valid_keys + self.num_deleted_keys):
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys) or\
+            self.itr < self.max_verify:
             return True
         return False
 

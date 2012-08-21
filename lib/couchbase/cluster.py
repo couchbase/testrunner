@@ -102,8 +102,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_verify_data(self, server, bucket, kv_store):
-        _task = ValidateDataTask(server, bucket, kv_store)
+    def async_verify_data(self, server, bucket, kv_store, max_verify=None):
+        _task = ValidateDataTask(server, bucket, kv_store, max_verify)
         self.task_manager.schedule(_task)
         return _task
 
