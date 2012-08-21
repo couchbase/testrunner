@@ -380,6 +380,30 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task.result(timeout)
 
+    def async_monitor_active_task(self, server,
+                                  type,
+                                  target_value,
+                                  wait_progress=100,
+                                  num_iteration=100,
+                                  wait_task=True):
+        """Asynchronously monitor active task.
+
+           When active task reached wait_progress this method  will return.
+
+        Parameters:
+            server - The server to handle fragmentation config task. (TestInputServer)
+            type - task type('indexer' , 'bucket_compaction', 'view_compaction' ) (String)
+            target_value - target value (for example "_design/ddoc" for indexing, bucket "default"
+                for bucket_compaction or "_design/dev_view" for view_compaction) (String)
+            wait_progress - expected progress (int)
+            num_iteration - failed test if progress is not changed during num iterations(int)
+            wait_task - expect to find task in the first attempt(bool)
+
+        Returns:
+            MonitorActiveTask - A task future that is a handle to the scheduled task."""
+        _task = MonitorActiveTask(server, type, target_value, wait_progress, num_iteration, wait_task)
+        self.task_manager.schedule(_task)
+        return _task
 
     def async_monitor_view_fragmentation(self, server,
                                          design_doc_name,

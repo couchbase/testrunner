@@ -1028,6 +1028,123 @@ class ModifyFragmentationConfigTask(Task):
             self.set_exception(e)
 
 
+class MonitorActiveTask(Task):
+
+    """
+        Attempt to monitor active task that  is available in _active_tasks API.
+        It allows to monitor indexer, bucket compaction.
+
+        Execute function looks at _active_tasks API and tries to identifies task for monitoring
+        and its pid by: task type('indexer' , 'bucket_compaction', 'view_compaction' )
+        and target value (for example "_design/ddoc" for indexing, bucket "default" for bucket compaction or
+        "_design/dev_view" for view compaction).
+        wait_task=True means that task should be found in the first attempt otherwise,
+        we can assume that the task has been completed( reached 100%).
+
+        Check function monitors task by pid that was identified in execute func
+        and matches new progress result with the previous.
+        task is failed if:
+            progress is not changed  during num_iterations iteration
+            new progress was gotten less then previous
+        task is passed and completed if:
+            progress reached wait_progress value
+            task was not found by pid(believe that it's over)
+    """
+
+    def __init__(self, server, type, target_value, wait_progress=100, num_iterations=100, wait_task=True):
+        Task.__init__(self, "monitor_active_task")
+        self.server = server
+        self.type = type  # indexer or bucket_compaction
+        self.target_key = ""
+        if self.type == "indexer":
+            self.target_key = "design_documents"
+        elif self.type == "bucket_compaction":
+            self.target_key = "original_target"
+        elif self.type == "view_compaction":
+            self.target_key = "design_documents"
+        else:
+            self.fail("type %s is not defined!" % self.type)
+        self.target_value = target_value
+        self.wait_progress = wait_progress
+        self.num_iterations = num_iterations
+        self.wait_task = wait_task
+
+        self.rest = RestConnection(self.server)
+        self.current_progress = None
+        self.current_iter = 0
+        self.task_pid = None
+
+
+    def execute(self, task_manager):
+        tasks = self.rest.active_tasks()
+        print tasks
+        for task in tasks:
+            if task["type"] == (self.type and (
+                        self.target_key == "design_documents" and task[self.target_key][0] == self.target_value) or (
+                        self.target_key == "original_target" and task[self.target_key] == self.target_value)):
+                self.current_progress = task["progress"]
+                self.task_pid = task["pid"]
+                self.log.info("monitoring active task was found:" + str(task))
+                self.log.info("progress %s:%s - %s %%" % (self.type, self.target_value, task["progress"]))
+                if self.current_progress >= self.wait_progress:
+                    self.log.info("expected progress was gotten: %s" % self.current_progress)
+                    self.state = FINISHED
+                    self.set_result(True)
+
+                else:
+                    self.state = CHECKING
+                    task_manager.schedule(self, 5)
+                return
+        if self.wait_task:
+            #task is not performed
+            self.state = FINISHED
+            self.log.error("expected active task %s:%s was not found" % (self.type, self.target_value))
+            self.set_result(False)
+        else:
+            #task was completed
+            self.state = FINISHED
+            self.log.info("task for monitoring %s:%s was not found" % (self.type, self.target_value))
+            self.set_result(True)
+
+
+    def check(self, task_manager):
+        tasks = self.rest.active_tasks()
+        for task in tasks:
+            #if task still exists
+            if task["pid"] == self.task_pid:
+                self.log.info("progress %s:%s - %s %%" % (self.type, self.target_value, task["progress"]))
+                #reached expected progress
+                if task["progress"] >= self.wait_progress:
+                        self.state = FINISHED
+                        self.log.error("progress was reached %s" % self.wait_progress)
+                        self.set_result(True)
+                #progress value was changed
+                if task["progress"] > self.current_progress:
+                    self.current_progress = task["progress"]
+                    self.currebt_iter = 0
+                    task_manager.schedule(self, 2)
+                #progress value was not changed
+                elif task["progress"] == self.current_progress:
+                    if self.current_iter < self.num_iterations:
+                        time.sleep(2)
+                        self.current_iter += 1
+                        task_manager.schedule(self, 2)
+                    #num iteration with the same progress = num_iterations
+                    else:
+                        self.state = FINISHED
+                        self.log.error("progress for active task was not changed during %s sec" % 2 * self.num_iterations)
+                        self.set_result(False)
+                else:
+                    self.state = FINISHED
+                    self.log.error("progress for task %s:%s changed direction!" % (self.type, self.target_value))
+                    self.set_result(False)
+
+        #task was completed
+        self.state = FINISHED
+        self.log.info("task %s:%s was completed" % (self.type, self.target_value))
+        self.set_result(True)
+
+
 class MonitorViewFragmentationTask(Task):
 
     """
