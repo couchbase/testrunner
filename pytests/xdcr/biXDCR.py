@@ -29,12 +29,12 @@ class bidirectional(XDCRReplicationBaseTest):
             if "update" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
             if "update" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", 0))
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", self._expires))
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            time.sleep(5)
+            time.sleep(30)
             for task in tasks:
                 task.result()
 
@@ -48,12 +48,14 @@ class bidirectional(XDCRReplicationBaseTest):
         if self._doc_ops_dest is not None:
         # allows multiple of them but one by one
             if "create" in self._doc_ops_dest:
-                self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+                self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
             if "update" in self._doc_ops_dest:
                 self._load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires)
             if "delete" in self._doc_ops_dest:
-                self._load_all_buckets(self.dest_master, self.gen_delete2, "delete", self._expires)
-            self._wait_for_stats_all_buckets(self.dest_nodes)
+                self._load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0)
+
+        self._wait_for_stats_all_buckets(self.src_nodes)
+        self._wait_for_stats_all_buckets(self.dest_nodes)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
@@ -64,10 +66,11 @@ class bidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_ops(self):
         if "create" in self._doc_ops:
-            self._load_all_buckets(self.src_master, self.gen_create, "create", self._expires)
+            self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         if "create" in self._doc_ops_dest:
-            self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+            self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
+        time.sleep(60)
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
@@ -82,7 +85,6 @@ class bidirectional(XDCRReplicationBaseTest):
             self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
 
         time.sleep(60)
-
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
@@ -91,9 +93,9 @@ class bidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_ops_with_warmup(self):
         if "create" in self._doc_ops:
-            self._load_all_buckets(self.src_master, self.gen_create, "create", self._expires)
+            self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         if "create" in self._doc_ops_dest:
-            self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+            self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
         time.sleep(30)
         #warmup
@@ -125,9 +127,9 @@ class bidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_ops_with_warmup_master(self):
         if "create" in self._doc_ops:
-            self._load_all_buckets(self.src_master, self.gen_create, "create", self._expires)
+            self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         if "create" in self._doc_ops_dest:
-            self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+            self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
         time.sleep(30)
         #warmup
@@ -220,8 +222,8 @@ class bidirectional(XDCRReplicationBaseTest):
         self.verify_results(verify_src=True)
 
     def load_with_failover(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", self._expires)
-        self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
         if "source" in self._failover:
             i = randrange(1, len(self.src_nodes))
@@ -232,6 +234,7 @@ class bidirectional(XDCRReplicationBaseTest):
             self._cluster_helper.failover(self.dest_nodes, [self.dest_nodes[i]])
             self._log.info(" Failing over Destination Non-Master Node {0}".format(self.dest_nodes[i].ip))
 
+        time.sleep(30)
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
@@ -300,8 +303,8 @@ class bidirectional(XDCRReplicationBaseTest):
 
 
     def replication_with_view_queries_and_ops(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", self._expires)
-        self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
         src_buckets = self._get_cluster_buckets(self.src_master)
         dest_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_buckets:
@@ -330,9 +333,9 @@ class bidirectional(XDCRReplicationBaseTest):
             if "update" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
             if "update" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", 0))
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", self._expires))
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
             time.sleep(5)
@@ -367,8 +370,8 @@ class bidirectional(XDCRReplicationBaseTest):
     a full verification: wait for the disk queues to drain
     and then verify that there has been no data loss on both clusters."""
     def replication_with_disabled_ddoc_compaction(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", self._expires)
-        self._load_all_buckets(self.dest_master, self.gen_create2, "create", self._expires)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
         disable_src_comp = self._input.param("disable_src_comp", True)
         disable_dest_comp = self._input.param("disable_dest_comp", True)
         if disable_src_comp:
@@ -378,6 +381,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         # perform doc's ops 3 times to increase rev number
         for i in range(3):
+            time.sleep(30)
             self._async_update_delete_data()
             tasks = []
             #restore deleted items
