@@ -76,12 +76,31 @@ class ViewQueryTests(unittest.TestCase):
 
 
     def test_simple_dataset_stale_queries(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(this test use all 3 options
+               of stale at the same time
+        '''
         # init dataset for test
         data_set = SimpleDataSet(self._rconn(), self.num_docs, self.limit)
         data_set.add_stale_queries()
         self._query_test_init(data_set)
 
     def test_simple_dataset_stale_queries_data_modification(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. load data
+            2. when data is loaded query view with stale=false
+            3. verify all keys are as expected
+            4. Delete a part of items
+            5. query view with stale=false again
+            6. Verify that only non-deleted keys appeared
+        '''
         # init dataset for test
         data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
         data_set.add_stale_queries(stale_param="false", limit=self.limit)
@@ -104,21 +123,51 @@ class ViewQueryTests(unittest.TestCase):
         self._query_all_views(data_set.views, verify_expected_keys=True)
 
     def test_simple_dataset_startkey_endkey_queries(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(different combinations of
+               stratkey. endkey, descending, inclusive_end, parameters)
+        '''
         data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
         data_set.add_startkey_endkey_queries()
         self._query_test_init(data_set)
 
     def test_simple_dataset_all_queries(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(include stale and startkey endkey queries)
+        '''
         data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
         data_set.add_all_query_sets()
         self._query_test_init(data_set)
 
     def test_simple_dataset_reduce_queries(self):
+        '''
+        Test uses simple data set:
+             -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(reduce=false, reduce=true)
+        '''
         data_set = SimpleDataSet(self._rconn(), self.num_docs,limit = self.limit,reduce_fn = self.reduce_fn)
         data_set.add_reduce_queries()
         self._query_test_init(data_set)
 
     def test_simple_dataset_negative_queries(self):
+        '''
+        Test uses simple data set:
+             -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(different invalid query parameters)
+            3. Verifies expected error message matches with actual
+        '''
         # init dataset for test
         query_params = TestInputSingleton.input.param("query_params", None)
         error = TestInputSingleton.input.param("error", None)
@@ -128,6 +177,15 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_simple_dataset_stale_queries_extended(self):
+        '''
+        Test uses simple data set:
+             -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(stale = ok, false, or update_after)
+            3. Load some more data
+            4. Verify stale ok and update_after returns old index, stale=false returns new index
+        '''
         # init dataset for test
         stale = str(self.input.param("stale_param", "update_after"))
         num_docs_to_add = self.input.param("num_docs_to_add", 10)
@@ -151,6 +209,21 @@ class ViewQueryTests(unittest.TestCase):
 
 
     def test_employee_dataset_startkey_endkey_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(starkey endkey descending
+            inclusive_end combinations)
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
@@ -160,6 +233,20 @@ class ViewQueryTests(unittest.TestCase):
         self._query_all_views(data_set.views, verify_expected_keys=True)
 
     def test_employee_dataset_alldocs_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously all_docs queries
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
@@ -167,6 +254,20 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_key_quieres(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start key queries
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
@@ -174,6 +275,21 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_negative_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(parameters values are invalid)
+            3. Verify that expected error equals to actual
+        '''
         # init dataset for test
         query_params = TestInputSingleton.input.param("query_params", None)
         error = TestInputSingleton.input.param("error", None)
@@ -184,6 +300,20 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_invalid_startkey_docid_endkey_docid_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start key queries with invalid startkey_docid or endkey_docid
+        '''
         # init dataset for test
         valid_params = TestInputSingleton.input.param("valid_params", None)
         invalid_params = TestInputSingleton.input.param("invalid_params", None)
@@ -194,6 +324,23 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_alldocs_queries_rebalance_in(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start key queries
+            3. Both threads are finished
+            4. Start rebalance in
+            5. Start querying
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         num_nodes_to_add = self.input.param('num_nodes_to_add',0)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
@@ -210,6 +357,22 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_alldocs_failover_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. wait until is persisted
+            3. failover some nodes and start rebalance
+            4. Start querying
+        '''
         failover_nodes = []
         try:
             docs_per_day = self.input.param('docs-per-day', 200)
@@ -247,6 +410,22 @@ class ViewQueryTests(unittest.TestCase):
                 shell.start_couchbase()
 
     def test_employee_dataset_alldocs_incremental_failover_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. wait until is persisted
+            3. failover nodes incrementaly in a loop and start rebalance in
+            4. Start querying
+        '''
         failover_nodes = []
         try:
             docs_per_day = self.input.param('docs-per-day', 200)
@@ -299,6 +478,23 @@ class ViewQueryTests(unittest.TestCase):
                 shell.disconnect()
 
     def test_employee_dataset_alldocs_queries_start_stop_rebalance_in_incremental(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. wait data for persistence
+            3. start rebalance in
+            4. stop rebalance
+            5. Start querying
+        '''
         docs_per_day = self.input.param('docs-per-day', 20)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
@@ -335,6 +531,23 @@ class ViewQueryTests(unittest.TestCase):
             nodes = rest.node_statuses()
 
     def test_employee_dataset_alldocs_queries_start_stop_rebalance_out_incremental(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. wait data for persistence
+            3. start rebalance out
+            4. stop rebalance
+            5. Start querying
+        '''
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
 
@@ -387,6 +600,21 @@ class ViewQueryTests(unittest.TestCase):
             nodes = rest.node_statuses()
 
     def test_employee_dataset_startkey_endkey_docid_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. simultaneously run queries (staartkey endkey startkey_docid endkey_docid
+            inclusive_end, descending combinations)
+            '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
@@ -394,6 +622,20 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_group_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. simultaneously start queries with group and group_level params
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
@@ -402,6 +644,21 @@ class ViewQueryTests(unittest.TestCase):
 
 
     def test_employee_dataset_startkey_endkey_queries_rebalance_in(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            3. start rebalance in
+            4. Start querying
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         num_nodes_to_add = self.input.param('num_nodes_to_add', 1)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
@@ -415,6 +672,21 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
 
     def test_employee_dataset_startkey_endkey_queries_rebalance_out(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start rebalance out
+            3. Start querying
+        '''
         ViewBaseTests._begin_rebalance_in(self)
         ViewBaseTests._end_rebalance(self)
 
@@ -432,7 +704,20 @@ class ViewQueryTests(unittest.TestCase):
         ViewBaseTests._end_rebalance(self)
 
     def test_employee_dataset_stale_queries(self):
-
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start stale queries(ok, update_after, false)
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
@@ -440,7 +725,20 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_all_queries(self):
-
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start queries: stale, group, starkey/endkey, stratkey_docid
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
@@ -448,6 +746,20 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_skip_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start queries with skip
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         skip = self.input.param('skip', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
@@ -456,6 +768,20 @@ class ViewQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_employee_dataset_skip_incremental_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start skip (pagination)
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         skip = 0
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
@@ -473,6 +799,21 @@ class ViewQueryTests(unittest.TestCase):
             data_set.views = [view for view in data_set.views if skip < view.index_size]
 
     def test_all_datasets_all_queries(self):
+        '''
+        Test uses employee data sets:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+             - documents are like {"name":name<string>, "age":age<int>}
+        Steps to repro:
+            1. Start load data
+            2. start all possible combinations of querying
+        '''
         ds1 = EmployeeDataSet(self._rconn())
         ds2 = SimpleDataSet(self._rconn(), self.num_docs)
         data_sets = [ds1, ds2]
@@ -496,6 +837,20 @@ class ViewQueryTests(unittest.TestCase):
         [self._query_all_views(ds.views) for ds in data_sets]
 
     def test_employee_dataset_query_all_nodes(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying all nodes
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
         data_set.add_startkey_endkey_queries()
@@ -523,7 +878,22 @@ class ViewQueryTests(unittest.TestCase):
                 self.thread_stopped.clear()
 
     def test_query_node_warmup(self):
-
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying
+            3. stop and start one node
+            4. start queriyng again
+        '''
         docs_per_day = self.input.param('docs-per-day', 500)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
@@ -545,6 +915,22 @@ class ViewQueryTests(unittest.TestCase):
         self._query_all_views(data_set.views)
 
     def test_employee_dataset_query_add_nodes(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying
+            3. add some nodes but don't rebalance
+            4. start queriyng
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         how_many_add = self.input.param('how_many_add', 0)
 
@@ -564,6 +950,21 @@ class ViewQueryTests(unittest.TestCase):
         self._query_all_views(data_set.views)
 
     def test_employee_dataset_startkey_endkey_queries_rebalance_incrementaly(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying
+            3. rebalance incrementally
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
@@ -619,6 +1020,21 @@ class ViewQueryTests(unittest.TestCase):
 
 
     def test_employee_dataset_startkey_compaction_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying
+            3. start compaction
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         percent_threshold = self.input.param('percent_compaction', 10)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
@@ -664,6 +1080,21 @@ class ViewQueryTests(unittest.TestCase):
         self._query_all_views(data_set.views)
 
     def test_employee_dataset_failover_pending_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying
+            3. gor node into pending failover state
+        '''
         failover_nodes = []
         try:
             docs_per_day = self.input.param('docs-per-day', 200)
@@ -698,6 +1129,20 @@ class ViewQueryTests(unittest.TestCase):
                     shell.disconnect()
 
     def test_employee_dataset_query_one_nodes_different_threads(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying one node - in different threads
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         num_threads = self.input.param('num_threads', 2)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
@@ -757,6 +1202,21 @@ class ViewQueryTests(unittest.TestCase):
             task.result()
 
     def test_simple_dataset_queries_during_modifying_docs(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying
+            3. start ddocs modifications
+        '''
         skip = 0
         action = self.input.param('action', 'recreate')
         data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
@@ -776,6 +1236,21 @@ class ViewQueryTests(unittest.TestCase):
 
 
     def test_employee_dataset_query_stop_master(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying
+            3. stop master
+        '''
         try:
             docs_per_day = self.input.param('docs-per-day', 200)
             error = self.input.param('error', None)
@@ -798,6 +1273,20 @@ class ViewQueryTests(unittest.TestCase):
             shell.start_couchbase()
 
     def test_start_end_key_docid_extra_params(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying (startkey/endkey with stale, skip, limit)
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         extra_params = self.input.param('extra_params', None)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
@@ -824,6 +1313,20 @@ class ViewQueryTests(unittest.TestCase):
         self._query_all_views(data_set.views)
 
     def test_employee_dataset_query_different_buckets(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying multiply buckets
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         data_sets = []
         for i in xrange(self.num_buckets):
@@ -928,6 +1431,17 @@ class ViewQueryTests(unittest.TestCase):
             task.result()
 
     def test_sales_dataset_query_reduce(self):
+        '''
+        Test uses sales data set:
+            -documents are structured as {
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "sales" : sales <int>}
+        Steps to repro:
+            1. Start load data
+            2. start querying for views with reduce
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         params = self.input.param('query_params', {})
         nodes_num_to_add = self.input.param('nodes_to_add', 0)
@@ -940,6 +1454,21 @@ class ViewQueryTests(unittest.TestCase):
         self._query_all_views(data_set.views, limit=self.limit)
 
     def test_sales_dataset_skip_query_datatypes(self):
+        '''
+        Test uses sales data set: 
+            -documents are structured as {
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "sales" : sales <int>
+                                       "delivery_date" : string for date),
+                                        "is_support_included" : boolean,
+                                        "client_name" : string,
+                                        "client_reclaims_rate" : float}}
+        Steps to repro:
+            1. Start load data
+            2. start querying for views with reduce
+        '''
         docs_per_day = self.input.param('docs-per-day', 200)
         skip = self.input.param('skip', 2000)
         nodes_num_to_add = self.input.param('nodes_to_add', 0)
@@ -1030,13 +1559,23 @@ class ViewQueryTests(unittest.TestCase):
     ##
     def _check_view_intergrity(self, views):
         for view in views:
-            self.assertEquals(view.results.failures, [],
-                [ex[1] for ex in view.results.failures])
-            self.assertEquals(view.results.errors, [],
-                [ex[1] for ex in view.results.errors])
+            if view.results.failures or view.results.errors:
+                failures = view.results.failures
+                failures += view.results.errors
+                self.fail(self._form_report_failure(failures, views))
 
-
-
+    def _form_report_failure(self, errors, views):
+        #TODO
+        report = ''
+        for ex in errors:
+            views_str = ['%s : map_fn=%s, reduce_fn=%s' %
+                         (view.name, view.fn_str, view.reduce_fn) for view in views]
+            view_struct = 'Views : %s' % views_str
+            msg = "\n****************** Error report *********************\n"
+            msg += "Failure message is: %s\nTest case info:\n%s\nViews structure are:\n%s\n\n" %(
+                                ex[1], getattr(self, self._testMethodName).func_doc, view_struct)
+            report += msg
+        return report
 
     # retrieve default rest connection associated with the master server
     def _rconn(self, server=None):
