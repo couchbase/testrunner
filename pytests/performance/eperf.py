@@ -1720,7 +1720,7 @@ class NRUMonitor(threading.Thread):
          if self.nru_num < 0:
              return
 
-         while nru_num > self.nru_num:
+         while nru_num <= self.nru_num:
              print "[NRUMonitor] nru_num = %d, sleep for %d seconds" \
                 % (nru_num, self.freq)
              time.sleep(self.freq)
