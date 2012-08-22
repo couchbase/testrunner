@@ -6,6 +6,7 @@ from membase.api.rest_client import RestConnection
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from tasks.task import MonitorActiveTask
+from membase.api.exception import RebalanceFailedException
 
 class RebalanceInTests(RebalanceBaseTest):
 
@@ -225,9 +226,10 @@ class RebalanceInTests(RebalanceBaseTest):
     Then it creates cluster with nodes_init nodes. Next steps are:
     stop the latest node in servs_init list( if list size equals 1, master node/
     cluster will be stopped), wait 20 sec and start the stopped node. Without waiting for
-    the node to start up completely, rebalance in servs_in servers.
-    Once the cluster has been rebalanced we wait for the disk queues to drain,
-    and then verify that there has been no data loss."""
+    the node to start up completely, rebalance in servs_in servers. Expect that
+    rebalance is failed. Wait for warmup complted and strart rebalance with the same
+    configuration. Once the cluster has been rebalanced we wait for the disk queues
+    to drain, and then verify that there has been no data loss."""
     def rebalance_in_with_warming_up(self):
         nodes_init = self.input.param("nodes_init", 1)
         servs_in = self.servers[nodes_init:nodes_init + self.nodes_in]
@@ -240,7 +242,15 @@ class RebalanceInTests(RebalanceBaseTest):
         time.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
-        rebalance = self.cluster.async_rebalance(servs_init, servs_in, [])
+        try:
+            rebalance = self.cluster.async_rebalance(servs_init, servs_in, [])
+            rebalance.result()
+        except RebalanceFailedException:
+            self.log.info("rebalance was failed as expected")
+        self.assertTrue(self._wait_warmup_completed([warmup_node], self.default_bucket_name))
+
+        self.log.info("second attempt to rebalance")
+        rebalance = self.cluster.async_rebalance(servs_init + servs_in, [], [])
         rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)

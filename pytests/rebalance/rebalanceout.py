@@ -5,6 +5,7 @@ from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.exception import RebalanceFailedException
 
 class RebalanceOutTests(RebalanceBaseTest):
 
@@ -214,6 +215,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     and all servers clustered together. Next steps are: stop defined
     node(master_restart = False by default), wait 20 sec and start the stopped node.
     Without waiting for the node to start up completely, rebalance out servs_out servers.
+    Expect that rebalance is failed. Wait for warmup complted and strart
+    rebalance with the same configuration.
     Once the cluster has been rebalanced we wait for the disk queues to drain,
     and then verify that there has been no data loss."""
     def rebalance_out_with_warming_up(self):
@@ -228,8 +231,17 @@ class RebalanceOutTests(RebalanceBaseTest):
         time.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
+        try:
+            rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
+            rebalance.result()
+        except RebalanceFailedException:
+            self.log.info("rebalance was failed as expected")
+        self.assertTrue(self._wait_warmup_completed([warmup_node], self.default_bucket_name))
+
+        self.log.info("second attempt to rebalance")
         rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
         rebalance.result()
+
         self._wait_for_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
         self._verify_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
