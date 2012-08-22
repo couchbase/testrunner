@@ -928,7 +928,8 @@ class PerfBase(unittest.TestCase):
         return ops, start_time, end_time
 
     def wait_until_drained(self):
-        print "[drain] draining disk write queue ..."
+        print "[perf.drain] draining disk write queue : %s"\
+            % time.strftime("%b %d %Y %H:%M:%S")
 
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
@@ -940,12 +941,14 @@ class PerfBase(unittest.TestCase):
                                               'ep_flusher_todo', 0,
                                               fn=RebalanceHelper.wait_for_stats_no_timeout)
 
-        print "[drain] disk write queue has been drained"
+        print "[perf.drain] disk write queue has been drained: %s"\
+            % time.strftime("%b %d %Y %H:%M:%S")
 
         return time.time()
 
     def wait_until_repl(self):
-        print "[perf.repl] waiting for replication ..."
+        print "[perf.repl] waiting for replication: %s"\
+            % time.strftime("%b %d %Y %H:%M:%S")
 
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
@@ -966,7 +969,8 @@ class PerfBase(unittest.TestCase):
             'ep_tap_replica_qlen', 0,
             fn=RebalanceHelper.wait_for_stats_no_timeout)
 
-        print "[perf.repl] replication is done"
+        print "[perf.repl] replication is done: %s"\
+            % time.strftime("%b %d %Y %H:%M:%S")
 
     def warmup(self, collect_stats=True, flush_os_cache=False):
         """
