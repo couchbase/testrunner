@@ -246,7 +246,7 @@ class EPerfMaster(perf.PerfBase):
             tm_hour = (gmt.tm_hour + 1) % 24
 
         min_left = 60 - gmt.tm_min
-        gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
+        gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
         for server in self.input.servers:
             shell = RemoteMachineShellConnection(server)
             cmd = "/opt/couchbase/bin/cbepctl localhost:11210 "\
@@ -1728,7 +1728,7 @@ class NRUMonitor(threading.Thread):
              if nru_num < 0:
                  break
 
-         gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
+         gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
          speed, num_items, run_time =  self.get_nru_speed()
 
          print "[NRUMonitor] access scanner finished at: %s, speed: %s, "\
@@ -1741,7 +1741,7 @@ class NRUMonitor(threading.Thread):
          self.shell.disconnect()
          self.eperf.latched_rebalance(delay=self.reb_delay, sync=True)
 
-         gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
+         gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
          print "[NRUMonitor] rebalance finished: %s" % gmt_now
 
          print "[NRUMonitor] stopped running"

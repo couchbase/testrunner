@@ -13,6 +13,7 @@ class PerfDefaults:
     num_nodes           =    10
     conf_file           =    "default.conf"
     bucket              =    "default"
+    strftime           =     "%b-%d-%Y %H:%M:%S"
 
     # load phase
     items               =    22000000    # 22 million

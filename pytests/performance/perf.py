@@ -473,7 +473,8 @@ class PerfBase(unittest.TestCase):
 
         if not overwrite:
             self._save_snapshot(server, bucket,
-                                "{0}.tar.gz".format(time.strftime('%X-%x-%Z')))  # TODO: filename
+                                "{0}.tar.gz".format(
+                                    time.strftime(PerfDefaults.strftime)))  # TODO: filename
 
         rm_cmd = "rm -rf {0}/{1} {0}/{1}-data {0}/_*".format(dest_data_path,
                                                              bucket)
@@ -711,7 +712,7 @@ class PerfBase(unittest.TestCase):
     def delayed_rebalance_worker(servers, num_nodes, delay_seconds, sc,
                                  max_retries=PerfDefaults.reb_max_retries):
         time.sleep(delay_seconds)
-        gmt_now = time.strftime("%b %d %Y %H:%M:%S", time.gmtime())
+        gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
         print "[delayed_rebalance_worker] rebalance started: %s" % gmt_now
 
         if not sc:
@@ -929,7 +930,7 @@ class PerfBase(unittest.TestCase):
 
     def wait_until_drained(self):
         print "[perf.drain] draining disk write queue : %s"\
-            % time.strftime("%b %d %Y %H:%M:%S")
+            % time.strftime(PerfDefaults.strftime)
 
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
@@ -942,13 +943,13 @@ class PerfBase(unittest.TestCase):
                                               fn=RebalanceHelper.wait_for_stats_no_timeout)
 
         print "[perf.drain] disk write queue has been drained: %s"\
-            % time.strftime("%b %d %Y %H:%M:%S")
+            % time.strftime(PerfDefaults.strftime)
 
         return time.time()
 
     def wait_until_repl(self):
         print "[perf.repl] waiting for replication: %s"\
-            % time.strftime("%b %d %Y %H:%M:%S")
+            % time.strftime(PerfDefaults.strftime)
 
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
@@ -970,7 +971,7 @@ class PerfBase(unittest.TestCase):
             fn=RebalanceHelper.wait_for_stats_no_timeout)
 
         print "[perf.repl] replication is done: %s"\
-            % time.strftime("%b %d %Y %H:%M:%S")
+            % time.strftime(PerfDefaults.strftime)
 
     def warmup(self, collect_stats=True, flush_os_cache=False):
         """
@@ -998,10 +999,10 @@ class PerfBase(unittest.TestCase):
         start_time = time.time()
 
         print "[warmup] stopping couchbase ... ({0}, {1})"\
-            .format(server.ip, time.strftime('%X %x %Z'))
+            .format(server.ip, time.strftime(PerfDefaults.strftime))
         shell.stop_couchbase()
         print "[warmup] couchbase stopped ({0}, {1})"\
-            .format(server.ip, time.strftime('%X %x %Z'))
+            .format(server.ip, time.strftime(PerfDefaults.strftime))
 
         if flush_os_cache:
             print "[warmup] flushing os cache ..."
@@ -1009,7 +1010,7 @@ class PerfBase(unittest.TestCase):
 
         shell.start_couchbase()
         print "[warmup] couchbase restarted ({0}, {1})"\
-            .format(server.ip, time.strftime('%X %x %Z'))
+            .format(server.ip, time.strftime(PerfDefaults.strftime))
 
         self.wait_until_warmed_up()
         print "[warmup] warmup finished"
