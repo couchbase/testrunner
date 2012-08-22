@@ -8,6 +8,7 @@ class TransferBaseTest(BaseTestCase):
                                              self.input.membase_settings.rest_password)
         self.value_size = self.input.param("value_size", 256)
         self.expire_time = self.input.param("expire_time", 5)
+        self.item_flag = self.input.param("item_flag", 0)
         self.backup_location = self.input.param("backup_location", "/tmp/backup")
         self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
