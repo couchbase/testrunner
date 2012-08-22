@@ -22,7 +22,7 @@ class OpsDuringBackupTests(BackupBaseTest):
         starts can be restored correctly."""
 
         gen_load_backup = BlobGenerator('couchdb', 'couchdb', self.value_size, end=self.backup_items)
-        self._load_all_buckets(self.master, gen_load_backup, "create", 0, 2)  #store items before backup starts to kvstores[2]
+        self._load_all_buckets(self.master, gen_load_backup, "create", 0, 2, self.item_flag)  #store items before backup starts to kvstores[2]
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         gen_load = BlobGenerator('mysql', 'mysql-', self.value_size, end=self.num_items)

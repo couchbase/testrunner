@@ -26,16 +26,16 @@ class OpsBeforeBackupTests(BackupBaseTest):
         gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items / 2 - 1))
         gen_delete = BlobGenerator('couchdb', 'couchdb-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items / 2 + 1, end=self.num_items *3 / 2)
-        self._load_all_buckets(self.master, gen_load_mysql, "create", 0)
-        self._load_all_buckets(self.master, gen_load_couchdb, "create", 0)
+        self._load_all_buckets(self.master, gen_load_mysql, "create", 0, 1, self.item_flag)
+        self._load_all_buckets(self.master, gen_load_couchdb, "create", 0, 1, self.item_flag)
 
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_update, "update", 0)
+                self._load_all_buckets(self.master, gen_update, "update", 0, 1, self.item_flag)
             if("create" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_create, "create", 0)
+                self._load_all_buckets(self.master, gen_create, "create", 0, 1, self.item_flag)
             if("delete" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_delete, "delete", 0)
+                self._load_all_buckets(self.master, gen_delete, "delete", 0, 1, self.item_flag)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
@@ -71,20 +71,20 @@ class OpsBeforeBackupTests(BackupBaseTest):
 
         gen_load = BlobGenerator('mysql', 'mysql-', self.value_size, end=self.num_items)
         gen_extra = BlobGenerator('couchdb', 'couchdb-', self.value_size, end=self.num_mutate_items)
-        self._load_all_buckets(self.master, gen_load, "create", 0)
+        self._load_all_buckets(self.master, gen_load, "create", 0, 1, self.item_flag)
         extra_items_deleted_flag = 0
 
         if(self.doc_ops is not None):
-            self._load_all_buckets(self.master, gen_extra, "create", 0)
+            self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag)
             if("update" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_extra, "update", 0)
+                self._load_all_buckets(self.master, gen_extra, "update", 0, 1, self.item_flag)
             if("delete" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_extra, "delete", 0)
+                self._load_all_buckets(self.master, gen_extra, "delete", 0, 1, self.item_flag)
                 extra_items_deleted_flag = 1
             if("expire" in self.doc_ops):
                 if extra_items_deleted_flag == 1:
-                    self._load_all_buckets(self.master, gen_extra, "create", 0)
-                self._load_all_buckets(self.master, gen_extra, "update", self.expire_time)
+                    self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag)
+                self._load_all_buckets(self.master, gen_extra, "update", self.expire_time, 1, self.item_flag)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
