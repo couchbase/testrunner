@@ -1715,7 +1715,8 @@ class QueryView:
                                 break
                             else:
                                 result_count_stats[num_keys] += 1
-                        time.sleep(delay)
+                        if num_keys != expected_num_docs:
+                            ViewBaseTests._wait_for_indexer_ddoc(tc, rest, view_name)
 
                     if num_keys == expected_num_docs and verify_expected_keys and not self.reduce_fn:
                         QueryHelper.verify_query_ids_full(rest, query, results)

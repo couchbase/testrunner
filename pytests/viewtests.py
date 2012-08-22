@@ -451,17 +451,63 @@ class ViewBaseTests(unittest.TestCase):
                     return results
                 else:
                     self.log.info("view returned empty results in {0} seconds, sleeping for {1}".format(delta, timeout))
+                    ViewBaseTests._wait_for_indexer_ddoc(self, rest, view)
                     time.sleep(timeout)
             except Exception as ex:
                 if invalid_results and ex.message.find('view_undefined') < 0:
                         raise ex
                 self.log.error("view_results not ready yet , try again in {1} seconds... , error {0}".format(ex, timeout))
+                ViewBaseTests._wait_for_indexer_ddoc(self, rest, view)
                 time.sleep(timeout)
         if results and results.get(u'errors', []):
             self.fail("unable to get view_results for {0} after {1} tries due to error {2}".format(view, num_tries, results.get(u'errors')))
         if results.get(u'error', ''):
             self.fail("unable to get view_results for {0} after {1} tries due to error {2}-{3}".format(view, num_tries, results.get(u'error'), results.get(u'reason')))
         self.fail("unable to get view_results for {0} after {1} tries".format(view, num_tries))
+
+    @staticmethod
+    def _get_indexer_task_pid(self, rest, ddoc):
+        active_tasks = rest.active_tasks()
+        if u'error' in active_tasks:
+            return None
+        if active_tasks:
+            for task in active_tasks:
+                if task['type'] == 'indexer':
+                    for ddoc in task['design_documents']:
+                        if ddoc == ('_design/%s' % ddoc):
+                            return task['pid'], False
+                if task['type'] == 'blocked_indexer':
+                    for ddoc in task['design_documents']:
+                        if ddoc == ('_design/%s' % ddoc):
+                            return task['pid'], True
+        return None, None
+
+    @staticmethod
+    def _wait_for_task_pid(self, pid, end_time):
+        while (time.time() < end_time):
+            new_pid, _ =  ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
+            if pid == new_pid:
+                time.sleep(5)
+                continue
+            else:
+                if new_pid:
+                    self.log.info('New index for ddoc %s is started' % ddoc)
+                else:
+                    self.log.info('Index for ddoc %s is not going on' % ddoc)
+                return
+
+    @staticmethod
+    def _wait_for_indexer_ddoc(self, rest, ddoc, timeout=300):
+        end_time = time.time() + timeout
+        old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
+        if not old_pid:
+            self.log.info('Index for ddoc %s is not going on' % ddoc)
+            return
+        while is_pid_blocked:
+            ViewBaseTests._wait_for_task_pid(old_pid, end_time)
+            old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
+        if old_pid:
+            ViewBaseTests._wait_for_task_pid(old_pid, end_time)
 
     @staticmethod
     def _setup_cluster(self):
