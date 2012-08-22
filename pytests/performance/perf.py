@@ -665,6 +665,9 @@ class PerfBase(unittest.TestCase):
         if is_eperf:
             if self.parami("load_wait_until_drained", 1) == 1:
                 self.wait_until_drained()
+            if self.parami("load_wait_until_repl",
+                PerfDefaults.load_wait_until_repl) == 1:
+                self.wait_until_repl()
             self.end_stats(sc, ops, "{0}.{1}".format(self.spec_reference,
                                                      phase))
 
@@ -940,6 +943,30 @@ class PerfBase(unittest.TestCase):
         print "[drain] disk write queue has been drained"
 
         return time.time()
+
+    def wait_until_repl(self):
+        print "[perf.repl] waiting for replication ..."
+
+        master = self.input.servers[0]
+        bucket = self.param("bucket", "default")
+
+        RebalanceHelper.wait_for_stats_on_all(master, bucket,
+            'vb_replica_queue_size', 0,
+            fn=RebalanceHelper.wait_for_stats_no_timeout)
+
+        RebalanceHelper.wait_for_stats_on_all(master, bucket,
+            'ep_tap_replica_queue_itemondisk', 0,
+            fn=RebalanceHelper.wait_for_stats_no_timeout)
+
+        RebalanceHelper.wait_for_stats_on_all(master, bucket,
+            'ep_tap_rebalance_queue_backfillremaining', 0,
+            fn=RebalanceHelper.wait_for_stats_no_timeout)
+
+        RebalanceHelper.wait_for_stats_on_all(master, bucket,
+            'ep_tap_replica_qlen', 0,
+            fn=RebalanceHelper.wait_for_stats_no_timeout)
+
+        print "[perf.repl] replication is done"
 
     def warmup(self, collect_stats=True, flush_os_cache=False):
         """
