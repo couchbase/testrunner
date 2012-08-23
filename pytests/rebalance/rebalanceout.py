@@ -293,9 +293,9 @@ class RebalanceOutTests(RebalanceBaseTest):
         result = active_task.result()
         self.assertTrue(result)
 
+        expected_rows = self.num_items / 10
         query["stale"] = "false"
         query["limit"] = expected_rows
-        expected_rows = self.num_items / 10
 
         self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 2, expected_rows=expected_rows)
 
