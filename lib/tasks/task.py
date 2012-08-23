@@ -524,7 +524,7 @@ class ValidateDataTask(GenericLoadingTask):
         self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
 
     def has_next(self):
-        if self.itr < (self.num_valid_keys + self.num_deleted_keys) or\
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys) and\
             self.itr < self.max_verify:
             return True
         return False
