@@ -69,7 +69,7 @@ class FailoverHelper(object):
             try:
                 rest = RestConnection(server)
             except Exception as ex:
-                if ex.find('Connection refused') > -1:
+                if ex.message and ex.message.find('Connection refused') > -1:
                     self.log.info("server %s is already stopped" % server.ip)
                     continue
                 else:
