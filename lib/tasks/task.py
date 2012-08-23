@@ -1079,7 +1079,7 @@ class MonitorActiveTask(Task):
         tasks = self.rest.active_tasks()
         print tasks
         for task in tasks:
-            if task["type"] == (self.type and (
+            if task["type"] == self.type and ((
                         self.target_key == "design_documents" and task[self.target_key][0] == self.target_value) or (
                         self.target_key == "original_target" and task[self.target_key] == self.target_value)):
                 self.current_progress = task["progress"]
