@@ -9,7 +9,7 @@ class RebalanceBaseTest(BaseTestCase):
         self.value_size = self.input.param("value_size", 256)
         self.nodes_in = self.input.param("nodes_in", 1)
         self.nodes_out = self.input.param("nodes_out", 1)
-        self.doc_ops=self.input.param("doc_ops", None)
+        self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
         self.defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
@@ -31,10 +31,12 @@ class RebalanceBaseTest(BaseTestCase):
     def tearDown(self):
         super(RebalanceBaseTest, self).tearDown()
 
-    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120, bucket="default"):
+    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120, bucket="default", expected_rows=None):
         tasks = []
+        if expected_rows is None:
+            expected_rows = self.num_items
         for i in xrange(num_views):
-            tasks.append(self.cluster.async_query_view(self.servers[0], prefix + ddoc_name, self.default_view_name + str(i), query, self.num_items, bucket))
+            tasks.append(self.cluster.async_query_view(self.servers[0], prefix + ddoc_name, self.default_view_name + str(i), query, expected_rows, bucket))
         try:
             for task in tasks:
                 task.result(wait_time)
