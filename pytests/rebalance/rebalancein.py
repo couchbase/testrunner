@@ -167,18 +167,34 @@ class RebalanceInTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 20)
 
         for bucket in self.buckets:
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout)
+                for view in views:
+                    # run queries to create indexes
+                    self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+
+        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
+        result = active_task.result()
+        self.assertTrue(result)
+
+        expected_rows = None
+        if self.max_verify:
+            expected_rows = self.max_verify
+            query["limit"] = expected_rows
+        query["stale"] = "false"
+
+
+        for bucket in self.buckets:
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
 
         servs_in = self.servers[1:self.nodes_in + 1]
         rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         time.sleep(self.wait_timeout / 5)
         #see that the result of view queries are the same as expected during the test
         for bucket in self.buckets:
-           self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout)
+           self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
         #verify view queries results after rebalancing
         rebalance.result()
         for bucket in self.buckets:
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
@@ -207,15 +223,29 @@ class RebalanceInTests(RebalanceBaseTest):
         tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
         for task in tasks:
             task.result(self.wait_timeout * 2)
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
+        for view in views:
+            # run queries to create indexes
+            self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+
+        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
+        result = active_task.result()
+        self.assertTrue(result)
+
+        expected_rows = None
+        if self.max_verify:
+            expected_rows = self.max_verify
+            query["limit"] = expected_rows
+        query["stale"] = "false"
+
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_row)
         for i in range(self.num_servers)[1:]:
             rebalance = self.cluster.async_rebalance(self.servers[:i], [self.servers[i]], [])
             time.sleep(self.wait_timeout / 5)
             #see that the result of view queries are the same as expected during the test
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             #verify view queries results after rebalancing
             rebalance.result()
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             self._wait_for_stats_all_buckets(self.servers[:i + 1])
             self._verify_all_buckets(self.master, max_verify=self.max_verify)
             self._verify_stats_all_buckets(self.servers[:i + 1])

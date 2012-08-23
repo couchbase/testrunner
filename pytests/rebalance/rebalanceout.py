@@ -147,26 +147,55 @@ class RebalanceOutTests(RebalanceBaseTest):
     def rebalance_out_with_queries(self):
         num_views = self.input.param("num_views", 5)
         is_dev_ddoc = self.input.param("is_dev_ddoc", True)
-        views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
 
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
+
+        views = []
         tasks = []
-        tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
+        for bucket in self.buckets:
+            temp = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
+            temp_tasks = self.async_create_views(self.master, ddoc_name, temp, bucket)
+            views += temp
+            tasks += temp_tasks
+
+        timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items / 50000)
+
         for task in tasks:
-            task.result(self.wait_timeout * 2)
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+            task.result(self.wait_timeout * 20)
+
+        for bucket in self.buckets:
+                for view in views:
+                    # run queries to create indexes
+                    self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+
+        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
+        result = active_task.result()
+        self.assertTrue(result)
+
+        expected_rows = None
+        if self.max_verify:
+            expected_rows = self.max_verify
+            query["limit"] = expected_rows
+        query["stale"] = "false"
+
+
+        for bucket in self.buckets:
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
+
         servs_out = self.servers[-self.nodes_out:]
         rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
         time.sleep(self.wait_timeout / 5)
         #see that the result of view queries are the same as expected during the test
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+        for bucket in self.buckets:
+           self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
         #verify view queries results after rebalancing
         rebalance.result()
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query)
+        for bucket in self.buckets:
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
         self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
@@ -192,19 +221,33 @@ class RebalanceOutTests(RebalanceBaseTest):
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
+        tasks = []
         tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
         for task in tasks:
-            task.result(self.wait_timeout)
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
+            task.result(self.wait_timeout * 2)
+        for view in views:
+            # run queries to create indexes
+            self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+
+        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
+        result = active_task.result()
+        self.assertTrue(result)
+
+        expected_rows = None
+        if self.max_verify:
+            expected_rows = self.max_verify
+            query["limit"] = expected_rows
+        query["stale"] = "false"
+
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_row)
         for i in reversed(range(self.num_servers)[1:]):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
             time.sleep(self.wait_timeout / 5)
             #see that the result of view queries are the same as expected during the test
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_row)
             #verify view queries results after rebalancing
             rebalance.result()
-            tasks = []
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_row)
             self._wait_for_stats_all_buckets(self.servers[:i])
             self._verify_all_buckets(self.master, max_verify=self.max_verify)
             self._verify_stats_all_buckets(self.servers[:i])
@@ -282,7 +325,6 @@ class RebalanceOutTests(RebalanceBaseTest):
             self._load_all_buckets(self.master, self.gen_update, "update", 0)
             for view in views:
                 # run queries to create indexes
-                query = {"stale" : "false"}
                 self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
