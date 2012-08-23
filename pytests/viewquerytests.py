@@ -408,6 +408,8 @@ class ViewQueryTests(unittest.TestCase):
                            if node.ip == server.ip and str(node.port) == server.port]:
                 shell = RemoteMachineShellConnection(server)
                 shell.start_couchbase()
+                time.sleep(10)
+                shell.disconnect()
 
     def test_employee_dataset_alldocs_incremental_failover_queries(self):
         '''
@@ -1126,6 +1128,7 @@ class ViewQueryTests(unittest.TestCase):
                 for server in stopped_servers:
                     shell = RemoteMachineShellConnection(server)
                     shell.start_couchbase()
+                    time.sleep(10)
                     shell.disconnect()
 
     def test_employee_dataset_query_one_nodes_different_threads(self):
@@ -1271,6 +1274,8 @@ class ViewQueryTests(unittest.TestCase):
         finally:
             shell = RemoteMachineShellConnection(self.servers[0])
             shell.start_couchbase()
+            time.sleep(10)
+            shell.disconnect()
 
     def test_start_end_key_docid_extra_params(self):
         '''
