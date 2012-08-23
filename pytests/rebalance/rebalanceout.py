@@ -286,7 +286,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                 query = {"stale" : "false"}
                 self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
 
-        if end_time < time.time():
+        if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
             self.fail("impossible to reach compaction value after %s sec" % self.wait_timeout * 10)
         fragmentation_monitor.result()
 
