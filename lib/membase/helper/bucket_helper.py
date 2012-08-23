@@ -228,12 +228,12 @@ class BucketOperationHelper():
     #try to insert key in all vbuckets before returning from this function
     #bucket { 'name' : 90,'password':,'port':1211'}
     @staticmethod
-    def wait_for_memcached(node, bucket, timeout_in_seconds=300, log=''):
+    def wait_for_memcached(node, bucket, timeout_in_seconds=300, log_msg=''):
         log = logger.Logger.get_logger()
         msg = "waiting for memcached bucket : {0} in {1} to accept set ops"
         log.info(msg.format(bucket, node.ip))
         all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
-                                                                                 bucket, timeout_in_seconds, log)
+                                                                                 bucket, timeout_in_seconds, log_msg)
         #return (counter == vbucket_count) and all_vbuckets_ready
         return all_vbuckets_ready
 

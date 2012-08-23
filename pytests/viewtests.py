@@ -126,7 +126,7 @@ class ViewBaseTests(unittest.TestCase):
                 available_ram = 256
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
             msg = 'This not_my_vbucket error is part of wait_for_memcached method, not an issue'
-            ready = BucketOperationHelper.wait_for_memcached(master, name, log=msg)
+            ready = BucketOperationHelper.wait_for_memcached(master, name, log_msg=msg)
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),
                         msg="unable to create {0} bucket".format(name))
@@ -134,7 +134,15 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _create_multiple_buckets(self, replica=1):
         master = self.servers[0]
-        created = BucketOperationHelper.create_multiple_buckets(master, replica, howmany=self.num_buckets, saslPassword="")
+        bucket_type = self.input.param('bucket-type', None)
+        if bucket_type == 'sasl':
+            created = BucketOperationHelper.create_multiple_buckets(master, replica,
+                                                                    howmany=self.num_buckets,
+                                                                    saslPassword="password")
+        else:
+            created = BucketOperationHelper.create_multiple_buckets(master, replica,
+                                                                    howmany=self.num_buckets,
+                                                                    saslPassword="")
         self.assertTrue(created, "unable to create multiple buckets")
 
         rest = RestConnection(master)

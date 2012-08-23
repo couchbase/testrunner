@@ -11,7 +11,7 @@ import math
 import datetime
 from threading import Thread, Event
 from couchbase.document import View
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from viewtests import ViewBaseTests
 from memcached.helper.data_helper import VBucketAwareMemcached, DocumentGenerator, KVStoreAwareSmartClient
 from membase.helper.failover_helper import FailoverHelper
@@ -1517,6 +1517,56 @@ class ViewQueryTests(unittest.TestCase):
         data_set.load(self, data_set.views[0])
         data_set.query_verify_value(self)
 
+    def test_employee_dataset_query_different_bucke_types(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. start querying multiply buckets, buckets are sasl with password
+        '''
+        docs_per_day = self.input.param('docs-per-day', 200)
+        bucket_type = self.input.param('bucket-type', None)
+        test_buckets = []
+        for i in xrange(self.num_buckets):
+            if bucket_type and bucket_type == 'sasl':
+                test_buckets.append(Bucket(name="bucket-{0}".format(i), saslPassword="password"))
+            else:
+                test_buckets.append(Bucket(name="bucket-{0}".format(i)))
+        data_sets = []
+        for test_bucket in test_buckets:
+            data_sets.append(EmployeeDataSet(self._rconn(), docs_per_day,
+                                             bucket=test_bucket))
+        for data_set in data_sets:
+            data_set.add_startkey_endkey_queries()
+            self._query_test_init(data_set, False)
+
+        query_bucket_threads = []
+        for data_set in data_sets:
+            t = StoppableThread(target=self._query_all_views,
+                                name="query-bucket-{0}".format(data_set.bucket.name),
+                                args=(data_set.views,))
+            query_bucket_threads.append(t)
+            t.start()
+
+        while True:
+            if not query_bucket_threads:
+                break
+            self.thread_stopped.wait(60)
+            if self.thread_crashed.is_set():
+                for t in query_bucket_threads:
+                    t.stop()
+                break
+            else:
+                query_bucket_threads = [d for d in query_bucket_threads if d.is_alive()]
+                self.thread_stopped.clear()
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.

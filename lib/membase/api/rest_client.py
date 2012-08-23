@@ -245,16 +245,9 @@ class RestConnection(object):
     def create_view(self, design_doc_name, bucket_name, views):
         return self.create_ddoc(design_doc_name, bucket_name, views)
 
-    def create_ddoc(self, design_doc_name, bucket_name, views):
+    def create_ddoc(self, design_doc_name, bucket, views):
         design_doc = DesignDocument(design_doc_name, views)
-        api = '%s/%s/_design/%s' % (self.capiBaseUrl, bucket_name, design_doc_name)
-
-        status, content, header = self._http_request(api, 'PUT', str(design_doc),
-                                            headers=self._create_capi_headers())
-        if not status:
-            raise Exception("unable to create ddoc: " + design_doc_name +
-                            " on bucket: " + bucket_name)
-        return json.loads(content)
+        return self.create_design_document(bucket, design_doc)
 
     def create_design_document(self, bucket, design_doc):
         design_doc_name = design_doc.id
