@@ -1525,6 +1525,9 @@ class Bucket(object):
         self.authType = authType
         self.master_id = master_id
 
+    def __str__(self):
+        return self.name
+
 
 class Node(object):
     def __init__(self):
