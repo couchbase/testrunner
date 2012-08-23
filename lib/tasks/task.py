@@ -888,6 +888,7 @@ class ViewQueryTask(Task):
         self.query = query
         self.expected_rows = expected_rows
         self.retry_time = retry_time
+        self.timeout = 900
 
     def execute(self, task_manager):
 
@@ -896,7 +897,7 @@ class ViewQueryTask(Task):
         try:
             # make sure view can be queried
             content = \
-                rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
+                rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query, self.timeout)
 
             if self.expected_rows is None:
                 # no verification
@@ -922,7 +923,7 @@ class ViewQueryTask(Task):
         try:
             # query and verify expected num of rows returned
             content = \
-                rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query)
+                rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query, self.timeout)
 
             self.log.info("(%d rows) expected, (%d rows) returned" % \
                           (self.expected_rows, len(content['rows'])))
