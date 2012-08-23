@@ -288,7 +288,7 @@ class BaseTestCase(unittest.TestCase):
         template = '{{ "age": {0}, "first_name": "{1}" }}'
         gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
 
-        self.log.info("load document data")
+        self.log.info("%s %s documents..." % (data_op, self.num_items))
         self._load_all_buckets(self.master, gen_load, data_op, 0)
 
     #returns true if warmup is completed in self.wait_timeout * 10 sec,
