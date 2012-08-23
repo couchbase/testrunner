@@ -247,11 +247,11 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance.result()
         except RebalanceFailedException:
             self.log.info("rebalance was failed as expected")
-        self.assertTrue(self._wait_warmup_completed([warmup_node], self.default_bucket_name))
+            self.assertTrue(self._wait_warmup_completed([warmup_node], self.default_bucket_name))
 
-        self.log.info("second attempt to rebalance")
-        rebalance = self.cluster.async_rebalance(servs_init + servs_in, [], [])
-        rebalance.result()
+            self.log.info("second attempt to rebalance")
+            rebalance = self.cluster.async_rebalance(servs_init + servs_in, [], [])
+            rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
@@ -303,7 +303,10 @@ class RebalanceInTests(RebalanceBaseTest):
         self.assertTrue(result)
 
         query["stale"] = "false"
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 2)
+        query["limit"] = expected_rows
+        expected_rows = self.num_items / 10
+
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 2, expected_rows=expected_rows)
 
         compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name, self.default_bucket_name)
         servs_in = self.servers[1:self.nodes_in + 1]

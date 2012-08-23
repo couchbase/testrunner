@@ -236,12 +236,11 @@ class RebalanceOutTests(RebalanceBaseTest):
             rebalance.result()
         except RebalanceFailedException:
             self.log.info("rebalance was failed as expected")
-        self.assertTrue(self._wait_warmup_completed([warmup_node], self.default_bucket_name))
+            self.assertTrue(self._wait_warmup_completed([warmup_node], self.default_bucket_name))
 
-        self.log.info("second attempt to rebalance")
-        rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
-        rebalance.result()
-
+            self.log.info("second attempt to rebalance")
+            rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
+            rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
         self._verify_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
@@ -289,6 +288,16 @@ class RebalanceOutTests(RebalanceBaseTest):
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
             self.fail("impossible to reach compaction value after %s sec" % self.wait_timeout * 10)
         fragmentation_monitor.result()
+
+        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
+        result = active_task.result()
+        self.assertTrue(result)
+
+        query["stale"] = "false"
+        query["limit"] = expected_rows
+        expected_rows = self.num_items / 10
+
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 2, expected_rows=expected_rows)
 
         compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name, self.default_bucket_name)
 
