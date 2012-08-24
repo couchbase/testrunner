@@ -472,11 +472,11 @@ class ViewBaseTests(unittest.TestCase):
             return None
         if active_tasks:
             for task in active_tasks:
-                if task['type'] == 'indexer':
+                if task['type'] == 'indexer' and task['indexer_type'] == 'main':
                     for ddoc in task['design_documents']:
                         if ddoc == ('_design/%s' % ddoc):
                             return task['pid'], False
-                if task['type'] == 'blocked_indexer':
+                if task['type'] == 'blocked_indexer' and task['indexer_type'] == 'main':
                     for ddoc in task['design_documents']:
                         if ddoc == ('_design/%s' % ddoc):
                             return task['pid'], True
