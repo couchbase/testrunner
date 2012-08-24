@@ -777,8 +777,12 @@ class ViewCreateTask(Task):
             else:
                 self.set_exception(Exception("failed to update design document"))
         except QueryViewException as e:
-            task_manager.schedule(self, 2)
-
+            if e.message.find('not_found') or e.message.find('view_undefined') > -1:
+                task_manager.schedule(self, 2)
+            else:
+                self.state = FINISHED
+                self.log.info("Unexpected Exception Caught")
+                self.set_exception(e)
         #catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
