@@ -64,34 +64,17 @@ class FailoverHelper(object):
 
 
     def _stop_server(self, node):
-        master_rest = RestConnection(self.servers[0])
         for server in self.servers:
-            try:
-                rest = RestConnection(server)
-            except Exception as ex:
-                if ex.message and ex.message.find('Connection refused') > -1:
-                    self.log.info("server %s is already stopped" % server.ip)
-                    continue
+            if server.ip == node.ip and server.port == str(node.port):
+                shell = RemoteMachineShellConnection(server)
+                if shell.is_couchbase_installed():
+                    shell.stop_couchbase()
+                    self.log.info("Couchbase stopped")
                 else:
-                    raise ex
-            self.log.info("see if server {0}:{1} is running".format(server.ip, server.port))
-            if not RestHelper(rest).is_ns_server_running(timeout_in_seconds=5):
-                continue
-            node_id = rest.get_nodes_self().id
-            if node_id == node.id:
-                # if its 8091 then do ssh otherwise use ns_servr
-                if node.port == 8091:
-                    shell = RemoteMachineShellConnection(server)
-                    if shell.is_couchbase_installed():
-                        shell.stop_couchbase()
-                        self.log.info("Couchbase stopped")
-                    else:
-                        shell.stop_membase()
-                        self.log.info("Membase stopped")
-                    break
-                else:
-                    self.log.info("running {0}".format(stop_cluster.format(node.id)))
-                    master_rest.diag_eval(stop_cluster.format(node.id))
+                    shell.stop_membase()
+                    self.log.info("Membase stopped")
+                shell.disconnect()
+                return
 
 
     def _start_servers(self, nodes):
