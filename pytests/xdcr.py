@@ -68,7 +68,7 @@ class XDCRBaseTest(unittest.TestCase):
         info = rest.get_nodes_self()
         rest.init_cluster(username=master.rest_username,
                           password=master.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota =
+        rest.init_cluster_memoryQuota(memoryQuota=
             int(info.mcdMemoryReserved * node_ram_ratio))
 
     @staticmethod
@@ -77,7 +77,7 @@ class XDCRBaseTest(unittest.TestCase):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(servers)
         master = servers[0]
         BucketOperationHelper.create_multiple_buckets(
-            master, replica,node_ram_ratio * bucket_ram_ratio, howmany=howmany, sasl=False)
+            master, replica, node_ram_ratio * bucket_ram_ratio, howmany=howmany, sasl=False)
         rest = RestConnection(master)
         buckets = rest.get_buckets()
         for bucket in buckets:
@@ -99,7 +99,7 @@ class XDCRBaseTest(unittest.TestCase):
 
     @staticmethod
     def poll_for_condition(condition, sleep, timeout):
-        num_iters = timeout/sleep
+        num_iters = timeout / sleep
         return XDCRBaseTest.poll_for_condition_rec(condition, sleep, num_iters)
 
     @staticmethod
@@ -137,11 +137,11 @@ class XDCRBaseTest(unittest.TestCase):
 
     @staticmethod
     def get_rev_info(rest_conn, bucket, keys):
-        vbmc = VBucketAwareMemcached(rest_conn,bucket)
+        vbmc = VBucketAwareMemcached(rest_conn, bucket)
         ris = []
         for k in keys:
             mc = vbmc.memcached(k)
-            ri = mc.getRev(k)
+            ri = mc.getMeta(k)
             ris.append(ri)
         return ris
 
@@ -172,7 +172,7 @@ class XDCRTests(unittest.TestCase):
                         "padding":"cluster_a", "seed" : "cluster_a",
                         "bucket" : self._buckets[0]}
         self._params["kv_template"] = {"name": "employee-${prefix}-${seed}",
-                                       "sequence": "${seed}","join_yr": 2007,
+                                       "sequence": "${seed}", "join_yr": 2007,
                                        "join_mo": 10, "join_day": 20,
                                        "email": "${prefix}@couchbase.com",
                                        "job_title": "Software Engineer-${padding}"}
@@ -243,7 +243,7 @@ class XDCRTests(unittest.TestCase):
                         "Verification of replicated revisions failed")
 
     def test_continuous_unidirectional_sets_deletes(self):
-        cluster_ref_a= "cluster_ref_a"
+        cluster_ref_a = "cluster_ref_a"
         master_a = self._input.clusters.get(0)[0]
         rest_conn_a = RestConnection(master_a)
 
@@ -273,7 +273,7 @@ class XDCRTests(unittest.TestCase):
 
         # Do some deletes
         self._params["ops"] = "delete"
-        self._params["count"] = self._num_items/5
+        self._params["count"] = self._num_items / 5
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
         load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
                                                         self._buckets[0],
@@ -521,7 +521,7 @@ class XDCRTests(unittest.TestCase):
         kvstore_a0 = ClientKeyValueStore()
         self._params["ops"] = "set"
         self._params["seed"] = "cluster-a"
-        self._params["count"] = self._num_items/4
+        self._params["count"] = self._num_items / 4
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
         load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
                                                         self._buckets[0],
@@ -534,7 +534,7 @@ class XDCRTests(unittest.TestCase):
         self._params["ops"] = "set"
         self._params["seed"] = "cluster-a-wins"
         self._params["padding"] = "cluster-a-wins"
-        self._params["count"] = self._num_items/4
+        self._params["count"] = self._num_items / 4
 
         # Mutating these keys several times will increase their seqnos and allow
         # them to win during conflict resolution
@@ -552,7 +552,7 @@ class XDCRTests(unittest.TestCase):
         self._params["ops"] = "set"
         self._params["seed"] = "cluster-b-wins"
         self._params["padding"] = "cluster-a-loses"
-        self._params["count"] = self._num_items/4
+        self._params["count"] = self._num_items / 4
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
         load_thread = RebalanceDataGenerator.start_load(rest_conn_a,
                                                         self._buckets[0],
@@ -563,7 +563,7 @@ class XDCRTests(unittest.TestCase):
         kvstore_b0 = ClientKeyValueStore()
         self._params["ops"] = "set"
         self._params["seed"] = "cluster-b"
-        self._params["count"] = self._num_items/4
+        self._params["count"] = self._num_items / 4
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
         load_thread = RebalanceDataGenerator.start_load(rest_conn_b,
                                                         self._buckets[0],
@@ -576,7 +576,7 @@ class XDCRTests(unittest.TestCase):
         self._params["ops"] = "set"
         self._params["seed"] = "cluster-b-wins"
         self._params["padding"] = "cluster-b-wins"
-        self._params["count"] = self._num_items/4
+        self._params["count"] = self._num_items / 4
 
         # Mutating these keys several times will increase their seqnos and allow
         # them to win during conflict resolution
@@ -594,7 +594,7 @@ class XDCRTests(unittest.TestCase):
         self._params["ops"] = "set"
         self._params["seed"] = "cluster-a-wins"
         self._params["padding"] = "cluster-b-loses"
-        self._params["count"] = self._num_items/4
+        self._params["count"] = self._num_items / 4
         task_def = RebalanceDataGenerator.create_loading_tasks(self._params)
         load_thread = RebalanceDataGenerator.start_load(rest_conn_b,
                                                         self._buckets[0],
@@ -688,7 +688,7 @@ class XDCRTests(unittest.TestCase):
         self.log.info("DURING replication, start rebalancing...")
         servers_a = self._input.clusters.get(0)
         self.log.info("REBALANCING IN Cluster A ...")
-        RebalanceHelper.rebalance_in(servers_a, len(servers_a)-1, monitor=False)
+        RebalanceHelper.rebalance_in(servers_a, len(servers_a) - 1, monitor=False)
         self.assertTrue(rest_conn_a.monitorRebalance(),
             msg="rebalance operation on cluster {0}".format(servers_a))
 
@@ -968,7 +968,7 @@ class XDCRTests(unittest.TestCase):
         self.log.info("DURING replication, start rebalancing...")
         servers_b = self._input.clusters.get(1)
         self.log.info("REBALANCING IN Cluster B ...")
-        RebalanceHelper.rebalance_in(servers_b, len(servers_b)-1, monitor=False)
+        RebalanceHelper.rebalance_in(servers_b, len(servers_b) - 1, monitor=False)
         self.assertTrue(rest_conn_b.monitorRebalance(),
             msg="rebalance operation on cluster {0}".format(servers_b))
 
@@ -1250,14 +1250,14 @@ class XDCRTests(unittest.TestCase):
         self.log.info("DURING replication, start rebalancing in on both clusters...")
         servers_a = self._input.clusters.get(0)
         self.log.info("REBALANCING IN Cluster A ...")
-        RebalanceHelper.rebalance_in(servers_a, len(servers_a)-1, monitor=False)
+        RebalanceHelper.rebalance_in(servers_a, len(servers_a) - 1, monitor=False)
         self.assertTrue(rest_conn_a.monitorRebalance(),
             msg="rebalance operation on cluster {0}".format(servers_a))
         self.log.info("REBALANCING IN Cluster A done ...")
 
         servers_b = self._input.clusters.get(1)
         self.log.info("REBALANCING IN Cluster B ...")
-        RebalanceHelper.rebalance_in(servers_b, len(servers_b)-1, monitor=False)
+        RebalanceHelper.rebalance_in(servers_b, len(servers_b) - 1, monitor=False)
         self.assertTrue(rest_conn_b.monitorRebalance(),
             msg="rebalance operation on cluster {0}".format(servers_b))
 

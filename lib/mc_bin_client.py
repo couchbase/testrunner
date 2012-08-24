@@ -218,34 +218,15 @@ class MemcachedClient(object):
         parts = self._doCmd(memcacheConstants.CMD_GET_REPLICA, key, '')
         return self.__parseGet(parts, len(key))
 
-    def __parseMeta(self, data):
-        flags = struct.unpack('I', data[-1][0:4])[0]
-        meta_type = struct.unpack('B', data[-1][4])[0]
-        length = struct.unpack('B', data[-1][5])[0]
-        meta = data[-1][6:6 + length]
-        return (meta_type, flags, meta)
 
-    def getMeta(self, key, vbucket= -1):
+    def getMeta(self, key):
         """Get the metadata for a given key within the memcached server."""
-        self._set_vbucket(key, vbucket)
-        parts = self._doCmd(memcacheConstants.CMD_GET_META, key, '')
-        return self.__parseMeta(parts)
-
-    def getRev(self, key, vbucket= -1):
-        """Get the revision for a given key within the memcached server."""
-        (meta_type, flags, meta_data) = self.getMeta(key, vbucket= -1)
-        if meta_type != memcacheConstants.META_REVID:
-            raise ValueError("Invalid meta type %x" % meta_type)
-        try:
-            seqno = struct.unpack('>Q', meta_data[:8])[0]
-            cas = struct.unpack('>Q', meta_data[8:16])[0]
-            exp_flags = struct.unpack('>I', meta_data[16:20])[0]
-            flags_other = False
-            flags_other = struct.unpack('>I', meta_data[20:])[0]
-        except Exception as ex:
-            print(
-                "Error unpacking rev: ({0}) Rev parts we have:: seqno: {1} cas: {2} exp: {3} flags_other: {4}".format(ex, seqno, cas, exp_flags, flags_other))
-        return (seqno, cas, exp_flags, flags_other)
+        opaque, cas, data = self._doCmd(memcacheConstants.CMD_GET_META, key, '')
+        deleted = struct.unpack('>I', data[0:4])[0]
+        flags = struct.unpack('>I', data[4:8])[0]
+        exp = struct.unpack('>I', data[8:12])[0]
+        seqno = struct.unpack('>Q', data[12:20])[0]
+        return (deleted, flags, exp, seqno, cas)
 
     def cas(self, key, exp, flags, oldVal, val, vbucket= -1):
         """CAS in a new value for the given key and comparison value."""

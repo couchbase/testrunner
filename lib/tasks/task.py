@@ -630,8 +630,8 @@ class VerifyRevIdTask(GenericLoadingTask):
         try:
             src = self.client.memcached(key)
             dest = self.client_dest.memcached(key)
-            seqno_src, cas_src, exp_src, flags_src = src.getRev(key)
-            seqno_dest, cas_dest, exp_dest, flags_dest = dest.getRev(key)
+            _, flags_src, exp_src, seqno_src, cas_src = src.getMeta(key)
+            _, flags_dest, exp_dest, seqno_dest, cas_dest = dest.getMeta(key)
 
             ## seqno number should never be zero
             if seqno_src == 0:

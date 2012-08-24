@@ -658,7 +658,8 @@ class RestConnection(object):
     def remove_all_remote_clusters(self):
         remote_clusters = self.get_remote_clusters()
         for remote_cluster in remote_clusters:
-            self.remove_remote_cluster(remote_cluster["name"])
+            if remote_cluster["deleted"] == False:
+                self.remove_remote_cluster(remote_cluster["name"])
 
 
 
@@ -718,7 +719,7 @@ class RestConnection(object):
         replications = self.get_replications()
         for replication in replications:
             if replication["value"]["have_replicator_doc"] == True:
-                self.stop_replication(self.capiBaseUrl + '_replicator', replication["value"]["replication_fields"]["_id"])
+                self.stop_replication(self.capiBaseUrl + '_replicator', replication["value"]["replication_fields"]["_id"].replace("/", "%2F"))
 
     def stop_replication(self, database, rep_id):
         self._http_request(database + "/{0}".format(rep_id), 'DELETE', None, self._create_capi_headers())
