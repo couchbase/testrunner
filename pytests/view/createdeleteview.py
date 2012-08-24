@@ -363,7 +363,7 @@ class CreateDeleteViewTests(ViewBaseTest):
                 self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2)
         rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
-        self._verify_all_buckets(server=self.master, timeout=180)
+        self._verify_all_buckets(server=self.master, timeout=900)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
@@ -390,7 +390,7 @@ class CreateDeleteViewTests(ViewBaseTest):
                     self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_ddoc" + str(i))
             rebalance.result()
             self._wait_for_stats_all_buckets(self.servers[:i])
-            self._verify_all_buckets(server=self.master, timeout=180)
+            self._verify_all_buckets(server=self.master, timeout=900)
             self._verify_stats_all_buckets(self.servers[:i])
             self._verify_ddoc_ops_all_buckets()
             if self.test_with_view:
@@ -425,7 +425,7 @@ class CreateDeleteViewTests(ViewBaseTest):
                 self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2)
         rebalance.result()
         self._wait_for_stats_all_buckets(servs_after_rebal)
-        self._verify_all_buckets(server=self.master, timeout=180)
+        self._verify_all_buckets(server=self.master, timeout=900)
         self._verify_stats_all_buckets(servs_after_rebal)
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
