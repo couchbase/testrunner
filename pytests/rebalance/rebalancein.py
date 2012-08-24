@@ -237,7 +237,7 @@ class RebalanceInTests(RebalanceBaseTest):
             query["limit"] = expected_rows
         query["stale"] = "false"
 
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_row)
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
         for i in range(self.num_servers)[1:]:
             rebalance = self.cluster.async_rebalance(self.servers[:i], [self.servers[i]], [])
             time.sleep(self.wait_timeout / 5)
