@@ -7,13 +7,21 @@ Prerequisites
 Dependencies
 ------------
 
-    pip install httplib2
+Common:
 
     pip install paramiko
+
+EC2:
+
+    pip install boto
+
+Performance tests:
 
     pip install couchdbkit
 
     pip install pymongo
+
+Documentation:
 
     pip install sphinx
 
