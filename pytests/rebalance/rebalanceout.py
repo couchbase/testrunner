@@ -239,15 +239,15 @@ class RebalanceOutTests(RebalanceBaseTest):
             query["limit"] = expected_rows
         query["stale"] = "false"
 
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_row)
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
         for i in reversed(range(self.num_servers)[1:]):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
             time.sleep(self.wait_timeout / 5)
             #see that the result of view queries are the same as expected during the test
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_row)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             #verify view queries results after rebalancing
             rebalance.result()
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_row)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             self._wait_for_stats_all_buckets(self.servers[:i])
             self._verify_all_buckets(self.master, max_verify=self.max_verify)
             self._verify_stats_all_buckets(self.servers[:i])
