@@ -673,6 +673,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
+        time.sleep(self._timeout / 2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
