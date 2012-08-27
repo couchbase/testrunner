@@ -201,18 +201,21 @@ class RebalanceTask(Task):
         nodes = rest.node_statuses()
 
         #Determine whether its a cluster_run/not
-        self.nodes_on_same_ip = True
+        cluster_run = True
 
         firstIp = self.servers[0].ip
-        for node in self.servers:
-            if node.ip != firstIp:
-                self.nodes_on_same_ip = False
-                break
+        if len(self.servers) == 1 and self.servers[0].port == '8091':
+            cluster_run = False
+        else:
+            for node in self.servers:
+                if node.ip != firstIp:
+                    cluster_run = False
+                    break
         ejectedNodes = []
 
         for server in self.to_remove:
             for node in nodes:
-                if self.nodes_on_same_ip:
+                if cluster_run:
                     if int(server.port) == int(node.port):
                         ejectedNodes.append(node.id)
                 else:
