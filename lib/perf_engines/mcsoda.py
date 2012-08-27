@@ -422,6 +422,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     store.flush()
 
 def next_cmd(cfg, cur, store):
+    do_delete = False
     itm_val = None
     num_ops = cur.get('cur-ops', 0)
 
@@ -472,6 +473,13 @@ def next_cmd(cfg, cur, store):
                                      cfg.get('random', 0),
                                      cur)
 
+        if not do_delete and cfg.get('hot-stack', 0):
+            stack = cur.get('hot-stack', None)
+            if not stack:
+                stack = Stack(cfg.get('hot-stack-size', 10))
+                cur['hot-stack'] = stack
+            stack.append(key_num)
+
         expiration = 0
         if cmd[0] == 's' and cfg.get('ratio-expirations', 0.0) * 100 > cur_sets % 100:
             expiration = cfg.get('expiration', 0)
@@ -496,7 +504,16 @@ def next_cmd(cfg, cur, store):
 
         do_get_hit = (cfg.get('ratio-misses', 0) * 100) <= (cur.get('cur-gets', 0) % 100)
         if do_get_hit:
-            key_num = choose_key_num(cur.get('cur-items', 0),
+            key_num = None
+            do_hot = (cfg.get('ratio-hot-gets', 0) * 100)\
+                > (cur.get('cur-gets', 0) % 100)
+            stack = cur.get('hot-stack', None)
+
+            if do_hot and stack:
+                key_num = stack.pop()
+
+            if not key_num:
+                key_num = choose_key_num(cur.get('cur-items', 0),
                                      cfg.get('ratio-hot', 0),
                                      cfg.get('ratio-hot-gets', 0),
                                      cur.get('cur-gets', 0),

@@ -801,6 +801,10 @@ class PerfBase(unittest.TestCase):
              ddoc=None):
         num_items = num_items or self.num_items_loaded
 
+        hot_stack_size = \
+            self.parami('hot_stack_size', PerfDefaults.hot_stack_size) or \
+            (num_items * ratio_hot)
+
         cfg = {'max-items': max_items or num_items,
                'max-creates': max_creates or 0,
                'max-ops-per-sec': self.parami("mcsoda_max_ops_sec",
@@ -827,6 +831,8 @@ class PerfBase(unittest.TestCase):
                'queries': queries,
                'report': report,
                'hot-shift': hot_shift,
+               'hot-stack': self.parami("hot_stack", PerfDefaults.hot_stack),
+               'hot-stack-size': hot_stack_size,
                'cluster_name': self.param("cluster_name", ""),
                'observe': self.param("observe", PerfDefaults.observe),
                'obs-backoff': self.paramf('obs_backoff',
