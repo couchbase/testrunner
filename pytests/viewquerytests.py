@@ -1295,8 +1295,10 @@ class ViewQueryTests(unittest.TestCase):
         docs_per_day = self.input.param('docs-per-day', 200)
         extra_params = self.input.param('extra_params', None)
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
-        data_set.add_startkey_endkey_docid_queries_extra_params(extra_params=extra_params)
+        data_set.add_stale_queries()
         self._query_test_init(data_set)
+        data_set.add_startkey_endkey_docid_queries_extra_params(extra_params=extra_params)
+        self._query_all_views(data_set.views)
 
 
     '''
