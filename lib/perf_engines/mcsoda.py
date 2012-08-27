@@ -10,6 +10,7 @@ import struct
 import random
 import threading
 import multiprocessing
+from collections import deque
 
 sys.path.append("lib")
 sys.path.append(".")
@@ -54,6 +55,48 @@ LARGE_PRIME = 9576890767
 INT_TYPE = type(123)
 FLOAT_TYPE = type(0.1)
 DICT_TYPE = type({})
+
+class Stack(object):
+    """
+    Not a traditional stack:
+
+    If stack is full, append() removes an item from the bottom
+
+    If rotate flag is on,
+    pop() rotates the queue rather than removes an item from the top
+    """
+    def __init__(self, size, rotate=True):
+        self.size = size
+        self.rotate = rotate
+        self.deq = deque()
+
+    def __repr__(self):
+        return "Stack(size=%r, rotate=%r, deq=%r" \
+            % (self.size, self.rotate, self.deq)
+
+    def pop(self):
+        if self.size <= 0:
+            print "unable to pop item from Stack: invalid size %s"\
+                % self.size
+            return None
+        try:
+            if self.rotate:
+                ret = self.deq[-1]
+                self.deq.rotate(1)
+                return ret
+            else:
+                return self.deq.pop()
+        except IndexError:
+            return None
+
+    def append(self, val):
+        if self.size <= 0:
+            print "unable to append item to Stack: invalid size %s"\
+                % self.size
+            return
+        while len(self.deq) >= self.size:
+            self.deq.popleft()
+        self.deq.append(val)
 
 def dict_to_s(d, level="", res=None, suffix=", ", ljust=None):
     res = res or []
