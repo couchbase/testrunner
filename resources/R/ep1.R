@@ -792,6 +792,24 @@ if (nrow(throughput_query) > 0) {
     throughput_query <- result
 }
 
+# Get indexing time stats
+cat("generating indexing time stats\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","view_info", sep='')
+		doc_json <- fromJSON(file=url)
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	}, error=function(e) e)
+}
+
+update_history <- result
+if (nrow(update_history) > 0) {
+    update_history$row <- as.numeric(update_history$row)
+    update_history$indexing_time <- as.numeric(update_history$indexing_time)
+}
+
 # Get Latency-get histogram
 cat("generating latency-get histogram")
 result <- data.frame()
@@ -2359,6 +2377,18 @@ if (nrow(throughput_query) > 0) {
     }
 }
 
+if (nrow(update_history) > 0) {
+    nodes = factor(update_history$node)
+    for(ns_node in levels(nodes)) {
+        node_update_history = subset(update_history, node==ns_node)
+        p <- ggplot(node_update_history, aes(row, indexing_time, color=buildinfo.version, label=indexing_time))
+        p <- p + labs(x="----time (min)--->", y="Seconds")
+        p <- p + geom_point()
+        p <- addopts(p, paste("Indexing time", ns_node, sep=" - "))
+        print(p)
+        makeFootnote(footnote)
+    }
+}
 #memcached stats
 
  # cat("generating ep_bg_wait_avg \n")
