@@ -1,7 +1,9 @@
 import time
 import logger
+from memcacheConstants import ERR_NOT_FOUND
 from castest.cas_base import CasBaseTest
 from couchbase.documentgenerator import BlobGenerator
+from mc_bin_client import MemcachedError
 
 class OpsChangeCasTests(CasBaseTest):
 
@@ -74,9 +76,15 @@ class OpsChangeCasTests(CasBaseTest):
                     o, cas, d = self.clients[bucket.name].set(key, self.expire_time, 0, value)
                     time.sleep(self.expire_time+1)
                     self.log.info("Try to mutate an expired item with its previous cas {0}".format(cas))
-                    self.clients[bucket.name].cas(key, 0, 0, cas, value)
-                    #It is expected to raise CAS exception becasue the key is expired.
-                    #It is a negative result test.
+                    try:
+                        self.clients[bucket.name].cas(key, 0, 0, cas, value)
+                    except MemcachedError as error:
+                    #It is expected to raise MemcachedError becasue the key is expired.
+                        if error.status == ERR_NOT_FOUND:
+                            self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.msg))
+                            pass
+                        else:
+                            self.set_exception(error)
 
             if len(cas_error_collection) > 0:
                 for cas_value in cas_error_collection:
