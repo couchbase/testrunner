@@ -67,6 +67,11 @@ class NodeInitializeTask(Task):
         rest = RestConnection(self.server)
         username = self.server.rest_username
         password = self.server.rest_password
+
+        code = "ns_config:set(index_aware_rebalance_disabled, false)."
+        self.log.info('Enabling consistent-views during rebalance: {0}'.format(code))
+        rest.diag_eval(code)
+
         rest.init_cluster(username, password)
         info = rest.get_nodes_self()
         if info is None:
