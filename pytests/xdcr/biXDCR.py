@@ -87,7 +87,19 @@ class bidirectional(XDCRReplicationBaseTest):
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
         time.sleep(60)
-        self._async_update_delete_data()
+        tasks = []
+        if "update" in self._doc_ops:
+            tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
+        if "update" in self._doc_ops_dest:
+            tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update, "update", self._expires))
+        if "delete" in self._doc_ops:
+            tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+        if "delete" in self._doc_ops_dest:
+            tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete, "delete", 0))
+
+        time.sleep(30)
+        for task in tasks:
+            task.result()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
