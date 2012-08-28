@@ -69,7 +69,7 @@ if __name__ == "__main__":
     except getopt.GetoptError, error:
         usage("ERROR: " + str(error))
 
-    file_path=input.param("path", "/tmp/logs")
+    file_path=input.param("path", ".")
 
     remotes = []
     for server in input.servers:
