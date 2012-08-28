@@ -35,7 +35,7 @@ class OpsChangeCasTests(CasBaseTest):
                 self.verify_cas("delete", gen_delete)
             if("expire" in self.doc_ops):
                 self.verify_cas("expire", gen_expire)
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        self._wait_for_stats_all_buckets([self.master]) #we only need 1 node to do cas test
 
     def verify_cas(self, ops, generator):
         """Verify CAS value manipulation. Since for delete and expire, they are
