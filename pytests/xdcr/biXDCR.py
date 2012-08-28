@@ -83,6 +83,8 @@ class bidirectional(XDCRReplicationBaseTest):
     def load_with_async_ops_and_joint_sets(self):
         if "create" in self._doc_ops:
             self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        if "create" in self._doc_ops_dest:
+            self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
         time.sleep(60)
         self._async_update_delete_data()
@@ -161,6 +163,8 @@ class bidirectional(XDCRReplicationBaseTest):
     def load_with_async_ops_and_joint_sets_with_warmup(self):
         if "create" in self._doc_ops:
             self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        if "create" in self._doc_ops_dest:
+            self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
         time.sleep(30)
         #warmup
@@ -193,6 +197,8 @@ class bidirectional(XDCRReplicationBaseTest):
     def load_with_async_ops_and_joint_sets_with_warmup_master(self):
         if "create" in self._doc_ops:
             self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        if "create" in self._doc_ops_dest:
+            self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
         time.sleep(30)
         #warmup
