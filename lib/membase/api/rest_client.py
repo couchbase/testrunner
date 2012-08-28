@@ -158,7 +158,13 @@ class RestConnection(object):
         self.port = 8091
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
-        http_res = self.init_http_request(self.baseUrl + 'nodes/self')
+        for iteration in xrange(3):
+            http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
+            if not success and type(http_res) == str and\
+               http_res.find('Node is unknown to this cluster') > -1:
+                continue
+            else:
+                break
         #if node was not initialized we can't get response from 'nodes/self'
         if not http_res or http_res["version"][0:2] == "1.":
             self.capiBaseUrl = self.baseUrl + "/couchBase"
@@ -184,8 +190,15 @@ class RestConnection(object):
             self.port = serverInfo.port
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
+        #for Node is unknown to this cluster error
         #determine the real couchApiBase for cluster_run
-        http_res = self.init_http_request(self.baseUrl + 'nodes/self')
+        for iteration in xrange(3):
+            http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
+            if not success and type(http_res) == str and\
+               http_res.find('Node is unknown to this cluster') > -1:
+                continue
+            else:
+                break
         #couchApiBase appeared in version 2.*
         try:
             if not http_res or http_res["version"][0:2] == "1.":
@@ -201,9 +214,12 @@ class RestConnection(object):
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
             json_parsed = json.loads(content)
-            return json_parsed
+            if status in ['200', '201', '202']:
+                return json_parsed, True
+            else:
+                return json_parsed, False
         except ValueError:
-            return ""
+            return "", False
 
     def active_tasks(self):
         api = self.capiBaseUrl + "_active_tasks"
