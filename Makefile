@@ -1,6 +1,7 @@
 DIST_DIR=./dist
 DIRS=b conf lib longevity pytests resources scripts unittests
 FILES=Makefile README TestInput.py
+SLEEP_TIME=3
 
 .PHONY: clean testrunner test test-quick
 
@@ -40,7 +41,7 @@ test-viewmerge:
 	echo "Running view merge tests with single node cluster"
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-single-node.ini conf/py-viewmerge.conf
 	echo "Running view merge tests with 4 nodes cluster"
-	sleep 3
+	sleep ${SLEEP_TIME}
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-viewmerge.conf
 
 e2e-kv-single-node:
