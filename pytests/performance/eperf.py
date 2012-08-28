@@ -441,6 +441,18 @@ class EPerfMaster(perf.PerfBase):
                       queries=queries,
                       ddoc=ddoc)
 
+    def clear_hot_keys(self):
+        """
+        callback to clear hot keys from the stack
+        """
+        stack = self.cur.get('hot-stack', None)
+        if not stack:
+            print "unable to clear hot stack : stack does not exist"
+            return False
+
+        stack.clear()
+        return True
+
     # restart the cluster and wait for it to warm up
     @_dashboard(phase='warmup')
     def warmup_phase(self):
@@ -1745,6 +1757,8 @@ class NRUMonitor(threading.Thread):
          print "[NRUMonitor] access scanner finished at: %s, speed: %s, "\
             "num_items: %s, run_time: %s" \
             % (gmt_now, speed, num_items, run_time)
+
+         self.eperf.clear_hot_keys()
 
          print "[NRUMonitor] scheduled rebalance after %d seconds"\
              % self.reb_delay

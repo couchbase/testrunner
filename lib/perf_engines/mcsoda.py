@@ -98,6 +98,11 @@ class Stack(object):
             self.deq.popleft()
         self.deq.append(val)
 
+    def clear(self):
+        num_cleared = len(self.deq)
+        self.deq.clear()
+        print "cleared %d items from hot stack" % num_cleared
+
 def dict_to_s(d, level="", res=None, suffix=", ", ljust=None):
     res = res or []
     return ''.join(dict_to_s_inner(d, level, res, suffix, ljust))

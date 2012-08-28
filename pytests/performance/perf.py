@@ -872,9 +872,9 @@ class PerfBase(unittest.TestCase):
                                   collect_server_stats=collect_server_stats,
                                   ddoc=ddoc)
 
-        cur = {'cur-items': num_items}
+        self.cur = {'cur-items': num_items}
         if start_at >= 0:
-            cur['cur-gets'] = start_at
+            self.cur['cur-gets'] = start_at
         if num_ops is None:
             num_ops = num_items
         if isinstance(num_ops, int):
@@ -902,23 +902,23 @@ class PerfBase(unittest.TestCase):
         self.log.info("mcsoda - %s %s %s %s" %
                       (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
-        self.log.info("mcsoda - cur: " + str(cur))
+        self.log.info("mcsoda - cur: " + str(self.cur))
 
         # For query tests always use StoreCouchbase
         if protocol == "couchbase":
             stores = [StoreCouchbase()]
 
-        cur, start_time, end_time = \
-            self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
+        self.cur, start_time, end_time = \
+            self.mcsoda_run(cfg, self.cur, protocol, host_port, user, pswd,
                             stats_collector=sc, ctl=ctl, stores=stores,
                             heartbeat=self.parami("mcsoda_heartbeat", 0),
                             why="loop", bucket=self.param("bucket", "default"))
 
-        ops = {'tot-sets': cur.get('cur-sets', 0),
-               'tot-gets': cur.get('cur-gets', 0),
-               'tot-items': cur.get('cur-items', 0),
-               'tot-creates': cur.get('cur-creates', 0),
-               'tot-misses': cur.get('cur-misses', 0),
+        ops = {'tot-sets': self.cur.get('cur-sets', 0),
+               'tot-gets': self.cur.get('cur-gets', 0),
+               'tot-items': self.cur.get('cur-items', 0),
+               'tot-creates': self.cur.get('cur-creates', 0),
+               'tot-misses': self.cur.get('cur-misses', 0),
                "start-time": start_time,
                "end-time": end_time}
 
