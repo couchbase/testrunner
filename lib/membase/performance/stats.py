@@ -533,7 +533,8 @@ class StatsCollector(object):
                     avg_time = 0
                 finally:
                     self._task['view_info'].append({'node': node.ip,
-                                                    'indexing_time': avg_time})
+                                                    'indexing_time': avg_time,
+                                                    'timestamp': time.time()})
 
         print "Finished collecting view indexing stats"
 

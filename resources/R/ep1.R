@@ -808,6 +808,18 @@ update_history <- result
 if (nrow(update_history) > 0) {
     update_history$row <- as.numeric(update_history$row)
     update_history$indexing_time <- as.numeric(update_history$indexing_time)
+    update_history$timestamp <- as.numeric(update_history$timestamp)
+
+        all_builds = factor(update_history$buildinfo.version)
+        result <- data.frame()
+        for(a_build in levels(all_builds)) {
+            tt <- update_history[update_history $buildinfo.version==a_build,]
+            tt$timestamp <- as.numeric(tt$timestamp)
+            min_timestamp = min(tt$timestamp)
+            filtered = transform(tt, row=timestamp-min_timestamp)
+            result <- rbind(result, filtered)
+        }
+        update_history <- result
 }
 
 # Get Latency-get histogram
@@ -2382,13 +2394,25 @@ if (nrow(update_history) > 0) {
     for(ns_node in levels(nodes)) {
         node_update_history = subset(update_history, node==ns_node)
         p <- ggplot(node_update_history, aes(row, indexing_time, color=buildinfo.version, label=indexing_time))
-        p <- p + labs(x="----time (min)--->", y="Seconds")
+        p <- p + labs(x="----time (sec)--->", y="Seconds")
         p <- p + geom_point()
         p <- addopts(p, paste("Indexing time", ns_node, sep=" - "))
         print(p)
         makeFootnote(footnote)
     }
+
+    for(ns_node in levels(nodes)) {
+        node_update_history = subset(update_history, node==ns_node)
+        p <- ggplot(node_update_history, aes(row, indexing_time, color=buildinfo.version, label=indexing_time))
+        p <- p + labs(x="----time (sec)--->", y="Seconds")
+        p <- p + coord_cartesian(ylim = c(0, 5))
+        p <- p + geom_point()
+        p <- addopts(p, paste("Indexing time (0-5 sec)", ns_node, sep=" - "))
+        print(p)
+        makeFootnote(footnote)
+    }
 }
+
 #memcached stats
 
  # cat("generating ep_bg_wait_avg \n")
