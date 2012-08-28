@@ -53,10 +53,10 @@ class RecoveryUseTransferTests(TransferBaseTest):
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
             transfer_source = "couchstore-files://%s" % (COUCHBASE_DATA_PATH)
-            transfer_destination = "http://%s@%s:%s -b %s -B %s" % (self.couchbase_login_info,
-                                                                    self.server_recovery.ip,
-                                                                    self.server_recovery.port,
-                                                                    bucket.name, bucket.name)
+            transfer_destination = "http://%s@%s:%s -b %s -B %s -v -v -v" % (self.couchbase_login_info,
+                                                                             self.server_recovery.ip,
+                                                                             self.server_recovery.port,
+                                                                             bucket.name, bucket.name)
             self.shell.execute_cbtransfer(transfer_source, transfer_destination)
         del kvs_before
         time.sleep(self.expire_time + 1)
@@ -84,7 +84,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
         for bucket in self.buckets:
             kvs_before[bucket.name] = bucket.kvs[1]
             bucket_names.append(bucket.name)
-            transfer_source = "couchstore-files://%s" % (COUCHBASE_DATA_PATH)
+            transfer_source = "-v -v -v couchstore-files://%s" % (COUCHBASE_DATA_PATH)
             transfer_destination = self.backup_location
             self.shell.execute_cbtransfer(transfer_source, transfer_destination)
 
