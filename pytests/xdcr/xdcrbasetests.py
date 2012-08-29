@@ -45,12 +45,7 @@ class XDCRConstants:
     REPLICATION_DIRECTION_UNIDIRECTION = "unidirection"
     REPLICATION_DIRECTION_BIDIRECTION = "bidirection"
 
-    SEED_DATA_OP_CREATE = "create"
-    SEED_DATA_OP_UPDATE = "update"
-    SEED_DATA_OP_DELETE = "delete"
-
     SEED_DATA_MODE_SYNC = "sync"
-    SEED_DATA_MODE_ASYNC = "async"
 
 
 #===============================================================================
@@ -253,14 +248,6 @@ class XDCRBaseTest(unittest.TestCase):
             nodes = self._clusters_dic[key]
             BucketOperationHelper.delete_all_buckets_or_assert(nodes, self)
             ClusterOperationHelper.cleanup_cluster(nodes)
-            #doesn't work with cluster_run
-#            for _, clusters in self._clusters_dic.items():
-#                remote = RemoteMachineShellConnection(clusters[0])
-#                cmd = "wget -O- -vvd --user={0} --password={1} \
-#                    --post-data='gen_server:cast(ns_cluster, leave).' http://{2}:8091/diag/eval".\
-#                    format(clusters[0].rest_password, clusters[0].rest_password, clusters[0].ip)
-#                self._log.info('Executing command to clean node {0}'.format(cmd))
-#                remote.execute_command(cmd, debug=True)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(nodes, self)
 
     def _cleanup_broken_setup(self):
@@ -606,7 +593,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         self._seed_data = self._input.param(XDCRConstants.INPUT_PARAM_SEED_DATA, False)
 
         self._seed_data_ops_lst = self._input.param(XDCRConstants.INPUT_PARAM_SEED_DATA_OPERATION,
-            XDCRConstants.SEED_DATA_OP_CREATE).split('|')
+            "create").split('|')
         self._seed_data_mode_str = self._input.param(XDCRConstants.INPUT_PARAM_SEED_DATA_MODE,
             XDCRConstants.SEED_DATA_MODE_SYNC)
 
@@ -673,7 +660,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
-        time.sleep(self._timeout/2)
+        time.sleep(self._timeout / 2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
@@ -712,11 +699,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 self._log.info("Started async Load of {0}".format(op_type))
 
     def _get_num_items_ratio(self, op_type):
-        if len(self._seed_data_ops_lst) <= 1:
-            return self._num_items
-        if op_type == XDCRConstants.SEED_DATA_OP_UPDATE:
-            return self._num_items / 2
-        elif op_type == XDCRConstants.SEED_DATA_OP_DELETE:
+        if op_type in ["update", "delete"]:
             return self._num_items / 3
         else:
             return self._num_items
