@@ -380,18 +380,26 @@ Verifying whether XDCR replication is successful on subsequent destination clust
 
             tasks = []
             #Setting up doc-ops at source nodes
-            if self._doc_ops is not None or self._doc_ops_dest is not None:
+            if self._doc_ops is not None:
                 # allows multiple of them but one by one on either of the clusters
                 if "update" in self._doc_ops:
                     tasks.extend(
                         self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
                 if "delete" in self._doc_ops:
                     tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+
+                time.sleep(5)
+
+            if self._doc_ops_dest is not None:
                 if "update" in self._doc_ops_dest:
                     tasks.extend(
                         self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
                 if "delete" in self._doc_ops_dest:
                     tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
+
+                time.sleep(5)
+
+            if self._rebalance is not None:
                 if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
                     remove_node = self.src_nodes[len(self.src_nodes) - 1]
                     tasks += self._async_rebalance(self.src_nodes, [add_node], [remove_node])
@@ -399,15 +407,17 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                         " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                             self.src_master.ip, add_node.ip, remove_node.ip))
                     self.src_nodes.remove(remove_node)
+
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
-                    remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
-                    tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
-                    self._log.info(
+                     remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
+                     tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
+                     self._log.info(
                         " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                             self.dest_master.ip, add_node.ip, remove_node.ip))
-                    self.dest_nodes.remove(remove_node)
+                     self.dest_nodes.remove(remove_node)
 
-                time.sleep(5)
+            time.sleep(5)
+
             while True:
                 for view in views:
                     self._cluster_helper.query_view(self.src_master, prefix + ddoc_name, view.name, query)
