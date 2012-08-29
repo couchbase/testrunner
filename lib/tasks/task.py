@@ -182,6 +182,7 @@ class RebalanceTask(Task):
         self.servers = servers
         self.to_add = to_add
         self.to_remove = to_remove
+        self.start_time = None
 
     def execute(self, task_manager):
         try:
@@ -227,6 +228,7 @@ class RebalanceTask(Task):
                     if server.ip == node.ip and int(server.port) == int(node.port):
                         ejectedNodes.append(node.id)
         rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
+        self.start_time = time.time()
 
     def check(self, task_manager):
         rest = RestConnection(self.servers[0])
@@ -239,12 +241,14 @@ class RebalanceTask(Task):
         #catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.info("Unexpected Exception Caught")
+            self.log.info("Unexpected Exception Caught in {0} sec".
+                          format(time.time() - self.start_time))
             self.set_exception(e)
         if progress != -1 and progress != 100:
             task_manager.schedule(self, 10)
         else:
-            self.log.info("rebalancing was completed with progress: {0}%".format(progress))
+            self.log.info("rebalancing was completed with progress: {0}% in {1} sec".
+                          format(progress, time.time() - self.start_time))
             self.state = FINISHED
             self.set_result(True)
 
