@@ -673,7 +673,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
-        time.sleep(self._timeout / 2)
+        time.sleep(self._timeout/2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
@@ -814,16 +814,16 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
                         'vb_active_curr_items', '==', items))
 
-                    available_replicas = self._num_replicas
-                    if len(servers) == self._num_replicas:
-                        available_replicas = len(servers) - 1
-                    elif len(servers) <= self._num_replicas:
-                        available_replicas = len(servers) - 1
-
-                    stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
-                        'vb_replica_curr_items', '==', items * available_replicas))
-                    stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
-                        'curr_items_tot', '==', items * (available_replicas + 1)))
+#                    available_replicas = self._num_replicas
+#                    if len(servers) == self._num_replicas:
+#                        available_replicas = len(servers) - 1
+#                    elif len(servers) <= self._num_replicas:
+#                        available_replicas = len(servers) - 1
+#
+#                    stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
+#                        'vb_replica_curr_items', '==', items * available_replicas))
+#                    stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
+#                        'curr_items_tot', '==', items * (available_replicas + 1)))
 
                 for task in stats_tasks:
                     task.result(timeout)
