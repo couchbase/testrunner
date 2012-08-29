@@ -685,9 +685,6 @@ class EPerfMaster(perf.PerfBase):
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 cbStatsCollector.stop()
 
-        if self.parami("loop_wait_until_drained", 0) == 1:
-            self.wait_until_drained()
-
         if self.parami("warmup", PerfDefaults.warmup) == 1:
             self.warmup_phase()
 
@@ -795,9 +792,6 @@ class EPerfMaster(perf.PerfBase):
                                                             PerfDefaults.ratio_expirations),
                               max_creates=self.parami("max_creates",
                                                       PerfDefaults.max_creates))
-
-        if self.parami("loop_wait_until_drained", 0) == 1:
-            self.wait_until_drained()
 
     def test_evperf_workload2(self):
         self.spec("evperf_workload2")

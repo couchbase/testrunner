@@ -59,6 +59,7 @@ class PerfDefaults:
     load_wait_until_drained =   1        # wait to be drained on the load phase, 1: enabled, 0: disabled
     load_wait_until_repl    =   0        # wait for replication on the load phase, 1: enabled, 0: disabled
     loop_wait_until_drained =   0        # wait to be drained on the access phase, 1: enabled, 0: disabled
+    loop_wait_until_repl    =   0        # wait for replication on the access phase, 1: enabled, 0: disabled
     mcsoda_heartbeat        =   0        # health check heartbeat message for mcsoda. 0: no heartbeat, ~: in sec
     mcsoda_max_ops_sec      =   0        # max ops per seconds for mcsoda
     mcsoda_fg_stats_ops     =   1000     # fg ops threshold to persist latency stats

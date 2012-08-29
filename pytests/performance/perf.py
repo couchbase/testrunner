@@ -933,6 +933,14 @@ class PerfBase(unittest.TestCase):
             ClusterOperationHelper.wait_for_completion(self.rest,
                                                        'view_compaction')
 
+        if self.parami("loop_wait_until_drained",
+                       PerfDefaults.loop_wait_until_drained):
+            self.wait_until_drained()
+
+        if self.parami("loop_wait_until_repl",
+                       PerfDefaults.loop_wait_until_repl):
+            self.wait_until_repl()
+
         if self.parami("collect_stats", 1):
             self.end_stats(sc, ops, self.spec_reference + ".loop")
 
