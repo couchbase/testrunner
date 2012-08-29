@@ -605,34 +605,23 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.ops_perf = ops_perf
 
     def has_next(self):
-        if self.ops_perf == "delete":
+        if self.ops_perf in ["delete", "update"] :
             if self.itr < (self.num_valid_keys + self.num_deleted_keys):
                 return True
             self.log.info("Verification done, {0} items have been "
-                          "verified (deleted items: {1})".format(self.itr, self.num_deleted_keys))
-            return False
-        elif self.ops_perf == "update":
-            if self.itr < (self.num_valid_keys + self.num_deleted_keys):
-                return True
-            self.log.info("Verification done, {0} items have been "
-                          "verified (updated items: {1})".format(self.itr, self.num_deleted_keys))
+                          "verified ({1}d items: {2})".format(
+                           self.itr, self.ops_perf, self.num_deleted_keys))
             return False
 
     def next(self):
-        if self.ops_perf == "delete":
+        if self.ops_perf in ["delete", "update"]:
             if self.itr < self.num_valid_keys:
                 self._check_key_revId(self.valid_keys[self.itr])
             elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
-                # verify deleted keys
+                # verify deleted/expired keys
                 self._check_key_revId(self.deleted_keys[self.itr - self.num_valid_keys])
             self.itr += 1
-        elif self.ops_perf == "update":
-            if self.itr < self.num_valid_keys:
-                self._check_key_revId(self.valid_keys[self.itr])
-            elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
-                # verify expired keys
-                self._check_key_revId(self.deleted_keys[(self.itr - self.num_valid_keys)])
-            self.itr += 1
+
         ## show progress of verification for every 50k items
         if math.fmod(self.itr, 50000) == 0.0:
             self.log.info("{0} items have been verified".format(self.itr))
