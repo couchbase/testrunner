@@ -833,6 +833,8 @@ class PerfBase(unittest.TestCase):
                'hot-shift': hot_shift,
                'hot-stack': self.parami("hot_stack", PerfDefaults.hot_stack),
                'hot-stack-size': hot_stack_size,
+               'hot-stack-rotate': self.parami("hot_stack_rotate",
+                                               PerfDefaults.hot_stack_rotate),
                'cluster_name': self.param("cluster_name", ""),
                'observe': self.param("observe", PerfDefaults.observe),
                'obs-backoff': self.paramf('obs_backoff',

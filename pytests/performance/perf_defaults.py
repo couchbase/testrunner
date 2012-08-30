@@ -55,6 +55,7 @@ class PerfDefaults:
     ep_compaction           =   50       # ep_engine side fragmentation percentage which triggers compaction
     hot_stack               =   0        # maintain a hot stack to queue up previously SETted keys
     hot_stack_size          =   0        # size of the hot stack. 0: compute from hot-ratio * num-items (caution: in memory)
+    hot_stack_rotate        =   0        # rotate the stack upon eviction rather than pop the item. 1: enable, 0: disable
     load_wait_until_drained =   1        # wait to be drained on the load phase, 1: enabled, 0: disabled
     load_wait_until_repl    =   0        # wait for replication on the load phase, 1: enabled, 0: disabled
     loop_wait_until_drained =   0        # wait to be drained on the access phase, 1: enabled, 0: disabled

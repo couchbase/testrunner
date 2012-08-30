@@ -65,7 +65,7 @@ class Stack(object):
     If rotate flag is on,
     pop() rotates the queue rather than removes an item from the top
     """
-    def __init__(self, size, rotate=True):
+    def __init__(self, size, rotate=False):
         self.size = size
         self.rotate = rotate
         self.deq = deque()
@@ -481,7 +481,8 @@ def next_cmd(cfg, cur, store):
         if not do_delete and cfg.get('hot-stack', 0):
             stack = cur.get('hot-stack', None)
             if not stack:
-                stack = Stack(cfg.get('hot-stack-size', 10))
+                rotate = (cfg.get('hot-stack-rotate', 0) == 1)
+                stack = Stack(cfg.get('hot-stack-size', 10), rotate)
                 cur['hot-stack'] = stack
             stack.append(key_num)
 
