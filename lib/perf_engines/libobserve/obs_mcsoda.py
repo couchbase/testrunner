@@ -249,39 +249,24 @@ class McsodaObserver(Observer, Thread):
 
         while True:
 
-            res = self.observe_single(key, server, timeout)
+            status, new_cas = self.observe_single(key, server, timeout)
 
-            if not res:
-                print "<%s> block_for_persistence: empty response"
+            if status < 0:
                 return False
 
-            key_len = len(res.keys)
-            if key_len != 1:
-                # we are not supposed to receive responses for more than one key,
-                # otherwise, it's a server side protocol error
-                print "<%s> block_for_persistence: invalid number of keys " \
-                    "in response: %d" % (self.__class__.__name__, key_len)
-                return False
-
-            res_key = res.keys[0]
-
-            if res_key.key != key:
-                print "<%s> block_for_persistence: invalid key %s in response" \
-                    % self.__class__.__name__
-                return False
-
-            if res_key.cas != cas:
-                print "<%s> block_for_persistence: key: %s, cas: %s has been modified" \
+            if new_cas != cas:
+                print "<%s> block_for_persistence: key: %s, "\
+                    "cas: %s has been modified"\
                     % (self.__class__.__name__, key, cas)
                 return False
 
-            if res_key.key_state == ObserveKeyState.OBS_PERSISITED:
+            elif status == ObserveKeyState.OBS_PERSISITED:
                 return True
-            elif res_key.key_state == ObserveKeyState.OBS_FOUND:
+            elif status == ObserveKeyState.OBS_FOUND:
                 sleep(self.backoff)
                 self.backoff = min(self.backoff * 2, self.max_backoff)
                 continue
-            elif res_key.key_state == ObserveKeyState.OBS_NOT_FOUND:
+            elif status == ObserveKeyState.OBS_NOT_FOUND:
                 print "<%s> block_for_persistence: key: %s, cas: %s does not" \
                     " exist any more" % (self.__class__.__name__, key, cas)
                 return False
@@ -295,12 +280,22 @@ class McsodaObserver(Observer, Thread):
     def observe_single(self, key, server="", timeout=0):
         """
         send an observe command and get the response back
+
+        parse the response afterwards
+
+        @return (status, cas)
+
+        @status -1 : network error
+        @status -2 : protocol error
+        @status ObserveKeyState
         """
+        cas = ""
         if not key:
             print "<%s> observe_single: invalid key" % self.__class__.__name__
-            return None
+            return -1
 
-        vbucketid = VbucketHelper.get_vbucket_id(key, self.cfg.get("vbuckets", 0))
+        vbucketid = \
+            VbucketHelper.get_vbucket_id(key, self.cfg.get("vbuckets", 0))
         if not server:
             server = self._get_server_str(vbucketid)
         req_key = ObserveRequestKey(key, vbucketid)
@@ -311,52 +306,77 @@ class McsodaObserver(Observer, Thread):
         try:
             skt = self.conns[server].s
         except KeyError:
-            print "<%s> KeyError: %s" % (self.__class__.__name__, server)
+            print "<%s> observe_single: KeyError: %s" \
+                % (self.__class__.__name__, server)
             self._add_conn(server)
-            return None
+            return -1, cas
 
         try:
             SocketHelper.send_bytes(skt, pkt, timeout)
         except IOError:
-            print "<%s> IOError: failed to send observe pkt : %s" \
-                % (self.__class__.__name__, pkt)
+            print "<%s> observe_single: IOError: " \
+                  "failed to send observe pkt : %s" \
+                  % (self.__class__.__name__, pkt)
             self._reconnect(self.conns[server])
             self._refresh_conns()
-            return None
+            return -1, cas
         except socket.timeout:
-            print "<%s> timeout: failed to send observe pkt : %s" \
+            print "<%s> observe_single: timeout: " \
+                "failed to send observe pkt : %s" \
                 % (self.__class__.__name__, pkt)
-            return None
+            return -1, cas
         except Exception as e:
-            print "<%s> failed to send observe pkt : %s" \
+            print "<%s> observe_single: failed to send observe pkt : %s" \
                 % (self.__class__.__name__, e)
-            return None
+            return -1, cas
 
         try:
-            hdr = SocketHelper.recv_bytes(skt, ObservePktFmt.OBS_RES_HDR_LEN, timeout)
+            hdr = SocketHelper.recv_bytes(
+                skt, ObservePktFmt.OBS_RES_HDR_LEN, timeout)
             res = ObserveResponse()
             if not res.unpack_hdr(hdr):
                 if res.status == ERR_NOT_MY_VBUCKET:
                     self._refresh_conns()
-                return None
+                return -1, cas
             body = SocketHelper.recv_bytes(skt, res.body_len, timeout)
             res.unpack_body(body)
         except IOError:
-            print "<%s> IOError: failed to recv observe pkt" \
+            print "<%s> observe_single: IOError: failed to recv observe pkt" \
                 % self.__class__.__name__
             self._reconnect(self.conns[server])
             self._refresh_conns()
-            return None
+            return -1, cas
         except socket.timeout:
-            print "<%s> timeout: failed to recv observe pkt" \
+            print "<%s> observe_single: timeout: failed to recv observe pkt" \
                 % self.__class__.__name__
-            return None
+            return -1, cas
         except Exception as e:
-            print "<%s> failed to recv observe pkt : %s" \
+            print "<%s> observe_single: failed to recv observe pkt : %s" \
                 % (self.__class__.__name__, e)
-            return None
+            return -1, cas
 
-        return res
+        if not res:
+            print "<%s> observe_single: empty response" \
+                % self.__class__.__name__
+            return -1, cas
+
+        key_len = len(res.keys)
+        if key_len != 1:
+            # we are not supposed to receive responses for more than one key,
+            # otherwise, it's a server side protocol error
+            print "<%s> observe_single: invalid number of keys in response: %d"\
+                    % (self.s.__name__, key_len)
+            return -2, cas
+
+        res_key = res.keys[0]
+        cas = res_key.cas
+
+        if res_key.key != key:
+            print "<%s> observe_single: invalid key %s in response"\
+                % self.__class__.__name__
+            return -2, cas
+
+        return res_key.key_state, cas
 
     def measure_client_latency(self):
         observables = self.observable_filter(ObserveStatus.OBS_SUCCESS)
