@@ -941,7 +941,8 @@ class PerfBase(unittest.TestCase):
                        PerfDefaults.loop_wait_until_repl):
             self.wait_until_repl()
 
-        if self.parami("collect_stats", 1):
+        if self.parami("collect_stats", 1) and \
+                not self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
             self.end_stats(sc, ops, self.spec_reference + ".loop")
 
         return ops, start_time, end_time

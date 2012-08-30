@@ -721,7 +721,8 @@ class EPerfMaster(perf.PerfBase):
                         items)
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
 
-        if not self.parami('nru_task', PerfDefaults.nru_task):
+        if not self.parami("nru_task", PerfDefaults.nru_task) and \
+            not self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
             rebalance_after = self.parami("rebalance_after",
                                       PerfDefaults.rebalance_after)
             self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
@@ -741,6 +742,12 @@ class EPerfMaster(perf.PerfBase):
                                                   cb_exc=cb_exc,
                                                   frequency=frequency)
 
+            if self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
+                max_creates = 1
+            else:
+                max_creates= \
+                    self.parami("max_creates", PerfDefaults.max_creates)
+
             self.access_phase(items,
                               ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
@@ -758,8 +765,32 @@ class EPerfMaster(perf.PerfBase):
                                                          PerfDefaults.ratio_hot_sets),
                               ratio_expirations=self.paramf('ratio_expirations',
                                                             PerfDefaults.ratio_expirations),
-                              max_creates=self.parami("max_creates",
-                                                      PerfDefaults.max_creates))
+                              max_creates=max_creates)
+
+            if self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
+
+                start_time = time.time()
+
+                self.latched_rebalance(delay=0, sync=True)
+
+                if self.parami("loop_wait_until_drained",
+                               PerfDefaults.loop_wait_until_drained):
+                    self.wait_until_drained()
+
+                if self.parami("loop_wait_until_repl",
+                               PerfDefaults.loop_wait_until_repl):
+                    self.wait_until_repl()
+
+                if self.parami("collect_stats", 1):
+                    ops = {"tot-sets": max_creates,
+                           "tot-gets": 0,
+                           "tot-items": 0,
+                           "tot-creates": max_creates,
+                           "tot-misses": 0,
+                           "start-time": start_time,
+                           "end-time": time.time()}
+
+                    self.end_stats(self.sc, ops, self.spec_reference + ".loop")
 
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
                 cbStatsCollector.stop()
