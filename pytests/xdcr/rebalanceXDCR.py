@@ -35,20 +35,22 @@ class Rebalance(XDCRReplicationBaseTest):
     def _async_update_delete_data(self):
         self._log.info("The tasks:-")
         tasks = []
-        #Setting up doc-ops at source nodes
-        if self._doc_ops is not None or self._doc_ops_dest is not None:
+        #Setting up doc-ops at source nodes and doc-ops-dest at destination nodes
+        if self._doc_ops is not None:
             # allows multiple of them but one by one on either of the clusters
             if "update" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "update" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", 0))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", self._expires))
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+            time.sleep(5)
+        if self._doc_ops_dest is not None:
+            if "update" in self._doc_ops_dest:
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
             time.sleep(5)
-            for task in tasks:
-                task.result()
+        for task in tasks:
+            task.result()
 
 
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
