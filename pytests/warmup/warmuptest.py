@@ -17,6 +17,7 @@ class WarmUpTests(BaseTestCase):
         self.bucket_size = self.input.param("bucket_size", 256)
         self.data_size = self.input.param("data_size", 2048)
         self.nodes_in = int(self.input.param("nodes_in", 1))
+        self.access_log = self.input.param("access_log", False)
         self.servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
         rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in, [])
         rebalance.result()
@@ -27,13 +28,13 @@ class WarmUpTests(BaseTestCase):
     def tearDown(self):
         super(WarmUpTests, self).tearDown()
 
-    def _load_doc_data_all_buckets(self, op_type='create', start=0):
+    def _load_doc_data_all_buckets(self, op_type='create', start=0, expiry=0):
         loaded = False
         count = 0
         gen_load = BlobGenerator('warmup', 'warmup-', self.data_size, start=start, end=self.num_items)
         while not loaded and count < 60:
             try :
-                self._load_all_buckets(self.servers[0], gen_load, op_type, 0)
+                self._load_all_buckets(self.servers[0], gen_load, op_type, expiry)
                 loaded = True
             except MemcachedError as error:
                 if error.status == 134:
@@ -212,7 +213,6 @@ class WarmUpTests(BaseTestCase):
     def test_warmup(self):
         ep_threshold = self.input.param("ep_threshold", "ep_mem_low_wat")
         active_resident_threshold = int(self.input.param("active_resident_threshold", 110))
-        self.access_log = self.input.param("access_log", False)
         access_log_time = self.input.param("access_log_time", 2)
         mc = MemcachedClientHelper.direct_client(self.servers[0], self.bucket_name)
         stats = mc.stats()
@@ -253,3 +253,18 @@ class WarmUpTests(BaseTestCase):
         self._restart_memcache()
         if self._warmup():
             self._load_doc_data_all_buckets('update', self.num_items - items)
+
+    ''' This test will load items with an expiration and then restart the node once items are
+        expired and then check the curr_items_tot which reduced to 0 '''
+    def test_warmup_with_expiration(self):
+        self.num_items = self.input.param("items", 1000)
+        expiry = self.input.param("expiry", 120)
+        self._load_doc_data_all_buckets('create', expiry=expiry)
+        #wait for draining of data before restart and warm up
+        rest = RestConnection(self.servers[0])
+        self.servers = rest.get_nodes()
+        self._wait_for_stats_all_buckets(self.servers)
+        self._stats_befor_warmup()
+        time.sleep(120)
+        self._restart_memcache()
+        self._warmup()
