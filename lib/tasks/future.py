@@ -1,5 +1,6 @@
 import logging
 import threading
+import traceback
 
 # Possible future states (for internal use by the futures package).
 PENDING = 'PENDING'
@@ -257,4 +258,5 @@ class Future(object):
             for waiter in self._waiters:
                 waiter.add_exception(self)
             self._condition.notify_all()
+        print traceback.extract_stack()
         self._invoke_callbacks()
