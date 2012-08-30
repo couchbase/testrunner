@@ -221,6 +221,7 @@ class MemcachedClient(object):
 
     def getMeta(self, key):
         """Get the metadata for a given key within the memcached server."""
+        self._set_vbucket(key)
         opaque, cas, data = self._doCmd(memcacheConstants.CMD_GET_META, key, '')
         deleted = struct.unpack('>I', data[0:4])[0]
         flags = struct.unpack('>I', data[4:8])[0]
