@@ -90,8 +90,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, flag=0):
-        _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag)
+    def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, flag=0, only_store_hash=False):
+        _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash)
         self.task_manager.schedule(_task)
         return _task
 
@@ -102,8 +102,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_verify_data(self, server, bucket, kv_store, max_verify=None):
-        _task = ValidateDataTask(server, bucket, kv_store, max_verify)
+    def async_verify_data(self, server, bucket, kv_store, max_verify=None, only_store_hash=False):
+        _task = ValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash)
         self.task_manager.schedule(_task)
         return _task
 
@@ -232,8 +232,8 @@ class Cluster(object):
         _task = self.async_rebalance(servers, to_add, to_remove)
         return _task.result(timeout)
 
-    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, timeout=None, flag=0):
-        _task = self.async_load_gen_docs(server, bucket, generator, kv_store, op_type, exp, flag)
+    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, timeout=None, flag=0, only_store_hash=False):
+        _task = self.async_load_gen_docs(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash=only_store_hash)
         return _task.result(timeout)
 
     def workload(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp, timeout=None):

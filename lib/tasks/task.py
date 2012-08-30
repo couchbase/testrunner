@@ -6,6 +6,7 @@ import copy
 import json
 import re
 import math
+import crc32
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
 from membase.api.rest_client import RestConnection, Bucket
@@ -366,6 +367,8 @@ class GenericLoadingTask(Thread, Task):
 
         try:
             self.client.set(key, self.exp, self.flag, value)
+            if self.only_store_hash:
+                value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
         except MemcachedError as error:
             self.state = FINISHED
@@ -382,7 +385,7 @@ class GenericLoadingTask(Thread, Task):
                 self.set_exception(error)
 
     def _unlocked_update(self, partition, key):
-        value = partition.get_valid(key)
+        o, c, value = self.client.get(key)
         if value is None:
             return
         try:
@@ -395,6 +398,8 @@ class GenericLoadingTask(Thread, Task):
 
         try:
             self.client.set(key, self.exp, self.flag, value)
+            if self.only_store_hash:
+                 value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
         except MemcachedError as error:
             self.state = FINISHED
@@ -412,12 +417,13 @@ class GenericLoadingTask(Thread, Task):
                 self.set_exception(error)
 
 class LoadDocumentsTask(GenericLoadingTask):
-    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=False):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.generator = generator
         self.op_type = op_type
         self.exp = exp
         self.flag = flag
+        self.only_store_hash = only_store_hash
 
     def has_next(self):
         return self.generator.has_next()
@@ -524,13 +530,14 @@ class WorkloadTask(GenericLoadingTask):
         self.kv_store.release_partition(part_num)
 
 class ValidateDataTask(GenericLoadingTask):
-    def __init__(self, server, bucket, kv_store, max_verify=None):
+    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=False):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
         self.max_verify = self.num_valid_keys + self.num_deleted_keys
+        self.only_store_hash = only_store_hash
         if max_verify is not None:
             self.max_verify = min(max_verify, self.max_verify)
         self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
@@ -556,13 +563,18 @@ class ValidateDataTask(GenericLoadingTask):
         if value is None or flag is None:
             self.kv_store.release_partition(key)
             return
-        value = json.dumps(value)
 
         try:
             o, c, d = self.client.get(key)
-            if d != json.loads(value):
-                self.state = FINISHED
-                self.set_exception(Exception('Bad result: %s != %s' % (json.dumps(d), value)))
+            if self.only_store_hash:
+                if crc32.crc32_hash(d) != int(value):
+                    self.state = FINISHED
+                    self.set_exception(Exception('Bad hash result: %d != %d' % (crc32.crc32_hash(d), int(value))))
+            else:
+                value = json.dumps(value)
+                if d != json.loads(value):
+                    self.state = FINISHED
+                    self.set_exception(Exception('Bad result: %s != %s' % (json.dumps(d), value)))
             if o != flag:
                 self.state = FINISHED
                 self.set_exception(Exception('Bad result for flag value: %s != the value we set: %s' % (o, flag)))
