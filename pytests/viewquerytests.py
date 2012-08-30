@@ -2936,9 +2936,9 @@ class ExpirationDataSet:
             tc.assertEquals(len(results.get(u'rows', 0)), view.index_size,
                               "Returned number of items is incorrect")
             for row in results.get(u'rows',0):
-                tc.assertTrue(row['value'] in xrange(self.expire_millis -100, self.expire_millis + 100),
+                tc.assertTrue(row['value'] in xrange(self.expire_millis -200, self.expire_millis + 200),
                                   "Expiration should be %s, but actual is %s" %\
-                                   (self.expire, row['value']))
+                                   (self.expire_millis, row['value']))
 
 class DataLoadHelper:
     @staticmethod
