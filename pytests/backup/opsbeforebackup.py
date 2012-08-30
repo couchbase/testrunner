@@ -86,6 +86,7 @@ class OpsBeforeBackupTests(BackupBaseTest):
                     self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag, True)
                 self._load_all_buckets(self.master, gen_extra, "update", self.expire_time, 1, self.item_flag, True)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        time.sleep(5)
 
         self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
 
