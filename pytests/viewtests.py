@@ -40,6 +40,7 @@ class ViewBaseTests(unittest.TestCase):
             ViewBaseTests._common_clenup(self)
         master = self.servers[0]
         rest = RestConnection(master)
+        rest.set_reb_cons_view(disable=False)
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         mem_quota = int(rest.get_nodes_self().mcdMemoryReserved * node_ram_ratio)
         if self.dgm_run:
