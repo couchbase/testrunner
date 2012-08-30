@@ -241,7 +241,7 @@ class McsodaObserver(Observer, Thread):
 
         return None
 
-    def block_for_persistence(self, key, cas, timeout=0):
+    def block_for_persistence(self, key, cas, server="", timeout=0):
         """
         observe a key until it has been persisted
         """
@@ -249,7 +249,7 @@ class McsodaObserver(Observer, Thread):
 
         while True:
 
-            res = self.observe_single(key, timeout)
+            res = self.observe_single(key, server, timeout)
 
             if not res:
                 print "<%s> block_for_persistence: empty response"
@@ -292,7 +292,7 @@ class McsodaObserver(Observer, Thread):
 
         return False # unreachable
 
-    def observe_single(self, key, timeout=0):
+    def observe_single(self, key, server="", timeout=0):
         """
         send an observe command and get the response back
         """
@@ -301,7 +301,8 @@ class McsodaObserver(Observer, Thread):
             return None
 
         vbucketid = VbucketHelper.get_vbucket_id(key, self.cfg.get("vbuckets", 0))
-        server = self._get_server_str(vbucketid)
+        if not server:
+            server = self._get_server_str(vbucketid)
         req_key = ObserveRequestKey(key, vbucketid)
 
         req = ObserveRequest([req_key])
