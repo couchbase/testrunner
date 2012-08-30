@@ -120,4 +120,4 @@ class RecoveryUseTransferTests(TransferBaseTest):
             if("expire" in self.doc_ops):
                 self._load_all_buckets(self.server_origin, gen_expire, "update", self.expire_time, 1, self.item_flag, True)
         self._wait_for_stats_all_buckets([self.server_origin])
-        time.sleep(5)
+        time.sleep(15)
