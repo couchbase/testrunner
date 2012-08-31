@@ -10,6 +10,7 @@ import struct
 import random
 import threading
 import multiprocessing
+import Queue
 from collections import deque
 
 sys.path.append("lib")
@@ -49,6 +50,7 @@ from libstats.carbon_feeder import CarbonFeeder
 from libstats.carbon_key import CarbonKey
 
 LARGE_PRIME = 9576890767
+OPAQUE_MAX = 4294967295
 
 # --------------------------------------------------------
 
@@ -245,6 +247,57 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
         req_queue.task_done()
     print "[mcsoda] woq_worker stopped working"
 
+def cor_worker(stats_queue, ctl, cfg, store):
+    """
+    Sequentially measure latencies of create/observe_replications patterns
+
+    Create brand new items instead of reusing the foreground mcsoda load
+    """
+    bucket = "default"
+    key_num = OPAQUE_MAX
+    store.cfg["cor"] = 1
+    store.cfg["batch"] = 1
+    if isinstance(store, StoreMembaseBinary):
+        store.awareness.reset()
+    else:
+        print "[mcsoda] cannot start cor_worker: invalid store %s" % store
+        return
+
+    print "[mcsoda] cor_worker started"
+
+    observer = McsodaObserver(ctl, cfg, store, None)
+
+    while True:
+
+        start_time = time.time()
+
+        key_num -= 1
+        key_str = prepare_key(key_num, cfg.get('prefix', ''))
+
+        data = store.gen_doc(key_num, key_str,
+            choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
+                key_num))
+
+        grp = store.inflight_start()
+        store.cmd_append("set", key_num, key_str, data, 0, grp)
+        msg = store.inflight_complete(grp)
+
+        store.inflight_send(msg)
+        store.inflight_recv(1, grp, expectBuffer=False)
+
+        cas = store.cor_key_cas[key_num]
+        store.cor_key_cas.clear()
+
+        if not observer.block_for_replication(key_str, cas):
+            # put an invalid object to indicate error
+            stats_queue.put([key_str, cas, 0, 0], block=True)
+            continue
+
+        latency = time.time() - start_time
+        stats_queue.put([key_str, cas, start_time, latency], block=True)
+
+    print "[mcsoda] cor_worker stopped"
+
 def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     i = 0
     t_last_flush = time.time()
@@ -290,6 +343,13 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     if cfg.get('observe', 0):
         observer = McsodaObserver(ctl, cfg, store, obs_cb)
         observer.start()
+
+    if cfg.get('cor-pattern', 0):
+        cor_stats_queue = multiprocessing.Queue()
+        cor_process = multiprocessing.Process(
+            target=cor_worker, args=(cor_stats_queue, ctl, cfg, store))
+        cor_process.daemon = True
+        cor_process.start()
 
     while ctl.get('run_ok', True):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
@@ -352,6 +412,20 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
                                      repl_count=cfg.get('obs-repl-count', 1))
                     observables.append(obs)
                 observer.load_observables(observables)
+
+        if flushed and cfg.get('cor-pattern', 0):
+            # record stats
+            if not cor_stats_queue.empty():
+                try:
+                    key, cas, start_time, latency = \
+                        cor_stats_queue.get(block=False)
+                    if latency:
+                        store.add_timing_sample("cor", latency)
+                        store.save_stats(start_time)
+                        print "[mcsoda] cor_stats: key: %s, cas: %s, latency: %f"\
+                            % (key, cas, latency)
+                except Queue.Empty:
+                    pass
 
         i += 1
 
@@ -728,6 +802,7 @@ class StoreMemcachedBinary(Store):
         self.xfer_recv = 0
         self.obs_key_cas = {} # {key_num: cas} pair
         self.woq_key_cas = {} # {key_num: cas} pair
+        self.cor_key_cas = {} # {key_num: cas} pair
 
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
         self.conn = mc_bin_client.MemcachedClient(host, port)
@@ -971,6 +1046,8 @@ class StoreMemcachedBinary(Store):
             self.obs_key_cas[opaque] = cas  # opaque is the key_num
         if not self.woq_key_cas and cmd == CMD_SET:
             self.woq_key_cas[opaque] = cas
+        if "cor" in self.cfg and cmd == CMD_SET:
+            self.cor_key_cas[opaque] = cas
         return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
 
 
@@ -1123,6 +1200,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
             self.obs_key_cas[opaque] = cas  # opaque is the key_num
         if not self.woq_key_cas and cmd == CMD_SET:
             self.woq_key_cas[opaque] = cas  # opaque is the key_num
+        if "cor" in self.cfg and cmd == CMD_SET:
+            self.cor_key_cas[opaque] = cas  # opaque is the key_num
         val, buf = self.readbytes(sock, datalen, buf)
         return cmd, keylen, extralen, errcode, datalen, opaque, val, buf
 
