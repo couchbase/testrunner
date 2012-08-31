@@ -294,8 +294,9 @@ class McsodaObserver(Observer, Thread):
         if not self.block_for_persistence(key, cas):
             return False
 
-        print "<%s> block_for_replication: repl_servers: %s" \
-            % (self.__class__.__name__, repl_servers)
+        print "<%s> block_for_replication: repl_servers: %s,"\
+            " key: %s, cas: %s, vbucketid: %s" \
+            % (self.__class__.__name__, repl_servers, key, cas, vbucketid)
 
         while len(repl_servers) >= num > 0:
 
