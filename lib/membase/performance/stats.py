@@ -179,7 +179,10 @@ class StatsCollector(object):
                "latency-woq-query-recent":self._task["latency"].get('percentile-latency-woq-query-recent', []),
                "latency-woq-histogram":self._task["latency"].get("latency-woq-histogram", []),
                "latency-woq":self._task["latency"].get('percentile-latency-woq', []),
-               "latency-woq-recent":self._task["latency"].get('percentile-latency-woq-recent', [])
+               "latency-woq-recent":self._task["latency"].get('percentile-latency-woq-recent', []),
+               "latency-cor-histogram":self._task["latency"].get("latency-cor-histogram", []),
+               "latency-cor":self._task["latency"].get('percentile-latency-cor', []),
+               "latency-cor-recent":self._task["latency"].get('percentile-latency-cor-recent', [])
                }
 
         if self.client_id:
