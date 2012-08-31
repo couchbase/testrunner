@@ -277,6 +277,62 @@ class McsodaObserver(Observer, Thread):
 
         return False # unreachable
 
+    def block_for_replication(self, key, cas, num=1, timeout=0):
+        """
+        observe a key until it has been persisted to @param num of servers
+        """
+        if not isinstance(num, int) or num <= 0:
+            print "<%s> block_for_replication: invalid num %s" \
+                % (self.__class__.__name__, num)
+            return False
+
+        vbucketid = \
+            VbucketHelper.get_vbucket_id(key, self.cfg.get("vbuckets", 0))
+
+        repl_servers = self._get_server_str(vbucketid, repl=True)
+
+        if not self.block_for_persistence(key, cas):
+            return False
+
+        print "<%s> block_for_replication: repl_servers: %s" \
+            % (self.__class__.__name__, repl_servers)
+
+        while len(repl_servers) >= num > 0:
+
+            for server in repl_servers:
+
+                if num == 0:
+                    break
+
+                status, new_cas = self.observe_single(key, server, timeout)
+
+                if status < 0:
+                    repl_servers.remove(server)
+                    continue
+
+                if new_cas != cas:
+                    # Due to the current protocol limitations,
+                    # assume key is unique and new, skip this server
+                    repl_servers.remove(server)
+                    continue
+
+                if status == ObserveKeyState.OBS_PERSISITED:
+                    num -= 1
+                    repl_servers.remove(server)
+                    continue
+                elif status == ObserveKeyState.OBS_FOUND:
+                    if len(repl_servers) == 1:
+                        sleep(self.backoff)
+                        self.backoff = min(self.backoff * 2, self.max_backoff)
+                    continue
+                elif status == ObserveKeyState.OBS_NOT_FOUND:
+                    continue
+
+        if num > 0:
+            return False
+
+        return True
+
     def observe_single(self, key, server="", timeout=0):
         """
         send an observe command and get the response back
