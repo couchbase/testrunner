@@ -838,3 +838,33 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             if v == cluster_name:
                 return k
         return -1
+
+    def _enable_firewall(self, server):
+        shell = RemoteMachineShellConnection(server)
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+        shell.log_command_output(o, r)
+        if self._replication_direction_str == "bidirection":
+            o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j REJECT")
+            shell.log_command_output(o, r)
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED, RELATED -j ACCEPT")
+        shell.log_command_output(o, r)
+        self._log.info("enabled firewall on {0}".format(server))
+        o, r = shell.execute_command("/sbin/iptables --list")
+        shell.log_command_output(o, r)
+        shell.disconnect()
+
+    def _disable_firewall(self, server):
+        shell = RemoteMachineShellConnection(server)
+        o, r = shell.execute_command("iptables -F")
+        shell.log_command_output(o, r)
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j ACCEPT")
+        shell.log_command_output(o, r)
+        if self._replication_direction_str == "bidirection":
+            o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j ACCEPT")
+            shell.log_command_output(o, r)
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED, RELATED -j ACCEPT")
+        shell.log_command_output(o, r)
+        self._log.info("enabled firewall on {0}".format(server))
+        o, r = shell.execute_command("/sbin/iptables --list")
+        shell.log_command_output(o, r)
+        shell.disconnect()

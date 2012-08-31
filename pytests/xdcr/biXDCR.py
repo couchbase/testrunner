@@ -458,3 +458,19 @@ class bidirectional(XDCRReplicationBaseTest):
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
         self.verify_results(verify_src=True)
+
+    def replication_while_rebooting_a_non_master_destination_node(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+        self._async_update_delete_data()
+        shell = RemoteMachineShellConnection(self.dest_nodes[1])
+        o, r = shell.execute_command("reboot")
+        shell.log_command_output(o, r)
+        shell = RemoteMachineShellConnection(self.src_nodes[1])
+        o, r = shell.execute_command("reboot")
+        shell.log_command_output(o, r)
+        time.sleep(self._timeout * 2)
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+
+        self.verify_results(verify_src=True)

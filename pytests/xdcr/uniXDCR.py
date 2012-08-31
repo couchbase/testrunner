@@ -411,3 +411,27 @@ class unidirectional(XDCRReplicationBaseTest):
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self.verify_results()
+
+    def replication_while_rebooting_a_non_master_destination_node(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._async_modify_data()
+        shell = RemoteMachineShellConnection(self.dest_nodes[1])
+        o, r = shell.execute_command("reboot")
+        shell.log_command_output(o, r)
+        time.sleep(self._timeout * 2)
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+
+        self.verify_results()
+
+    def replication_with_firewall_enabled(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._async_modify_data()
+        time.sleep(self._timeout / 6)
+        self._enable_firewall(self.dest_master)
+        time.sleep(self._timeout / 2)
+        self._disable_firewall(self.dest_master)
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+
+        self.verify_results()
