@@ -177,21 +177,33 @@ class unidirectional(XDCRReplicationBaseTest):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
 
         if "source" in self._failover:
-            i = randrange(1, len(self.src_nodes))
-            self._log.info(" Failing over Source Non-Master Node {0}".format(self.src_nodes[i].ip))
-            self._cluster_helper.failover(self.src_nodes, [self.src_nodes[i]])
-            self._log.info(" Rebalance out Source Non-Master Node {0}".format(self.src_nodes[i].ip))
-            self._cluster_helper.rebalance(self.src_nodes, [], [self.src_nodes[i]])
-            self.src_nodes.pop(i)
+            if len(self.src_nodes) > 1:
+                i = len(self.src_nodes) - 1
+                self._log.info(
+                    " Failing over Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip, self.src_nodes[i].port))
+                self._cluster_helper.failover(self.src_nodes, [self.src_nodes[i]])
+                self._log.info(" Rebalance out Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip,
+                    self.src_nodes[i].port))
+                self._cluster_helper.rebalance(self.src_nodes, [], [self.src_nodes[i]])
+                self.src_nodes.remove(self.src_nodes[i])
+            else:
+                self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
+                    len(self.src_nodes)))
         if "destination" in self._failover:
-            i = randrange(1, len(self.dest_nodes))
-            self._log.info(" Failing over Destination Non-Master Node {0}".format(self.dest_nodes[i].ip))
-            self._cluster_helper.failover(self.dest_nodes, [self.dest_nodes[i]])
-            self._log.info(" Rebalance out Destination Non-Master Node {0}".format(self.dest_nodes[i].ip))
-            self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_nodes[i]])
-            self.dest_nodes.pop(i)
+            if len(self.dest_nodes) > 1:
+                i = len(self.dest_nodes) - 1
+                self._log.info(" Failing over Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
+                    self.dest_nodes[i].port))
+                self._cluster_helper.failover(self.dest_nodes, [self.dest_nodes[i]])
+                self._log.info(" Rebalance out Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
+                    self.dest_nodes[i].port))
+                self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_nodes[i]])
+                self.dest_nodes.remove(self.dest_nodes[i])
+            else:
+                self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
+                    len(self.dest_nodes)))
 
-        time.sleep(5)
+        time.sleep(self._timeout / 6)
 
         self._async_modify_data()
 
@@ -207,8 +219,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
 
         if "source" in self._failover:
-            i = randrange(1, len(self.src_nodes))
-            self._log.info(" Failing over Source Master Node {0}".format(self.src_master.ip))
+            self._log.info(" Failing over Source Master Node {0}:{1}".format(self.src_master.ip, self.src_master.port))
             self._cluster_helper.failover(self.src_nodes, [self.src_master])
             self._log.info(" Rebalance out Source Master Node {0}".format(self.src_master.ip))
             self._cluster_helper.rebalance(self.src_nodes, [], [self.src_master])
@@ -223,7 +234,7 @@ class unidirectional(XDCRReplicationBaseTest):
             self.dest_nodes.remove(self.dest_master)
             self.dest_master = self.dest_nodes[0]
 
-        time.sleep(10)
+        time.sleep(self._timeout / 6)
 
         self._async_modify_data()
 
