@@ -1490,6 +1490,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         #type = info.type.lower()
         #if type == 'windows':
         #cbcollect_command = "%scbepctl" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if bucket.saslPassword == None:
+            bucket.saslPassword = ''
         if persistence != "":
             command = "%s %s:11210 -b %s -p \"%s\" %s" % (cbepctl_command, self.ip,
                                                           bucket.name, bucket.saslPassword,
