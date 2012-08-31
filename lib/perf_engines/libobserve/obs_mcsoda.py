@@ -294,6 +294,8 @@ class McsodaObserver(Observer, Thread):
         if not self.block_for_persistence(key, cas):
             return False
 
+        self.backoff = self.cfg.get('obs-backoff', BACKOFF)
+
         print "<%s> block_for_replication: repl_servers: %s,"\
             " key: %s, cas: %s, vbucketid: %s" \
             % (self.__class__.__name__, repl_servers, key, cas, vbucketid)
