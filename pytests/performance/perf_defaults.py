@@ -86,3 +86,4 @@ class PerfDefaults:
     warmup                  =   0        # restart memcached and measure warmup phase. 1: enabled, 0: disabled
     woq_pattern             =   0        # measure standard write/observe/query pattern
     woq_verbose             =   0        # verbose output for woq pattern
+    cor_pattern             =   0        # measure create/observe replication pattern on a different key space
