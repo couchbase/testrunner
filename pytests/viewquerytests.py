@@ -1487,6 +1487,31 @@ class ViewQueryTests(unittest.TestCase):
         data_set.load(self, data_set.views[0], docs_per_day)
         self._query_all_views(data_set.views, limit=self.limit)
 
+    def test_sales_dataset_multiply_items(self):
+        '''
+        Test uses sales data set: 
+            -documents are structured as {
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "sales" : sales <int>
+                                       <n> string items}}
+        Steps to repro:
+            1. Start load data
+            2. start querying for views
+        '''
+        docs_per_day = self.input.param('docs-per-day', 200)
+        skip = self.input.param('skip', 2000)
+        nodes_num_to_add = self.input.param('nodes_to_add', 0)
+        num_items = self.input.param('num_items', 55)
+        if nodes_num_to_add:
+            rebalance = self.cluster.async_rebalance(self.servers[:nodes_num_to_add + 1], [self.servers[1 : nodes_num_to_add + 1]], [])
+            rebalance.result()
+        data_set = SalesDataSet(self._rconn(), docs_per_day, limit=self.limit, template_items_num=num_items)
+        data_set.add_skip_queries(skip=skip, limit=self.limit)
+        data_set.load(self, data_set.views[0], docs_per_day)
+        self._query_all_views(data_set.views, limit=self.limit)
+
     def test_expiration_docs_queries(self):
         data_set = ExpirationDataSet(self._rconn(),self.num_docs)
         data_set.load(self, data_set.views[0])
@@ -2721,7 +2746,7 @@ class SimpleDataSet:
         self.add_stale_queries(views, limit)
 
 class SalesDataSet:
-    def __init__(self, rest, docs_per_day = 200, bucket = "default", limit=None, test_datatype=False):
+    def __init__(self, rest, docs_per_day = 200, bucket = "default", limit=None, test_datatype=False, template_items_num=None):
         self.docs_per_day = docs_per_day
         self.years = 1
         self.months = 12
@@ -2729,6 +2754,7 @@ class SalesDataSet:
         self.bucket = bucket
         self.rest = rest
         self.test_datatype = test_datatype
+        self.template_items_num = template_items_num
         self.views = self.create_views(rest, bucket=self.bucket)
         self.name = "sales_dataset"
         self.kv_store = None
@@ -2755,6 +2781,10 @@ class SalesDataSet:
                      QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn4),
                      QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn5),
                      QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn5, reduce_fn = "_count")]
+        elif self.template_items_num:
+            vfn1 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc['sales']);}"
+            views = [QueryView(rest, full_index_size, bucket=bucket, fn_str= vfn1),
+                     QueryView(rest, full_index_size, bucket=bucket, fn_str = vfn1, reduce_fn = "_count")]
         else:
             views = [QueryView(rest, full_index_size, bucket=bucket, fn_str=vfn, reduce_fn="_count"),
                      QueryView(rest, full_index_size, bucket=bucket, fn_str=vfn, reduce_fn="_sum"),
@@ -2785,6 +2815,12 @@ class SalesDataSet:
                                            "client_contact" :  str(uuid.uuid4())[:10],
                                            "client_name" : str(uuid.uuid4())[:10],
                                            "client_reclaims_rate" : random.random()}
+                            self.doc_id_map['years'][i]['months'][j]['days'][k]["sales"] = kv_template
+                        elif self.template_items_num:
+                            kv_template = {"join_yr" : 2007 + i, "join_mo" : j, "join_day" : k,
+                                           "sales" : sales}
+                            for num in xrange(self.template_items_num - 2):
+                                kv_template['item_%s' % num] = 'value_%s' % num
                             self.doc_id_map['years'][i]['months'][j]['days'][k]["sales"] = kv_template
                         else:
                             kv_template = {"join_yr" : 2007+i, "join_mo" : j, "join_day" : k,
