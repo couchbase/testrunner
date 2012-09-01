@@ -216,7 +216,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
-        #inrease timout for big data
+        #increase timeout for big data
         timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items / 100000)
         query = {}
         query["connectionTimeout"] = 60000;
@@ -240,6 +240,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         query["stale"] = "false"
 
         self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
+        query["stale"] = "update_after"
         for i in reversed(range(self.num_servers)[1:]):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
             time.sleep(self.wait_timeout / 5)
