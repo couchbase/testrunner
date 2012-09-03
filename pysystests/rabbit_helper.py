@@ -1,5 +1,5 @@
 from librabbitmq import Connection, Message
-import json
+import yajl
 import re
 from celery import Task
 import testcfg as cfg
@@ -55,17 +55,30 @@ class RabbitHelper(object):
     def getMsg(self, queue, no_ack = False, requeue = False):
 
         message = self.channel.basic_get(queue = queue)
-        body = message.body
+        body = None
 
-        # Handle data receipt acknowldegement 
-        if no_ack == False:
-           message.ack
+        if message is not None:
+            body = message.body
+            # Handle data receipt acknowldegement
+            if no_ack == False:
+               message.ack
 
-        if requeue:
-            self.putMsg(queue, body)
+            if requeue:
+                self.putMsg(queue, body)
 
 
-        #TODO: try json loads here	
+        return body
+
+    def getJsonMsg(self, queue, no_ack = False, requeue = False):
+
+        msg = self.getMsg(queue, no_ack, requeue)
+        body = {}
+        if msg is not None:
+            try:
+                body = yajl.loads(msg)
+            except ValueError:
+                pass
+
         return body
 
     def close(self):

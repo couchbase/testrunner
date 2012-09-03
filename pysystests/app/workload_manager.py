@@ -36,9 +36,7 @@ def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_templ
     try:
         templateQueueSize = rabbitHelper.qsize(templateQueue)
         if templateQueueSize > 0:
-            templateMsg = rabbitHelper.getMsg(templateQueue)
-            templateMsg = yajl.loads(templateMsg)
-            logger.error(templateMsg)
+            templateMsg = rabbitHelper.getJsonMsg(templateQueue)
             template = Template(templateMsg)
             TemplateCacher().store(template)
     except ValueError as ex:
@@ -51,8 +49,7 @@ def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_templ
     try:
         workloadQueueSize = rabbitHelper.qsize(workloadQueue)
         if workloadQueueSize > 0:
-            workloadMsg = rabbitHelper.getMsg(workloadQueue)
-            workloadMsg = yajl.loads(workloadMsg)
+            workloadMsg = rabbitHelper.getJsonMsg(workloadQueue)
             workload = Workload(workloadMsg)
             WorkloadCacher().store(workload)
 
@@ -243,10 +240,9 @@ def taskScheduler():
             task_queue = workload.task_queue
             # dequeue subtasks
             if rabbitHelper.qsize(task_queue) > 0:
-                tasks = rabbitHelper.getMsg(task_queue)
+                tasks = rabbitHelper.getJsonMsg(task_queue)
 
                 if tasks is not None and len(tasks) > 0:
-                    tasks = yajl.loads(tasks)
 
                     # apply async
                     result = TaskSet(tasks = tasks).apply_async()
@@ -351,16 +347,15 @@ def generate_get_tasks(count, docs_queue, bucket="default", batch_size = 100):
 
     if rabbitHelper.qsize(docs_queue) > 0:
 
-        keys = rabbitHelper.getMsg(docs_queue, requeue = True)
-        keys = yajl.loads(keys)
+        keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
 
         # keys are stored in batch but sometimes we need to get more
         while len(keys) < count:
             if rabbitHelper.qsize(docs_queue) == 0: break 
                 
-            ex_keys = rabbitHelper.getMsg(docs_queue,  requeue = True)
+            ex_keys = rabbitHelper.getJsonMsg(docs_queue,  requeue = True)
             if ex_keys is not None and len(ex_keys) > 0:
-                keys = keys + yajl.loads(ex_keys)
+                keys = keys + ex_keys
        
         if len(keys) > 0:
 
@@ -386,16 +381,15 @@ def generate_update_tasks(template, update_count, docs_queue, bucket = "default"
 
     if rabbitHelper.qsize(docs_queue) > 0:
 
-        keys = rabbitHelper.getMsg(docs_queue, requeue = True)
-        keys = yajl.loads(keys)
+        keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
 
         # keys are stored in batch but sometimes we need to get more
         while len(keys) < update_count:
 
             if rabbitHelper.qsize(docs_queue) == 0: break 
 
-            ex_keys = rabbitHelper.getMsg(docs_queue, requeue = True)
-            keys = keys + yajl.loads(ex_keys)
+            ex_keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
+            keys = keys + ex_keys
         
 
         if len(keys) > 0:
@@ -416,17 +410,16 @@ def generate_del_tasks(del_count, docs_queue, bucket = "default"):
 
     if rabbitHelper.qsize(docs_queue) > 0:
 
-        keys = rabbitHelper.getMsg(docs_queue)
-        keys = yajl.loads(keys)
+        keys = rabbitHelper.getJsonMsg(docs_queue)
 
         # keys are stored in batch but sometimes we need to get more
         while len(keys) < del_count:
 
             if rabbitHelper.qsize(docs_queue) == 0: break 
 
-            ex_keys = rabbitHelper.getMsg(docs_queue)
+            ex_keys = rabbitHelper.getJsonMsg(docs_queue)
             if ex_keys is not None and len(ex_keys) > 0:
-                keys = keys + yajl.loads(ex_keys)
+                keys = keys + ex_keys
         
 
         if len(keys) > 0:
