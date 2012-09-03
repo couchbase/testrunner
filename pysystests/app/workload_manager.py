@@ -211,7 +211,10 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
             bs.block(bucket)
             BucketStatusCacher().store(bs)
 
-            stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT)
+            stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
+                                       bucket = bucket,
+                                       username = cfg.COUCHBASE_USER,
+                                       password = cfg.COUCHBASE_PWD)
             while not stat_checker.check(workload.preconditions):
                 time.sleep(1)
             prevWorkload.active = False
@@ -262,7 +265,6 @@ back into nonblocking mode
 def postcondition_handler():
 
     cache = WorkloadCacher()
-    stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT)
 
     for workload in  cache.workloads:
         if workload.postconditions and workload.active:
@@ -270,6 +272,11 @@ def postcondition_handler():
             bs = BucketStatusCacher().bucketstatus(bucket)
             bs.block(bucket)
             BucketStatusCacher().store(bs)
+
+            stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
+                                       bucket = bucket,
+                                       username = cfg.COUCHBASE_USER,
+                                       password = cfg.COUCHBASE_PWD)
             if stat_checker.check(workload.postconditions):
                 bs = BucketStatusCacher().bucketstatus(bucket)
                 bs.unblock(bucket)
