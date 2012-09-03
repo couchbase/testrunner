@@ -21,6 +21,6 @@ for queue in test_queues:
 cacheClean()
 
 # kill+start sdk's
-os.system("ps -aefl | grep sdkserver | awk '{print $4'} | xargs kill")
+os.system("ps aux | grep sdkserver | awk '{print $2'} | xargs kill")
 os.system("ruby sdkserver.rb &")
 os.system("python sdkserver.py  &")
