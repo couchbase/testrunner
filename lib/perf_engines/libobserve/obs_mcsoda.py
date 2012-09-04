@@ -277,9 +277,11 @@ class McsodaObserver(Observer, Thread):
 
         return False # unreachable
 
-    def block_for_replication(self, key, cas, num=1, timeout=0):
+    def block_for_replication(self, key, cas, num=1, timeout=0, persist=False):
         """
-        observe a key until it has been persisted to @param num of servers
+        observe a key until it has been replicated to @param num of servers
+
+        @param persist : block until item has been persisted to disk
         """
         if not isinstance(num, int) or num <= 0:
             print "<%s> block_for_replication: invalid num %s" \
@@ -291,7 +293,7 @@ class McsodaObserver(Observer, Thread):
 
         repl_servers = self._get_server_str(vbucketid, repl=True)
 
-        if not self.block_for_persistence(key, cas):
+        if persist and not self.block_for_persistence(key, cas):
             return False
 
         self.backoff = self.cfg.get('obs-backoff', BACKOFF)
@@ -313,7 +315,7 @@ class McsodaObserver(Observer, Thread):
                     repl_servers.remove(server)
                     continue
 
-                if new_cas != cas:
+                if new_cas and new_cas != cas:
                     # Due to the current protocol limitations,
                     # assume key is unique and new, skip this server
                     repl_servers.remove(server)
@@ -324,12 +326,16 @@ class McsodaObserver(Observer, Thread):
                     repl_servers.remove(server)
                     continue
                 elif status == ObserveKeyState.OBS_FOUND:
-                    if len(repl_servers) == 1:
-                        sleep(self.backoff)
-                        self.backoff = min(self.backoff * 2, self.max_backoff)
-                    continue
+                    if not persist:
+                        num -= 1
+                        repl_servers.remove(server)
+                        continue
                 elif status == ObserveKeyState.OBS_NOT_FOUND:
-                    continue
+                    pass
+
+                if len(repl_servers) == 1:
+                    sleep(self.backoff)
+                    self.backoff = min(self.backoff * 2, self.max_backoff)
 
         if num > 0:
             return False
