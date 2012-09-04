@@ -326,6 +326,12 @@ ns_server_data $get_hits <- as.numeric(ns_server_data$get_hits)
 ns_server_data <- transform(ns_server_data , cache_miss=ifelse(ns_server_data$cmd_get <= ns_server_data$ep_bg_fetched,0,ns_server_data$ep_bg_fetched/ns_server_data$cmd_get))
 ns_server_data$cache_miss <- ns_server_data$cache_miss*100
 ns_server_data$curr_connections <- as.numeric(ns_server_data$curr_connections)
+tryCatch({
+    ns_server_data $replication_changes_left <- as.numeric(ns_server_data$replication_changes_left)
+    ns_server_data $xdc_ops <- as.numeric(ns_server_data$xdc_ops)
+}, error=function(e) {
+    print("Cannot find XDC stats")
+})
 all_builds = factor(ns_server_data$buildinfo.version)
 result_tmp <- data.frame()
 for(a_build in levels(all_builds)) {
@@ -1832,6 +1838,28 @@ if (nrow(ns_server_data) > 0) {
                         "internal statistic gathering (measured",
                         "from curr_connections)",
                         sep="\n"))
+
+    if(!is.null(ns_server_data$replication_changes_left)) {
+        cat("generating replication_changes_left \n")
+        p <- ggplot(ns_server_data, aes(row, replication_changes_left, color=buildinfo.version, label=replication_changes_left)) + labs(x="----time (sec)--->", y="items")
+        p <- p + geom_point()
+        p <- addopts(p, "XDC replication Queue")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of items waiting to be",
+                            "replicated to other clusters",
+                            sep="\n"))
+
+        cat("generating xdc_ops \n")
+        p <- ggplot(ns_server_data, aes(row, xdc_ops, color=buildinfo.version, label=xdc_ops)) + labs(x="----time (sec)--->", y="ops/sec")
+        p <- p + geom_point()
+        p <- addopts(p,"XDC ops per sec")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Cross-datacenter replication related",
+                            "operations per second to this bucket.",
+                            sep="\n"))
+    }
 }
 
 cat("generating cpu_util \n")
