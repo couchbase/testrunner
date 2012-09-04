@@ -1104,6 +1104,12 @@ class RestConnection(object):
 
         return json.loads(content)
 
+    def get_xdc_queue_size(self, bucket):
+        """Fetch bucket stats and return the latest value of XDC replication
+        queue size"""
+        bucket_stats = self.fetch_bucket_stats(bucket)
+        return bucket_stats['op']['samples']['replication_changes_left'][-1]
+
     def get_nodes(self):
         nodes = []
         api = self.baseUrl + 'pools/default'
