@@ -249,6 +249,8 @@ def cor_worker(stats_queue, ctl, cfg, store):
 
     Create brand new items instead of reusing the foreground mcsoda load
     """
+    OP_WIN = 1     # ensure foreground load to dominate the traffic
+    backoff = 0
     bucket = "default"
     key_num = OPAQUE_MAX
     store.cfg["cor"] = 1
@@ -264,6 +266,11 @@ def cor_worker(stats_queue, ctl, cfg, store):
     observer = McsodaObserver(ctl, cfg, store, None)
 
     while True:
+
+        if backoff:
+            log.info("[mcsoda] cor_worker sleep for %s seconds" % backoff)
+            time.sleep(backoff)
+            backoff = 0
 
         start_time = time.time()
 
@@ -284,13 +291,17 @@ def cor_worker(stats_queue, ctl, cfg, store):
         cas = store.cor_key_cas[key_num]
         store.cor_key_cas.clear()
 
-        if not observer.block_for_replication(key_str, cas):
+        status = observer.block_for_replication(key_str, cas)
+        latency = time.time() - start_time
+
+        if status:
+            stats_queue.put([key_str, cas, start_time, latency], block=True)
+        else:
             # put an invalid object to indicate error
             stats_queue.put([key_str, cas, 0, 0], block=True)
-            continue
 
-        latency = time.time() - start_time
-        stats_queue.put([key_str, cas, start_time, latency], block=True)
+        if latency < OP_WIN:
+            backoff = OP_WIN - latency
 
     log.info("[mcsoda] cor_worker stopped")
 
