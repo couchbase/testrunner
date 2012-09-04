@@ -1,6 +1,7 @@
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from xdcrbasetests import XDCRReplicationBaseTest
 from membase.helper.rebalance_helper import RebalanceHelper
+from remote.remote_util import RemoteMachineShellConnection
 from random import randrange
 
 import time
