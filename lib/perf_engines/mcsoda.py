@@ -255,6 +255,8 @@ def cor_worker(stats_queue, ctl, cfg, store):
     key_num = OPAQUE_MAX
     store.cfg["cor"] = 1
     store.cfg["batch"] = 1
+    persist = (int(cfg.get('cor-persist', 0)) == 1)
+
     if isinstance(store, StoreMembaseBinary):
         store.awareness.reset()
     else:
@@ -291,7 +293,8 @@ def cor_worker(stats_queue, ctl, cfg, store):
         cas = store.cor_key_cas[key_num]
         store.cor_key_cas.clear()
 
-        status = observer.block_for_replication(key_str, cas)
+        status = \
+            observer.block_for_replication(key_str, cas, persist=persist)
         latency = time.time() - start_time
 
         if status:

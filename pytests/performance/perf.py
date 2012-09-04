@@ -851,6 +851,8 @@ class PerfBase(unittest.TestCase):
                                          PerfDefaults.woq_verbose),
                'cor-pattern': self.param('cor_pattern',
                                          PerfDefaults.cor_pattern),
+               'cor-persist': self.parami('cor_persist',
+                                         PerfDefaults.cor_persist),
                'carbon': self.parami('carbon', PerfDefaults.carbon),
                'carbon-server': self.param('carbon_server',
                                            PerfDefaults.carbon_server),
