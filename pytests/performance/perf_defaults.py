@@ -52,7 +52,7 @@ class PerfDefaults:
 
     # control
     avg_value_size          =   2048     # average size of document body
-    db_compaction           =   2        # db fragmentation percentage triggers compaction
+    db_compaction           =   30       # db fragmentation percentage triggers compaction
     ep_compaction           =   50       # ep_engine side fragmentation percentage which triggers compaction
     hot_stack               =   0        # maintain a hot stack to queue up previously SETted keys
     hot_stack_size          =   0        # size of the hot stack. 0: compute from hot-ratio * num-items (caution: in memory)
@@ -81,7 +81,7 @@ class PerfDefaults:
     tear_down_bucket        =   0        # (prerequsite: tear_down = 1) tear down bucket,  1: enabled, 0: disabled
     tear_down_cluster       =   1        # (prerequsite: tear_down = 1) tear down server cluster, 1: enabled, 0: disabled
     tear_down_on_setup      =   0        # teardown routine to clean up resources during startup. 1: enabled, 0: disabled
-    view_compaction         =   10       # view fragmentation percentage triggers compaction
+    view_compaction         =   30       # view fragmentation percentage triggers compaction
     vbuckets                =   1024     # number of vbuckets
     warmup                  =   0        # restart memcached and measure warmup phase. 1: enabled, 0: disabled
     woq_pattern             =   0        # measure standard write/observe/query pattern
