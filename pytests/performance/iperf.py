@@ -358,6 +358,14 @@ class XPerfTests(EVPerfClient):
     def test_vperf_bidir(self):
         super(XPerfTests, self).test_vperf2()
 
+    @PerfWrapper.xperf()
+    def test_mixed_unidir(self):
+        super(XPerfTests, self).test_eperf_mixed()
+
+    @PerfWrapper.xperf(bidir=True)
+    def test_mixed_bidir(self):
+        super(XPerfTests, self).test_eperf_mixed()
+
     @PerfWrapper.xperf_load
     def test_vperf_load(self):
         super(XPerfTests, self).test_vperf2()
