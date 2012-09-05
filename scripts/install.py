@@ -42,6 +42,7 @@ Available keys:
  standalone=false        Install without cluster management
  toy=                    Install a toy build
  vbuckets=               The number of vbuckets in the server installation.
+ erlang_threads=         Number of erlang threads (+A param) (default=16)
 
 Examples:
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
@@ -349,6 +350,15 @@ class CouchbaseServerInstaller(Installer):
                 if mem_req_tap_env:
                     remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
                                                            mem_req_tap_env)
+                #TODO: Make it work with windows
+                if "erlang_threads" in params:
+                    erlang_threads = params.get('erlang_threads', testconstants.NUM_ERLANG_THREADS)
+                    # Stop couchbase-server
+                    ClusterOperationHelper.stop_cluster([server])
+                    # Change num erlang threads
+                    ClusterOperationHelper.change_erlang_async([server], erlang_threads)
+                    # Start couchbase-server
+                    ClusterOperationHelper.start_cluster([server])
 
                 cluster_initialized = True
                 break
@@ -615,6 +625,7 @@ if __name__ == "__main__":
     #TODO: This is not broken, but could be something better
     #      like a validator, to check SSH, input params etc
     #check_build(input)
+
     if "parallel" in input.test_params:
         # workaround for a python2.6 bug of using strptime with threads
         datetime.strptime("30 Nov 00", "%d %b %y")

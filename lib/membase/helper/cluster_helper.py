@@ -303,15 +303,23 @@ class ClusterOperationHelper(object):
             c.close()
 
     @staticmethod
-    def change_erlang_async(servers, original, modified):
+    def change_erlang_async(servers, value=16):
+        """Change the number of async internal erlang threads
+           Identified with +A param
+
+        Default: 16
+        """
         log = logger.Logger.get_logger()
         for server in servers:
             sh = RemoteMachineShellConnection(server)
-            command = "sed -i 's/+A {0}/+A {1}/g' /opt/couchbase/bin/membase-server".format(original, modified)
+            product = "membase"
+            if sh.is_couchbase_installed():
+                product = "couchbase"
+            command = "sed -i 's/+A .*/+A %s \\\/g' /opt/%s/bin/%s-server" % (value, product, product)
             o, r = sh.execute_command(command)
             sh.log_command_output(o, r)
-            msg = "modified erlang +A from {0} to {1} for server {2}"
-            log.info(msg.format(original, modified, server.ip))
+            msg = "modified erlang +A to %s for server %s"
+            log.info(msg % (value, server.ip))
 
     @staticmethod
     def begin_rebalance_in(master, servers, timeout=5):
