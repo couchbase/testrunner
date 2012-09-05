@@ -837,7 +837,7 @@ class StoreMemcachedBinary(Store):
         return ''.join(inflight_arr)
 
     def inflight_send(self, inflight_msg):
-        self.conn.s.send(inflight_msg)
+        self.conn.s.sendall(inflight_msg)
         return len(inflight_msg)
 
     def inflight_recv(self, inflight, inflight_arr, expectBuffer=None):
