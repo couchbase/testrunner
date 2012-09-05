@@ -12,6 +12,7 @@ import threading
 import multiprocessing
 import Queue
 from collections import deque
+from hashlib import md5
 
 sys.path.append("lib")
 sys.path.append(".")
@@ -25,12 +26,6 @@ except:
         def error(self, m): print(m)
         def info(self, m):  print(m)
     log = P()
-
-try:
-    from hashlib import md5
-    md5; # Pyflakes workaround
-except ImportError:
-    from md5 import md5
 
 import crc32
 import mc_bin_client
