@@ -59,19 +59,18 @@ class Task(Future):
         raise NotImplementedError
 
 class NodeInitializeTask(Task):
-    def __init__(self, server):
+    def __init__(self, server, disabled_consistent_view=None):
         Task.__init__(self, "node_init_task")
         self.server = server
         self.quota = 0
+        self.disable_consistent_view = disabled_consistent_view
 
     def execute(self, task_manager):
         rest = RestConnection(self.server)
         username = self.server.rest_username
         password = self.server.rest_password
 
-        code = "ns_config:set(index_aware_rebalance_disabled, false)."
-        self.log.info('Enabling consistent-views during rebalance: {0}'.format(code))
-        rest.diag_eval(code)
+        rest.set_reb_cons_view(self.disable_consistent_view)
 
         rest.init_cluster(username, password)
         info = rest.get_nodes_self()

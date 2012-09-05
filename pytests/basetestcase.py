@@ -38,13 +38,14 @@ class BaseTestCase(unittest.TestCase):
         self.dgm_run = self.input.param("dgm_run", False)
         #max items number to verify in ValidateDataTask, None - verify all
         self.max_verify = self.input.param("max_verify", None)
+        self.disabled_consistent_view = self.input.param("disabled_consistent_view", True)
         self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
         #avoid clean up if the previous test has been tear down
         if not self.input.param("skip_cleanup", True) or self.case_number == 1:
             self.tearDown()
             self.cluster = Cluster()
-        self.quota = self._initialize_nodes(self.cluster, self.servers)
+        self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
         if self.dgm_run:
             self.quota = 256
         if self.total_buckets > 0:
@@ -98,11 +99,11 @@ class BaseTestCase(unittest.TestCase):
         except:
             pass
 
-    def _initialize_nodes(self, cluster, servers):
+    def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None):
         quota = 0
         init_tasks = []
         for server in servers:
-            init_tasks.append(cluster.async_init_node(server))
+            init_tasks.append(cluster.async_init_node(server, disabled_consistent_view))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:

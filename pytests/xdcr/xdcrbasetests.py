@@ -76,7 +76,7 @@ class XDCRBaseTest(unittest.TestCase):
             if not self._input.param("skip_cleanup", False):
                 self._cleanup_previous_setup()
 
-            self._init_clusters()
+            self._init_clusters(self._disabled_consistent_view)
             self.setup_extended()
             self._log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
@@ -112,6 +112,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._cluster_counter_temp_int = 0
         self._cluster_names_dic = self._get_cluster_names()
         self._servers = self._input.servers
+        self._disabled_consistent_view = self._input.param("disabled_consistent_view", True)
         self._floating_servers_set = self._get_floating_servers() # These are the servers defined in .ini file but not linked to any cluster.
         self._cluster_counter_temp_int = 0 #TODO: fix the testrunner code to pass cluster name in params.
         self._buckets = []
@@ -227,9 +228,9 @@ class XDCRBaseTest(unittest.TestCase):
         return floating_servers
 
 
-    def _init_clusters(self):
+    def _init_clusters(self, disabled_consistent_view=None):
         for key in self._clusters_keys_olst:
-            self._setup_cluster(self._clusters_dic[key])
+            self._setup_cluster(self._clusters_dic[key], disabled_consistent_view)
 
     # This method shall be overridden in case there are parameters that need to be initialized.
     def init_parameters_extended(self):
@@ -263,15 +264,15 @@ class XDCRBaseTest(unittest.TestCase):
             self._cluster_counter_temp_int += 1
         return cs_names
 
-    def _setup_cluster(self, nodes):
-        self._init_nodes(nodes)
+    def _setup_cluster(self, nodes, disabled_consistent_view=None):
+        self._init_nodes(nodes, disabled_consistent_view)
         self._config_cluster(nodes)
         self._create_buckets(nodes)
 
-    def _init_nodes(self, nodes):
+    def _init_nodes(self, nodes, disabled_consistent_view=None):
         _tasks = []
         for node in nodes:
-            _tasks.append(self._cluster_helper.async_init_node(node))
+            _tasks.append(self._cluster_helper.async_init_node(node, disabled_consistent_view))
         for task in _tasks:
             mem_quota_node = task.result()
             if mem_quota_node < self._mem_quota_int or self._mem_quota_int == 0:

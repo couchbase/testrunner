@@ -75,7 +75,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_init_node(self, server):
+    def async_init_node(self, server, disabled_consistent_view=None):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -83,10 +83,11 @@ class Cluster(object):
 
         Parameters:
             server - The server to initialize. (TestInputServer)
+            disabled_consistent_view - disable consistent view
 
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
-        _task = NodeInitializeTask(server)
+        _task = NodeInitializeTask(server, disabled_consistent_view)
         self.task_manager.schedule(_task)
         return _task
 
@@ -205,7 +206,7 @@ class Cluster(object):
         _task = self.async_bucket_delete(server, bucket)
         return _task.result(timeout)
 
-    def init_node(self, server):
+    def init_node(self, server, async_init_node=True, disabled_consistent_view=None):
         """Synchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -213,10 +214,11 @@ class Cluster(object):
 
         Parameters:
             server - The server to initialize. (TestInputServer)
+            disabled_consistent_view - disable consistent view
 
         Returns:
             boolean - Whether or not the node was properly initialized."""
-        _task = self.async_init_node(server)
+        _task = self.async_init_node(server, async_init_node, disabled_consistent_view)
         return _task.result()
 
     def rebalance(self, servers, to_add, to_remove, timeout=None):
