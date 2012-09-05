@@ -785,7 +785,8 @@ class EPerfMaster(perf.PerfBase):
 
                 start_time = time.time()
 
-                self.latched_rebalance(delay=0, sync=True)
+                if not self.parami("prefix", 0):
+                    self.latched_rebalance(delay=0, sync=True)
 
                 if self.parami("loop_wait_until_drained",
                                PerfDefaults.loop_wait_until_drained):
