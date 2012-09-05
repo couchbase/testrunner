@@ -816,7 +816,7 @@ class StoreMemcachedBinary(Store):
 
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
         self.conn = mc_bin_client.MemcachedClient(host, port)
-        if user:
+        if user and bucket != "default":
             self.conn.sasl_auth_plain(user, pswd)
 
     def inflight_reinit(self, inflight=0):
