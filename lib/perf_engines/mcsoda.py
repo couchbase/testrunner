@@ -25,6 +25,7 @@ except:
     class P:
         def error(self, m): print(m)
         def info(self, m):  print(m)
+        def debug(self, m):  print(m)
     log = P()
 
 import crc32
@@ -73,8 +74,8 @@ class Stack(object):
 
     def pop(self):
         if self.size <= 0:
-            print "unable to pop item from Stack: invalid size %s"\
-                % self.size
+            log.error("unable to pop item from Stack: invalid size %s"\
+                % self.size)
             return None
         try:
             if self.rotate:
@@ -88,8 +89,8 @@ class Stack(object):
 
     def append(self, val):
         if self.size <= 0:
-            print "unable to append item to Stack: invalid size %s"\
-                % self.size
+            log.error("unable to append item to Stack: invalid size %s"\
+                % self.size)
             return
         while len(self.deq) >= self.size:
             self.deq.popleft()
@@ -98,7 +99,7 @@ class Stack(object):
     def clear(self):
         num_cleared = len(self.deq)
         self.deq.clear()
-        print "cleared %d items from hot stack" % num_cleared
+        log.info("cleared %d items from hot stack" % num_cleared)
 
 def dict_to_s(d, level="", res=None, suffix=", ", ljust=None):
     res = res or []
@@ -184,10 +185,10 @@ def obs_cb(store):
     callback for observe thread.
     """
     if not store:
-        print "[mcsoda] obs_cb is broken"
+        log.error("[mcsoda] obs_cb is broken")
         return
 
-    print "[mcsoda] obs_cb: clear obs_key_cas %s" % store.obs_key_cas
+    log.info("[mcsoda] obs_cb: clear obs_key_cas %s" % store.obs_key_cas)
     store.obs_key_cas.clear()
 
 def woq_worker(req_queue, stats_queue, ctl, cfg, store):
@@ -200,7 +201,7 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
     query_params = {"limit": 10,
                     "stale": "false"}
 
-    print "[mcsoda] woq_worker started"
+    log.info("[mcsoda] woq_worker started")
     woq_observer = McsodaObserver(ctl, cfg, store, None)
 
     while True:
@@ -217,30 +218,30 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
 
         obs_latency = time.time() - start_time
         if cfg.get("woq-verbose", 0):
-            print "[mcsoda] woq_worker obs latency: %s, key = %s, cas = %s "\
-                % (obs_latency, key, cas)
+            log.info("[mcsoda] woq_worker obs latency: %s, key = %s, cas = %s "\
+                % (obs_latency, key, cas))
 
         query_start = time.time()
 
         try:
             result = store.rest.query_view(ddoc, view, bucket, query_params)
         except QueryViewException as e:
-            print "[mcsoda] woq_worker QueryViewException: %s" % e
+            log.error("[mcsoda] woq_worker QueryViewException: %s" % e)
             stats_queue.put([key, cas, 0, 0, 0, 0], block=True)
             req_queue.task_done()
             continue
 
         query_latency = time.time() - query_start
         if cfg.get("woq-verbose", 0):
-            print "[mcsoda] woq_worker query latency: %s, key = %s, cas = %s "\
-                % (query_latency, key, cas)
-            print "[mcsoda] woq_worker query result: %s" % result
+            log.info("[mcsoda] woq_worker query latency: %s, key = %s, cas = %s "\
+                % (query_latency, key, cas))
+            log.info("[mcsoda] woq_worker query result: %s" % result)
 
         latency = time.time() - start_time
         stats_queue.put([key, cas, start_time, obs_latency, query_latency, latency],
                         block=True)
         req_queue.task_done()
-    print "[mcsoda] woq_worker stopped working"
+    log.info("[mcsoda] woq_worker stopped working")
 
 def cor_worker(stats_queue, ctl, cfg, store):
     """
@@ -255,10 +256,10 @@ def cor_worker(stats_queue, ctl, cfg, store):
     if isinstance(store, StoreMembaseBinary):
         store.awareness.reset()
     else:
-        print "[mcsoda] cannot start cor_worker: invalid store %s" % store
+        log.error("[mcsoda] cannot start cor_worker: invalid store %s" % store)
         return
 
-    print "[mcsoda] cor_worker started"
+    log.info("[mcsoda] cor_worker started")
 
     observer = McsodaObserver(ctl, cfg, store, None)
 
@@ -291,7 +292,7 @@ def cor_worker(stats_queue, ctl, cfg, store):
         latency = time.time() - start_time
         stats_queue.put([key_str, cas, start_time, latency], block=True)
 
-    print "[mcsoda] cor_worker stopped"
+    log.info("[mcsoda] cor_worker stopped")
 
 def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     i = 0
@@ -318,11 +319,11 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
         cur['batch'] = 10
 
-    log.info("[mcsoda: %s] starts cfg: %s" %(why, cfg))
-    log.info("[mcsoda: %s] starts cur: %s" %(why, cur))
-    log.info("[mcsoda: %s] starts store: %s" %(why, store))
-    log.info("[mcsoda: %s] starts prefix: %s" %(why, prefix))
-    log.info("[mcsoda: %s] starts running." %why)
+    log.debug("[mcsoda: %s] starts cfg: %s" %(why, cfg))
+    log.debug("[mcsoda: %s] starts cur: %s" %(why, cur))
+    log.debug("[mcsoda: %s] starts store: %s" %(why, store))
+    log.debug("[mcsoda: %s] starts prefix: %s" %(why, prefix))
+    log.debug("[mcsoda: %s] starts running." %why)
 
     heartbeat_last = t_last
 
@@ -382,9 +383,9 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
                         store.add_timing_sample("woq", latency)
                         store.save_stats(start_time)
                         store.woq_key_cas.clear()   # simply clear all, no key/cas sanity check
-                        print "[mcsoda] woq_stats: key: %s, cas: %s, " \
+                        log.info("[mcsoda] woq_stats: key: %s, cas: %s, " \
                             "obs_latency: %f, query_latency: %f, latency: %f" \
-                            % (key, cas, obs_latency, query_latency, latency)
+                            % (key, cas, obs_latency, query_latency, latency))
                 except Queue.Empty:
                     pass
 
@@ -417,8 +418,8 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
                     if latency:
                         store.add_timing_sample("cor", latency)
                         store.save_stats(start_time)
-                        print "[mcsoda] cor_stats: key: %s, cas: %s, latency: %f"\
-                            % (key, cas, latency)
+                        log.info("[mcsoda] cor_stats: key: %s, cas: %s, latency: %f"\
+                            % (key, cas, latency))
                 except Queue.Empty:
                     pass
 
@@ -439,7 +440,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             xfer_sent_per_sec = xfer_sent_delta / t_delta
             xfer_recv_per_sec = xfer_recv_delta / t_delta
 
-            log.info(prefix + dict_to_s(cur))
+            log.debug(prefix + dict_to_s(cur))
             log.info("%s  ops: %s secs: %s ops/sec: %s" \
                      " tx-bytes/sec: %s rx-bytes/sec: %s" %
                      (prefix,
@@ -615,8 +616,8 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
     num_creates = cur.get('cur-creates', 0)
     if num_items < 0 \
         or ratio_hot < 0 or ratio_hot > 1:
-        print "[mcsoda choose_key_num error] num_items: {0}, num_creates:{1}, ratio_hot: {2}"\
-            .format(num_items, num_creates, ratio_hot)
+        log.error("[mcsoda choose_key_num error] num_items: {0}, num_creates:{1}, ratio_hot: {2}"\
+            .format(num_items, num_creates, ratio_hot))
         return 1
 
     # get a random or deterministic key
@@ -682,12 +683,12 @@ class Store(object):
         self.xfer_recv = 0
 
     def show_some_keys(self):
-        log.info("first 5 keys...")
+        log.debug("first 5 keys...")
         for i in range(5):
-            print("echo get %s | nc %s %s" %
+            log.debug(("echo get %s | nc %s %s" %
                  (self.cmd_line_get(i, prepare_key(i, self.cfg.get('prefix', ''))),
                   self.target.split(':')[0],
-                  self.target.split(':')[1]))
+                  self.target.split(':')[1])))
 
     def stats_collector(self, sc):
         self.sc = sc
@@ -695,18 +696,18 @@ class Store(object):
     def command(self, c):
         cmd, key_num, key_str, data, expiration = c
         if cmd[0] == 'g' or cmd[0] == 'q':
-            print(cmd + ' ' + key_str + '\r')
+            log.debug(cmd + ' ' + key_str + '\r')
             return False
         if cmd[0] == 'd':
-            print('delete ' + key_str + '\r')
+            log.debug('delete ' + key_str + '\r')
             return False
 
         c = 'set'
         if cmd[0] == 'a':
             c = self.arpa[self.cur.get('cur-sets', 0) % len(self.arpa)]
 
-        print("%s %s 0 %s %s\r\n%s\r" % (c, key_str, expiration,
-                                         len(data), data))
+        log.debug("%s %s 0 %s %s\r\n%s\r" % (c, key_str, expiration,
+                                             len(data), data))
         return False
 
     def flush(self):
@@ -758,7 +759,7 @@ class Store(object):
                 bucket = round(self.histo_bucket(delta), 6)
                 histo[bucket] = histo.get(bucket, 0) + 1
             except TypeError as e:
-                print "[mcsoda TypeError] {0}, delta = {1}".format(str(e), delta)
+                log.error("[mcsoda TypeError] {0}, delta = {1}".format(str(e), delta))
 
     def histo_bucket(self, samp):
         hp = self.cfg.get("histo-precision", 2)
@@ -977,7 +978,7 @@ class StoreMemcachedBinary(Store):
             if self.ops - self.previous_ops > self.stats_ops:
                 self.previous_ops = self.ops
                 self.save_stats()
-                print "[mcsoda %s] save_stats : %s" %(self.why, latency_cmd)
+                log.debug("[mcsoda %s] save_stats : %s" %(self.why, latency_cmd))
 
     def save_stats(self, cur_time=0):
         for key in self.cur:
@@ -1180,7 +1181,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
             except Exception as e:
                 log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.awareness.reset: " + str(e))
                 self.cur["cur-ex-StoreMembaseBinary.awareness.reset"] = self.cur.get("cur-ex-StoreMembaseBinary.awareness.reset", 0) + 1
-                print "EXCEPTION: self.awareness.reset()"
+                log.error("EXCEPTION: self.awareness.reset()")
                 pass
 
         return received
@@ -1414,7 +1415,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
         if store is None:
             store = PROTOCOL_STORE[protocol]()
 
-        log.info("store: %s - %s" % (i, store.__class__))
+        log.debug("store: %s - %s" % (i, store.__class__))
 
         store.connect(host_port, user, pswd, cfg, cur, bucket=bucket)
         store.stats_collector(stats_collector)
@@ -1429,13 +1430,13 @@ def run(cfg, cur, protocol, host_port, user, pswd,
         min_value_size = cfg['min-value-size'][0]
         json = cfg.get('json', 1) > 0
         cache = cfg.get('doc-cache', 0)
-        log.info("doc-gen...")
+        log.debug("doc-gen...")
         gen_start = time.time()
         for key_num in range(cfg.get("max-items", 0)):
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
             store.gen_doc(key_num, key_str, min_value_size, json, cache)
         gen_end = time.time()
-        log.info("doc-gen...done (elapsed: %s, docs/sec: %s)" % \
+        log.debug("doc-gen...done (elapsed: %s, docs/sec: %s)" % \
                  (gen_end - gen_start,
                   float(key_num) / (gen_end - gen_start)))
 
