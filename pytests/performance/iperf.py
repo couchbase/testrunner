@@ -9,7 +9,7 @@ from collections import defaultdict
 from membase.api import httplib2
 from membase.api.rest_client import RestConnection
 
-from performance.eperf import EVPerfClient
+from performance.eperf import EVPerfClient, EPerfClient
 
 
 class PerfWrapper(object):
@@ -364,11 +364,11 @@ class XPerfTests(EVPerfClient):
 
     @PerfWrapper.xperf()
     def test_mixed_unidir(self):
-        super(XPerfTests, self).test_eperf_mixed()
+        EPerfClient().test_eperf_mixed()
 
     @PerfWrapper.xperf(bidir=True)
     def test_mixed_bidir(self):
-        super(XPerfTests, self).test_eperf_mixed()
+        EPerfClient().test_eperf_mixed()
 
     @PerfWrapper.xperf_load
     def test_vperf_load(self):
