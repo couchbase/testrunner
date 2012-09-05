@@ -995,26 +995,6 @@ class RebalanceOutWithFailover(unittest.TestCase):
 
 class RebalanceTaskHelper():
     @staticmethod
-    def add_node_init_task(tm, server):
-        _t = task.NodeInitializeTask(server)
-        return RebalanceTaskHelper.schedule_task_helper(tm, _t)
-
-    @staticmethod
-    def add_nodes_init_task(tm, servers):
-        return [RebalanceTaskHelper.add_node_init_task(tm, server) for server in servers]
-
-    @staticmethod
-    def add_bucket_create_task(tm, server, bucket='default', replicas=1, port=11210, size=0,
-                               password=None, monitor=True):
-        _t = task.BucketCreateTask(server, bucket, replicas, port, size, password)
-        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
-
-    @staticmethod
-    def add_bucket_delete_task(tm, server, bucket='default', monitor=True):
-        _t = task.BucketDeleteTask(server, bucket)
-        return RebalanceTaskHelper.schedule_task_helper(tm, _t, monitor)
-
-    @staticmethod
     def add_rebalance_task(tm, servers, to_add, to_remove, monitor=True,
                            do_stop=False, progress=30):
         _t = task.RebalanceTask(servers, to_add, to_remove, do_stop=do_stop,
