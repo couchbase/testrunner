@@ -415,7 +415,8 @@ class unidirectional(XDCRReplicationBaseTest):
     def replication_while_rebooting_a_non_master_destination_node(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._async_modify_data()
-        shell = RemoteMachineShellConnection(self.dest_nodes[1])
+        i = len(self.dest_nodes) - 1
+        shell = RemoteMachineShellConnection(self.dest_nodes[i])
         o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
         time.sleep(self._timeout * 2)

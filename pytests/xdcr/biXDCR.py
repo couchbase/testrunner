@@ -464,10 +464,12 @@ class bidirectional(XDCRReplicationBaseTest):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
         self._async_update_delete_data()
-        shell = RemoteMachineShellConnection(self.dest_nodes[1])
+        i = len(self.dest_nodes) - 1
+        shell = RemoteMachineShellConnection(self.dest_nodes[i])
         o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
-        shell = RemoteMachineShellConnection(self.src_nodes[1])
+        i = len(self.src_nodes) - 1
+        shell = RemoteMachineShellConnection(self.src_nodes[i])
         o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
         time.sleep(self._timeout * 2)
