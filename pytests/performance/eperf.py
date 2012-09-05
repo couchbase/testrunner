@@ -394,6 +394,7 @@ class EPerfMaster(perf.PerfBase):
                      queries=None,
                      proto_prefix="membase-binary",
                      host=None,
+                     port=None,
                      ddoc=None):
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
@@ -406,7 +407,8 @@ class EPerfMaster(perf.PerfBase):
             self.is_multi_node = False
             if host is None:
                 host = self.input.servers[0].ip
-            port = self.input.servers[0].port
+            if port is None:
+                port = self.input.servers[0].port
             mvs = self.min_value_size(self.parami("avg_value_size",
                                       PerfDefaults.avg_value_size))
 
@@ -775,7 +777,9 @@ class EPerfMaster(perf.PerfBase):
                                                          PerfDefaults.ratio_hot_sets),
                               ratio_expirations=self.paramf('ratio_expirations',
                                                             PerfDefaults.ratio_expirations),
-                              max_creates=max_creates)
+                              max_creates=max_creates,
+                              proto_prefix="memcached-binary",
+                              port="11211")
 
             if self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
 

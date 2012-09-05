@@ -694,7 +694,6 @@ class PerfBase(unittest.TestCase):
         else:
             print "[perf.setUp] rebalancing nodes: num_nodes = {0}".\
                 format(num_nodes)
-            self.is_multi_node = True
 
         if self.input.clusters:
             for cluster in self.input.clusters.values():
