@@ -840,7 +840,15 @@ class ViewBaseTests(unittest.TestCase):
             results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, limit=2 * len(doc_names))
             doc_names_view = ViewBaseTests._get_doc_names(self, results)
         if sorted(doc_names_view) != sorted(doc_names):
-            self.fail("returned doc names have different values than expected")
+            self.log.error("view returned %s items, expected to return %s items" %(
+                            len(doc_names_view), len(doc_names)))
+            if len(doc_names) > len(doc_names_view):
+                self.log.error("There is a dataloss")
+                self.log.error("%s are lost" % (set(doc_names) - set(doc_names_view)))
+            else:
+                self.log.error("There are extra docs")
+                self.log.error("%s are extra" % (set(doc_names_view) - set(doc_names)))
+            self.fail("returned doc names have different values than expected(see details above)")
 
 
     @staticmethod
