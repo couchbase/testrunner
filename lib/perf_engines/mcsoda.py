@@ -23,9 +23,12 @@ try:
     log = logging.getLogger()
 except:
     class P:
-        def error(self, m): print(m)
-        def info(self, m):  print(m)
-        def debug(self, m):  print(m)
+        def error(self, m):
+            print(m)
+        def info(self, m):
+            print(m)
+        def debug(self, m):
+            print(m)
     log = P()
 
 import crc32
@@ -37,7 +40,7 @@ from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETMPFAIL
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
-from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND # "ARPA"
+from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND  # "ARPA"
 
 from libobserve.obs_mcsoda import McsodaObserver
 from libobserve.obs import Observable
@@ -53,6 +56,7 @@ OPAQUE_MAX = 4294967295
 INT_TYPE = type(123)
 FLOAT_TYPE = type(0.1)
 DICT_TYPE = type({})
+
 
 class Stack(object):
     """
@@ -74,8 +78,8 @@ class Stack(object):
 
     def pop(self):
         if self.size <= 0:
-            log.error("unable to pop item from Stack: invalid size %s"\
-                % self.size)
+            log.error("unable to pop item from Stack: invalid size %s"
+                      % self.size)
             return None
         try:
             if self.rotate:
@@ -89,8 +93,8 @@ class Stack(object):
 
     def append(self, val):
         if self.size <= 0:
-            log.error("unable to append item to Stack: invalid size %s"\
-                % self.size)
+            log.error("unable to append item to Stack: invalid size %s"
+                      % self.size)
             return
         while len(self.deq) >= self.size:
             self.deq.popleft()
@@ -101,9 +105,11 @@ class Stack(object):
         self.deq.clear()
         log.info("cleared %d items from hot stack" % num_cleared)
 
+
 def dict_to_s(d, level="", res=None, suffix=", ", ljust=None):
     res = res or []
     return ''.join(dict_to_s_inner(d, level, res, suffix, ljust))
+
 
 def dict_to_s_inner(d, level, res, suffix, ljust):
     dtype = DICT_TYPE
@@ -122,13 +128,13 @@ def dict_to_s_inner(d, level, res, suffix, ljust):
     histo_max = 0
     histo_sum = 0
     if scalars and not complex and \
-        type(scalars[0]) == FLOAT_TYPE and type(d[scalars[0]]) == INT_TYPE:
+            type(scalars[0]) == FLOAT_TYPE and type(d[scalars[0]]) == INT_TYPE:
         for key in scalars:
             v = d[key]
             histo_max = max(v, histo_max)
             histo_sum = histo_sum + v
 
-    histo_cur = 0 # Running total for histogram output.
+    histo_cur = 0  # Running total for histogram output.
     for key in scalars:
         if type(key) == FLOAT_TYPE:
             k = re.sub("0*$", "", "%.7f" % (key))
@@ -151,13 +157,15 @@ def dict_to_s_inner(d, level, res, suffix, ljust):
     if complex:
         res.append("\n")
     for key in complex:
-        res.append(level   + str(key) + ":\n")
+        res.append(level + str(key) + ":\n")
         dict_to_s_inner(d[key], level + "  ", res, "\n", 9)
 
     return res
 
 # The histo dict is returned by add_timing_sample().
 # The percentiles must be sorted, ascending, like [0.90, 0.99].
+
+
 def histo_percentile(histo, percentiles):
     v_sum = 0
     bins = histo.keys()
@@ -165,7 +173,7 @@ def histo_percentile(histo, percentiles):
     for bin in bins:
         v_sum += histo[bin]
     v_sum = float(v_sum)
-    v_cur = 0 # Running total.
+    v_cur = 0  # Running total.
     rv = []
     for bin in bins:
         if not percentiles:
@@ -180,6 +188,7 @@ def histo_percentile(histo, percentiles):
 
 MIN_VALUE_SIZE = [10]
 
+
 def obs_cb(store):
     """
     callback for observe thread.
@@ -190,6 +199,7 @@ def obs_cb(store):
 
     log.info("[mcsoda] obs_cb: clear obs_key_cas %s" % store.obs_key_cas)
     store.obs_key_cas.clear()
+
 
 def woq_worker(req_queue, stats_queue, ctl, cfg, store):
     """
@@ -207,7 +217,7 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
     while True:
 
         key, cas = req_queue.get(block=True)
-        start_time = time.time() # latency includes observe and query time
+        start_time = time.time()  # latency includes observe and query time
 
         # observe
         if not woq_observer.block_for_persistence(key, cas):
@@ -218,8 +228,8 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
 
         obs_latency = time.time() - start_time
         if cfg.get("woq-verbose", 0):
-            log.info("[mcsoda] woq_worker obs latency: %s, key = %s, cas = %s "\
-                % (obs_latency, key, cas))
+            log.info("[mcsoda] woq_worker obs latency: %s, key = %s, cas = %s "
+                     % (obs_latency, key, cas))
 
         query_start = time.time()
 
@@ -233,8 +243,8 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
 
         query_latency = time.time() - query_start
         if cfg.get("woq-verbose", 0):
-            log.info("[mcsoda] woq_worker query latency: %s, key = %s, cas = %s "\
-                % (query_latency, key, cas))
+            log.info("[mcsoda] woq_worker query latency: %s, key = %s, cas = %s "
+                     % (query_latency, key, cas))
             log.info("[mcsoda] woq_worker query result: %s" % result)
 
         latency = time.time() - start_time
@@ -242,6 +252,7 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
                         block=True)
         req_queue.task_done()
     log.info("[mcsoda] woq_worker stopped working")
+
 
 def cor_worker(stats_queue, ctl, cfg, store):
     """
@@ -279,9 +290,10 @@ def cor_worker(stats_queue, ctl, cfg, store):
         key_num -= 1
         key_str = prepare_key(key_num, cfg.get('prefix', ''))
 
-        data = store.gen_doc(key_num, key_str,
-            choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
-                key_num))
+        data = store.gen_doc(
+            key_num, key_str,
+            choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE), key_num)
+        )
 
         grp = store.inflight_start()
         store.cmd_append("set", key_num, key_str, data, 0, grp)
@@ -308,7 +320,8 @@ def cor_worker(stats_queue, ctl, cfg, store):
 
     log.info("[mcsoda] cor_worker stopped")
 
-def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
+
+def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
     i = 0
     t_last_flush = time.time()
     t_last_cycle = time.time()
@@ -333,11 +346,11 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
     if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
         cur['batch'] = 10
 
-    log.debug("[mcsoda: %s] starts cfg: %s" %(why, cfg))
-    log.debug("[mcsoda: %s] starts cur: %s" %(why, cur))
-    log.debug("[mcsoda: %s] starts store: %s" %(why, store))
-    log.debug("[mcsoda: %s] starts prefix: %s" %(why, prefix))
-    log.debug("[mcsoda: %s] starts running." %why)
+    log.debug("[mcsoda: %s] starts cfg: %s" % (why, cfg))
+    log.debug("[mcsoda: %s] starts cur: %s" % (why, cur))
+    log.debug("[mcsoda: %s] starts store: %s" % (why, store))
+    log.debug("[mcsoda: %s] starts prefix: %s" % (why, prefix))
+    log.debug("[mcsoda: %s] starts running." % why)
 
     heartbeat_last = t_last
 
@@ -367,8 +380,8 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
         if cfg.get('max-ops', 0) > 0 and cfg.get('max-ops', 0) <= num_ops:
             break
         if cfg.get('exit-after-creates', 0) > 0 and \
-            cfg.get('max-creates', 0) > 0 and \
-            cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
+                cfg.get('max-creates', 0) > 0 and \
+                cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
             break
         if ctl.get('shutdown_event') is not None:
             if ctl['shutdown_event'].is_set():
@@ -377,7 +390,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
         heartbeat_duration = time.time() - heartbeat_last
         if heartbeat != 0 and heartbeat_duration > heartbeat:
             heartbeat_last += heartbeat_duration
-            log.info("[mcsoda: %s] num_ops = %s. duration = %s" %(why, num_ops, heartbeat_duration))
+            log.info("[mcsoda: %s] num_ops = %s. duration = %s" % (why, num_ops, heartbeat_duration))
 
         command = next_cmd(cfg, cur, store)
         flushed = store.command(command)
@@ -397,9 +410,9 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
                         store.add_timing_sample("woq", latency)
                         store.save_stats(start_time)
                         store.woq_key_cas.clear()   # simply clear all, no key/cas sanity check
-                        log.info("[mcsoda] woq_stats: key: %s, cas: %s, " \
-                            "obs_latency: %f, query_latency: %f, latency: %f" \
-                            % (key, cas, obs_latency, query_latency, latency))
+                        log.info("[mcsoda] woq_stats: key: %s, cas: %s, "
+                                 "obs_latency: %f, query_latency: %f, latency: %f"
+                                 % (key, cas, obs_latency, query_latency, latency))
                 except Queue.Empty:
                     pass
 
@@ -432,8 +445,8 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
                     if latency:
                         store.add_timing_sample("cor", latency)
                         store.save_stats(start_time)
-                        log.info("[mcsoda] cor_stats: key: %s, cas: %s, latency: %f"\
-                            % (key, cas, latency))
+                        log.info("[mcsoda] cor_stats: key: %s, cas: %s, latency: %f"
+                                 % (key, cas, latency))
                 except Queue.Empty:
                     pass
 
@@ -455,7 +468,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
             xfer_recv_per_sec = xfer_recv_delta / t_delta
 
             log.debug(prefix + dict_to_s(cur))
-            log.info("%s  ops: %s secs: %s ops/sec: %s" \
+            log.info("%s  ops: %s secs: %s ops/sec: %s"
                      " tx-bytes/sec: %s rx-bytes/sec: %s" %
                      (prefix,
                       string.ljust(str(o_delta), 10),
@@ -510,6 +523,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat = 0, why = ""):
 
     store.flush()
 
+
 def next_cmd(cfg, cur, store):
     do_delete = False
     itm_val = None
@@ -524,11 +538,12 @@ def next_cmd(cfg, cur, store):
         cur['cur-sets'] = cur_sets
         cur['cur-ops'] = cur.get('cur-ops', 0) + 1
 
-        do_set_create = ((cfg.get('max-items', 0) <= 0 or
-                          cfg.get('max-items', 0) > cur.get('cur-items', 0)) and
-                         cfg.get('max-creates', 0) > cur.get('cur-creates', 0) and
-                         cfg.get('ratio-creates', 0) >= \
-                           float(cur.get('cur-creates', 0)) / positive(cur.get('cur-sets', 0)))
+        do_set_create = (
+            (cfg.get('max-items', 0) <= 0 or
+             cfg.get('max-items', 0) > cur.get('cur-items', 0)) and
+            cfg.get('max-creates', 0) > cur.get('cur-creates', 0) and
+            cfg.get('ratio-creates', 0) >= float(cur.get('cur-creates', 0)) / positive(cur.get('cur-sets', 0))
+        )
         if do_set_create:
             # Create...
             key_num = cur.get('cur-items', 0)
@@ -540,7 +555,7 @@ def next_cmd(cfg, cur, store):
             num_updates = cur['cur-sets'] - cur.get('cur-creates', 0)
 
             do_delete = cfg.get('ratio-deletes', 0) > \
-                          float(cur.get('cur-deletes', 0)) / positive(num_updates)
+                float(cur.get('cur-deletes', 0)) / positive(num_updates)
             if do_delete:
                 itm_gen = False
                 cmd = 'delete'
@@ -549,7 +564,7 @@ def next_cmd(cfg, cur, store):
                 num_mutates = num_updates - cur.get('cur-deletes', 0)
 
                 do_arpa = cfg.get('ratio-arpas', 0) > \
-                          float(cur.get('cur-arpas', 0)) / positive(num_mutates)
+                    float(cur.get('cur-arpas', 0)) / positive(num_mutates)
                 if do_arpa:
                     cmd = 'arpa'
                     cur['cur-arpas'] = cur.get('cur-arpas', 0) + 1
@@ -604,18 +619,19 @@ def next_cmd(cfg, cur, store):
 
             if not key_num:
                 key_num = choose_key_num(cur.get('cur-items', 0),
-                                     cfg.get('ratio-hot', 0),
-                                     cfg.get('ratio-hot-gets', 0),
-                                     cur.get('cur-gets', 0),
-                                     cur.get('cur-base', 0),
-                                     cfg.get('random', 0),
-                                     cur)
+                                         cfg.get('ratio-hot', 0),
+                                         cfg.get('ratio-hot-gets', 0),
+                                         cur.get('cur-gets', 0),
+                                         cur.get('cur-base', 0),
+                                         cfg.get('random', 0),
+                                         cur)
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
 
             return (cmd, key_num, key_str, itm_val, 0)
         else:
             cur['cur-misses'] = cur.get('cur-misses', 0) + 1
             return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None, 0)
+
 
 def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
                    num_ops, base, random_key, cur):
@@ -628,10 +644,9 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
         hot items are chosen from the newest guys.
     """
     num_creates = cur.get('cur-creates', 0)
-    if num_items < 0 \
-        or ratio_hot < 0 or ratio_hot > 1:
-        log.error("[mcsoda choose_key_num error] num_items: {0}, num_creates:{1}, ratio_hot: {2}"\
-            .format(num_items, num_creates, ratio_hot))
+    if num_items < 0 or ratio_hot < 0 or ratio_hot > 1:
+        log.error("[mcsoda choose_key_num error] num_items: {0}, num_creates:{1}, ratio_hot: {2}"
+                  .format(num_items, num_creates, ratio_hot))
         return 1
 
     # get a random or deterministic key
@@ -669,16 +684,19 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
 
     return int(retval) % num_items
 
+
 def positive(x):
     if x > 0:
         return x
     return 1
+
 
 def prepare_key(key_num, prefix=None):
     key_hash = md5(str(key_num)).hexdigest()[0:16]
     if prefix and len(prefix) > 0:
         return prefix + "-" + key_hash
     return key_hash
+
 
 def choose_entry(arr, n):
     return arr[n % len(arr)]
@@ -687,7 +705,6 @@ def choose_entry(arr, n):
 
 
 class Store(object):
-
 
     def connect(self, target, user, pswd, cfg, cur, bucket="default"):
         self.target = target
@@ -700,9 +717,9 @@ class Store(object):
         log.debug("first 5 keys...")
         for i in range(5):
             log.debug(("echo get %s | nc %s %s" %
-                 (self.cmd_line_get(i, prepare_key(i, self.cfg.get('prefix', ''))),
-                  self.target.split(':')[0],
-                  self.target.split(':')[1])))
+                      (self.cmd_line_get(i, prepare_key(i, self.cfg.get('prefix', ''))),
+                       self.target.split(':')[0],
+                       self.target.split(':')[1])))
 
     def stats_collector(self, sc):
         self.sc = sc
@@ -804,15 +821,15 @@ class StoreMemcachedBinary(Store):
         self.ops = 0
         self.previous_ops = 0
         self.buf = ''
-        self.arpa = [ (CMD_ADD,     True),
-                      (CMD_REPLACE, True),
-                      (CMD_APPEND,  False),
-                      (CMD_PREPEND, False) ]
+        self.arpa = [(CMD_ADD,     True),
+                     (CMD_REPLACE, True),
+                     (CMD_APPEND,  False),
+                     (CMD_PREPEND, False)]
         self.xfer_sent = 0
         self.xfer_recv = 0
-        self.obs_key_cas = {} # {key_num: cas} pair
-        self.woq_key_cas = {} # {key_num: cas} pair
-        self.cor_key_cas = {} # {key_num: cas} pair
+        self.obs_key_cas = {}  # {key_num: cas} pair
+        self.woq_key_cas = {}  # {key_num: cas} pair
+        self.cor_key_cas = {}  # {key_num: cas} pair
 
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
         self.conn = mc_bin_client.MemcachedClient(host, port)
@@ -858,8 +875,7 @@ class StoreMemcachedBinary(Store):
         return False
 
     def flush_level(self):
-        return self.cur.get('batch') or \
-               self.cfg.get('batch', 100)
+        return self.cur.get('batch') or self.cfg.get('batch', 100)
 
     def get_vbucketId(self, key):
         vbuckets = self.cfg.get("vbuckets", 0)
@@ -936,13 +952,13 @@ class StoreMemcachedBinary(Store):
             self.inflight_end_time = time.time()
             self.ops += self.inflight
             if self.sc:
-                self.sc.ops_stats({ 'tot-gets':    self.inflight_num_gets,
-                                    'tot-sets':    self.inflight_num_sets,
-                                    'tot-deletes': self.inflight_num_deletes,
-                                    'tot-arpas':   self.inflight_num_arpas,
-                                    'tot-queries': self.inflight_num_queries,
-                                    'start-time':  self.inflight_start_time,
-                                    'end-time':    self.inflight_end_time })
+                self.sc.ops_stats({'tot-gets':    self.inflight_num_gets,
+                                   'tot-sets':    self.inflight_num_sets,
+                                   'tot-deletes': self.inflight_num_deletes,
+                                   'tot-arpas':   self.inflight_num_arpas,
+                                   'tot-queries': self.inflight_num_queries,
+                                   'start-time':  self.inflight_start_time,
+                                   'end-time':    self.inflight_end_time})
 
         if len(self.queue) > 0:
             # Use the first request in the batch to measure single
@@ -992,7 +1008,7 @@ class StoreMemcachedBinary(Store):
             if self.ops - self.previous_ops > self.stats_ops:
                 self.previous_ops = self.ops
                 self.save_stats()
-                log.debug("[mcsoda %s] save_stats : %s" %(self.why, latency_cmd))
+                log.debug("[mcsoda %s] save_stats : %s" % (self.why, latency_cmd))
 
     def save_stats(self, cur_time=0):
         for key in self.cur:
@@ -1072,9 +1088,9 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         from membase.api.rest_client import RestConnection
         from memcached.helper.data_helper import VBucketAwareMemcached
 
-        info = { "ip": host, "port": port,
-                 'username': user or self.cfg.get("rest_username", "Administrator"),
-                 'password': pswd or self.cfg.get("rest_password", "password") }
+        info = {"ip": host, "port": port,
+                'username': user or self.cfg.get("rest_username", "Administrator"),
+                'password': pswd or self.cfg.get("rest_password", "password")}
 
         self.rest = RestConnection(info)
         self.awareness = VBucketAwareMemcached(self.rest, bucket, info)
@@ -1087,12 +1103,13 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         return f * len(self.awareness.memcacheds)
 
     def inflight_start(self):
-        return { 's_bufs': {}, # Key is server str, value is [] of buffer.
-                 's_cmds': {}  # Key is server str, value is int (number of cmds).
-               }
+        return {
+            's_bufs': {},  # Key is server str, value is [] of buffer.
+            's_cmds': {}   # Key is server str, value is int (number of cmds).
+        }
 
     def inflight_complete(self, inflight_grp):
-        rv = [] # Array of tuples (server, buffer).
+        rv = []  # Array of tuples (server, buffer).
         s_bufs = inflight_grp['s_bufs']
         for server in s_bufs.keys():
             buffers = s_bufs[server]
@@ -1152,7 +1169,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                 except:
                     recvBuf = ''
                 if expectBuffer == False and recvBuf != '':
-                    raise Exception("Was expecting empty buffer, but have (" + \
+                    raise Exception("Was expecting empty buffer, but have (" +
                                     str(len(recvBuf)) + "): " + recvBuf)
                 cmds = s_cmds[server]
                 for i in range(cmds):
@@ -1163,10 +1180,10 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                         if errcode == ERR_NOT_MY_VBUCKET:
                             reset_my_awareness = True
                         elif errcode == ERR_ENOMEM or \
-                             errcode == ERR_EBUSY or \
-                             errcode == ERR_ETMPFAIL:
+                                errcode == ERR_EBUSY or \
+                                errcode == ERR_ETMPFAIL:
                             backoff = True
-                            log.error("[mcsoda] inflight recv errorcode = %s" %errcode)
+                            log.error("[mcsoda] inflight recv errorcode = %s" % errcode)
                     except Exception as e:
                         log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.recvMsgSockBuf / inflight_recv inner: " + str(e))
                         self.cur["cur-ex-StoreMembaseBinary.recvMsgSockBuf"] = self.cur.get("cur-ex-StoreMembaseBinary.recvMsgSockBuf", 0) + 1
@@ -1181,10 +1198,10 @@ class StoreMembaseBinary(StoreMemcachedBinary):
 
         if backoff:
             self.backoff = max(self.backoff, 0.1) * \
-                          self.cfg.get('backoff-factor', 2.0)
+                self.cfg.get('backoff-factor', 2.0)
             if self.backoff > 0:
                 self.cur['cur-backoffs'] = self.cur.get('cur-backoffs', 0) + 1
-                log.info("[mcsoda] inflight recv backoff = %s" %self.backoff)
+                log.info("[mcsoda] inflight recv backoff = %s" % self.backoff)
                 time.sleep(self.backoff)
         else:
             self.backoff = 0
@@ -1243,13 +1260,13 @@ class StoreMemcachedAscii(Store):
         self.ops = 0
         self.previous_ops = 0
         self.buf = ''
-        self.arpa = [ 'add', 'replace', 'append', 'prepend' ]
+        self.arpa = ['add', 'replace', 'append', 'prepend']
         self.xfer_sent = 0
         self.xfer_recv = 0
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > (self.cur.get('batch') or \
+        if len(self.queue) > (self.cur.get('batch') or
                               self.cfg.get('batch', 100)):
             self.flush()
             return True
@@ -1263,7 +1280,7 @@ class StoreMemcachedAscii(Store):
 
         c = 'set'
         if cmd[0] == 'a':
-           c = self.arpa[self.cur.get('cur-sets', 0) % len(self.arpa)]
+            c = self.arpa[self.cur.get('cur-sets', 0) % len(self.arpa)]
         return "%s %s 0 %s %s\r\n%s\r\n" % (c, key_str, expiration,
                                             len(data), data)
 
@@ -1279,10 +1296,10 @@ class StoreMemcachedAscii(Store):
                 line, buf = self.readline(self.skt, buf)
         elif cmd[0] == 'd':
             # DELETE...
-            line, buf = self.readline(self.skt, buf) # line == "DELETED"
+            line, buf = self.readline(self.skt, buf)  # line == "DELETED"
         else:
             # SET...
-            line, buf = self.readline(self.skt, buf) # line == "STORED"
+            line, buf = self.readline(self.skt, buf)  # line == "STORED"
         self.buf = buf
 
     def flush(self):
@@ -1312,32 +1329,41 @@ class StoreMemcachedAscii(Store):
             if not data:
                 return '', ''
             buf += data
-        return buf[:index], buf[index+2:]
+        return buf[:index], buf[index + 2:]
 
 # --------------------------------------------------------
 
 # A key is a 16 char hex string.
+
+
 def key_to_name(key_num, key_str):
     return "%s %s" % (key_str[-16:-12], key_str[-4:-1])
+
 
 def key_to_email(key_num, key_str):
     return "%s@%s.com" % (key_str[-16:-12], key_str[-13:-11])
 
+
 def key_to_city(key_num, key_str):
     return key_str[-12:-9]
+
 
 def key_to_country(key_num, key_str):
     return key_str[-9:-7]
 
+
 def key_to_realm(key_num, key_str):
     return key_str[-7:-5]
+
 
 def key_to_coins(key_num, key_str):
     sub_key = key_str[-16:]
     return max(0.0, int(sub_key[0:4], 16) / 100.0)
 
+
 def key_to_category(key_num, key_str):
     return int(key_str[-12], 16) % 3
+
 
 def key_to_achievements(key_num, key_str):
     next = 300
@@ -1350,6 +1376,7 @@ def key_to_achievements(key_num, key_str):
     return achievements
 
 doc_cache = {}
+
 
 def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
                    cache=None, key_name="key", suffix_ex="", whitespace=True):
@@ -1392,18 +1419,19 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
 
 # --------------------------------------------------------
 
-PROTOCOL_STORE = { 'memcached-ascii': StoreMemcachedAscii,
-                   'memcached-binary': StoreMemcachedBinary,
-                   'membase-binary': StoreMembaseBinary,
-                   'none-binary': Store,
-                   'none': Store }
+PROTOCOL_STORE = {'memcached-ascii': StoreMemcachedAscii,
+                  'memcached-binary': StoreMemcachedBinary,
+                  'membase-binary': StoreMembaseBinary,
+                  'none-binary': Store,
+                  'none': Store}
+
 
 def run(cfg, cur, protocol, host_port, user, pswd,
-        stats_collector = None, stores = None, ctl = None, heartbeat = 0, why = "", bucket = "default"):
-    if type(cfg['min-value-size']) == type(""):
+        stats_collector=None, stores=None, ctl=None, heartbeat=0, why="", bucket="default"):
+    if isinstance(cfg['min-value-size'], str):
         cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
-    if type(cfg['min-value-size']) != type([]):
-        cfg['min-value-size'] = [ cfg['min-value-size'] ]
+    if not isinstance(cfg['min-value-size'], list):
+        cfg['min-value-size'] = [cfg['min-value-size']]
 
     cfg['body'] = {}
     cfg['suffix'] = {}
@@ -1414,10 +1442,10 @@ def run(cfg, cur, protocol, host_port, user, pswd,
         cfg['body'][mvs] = 'x'
         while len(cfg['body'][mvs]) < mvs:
             cfg['body'][mvs] = cfg['body'][mvs] + \
-                               md5(str(len(cfg['body'][mvs]))).hexdigest()
+                md5(str(len(cfg['body'][mvs]))).hexdigest()
         cfg['suffix'][mvs] = "\"body\":\"" + cfg['body'][mvs] + "\"}"
 
-    ctl = ctl or { 'run_ok': True }
+    ctl = ctl or {'run_ok': True}
 
     threads = []
 
@@ -1435,8 +1463,8 @@ def run(cfg, cur, protocol, host_port, user, pswd,
         store.stats_collector(stats_collector)
 
         threads.append(threading.Thread(target=run_worker,
-                                       args=(ctl, cfg, cur, store,
-                                             "thread-" + str(i) + ": ")))
+                                        args=(ctl, cfg, cur, store,
+                                              "thread-" + str(i) + ": ")))
 
     store.show_some_keys()
 
@@ -1450,7 +1478,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
             store.gen_doc(key_num, key_str, min_value_size, json, cache)
         gen_end = time.time()
-        log.debug("doc-gen...done (elapsed: %s, docs/sec: %s)" % \
+        log.debug("doc-gen...done (elapsed: %s, docs/sec: %s)" %
                  (gen_end - gen_start,
                   float(key_num) / (gen_end - gen_start)))
 
@@ -1489,7 +1517,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
         total_cmds = cur.get('cur-queries', 0)
     else:
         total_cmds = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
-    log.info("    ops/sec: %s" %(total_cmds / total_time))
+    log.info("    ops/sec: %s" % (total_cmds / total_time))
 
     threads = [t for t in threads if t.isAlive()]
     heartbeat = 0
@@ -1504,10 +1532,11 @@ def run(cfg, cur, protocol, host_port, user, pswd,
     ctl['run_ok'] = False
     if ctl.get('shutdown_event') is not None:
         ctl['shutdown_event'].set()
-    log.info("[mcsoda: %s] stopped running." %why)
+    log.info("[mcsoda: %s] stopped running." % why)
     return cur, t_start, t_end
 
 # --------------------------------------------------------
+
 
 def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
          extra_examples=None):
@@ -1593,7 +1622,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
     cur = {}
     err = {}
 
-    for (o, d) in [(cfg, cfg_defaults), (cur, cur_defaults)]: # Parse key=val pairs.
+    for (o, d) in [(cfg, cfg_defaults), (cur, cur_defaults)]:  # Parse key=val pairs.
         for (dk, dv) in d.iteritems():
             o[dk] = dv[0]
         for kv in argv[2:]:
@@ -1601,9 +1630,9 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
             k = s[0]
             v = '='.join(s[1:])
             if k and v and k in o:
-                if type(o[k]) != type(""):
+                if not isinstance(o[k], str):
                     try:
-                        v = ({ 'y':'1', 'n':'0' }).get(v, v)
+                        v = ({'y': '1', 'n': '0'}).get(v, v)
                         for parse in [float, int]:
                             if str(parse(v)) == v:
                                 v = parse(v)
@@ -1631,7 +1660,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
         for k in sorted(o.iterkeys()):
             log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
 
-    protocol = protocol or '-'.join(((["memcached"] + \
+    protocol = protocol or '-'.join(((["memcached"] +
                                     argv[1].split("://"))[-2] + "-binary").split('-')[0:2])
     host_port = ('@' + argv[1].split("://")[-1]).split('@')[-1] + ":11211"
     user, pswd = (('@' + argv[1].split("://")[-1]).split('@')[-2] + ":").split(':')[0:2]
@@ -1641,5 +1670,4 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
     run(cfg, cur, protocol, host_port, user, pswd, stores=stores)
 
 if __name__ == "__main__":
-  main(sys.argv)
-
+    main(sys.argv)
