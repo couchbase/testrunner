@@ -1470,6 +1470,21 @@ if(ncol(avg_qps) > 0) {
     }
 }
 
+if(!is.null(ns_server_data$xdc_ops)) {
+    for(build in levels(builds)) {
+        fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$xdc_ops!=0, ]
+        d <- mean(fi$xdc_ops)
+        if(build == baseline){
+            row <-c ("baseline", "XDC ops/sec", as.numeric(d))
+            combined <- rbind(combined, row)
+        }
+        else{
+            row <-c (build, "XDC ops/sec", as.numeric(d))
+            combined <- rbind(combined, row)
+        }
+    }
+}
+
 for(build in levels(builds)) {
     fi <-builds_list[builds_list$build==build, ]
     d <- fi$reb_dur
@@ -1556,11 +1571,12 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[18])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[19])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[20])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[21])))
-MB <- append(MB,combined[combined[,'system'] == 'baseline',]$value[23])
+MB <- append(MB,as.numeric(sprintf("%.2f",MB1[22])))
+MB <- append(MB,combined[combined[,'system'] == 'baseline',]$value[24])
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[23])))
-    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[24])))
+    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[25])))
+    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[26])))
 }
 
 CB <- c()
@@ -1585,16 +1601,17 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[18])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[19])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[20])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[21])))
-CB <- append(CB,combined[combined[,'system'] != 'baseline',]$value[23])
+CB <- append(CB,as.numeric(sprintf("%.2f",CB1[22])))
+CB <- append(CB,combined[combined[,'system'] != 'baseline',]$value[24])
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[23])))
-    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[24])))
+    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[25])))
+    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[26])))
 }
 
 testdf <- data.frame(MB,CB)
 
-row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)", "Avg. CPU rate (%)", "Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Latency-query (99.9th) (ms)", "Avg. QPS", "Rebalance Time (sec)", "Testrunner Version")
+row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)", "Avg. CPU rate (%)", "Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Latency-query (99.9th) (ms)", "Avg. QPS", "XDC ops/sec", "Rebalance Time (sec)", "Testrunner Version")
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
 	row_names <- c(row_names, c("Warmup Time - flush (sec)", "Warmup Time - no flush (sec)"))
