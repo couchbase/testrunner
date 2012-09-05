@@ -1406,8 +1406,6 @@ class EVPerfClient(EPerfClient):
         self.bg_thread = None
         self.bg_thread_ctl = None
 
-        cfg['time'] = self.parami('time', 0)
-
         num_clients, start_at = self.access_phase_clients_start_at()
 
         # If non-zero background ops/second, the background thread,

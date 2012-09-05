@@ -859,7 +859,8 @@ class PerfBase(unittest.TestCase):
                'carbon-timeout': self.parami('carbon_timeout',
                                              PerfDefaults.carbon_timeout),
                'carbon-cache-size': self.parami('carbon_cache_size',
-                                                PerfDefaults.carbon_cache_size)}
+                                                PerfDefaults.carbon_cache_size),
+               'time': self.parami('time', 0)}
 
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
