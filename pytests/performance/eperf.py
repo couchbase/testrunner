@@ -1406,6 +1406,8 @@ class EVPerfClient(EPerfClient):
         self.bg_thread = None
         self.bg_thread_ctl = None
 
+        cfg['time'] = self.parami('time', 0)
+
         num_clients, start_at = self.access_phase_clients_start_at()
 
         # If non-zero background ops/second, the background thread,
@@ -1453,7 +1455,6 @@ class EVPerfClient(EPerfClient):
                 cfg['active_fg_workers'] = self.active_fg_workers
             if getattr(self, "shutdown_event", None) is not None:
                 ctl['shutdown_event'] = self.shutdown_event
-            cfg['time'] = self.parami('time', 0)
             cfg['node_prefix'] = self.parami('prefix', 0)
 
         cfg['stats_ops'] = self.parami("mcsoda_fg_stats_ops",
