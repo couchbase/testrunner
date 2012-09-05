@@ -194,10 +194,10 @@ class MultiClientTests(EVPerfClient):
     def test_vperf2(self):
         super(MultiClientTests, self).test_vperf2()
 
-
     @PerfWrapper.multiply
     def test_vperf4(self):
         super(MultiClientTests, self).test_vperf4()
+
 
 class RampUpTests(EVPerfClient):
 
