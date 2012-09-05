@@ -329,6 +329,9 @@ ns_server_data$curr_connections <- as.numeric(ns_server_data$curr_connections)
 tryCatch({
     ns_server_data $replication_changes_left <- as.numeric(ns_server_data$replication_changes_left)
     ns_server_data $xdc_ops <- as.numeric(ns_server_data$xdc_ops)
+    ns_server_data $ep_num_ops_get_meta <- as.numeric(ns_server_data$ep_num_ops_get_meta)
+    ns_server_data $ep_num_ops_set_meta <- as.numeric(ns_server_data$ep_num_ops_set_meta)
+    ns_server_data $ep_num_ops_del_meta <- as.numeric(ns_server_data$ep_num_ops_del_meta)
 }, error=function(e) {
     print("Cannot find XDC stats")
 })
@@ -1933,6 +1936,40 @@ if (nrow(ns_server_data) > 0) {
         makeMetricDef(paste("Cross-datacenter replication related",
                             "operations per second to this bucket.",
                             sep="\n"))
+
+        cat("generating ep_num_ops_get_meta \n")
+        p <- ggplot(ns_server_data, aes(row, ep_num_ops_get_meta, color=buildinfo.version, label=ep_num_ops_get_meta)) + labs(x="----time (sec)--->", y="ops/sec")
+        p <- p + geom_point()
+        p <- addopts(p,"XDC gets per sec")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of get operations per second",
+                            "related to this bucket being the",
+                            "target of cross datacenter replication",
+                            sep="\n"))
+
+        cat("generating ep_num_ops_set_meta \n")
+        p <- ggplot(ns_server_data, aes(row, ep_num_ops_set_meta, color=buildinfo.version, label=ep_num_ops_set_meta)) + labs(x="----time (sec)--->", y="ops/sec")
+        p <- p + geom_point()
+        p <- addopts(p,"XDC sets per sec")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of set operations per second",
+                            "related to this bucket being the",
+                            "target of cross datacenter replication",
+                            sep="\n"))
+
+        cat("generating ep_num_ops_del_meta \n")
+        p <- ggplot(ns_server_data, aes(row, ep_num_ops_del_meta, color=buildinfo.version, label=ep_num_ops_del_meta)) + labs(x="----time (sec)--->", y="ops/sec")
+        p <- p + geom_point()
+        p <- addopts(p,"XDC dels per sec")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of del operations per second",
+                            "related to this bucket being the",
+                            "target of cross datacenter replication",
+                            sep="\n"))
+
     }
 }
 
