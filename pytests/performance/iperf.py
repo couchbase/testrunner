@@ -9,7 +9,7 @@ from collections import defaultdict
 from membase.api import httplib2
 from membase.api.rest_client import RestConnection
 
-from performance.eperf import EVPerfClient
+from performance.eperf import EPerfClient, EVPerfClient
 
 
 class PerfWrapper(object):
@@ -209,7 +209,7 @@ class RampUpTests(EVPerfClient):
         super(RampUpTests, self).test_vperf2()
 
 
-class XPerfTests(EVPerfClient):
+class XPerfTests(EPerfClient):
 
     """XDCR large-scale performance tests
     """
@@ -347,32 +347,38 @@ class XPerfTests(EVPerfClient):
             print "{0}> AVG CPU rate: {1}, %".format(server, cpu_rate)
 
     @PerfWrapper.xperf()
-    def test_vperf_unidir(self):
-        super(XPerfTests, self).test_vperf2()
-
-    @PerfWrapper.xperf(bidir=True)
-    def test_vperf_bidir(self):
-        super(XPerfTests, self).test_vperf2()
-
-    @PerfWrapper.xperf()
-    def test_vperf_3d_unidir(self):
-        super(XPerfTests, self).test_vperf4()
-
-    @PerfWrapper.xperf(bidir=True)
-    def test_vperf_3d_bidir(self):
-        super(XPerfTests, self).test_vperf4()
-
-    @PerfWrapper.xperf()
     def test_mixed_unidir(self):
-        super(EVPerfClient, self).test_eperf_mixed()
+        super(XPerfTests, self).test_eperf_mixed()
 
     @PerfWrapper.xperf(bidir=True)
     def test_mixed_bidir(self):
-        super(EVPerfClient, self).test_eperf_mixed()
+        super(XPerfTests, self).test_eperf_mixed()
+
+
+class XVPerfTests(XPerfTests, EVPerfClient):
+
+    """XDCR large-scale performance tests with views
+    """
+
+    @PerfWrapper.xperf()
+    def test_vperf_unidir(self):
+        super(XVPerfTests, self).test_vperf2()
+
+    @PerfWrapper.xperf(bidir=True)
+    def test_vperf_bidir(self):
+        super(XVPerfTests, self).test_vperf2()
+
+    @PerfWrapper.xperf()
+    def test_vperf_3d_unidir(self):
+        super(XVPerfTests, self).test_vperf4()
+
+    @PerfWrapper.xperf(bidir=True)
+    def test_vperf_3d_bidir(self):
+        super(XVPerfTests, self).test_vperf4()
 
     @PerfWrapper.xperf_load
     def test_vperf_load(self):
-        super(XPerfTests, self).test_vperf2()
+        super(XVPerfTests, self).test_vperf2()
 
 
 class RebalanceTests(EVPerfClient):
