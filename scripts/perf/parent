@@ -17,8 +17,12 @@ if [ -n ${toy_build} ] ; then
    toy=",toy=${toy_build}"
 fi
 
+if [ -z ${erlang_threads} ]; then
+    erlang_threads=16
+fi
+
 if [ ${skip_install} != "1" ]; then
-   python scripts/install.py -i ${ini_file} -p product=${product},version=${version_number},vbuckets=1024,parallel=True,disable_consistency=1,use_domain_names=1$toy
+   python scripts/install.py -i ${ini_file} -p product=${product},version=${version_number},vbuckets=1024,parallel=True,disable_consistency=1,use_domain_names=1,erlang_threads=${erlang_threads}$toy
 else
    echo "No Setup"
 fi
