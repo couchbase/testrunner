@@ -264,7 +264,7 @@ class bidirectional(XDCRReplicationBaseTest):
                 self._log.info(" Failing over Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
                     self.dest_nodes[i].port))
                 self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_nodes[i]])
-                self.src_nodes.remove(self.dest_nodes[i])
+                self.dest_nodes.remove(self.dest_nodes[i])
             else:
                 self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                     len(self.dest_nodes)))
