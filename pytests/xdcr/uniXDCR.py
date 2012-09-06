@@ -278,7 +278,7 @@ class unidirectional(XDCRReplicationBaseTest):
             self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_nodes[i]])
             self.dest_nodes.pop(i)
 
-            self.verify_results()
+        self.verify_results()
             #ToDO - Failover and ADD BACK NODE
 
     """Replication with compaction ddocs and view queries on both clusters.
@@ -369,8 +369,6 @@ class unidirectional(XDCRReplicationBaseTest):
                     continue
             break
 
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         tasks = []
         for view in views:
             tasks.append(self._cluster_helper.async_query_view(self.src_master, prefix + ddoc_name, view.name, query, src_buckets[0].kvs[1].__len__()))
@@ -378,6 +376,8 @@ class unidirectional(XDCRReplicationBaseTest):
 
         for task in tasks:
             task.result(self._poll_timeout)
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self.verify_results()
 
@@ -403,9 +403,10 @@ class unidirectional(XDCRReplicationBaseTest):
             #restore deleted items
             if self._doc_ops is not None:
                 if "delete" in self._doc_ops:
-                    task = self._async_load_all_buckets(self.src_master, self.gen_delete, "create", 0)
+                    tasks = self._async_load_all_buckets(self.src_master, self.gen_delete, "create", 0)
                     time.sleep(5)
-                    task.result()
+                    for task in tasks:
+                        task.result()
 
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
