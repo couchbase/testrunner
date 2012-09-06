@@ -254,7 +254,7 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
     log.info("[mcsoda] woq_worker stopped working")
 
 
-def cor_worker(stats_queue, ctl, cfg, store):
+def cor_worker(stats_queue, ctl, cfg, cur, store):
     """
     Sequentially measure latencies of create/observe_replications patterns
 
@@ -262,8 +262,7 @@ def cor_worker(stats_queue, ctl, cfg, store):
     """
     OP_WIN = 1     # ensure foreground load to dominate the traffic
     backoff = 0
-    bucket = "default"
-    key_num = OPAQUE_MAX
+    key_num = OPAQUE_MAX - cur.get('cur-gets', 0)
     store.cfg["cor"] = 1
     store.cfg["batch"] = 1
     persist = (int(cfg.get('cor-persist', 0)) == 1)
@@ -370,7 +369,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
     if cfg.get('cor-pattern', 0):
         cor_stats_queue = multiprocessing.Queue()
         cor_process = multiprocessing.Process(
-            target=cor_worker, args=(cor_stats_queue, ctl, cfg, store))
+            target=cor_worker, args=(cor_stats_queue, ctl, cfg, cur, store))
         cor_process.daemon = True
         cor_process.start()
 
