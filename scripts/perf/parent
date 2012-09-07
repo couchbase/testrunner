@@ -40,3 +40,6 @@ if [ ${skip_run} != "1" ]; then
 else
    echo "No Cluster setup run"
 fi
+
+# reset swap
+python scripts/ssh.py -i ${ini_file} "swapoff -a && swapon -a"
