@@ -126,14 +126,14 @@ class RebalanceInTests(RebalanceBaseTest):
     """Rebalances nodes into a cluster while doing mutations.
 
     This test begins by loading a given number of items into the cluster. It then
-    adds one node at a time and rebalances that node into the cluster. During the rebalance we
+    adds two nodes at a time and rebalances that node into the cluster. During the rebalance we
     update(all of the items in the cluster)/delete( num_items/(num_servers -1) in each iteration)/
     create(a half of initial items in each iteration). Once the cluster has been
     rebalanced we wait for the disk queues to drain, and then verify that
      there has been no data loss. Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_in_with_ops(self):
-        for i in range(self.num_servers)[1:]:
-            rebalance = self.cluster.async_rebalance(self.servers[:i], [self.servers[i]], [])
+        for i in range(1, self.num_servers, 2):
+            rebalance = self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])
             if self.doc_ops is not None:
             # define which doc's operation will be performed during rebalancing
             #only one type of ops can be passed
@@ -150,9 +150,9 @@ class RebalanceInTests(RebalanceBaseTest):
                     gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
                     self._load_all_buckets(self.master, gen_delete, "delete", 0)
             rebalance.result()
-            self._wait_for_stats_all_buckets(self.servers[:i + 1])
+            self._wait_for_stats_all_buckets(self.servers[:i + 2])
             self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:i + 1])
+            self._verify_stats_all_buckets(self.servers[:i + 2])
 
     """Rebalances nodes into a cluster  during view queries.
 
@@ -224,7 +224,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
     This test begins by loading a given number of items into the cluster. It creates num_views as
     development/production view with default map view funcs(is_dev_ddoc = True by default).
-    It then adds one node at a time and rebalances that node into the cluster. During the rebalancing
+    It then adds two nodes at a time and rebalances that node into the cluster. During the rebalancing
     we perform view queries for all views and verify the expected number of docs for them.
     Perform the same view queries after cluster has been completed. Then we wait for
     the disk queues to drain, and then verify that there has been no data loss.
@@ -260,17 +260,17 @@ class RebalanceInTests(RebalanceBaseTest):
 
         self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
         query["stale"] = "update_after"
-        for i in range(self.num_servers)[1:]:
-            rebalance = self.cluster.async_rebalance(self.servers[:i], [self.servers[i]], [])
+        for i in range(1, self.num_servers, 2):
+            rebalance = self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])
             time.sleep(self.wait_timeout / 5)
             #see that the result of view queries are the same as expected during the test
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             #verify view queries results after rebalancing
             rebalance.result()
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
-            self._wait_for_stats_all_buckets(self.servers[:i + 1])
+            self._wait_for_stats_all_buckets(self.servers[:i + 2])
             self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:i + 1])
+            self._verify_stats_all_buckets(self.servers[:i + 2])
 
     """Rebalances nodes into a cluster when one node is warming up.
 

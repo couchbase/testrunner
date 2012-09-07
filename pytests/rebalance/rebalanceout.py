@@ -103,15 +103,15 @@ class RebalanceOutTests(RebalanceBaseTest):
     """Rebalances nodes out of a cluster while doing docs' ops.
 
     This test begins with all servers clustered together and loads a user defined
-    number of items into the cluster. It then removes one node at a time from the
+    number of items into the cluster. It then removes two nodes at a time from the
     cluster and rebalances. During the rebalance we update(all of the items in the cluster)/
     delete( num_items/(num_servers -1) in each iteration)/
     create(a half of initial items in each iteration). Once the cluster has been rebalanced
     the test waits for the disk queues to drain and then verifies that there has been no data loss.
     Once all nodes have been rebalanced out of the cluster the test finishes."""
     def incremental_rebalance_out_with_ops(self):
-        for i in reversed(range(self.num_servers)[1:]):
-            rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
+        for i in reversed(range(1, self.num_servers, 2)):
+            rebalance = self.cluster.async_rebalance(self.servers[:i], [], self.servers[i:i + 2])
             if self.doc_ops is not None:
             # define which doc's operation will be performed during rebalancing
             #only one type of ops can be passed
@@ -204,7 +204,7 @@ class RebalanceOutTests(RebalanceBaseTest):
 
     This test begins with all servers clustered together and  loading a given number of items
     into the cluster. It creates num_views as development/production view with
-    default map view funcs(is_dev_ddoc = True by default).  It then adds one node at a time and
+    default map view funcs(is_dev_ddoc = True by default).  It then adds two nodes at a time and
     rebalances that node into the cluster. During the rebalancing we perform view queries
     for all views and verify the expected number of docs for them.
     Perform the same view queries after cluster has been completed. Then we wait for
@@ -241,8 +241,8 @@ class RebalanceOutTests(RebalanceBaseTest):
 
         self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
         query["stale"] = "update_after"
-        for i in reversed(range(self.num_servers)[1:]):
-            rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
+        for i in reversed(range(1, self.num_servers, 2)):
+            rebalance = self.cluster.async_rebalance(self.servers[:i], [], self.servers[i:i + 2])
             time.sleep(self.wait_timeout / 5)
             #see that the result of view queries are the same as expected during the test
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
