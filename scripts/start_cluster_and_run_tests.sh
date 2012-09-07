@@ -68,4 +68,7 @@ python ./testrunner $conf -i $ini 2>&1 -p makefile=True | tee make_test.log
 
 kill $pid
 wait
+tail -c 1G $wd/cluster_run.log &> $wd/tmp.log
+cp $wd/tmp.log $wd/cluster_run.log
+rm $wd/tmp.log
 ! grep FAILED make_test.log &> /dev/null
