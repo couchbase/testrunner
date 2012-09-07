@@ -98,3 +98,23 @@ class BlobGenerator(KVGenerator):
             value += 'a' * extra
         self.itr += 1
         return key, value
+
+class BatchedDocumentGenerator(object):
+
+    def __init__(self, document_generator, batch_size_int=100):
+        self._doc_gen = document_generator
+        self._batch_size = batch_size_int
+        if self._batch_size <= 0 :
+            raise ValueError("Invalid Batch size {0}".format(self._batch_size))
+
+    def has_next(self):
+        return self._doc_gen.has_next()
+
+    def next_batch(self):
+        count = 0
+        key_val = {}
+        while count < self._batch_size and self.has_next():
+            key, val = self._doc_gen.next()
+            key_val[key] = val
+            count += 1
+        return key_val

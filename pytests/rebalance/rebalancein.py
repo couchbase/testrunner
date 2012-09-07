@@ -1,4 +1,5 @@
 import time
+import sys
 
 from threading import Thread
 from rebalance.rebalance_base import RebalanceBaseTest
@@ -42,6 +43,26 @@ class RebalanceInTests(RebalanceBaseTest):
         rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
+
+
+    def rebalance_in_with_ops_batch(self):
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start= (self.num_items / 2-1), end=self.num_items)
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
+        servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
+        rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
+        if(self.doc_ops is not None):
+            # define which doc's ops will be performed during rebalancing
+            # allows multiple of them but one by one
+            if("update" in self.doc_ops):
+                self._load_all_buckets(self.servers[0], self.gen_update, "update", 0, 1, 4294967295, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("create" in self.doc_ops):
+                self._load_all_buckets(self.servers[0], gen_create, "create", 0, 1, 4294967295, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("delete" in self.doc_ops):
+                self._load_all_buckets(self.servers[0], gen_delete, "delete", 0, 1, 4294967295, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+        rebalance.result()
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
+        self._verify_all_buckets(self.servers[0], 1, 1000, None, only_store_hash=True, batch_size=5000)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
 
     """Rebalances nodes into a cluster during getting random keys.

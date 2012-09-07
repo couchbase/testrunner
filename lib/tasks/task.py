@@ -19,6 +19,8 @@ from tasks.future import Future
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                         GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException
 
+from couchbase.documentgenerator import BatchedDocumentGenerator
+
 #TODO: Setup stacktracer
 #TODO: Needs "easy_install pygments"
 #import stacktracer
@@ -156,6 +158,7 @@ class BucketDeleteTask(Task):
                 self.state = FINISHED
                 self.set_result(False)
         #catch and set all unexpected exceptions
+
         except Exception as e:
             self.state = FINISHED
             self.log.info("Unexpected Exception Caught")
@@ -443,6 +446,125 @@ class LoadDocumentsTask(GenericLoadingTask):
             self.set_exception(Exception("Bad operation type: %s" % self.op_type))
         self.kv_store.release_partition(key)
 
+class BatchedLoadDocumentsTask(GenericLoadingTask):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=False, batch_size=100, pause_secs=1, timeout_secs=30):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store)
+        self.batch_generator = BatchedDocumentGenerator(generator, batch_size)
+        self.op_type = op_type
+        self.exp = exp
+        self.flag = flag
+        self.only_store_hash = only_store_hash
+        self.batch_size = batch_size
+        self.pause = pause_secs
+        self.timeout = timeout_secs
+
+    def has_next(self):
+        return self.batch_generator.has_next()
+
+    def next(self):
+        key_value = self.batch_generator.next_batch()
+        self.log.info("Batch loading documents #: {0}".format(len(key_value)))
+        partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
+        if self.op_type == 'create':
+            self._create_batch(partition_keys_dic, key_value)
+        elif self.op_type == 'update':
+            self._update_batch(partition_keys_dic, key_value)
+        elif self.op_type == 'delete':
+            self._delete_batch(partition_keys_dic, key_value)
+        elif self.op_type == 'read':
+            self._read_batch(partition_keys_dic, key_value)
+        else:
+            self.state = FINISHED
+            self.set_exception(Exception("Bad operation type: %s" % self.op_type))
+        self.kv_store.release_partitions(partition_keys_dic.keys())
+
+
+    def _create_batch(self, partition_keys_dic, key_val):
+        try:
+            self._process_values_for_create(key_val)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self._populate_kvstore(partition_keys_dic, key_val)
+        except MemcachedError as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+
+    def _update_batch(self, partition_keys_dic, key_val):
+        try:
+            self._process_values_for_update(partition_keys_dic, key_val)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self._populate_kvstore(partition_keys_dic, key_val)
+        except MemcachedError as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+
+    def _delete_batch(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            for key in keys:
+                try:
+                    self.client.delete(key)
+                    partition.delete(key)
+                except MemcachedError as error:
+                    if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                        pass
+                    else:
+                        self.state = FINISHED
+                        self.set_exception(error)
+                        return
+
+    def _read_batch(self, partition_keys_dic, key_val):
+        try:
+            o, c, d = self.client.getMulti(key_val.keys(), self.pause, self.timeout)
+        except MemcachedError as error:
+                self.state = FINISHED
+                self.set_exception(error)
+
+    def _process_values_for_create(self, key_val):
+        for key, value in key_val.items():
+            try:
+                value_json = json.loads(value)
+                value_json['mutated'] = 0
+                value = json.dumps(value_json)
+            except ValueError:
+                index = random.choice(range(len(value)))
+                value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            finally:
+                key_val[key] = value
+
+    def _process_values_for_update(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            for key  in keys:
+                value = partition.get_valid(key)
+                if value is None:
+                    del key_val[key]
+                    continue
+                try:
+                    value = key_val[key] # new updated value, however it is not their in orginal code "LoadDocumentsTask"
+                    value_json = json.loads(value)
+                    value_json['mutated'] += 1
+                    value = json.dumps(value_json)
+                except ValueError:
+                    index = random.choice(range(len(value)))
+                    value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+                finally:
+                    key_val[key] = value
+
+
+    def _populate_kvstore(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            self._populate_kvstore_partition(partition, keys, key_val)
+
+    def _release_locks_on_kvstore(self):
+        for part in self._partitions_keyvals_dic.keys:
+            self.kv_store.release_lock(part)
+
+    def _populate_kvstore_partition(self, partition, keys, key_val):
+        for key in keys:
+            if self.only_store_hash:
+                key_val[key] = str(crc32.crc32_hash(key_val[key]))
+            partition.set(key, key_val[key], self.exp, self.flag)
+
 class WorkloadTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
@@ -585,6 +707,84 @@ class ValidateDataTask(GenericLoadingTask):
                 self.state = FINISHED
                 self.set_exception(error)
         self.kv_store.release_partition(key)
+
+    def _check_deleted_key(self, key):
+        partition = self.kv_store.acquire_partition(key)
+
+        try:
+            o, c, d = self.client.delete(key)
+            if partition.get_valid(key) is not None:
+                self.state = FINISHED
+                self.set_exception(Exception('Not Deletes: %s' % (key)))
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+        self.kv_store.release_partition(key)
+
+
+class BatchedValidateDataTask(GenericLoadingTask):
+    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=False, batch_size=100):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store)
+        self.valid_keys, self.deleted_keys = kv_store.key_set()
+        self.num_valid_keys = len(self.valid_keys)
+        self.num_deleted_keys = len(self.deleted_keys)
+        self.itr = 0
+        self.max_verify = self.num_valid_keys + self.num_deleted_keys
+        self.only_store_hash = only_store_hash
+        if max_verify is not None:
+            self.max_verify = min(max_verify, self.max_verify)
+        self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
+        self.batch_size = batch_size
+
+    def has_next(self):
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.itr < self.max_verify:
+            return True
+        return False
+
+    def next(self):
+        if self.itr < self.num_valid_keys:
+            keys_batch = self.valid_keys[self.itr:self.itr + self.batch_size]
+            self.itr += len(keys_batch)
+            self._check_valid_keys(keys_batch)
+        else:
+            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys])
+            self.itr += 1
+
+    def _check_valid_keys(self, keys):
+        partition_keys_dic = self.kv_store.acquire_partitions(keys)
+        key_vals = self.client.getMulti(keys, parallel=True)
+        for partition, keys in partition_keys_dic.items():
+            self._check_validity(partition, keys, key_vals)
+        self.kv_store.release_partitions(partition_keys_dic.keys())
+
+    def _check_validity(self, partition, keys, key_vals):
+
+        for key in keys:
+            value = partition.get_valid(key)
+            flag = partition.get_flag(key)
+            if value is None:
+                continue
+            try:
+                o, c, d = key_vals[key]
+                if self.only_store_hash:
+                    if crc32.crc32_hash(d) != int(value):
+                        self.state = FINISHED
+                        self.set_exception(Exception('Bad hash result: %d != %d' % (crc32.crc32_hash(d), int(value))))
+                else:
+                    value = json.dumps(value)
+                    if d != json.loads(value):
+                        self.state = FINISHED
+                        self.set_exception(Exception('Bad result: %s != %s' % (json.dumps(d), value)))
+                if o != flag:
+                    self.state = FINISHED
+                    self.set_exception(Exception('Bad result for flag value: %s != the value we set: %s' % (o, flag)))
+            except KeyError as error:
+                self.state = FINISHED
+                self.set_exception(error)
+
 
     def _check_deleted_key(self, key):
         partition = self.kv_store.acquire_partition(key)
