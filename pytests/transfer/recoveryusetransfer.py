@@ -110,14 +110,14 @@ class RecoveryUseTransferTests(TransferBaseTest):
         gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items/2-1))
         gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items/2, end=(self.num_items*3/4-1))
         gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items*3/4, end=self.num_items)
-        self._load_all_buckets(self.server_origin, gen_load, "create", 0, 1, self.item_flag, True)
+        self._load_all_buckets(self.server_origin, gen_load, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
 
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
-                self._load_all_buckets(self.server_origin, gen_update, "update", 0, 1, self.item_flag, True)
+                self._load_all_buckets(self.server_origin, gen_update, "update", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("delete" in self.doc_ops):
-                self._load_all_buckets(self.server_origin, gen_delete, "delete", 0, 1, self.item_flag, True)
+                self._load_all_buckets(self.server_origin, gen_delete, "delete", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("expire" in self.doc_ops):
-                self._load_all_buckets(self.server_origin, gen_expire, "update", self.expire_time, 1, self.item_flag, True)
+                self._load_all_buckets(self.server_origin, gen_expire, "update", self.expire_time, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets([self.server_origin])
         time.sleep(30)
