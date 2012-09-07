@@ -722,7 +722,6 @@ class VBucketAwareMemcached(object):
         self.vBucketMapReplica = r
 
     def reset_vbuckets(self, rest, vbucketids_set):
-        self.log.info("Reset vbuckets: {0}".format(vbucketids_set), exc_info=1)
         forward_map = rest.get_bucket(self.bucket).forward_map
         if not forward_map:
             forward_map = rest.get_vbuckets(self.bucket)
