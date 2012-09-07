@@ -22,13 +22,15 @@ class OpsDuringBackupTests(BackupBaseTest):
         starts can be restored correctly."""
 
         gen_load_backup = BlobGenerator('couchdb', 'couchdb', self.value_size, end=self.backup_items)
-        self._load_all_buckets(self.master, gen_load_backup, "create", 0, 2, self.item_flag, True)  #store items before backup starts to kvstores[2]
+        self._load_all_buckets(self.master, gen_load_backup, "create", 0, 2, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+        #store items before backup starts to kvstores[2]
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         gen_load = BlobGenerator('mysql', 'mysql-', self.value_size, end=self.num_items)
         data_load_thread = Thread(target=self._load_all_buckets,
                                   name="load_data",
-                                  args=(self.master, gen_load, "create", 0, 1, 0, True))  #store noise items during backup to kvstores[1]
+                                  args=(self.master, gen_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180))
+        #store noise items during backup to kvstores[1]
 
         backup_thread = Thread(target=self.shell.execute_cluster_backup,
                                name="backup",
@@ -74,7 +76,7 @@ class OpsDuringBackupTests(BackupBaseTest):
         gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items/2-1))
         gen_expire = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items/2, end=(self.num_items*3/4-1))
         gen_delete = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items*3/4, end=self.num_items)
-        self._load_all_buckets(self.master, gen_load, "create", 0, 1, 0, True)
+        self._load_all_buckets(self.master, gen_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         mutate_threads = []
@@ -82,15 +84,15 @@ class OpsDuringBackupTests(BackupBaseTest):
             if("update" in self.doc_ops):
                 mutate_threads.append(Thread(target=self._load_all_buckets,
                                              name="update",
-                                             args=(self.master, gen_update, "update", 0, 1, 0, True)))
+                                             args=(self.master, gen_update, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)))
             if("delete" in self.doc_ops):
                 mutate_threads.append(Thread(target=self._load_all_buckets,
                                              name="delete",
-                                             args=(self.master, gen_delete, "delete", 0, 1, 0, True)))
+                                             args=(self.master, gen_delete, "delete", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)))
             if("expire" in self.doc_ops):
                 mutate_threads.append(Thread(target=self._load_all_buckets,
                                              name="expire",
-                                             args=(self.master, gen_expire, "update", self.expire_time, 1, 0, True)))
+                                             args=(self.master, gen_expire, "update", self.expire_time, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)))
         for t in mutate_threads:
             t.start()
 
