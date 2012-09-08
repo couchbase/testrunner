@@ -48,6 +48,9 @@ def exec_request(data)
     if data['command'] == 'delete'
         return do_delete(data)
     end
+    if data['command'] == 'mdelete'
+        return do_mdelete(data)
+    end
     if data['command'] == 'query'
         return do_query(data)
     end
@@ -122,6 +125,20 @@ def do_delete(data)
 
     return res
 end
+
+def do_mdelete(data)
+    res = nil
+    begin
+        for key in data['args']
+            res = $client_map[data["bucket"]].delete key
+        end
+    rescue Couchbase::Error::NotFound => e
+        res = e
+    end
+
+    return res
+end
+
 
 def do_query(data)
     design_doc_name = data['args'][0]

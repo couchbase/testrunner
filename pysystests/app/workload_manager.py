@@ -297,7 +297,7 @@ def generate_pending_tasks(task_queue, template, bucket, create_count,
     if get_count > 0:
         get_tasks = generate_get_tasks(get_count, consume_queue, bucket)
     if del_count > 0:
-        del_tasks = generate_del_tasks(del_count, consume_queue, bucket)
+        del_tasks = generate_delete_tasks(del_count, consume_queue, bucket)
 
     pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks 
     pending_tasks = yajl.dumps(pending_tasks)
@@ -339,39 +339,28 @@ def generate_set_tasks(template, count, bucket = "default", batch_size = 100):
     return tasks
 
 @celery.task(base = PersistedMQ)
-def generate_get_tasks(count, docs_queue, bucket="default", batch_size = 100):
+def generate_get_tasks(count, docs_queue, bucket="default"):
+
     rabbitHelper = generate_get_tasks.rabbitHelper 
 
-    tasks = [] 
+    tasks = []
+    keys_retrieved = 0
 
-    if batch_size > count:
-        batch_size = count
+    while keys_retrieved < count:
 
-    if rabbitHelper.qsize(docs_queue) > 0:
+        if rabbitHelper.qsize(docs_queue) == 0:
+            msg = ("%s keys retrieved, Requested %s ") % (keys_retrieved, count)
+            logger.info(msg)
+            break
 
         keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
 
-        # keys are stored in batch but sometimes we need to get more
-        while len(keys) < count:
-            if rabbitHelper.qsize(docs_queue) == 0: break 
-                
-            ex_keys = rabbitHelper.getJsonMsg(docs_queue,  requeue = True)
-            if ex_keys is not None and len(ex_keys) > 0:
-                keys = keys + ex_keys
-       
         if len(keys) > 0:
+            tasks.append(client.mget.s(keys, bucket))
+            keys_retrieved = keys_retrieved + len(keys)
 
-            # generate tasks
-            i = 0
-            while count > 0:
-                tasks.append(client.mget.s(keys[i:i+batch_size], bucket))
-                i = i + batch_size
-                count = count - batch_size 
-    else:
-        # warning there are no documents to consume
-        pass
 
-    return tasks 
+    return tasks
 
     
 @celery.task(base = PersistedMQ)
@@ -385,8 +374,8 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default"):
 
     while keys_updated < count:
         if rabbitHelper.qsize(docs_queue) == 0:
-            msg = ("%s keys updated, Requested %s ") % (keys_updated, count)
-            logger.error(msg)
+            msg = ("Error: %s keys updated, Requested %s ") % (keys_updated, count)
+            logger.info(msg)
             break
 
         keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
@@ -400,33 +389,27 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default"):
 
 
 @celery.task(base = PersistedMQ)
-def generate_del_tasks(del_count, docs_queue, bucket = "default"):
+def generate_delete_tasks(count, docs_queue, bucket = "default"):
 
-    rabbitHelper = generate_del_tasks.rabbitHelper 
-    tasks = [] 
 
-    if rabbitHelper.qsize(docs_queue) > 0:
+    rabbitHelper = generate_delete_tasks.rabbitHelper 
+
+    tasks = []
+    keys_deleted = 0
+
+    while keys_deleted < count:
+
+        if rabbitHelper.qsize(docs_queue) == 0:
+            msg = ("%s keys deleted, Requested %s ") % (keys_deleted, count)
+            logger.info(msg)
+            break
 
         keys = rabbitHelper.getJsonMsg(docs_queue)
 
-        # keys are stored in batch but sometimes we need to get more
-        while len(keys) < del_count:
-
-            if rabbitHelper.qsize(docs_queue) == 0: break 
-
-            ex_keys = rabbitHelper.getJsonMsg(docs_queue)
-            if ex_keys is not None and len(ex_keys) > 0:
-                keys = keys + ex_keys
-        
-
         if len(keys) > 0:
+            tasks.append(client.mdelete.s(keys, bucket))
+            keys_deleted = keys_deleted + len(keys)
 
-            # requeue undeleted keys 
-            msg = yajl.dumps(keys[del_count:])
-            rabbitHelper.putMsg(docs_queue, msg)
-
-            # generate tasks
-            tasks = [client.delete.s(key, bucket) for key in keys[0:del_count]]
 
     return tasks
 

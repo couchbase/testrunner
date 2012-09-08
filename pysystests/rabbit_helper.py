@@ -61,7 +61,7 @@ class RabbitHelper(object):
             body = message.body
             # Handle data receipt acknowldegement
             if no_ack == False:
-               message.ack
+               message.ack()
 
             if requeue:
                 self.putMsg(queue, body)

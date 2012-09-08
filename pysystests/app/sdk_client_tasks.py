@@ -61,10 +61,19 @@ def delete(key, bucket = "default"):
                "args" : [key]}
     return  _send_msg(message)
 
+@celery.task
+
+def mdelete(keys, bucket = "default"):
+    message = {"command" : "mdelete",
+               "bucket" : bucket,
+               "args" : keys}
+    return  _send_msg(message)
+
 def _send_msg(message):
     message.update({"cb_ip" : cfg.COUCHBASE_IP,
                     "cb_port" : cfg.COUCHBASE_PORT})
-    if message["command"] == "mget":
+
+    if message["command"] == "mget" or message["command"] == "mdelete":
         sdk_client = eventlet.connect((SDK_IP, SDK_PORT2))
         sdk_client.sendall(yajl.dumps(message))
     else: 
