@@ -22,7 +22,7 @@ SDK_PORT2 = 50009
 
 
 @celery.task
-def mset(keys, template, bucket = "default"):
+def mset(keys, template, bucket = "default", isupdate = False):
     message = {"command" : "mset",
                "args" : keys,
                "template" : template,

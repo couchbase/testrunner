@@ -119,24 +119,26 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
     rabbitHelper = sysTestRunner.rabbitHelper
     if sender == sysTestRunner:
         # cleanup workload after handled by test runner
-        workload = retval 
+        workload = retval
         rabbitHelper.purge(workload.task_queue)
         WorkloadCacher().delete(workload)
 
     if sender == client.mset:
-        # allow multi set keys to be consumed
+
         if isinstance(retval,list):
-            keys = retval 
+            isupdate = args[3]
+            if isupdate == False:
+                # allow multi set keys to be consumed
+                keys = retval 
 
-            # note template was converted to dict for mset
-            template = args[1]  
-
-            if template["cc_queues"] is not None:
-                for queue in template["cc_queues"]:
-                    queue = str(queue)
-                    rabbitHelper.declare(queue)
-                    if keys is not None and len(keys) > 0:
-                        rabbitHelper.putMsg(queue, yajl.dumps(keys))             
+                # note template was converted to dict for mset
+                template = args[1]
+                if template["cc_queues"] is not None:
+                    for queue in template["cc_queues"]:
+                        queue = str(queue)
+                        rabbitHelper.declare(queue)
+                        if keys is not None and len(keys) > 0:
+                            rabbitHelper.putMsg(queue, yajl.dumps(keys))
         else:
             logger.error("Error during multi set")
             logger.error(retval)
@@ -331,7 +333,7 @@ def generate_set_tasks(template, count, bucket = "default", batch_size = 100):
             batch_counter = batch_counter + 1
             i = i + 1
 
-        tasks.append(client.mset.s(key_batch, template.__dict__, bucket))
+        tasks.append(client.mset.s(key_batch, template.__dict__, bucket, False))
         batch_counter = 0
 
     return tasks
@@ -373,30 +375,25 @@ def generate_get_tasks(count, docs_queue, bucket="default", batch_size = 100):
 
     
 @celery.task(base = PersistedMQ)
-def generate_update_tasks(template, update_count, docs_queue, bucket = "default"):
+def generate_update_tasks(template, count, docs_queue, bucket = "default"):
 
     rabbitHelper = generate_update_tasks.rabbitHelper 
+    val = yajl.dumps(template.kv)
 
-    tasks = [] 
+    tasks = []
+    keys_updated = 0
 
-    if rabbitHelper.qsize(docs_queue) > 0:
+    while keys_updated < count:
+        if rabbitHelper.qsize(docs_queue) == 0:
+            msg = ("%s keys updated, Requested %s ") % (keys_updated, count)
+            logger.error(msg)
+            break
 
         keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
 
-        # keys are stored in batch but sometimes we need to get more
-        while len(keys) < update_count:
-
-            if rabbitHelper.qsize(docs_queue) == 0: break 
-
-            ex_keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
-            keys = keys + ex_keys
-        
-
         if len(keys) > 0:
-
-            # generate tasks
-            val = yajl.dumps(template["kv"])
-            tasks = [client.set.s(key, val, bucket) for key in keys[0:update_count]]
+            tasks.append(client.mset.s(keys, template.__dict__, bucket, True))
+            keys_updated = keys_updated + len(keys)
 
     return tasks 
 
