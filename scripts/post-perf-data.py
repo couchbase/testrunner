@@ -170,6 +170,13 @@ if __name__ == "__main__":
                 row.update({"row": index})
                 print row["stime"], row["comm"], row["row"]
             del input_json["systemstats"]
+        if "iostats" in input_json:
+            print "flattening iostats"
+            attachments["iostats"] = input_json["iostats"]
+            for index, row in enumerate(attachments["iostats"], start=1):
+                row.update(z)
+                row.update({"row": index})
+            del input_json["iostats"]
         if "data-size" in input_json:
             print "flattening data-size"
             attachments["data-size"] = input_json["data-size"]
