@@ -415,6 +415,25 @@ if (nrow(system_stats)) {
     system_stats$cnswap <- as.numeric(system_stats$cnswap)
 }
 
+cat("generating io stats \n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+    tryCatch({
+        url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","iostats", sep='')
+        doc_json <- fromJSON(file=url)
+        unlisted <- plyr::ldply(doc_json, unlist)
+        print(ncol(unlisted))
+        result <- rbind(result,unlisted)
+    }, error=function(e) e)
+}
+cat(paste("result has ", nrow(result)," rows \n"))
+iostats <- result
+if (nrow(iostats)) {
+    iostats$row <- as.numeric(factor(iostats$row))
+    iostats$time <- as.numeric(iostats$time)
+    iostats$read <- as.numeric(iostats$read)
+    iostats$write <- as.numeric(iostats$write)
+}
 
 # Get Latency-get
 cat("generating latency-get\n")
@@ -2026,6 +2045,28 @@ for(ip in levels(factor(system_stats$ip))) {
                         "among snapshots across time",
                         sep="\n"))
 
+}
+
+cat("generating iostat \n")
+for(ip in levels(factor(iostats$ip))) {
+    stats = iostats[iostats$ip == ip, ]
+    stats$read = c(0 , diff(stats$read) / diff(stats$time))
+    stats$write = c(0, diff(stats$write) / diff(stats$time))
+    stats$time = stats$time - min(stats$time)
+
+    p <- ggplot(stats, aes(time, read, color=buildinfo.version, label=stats)) + labs(x="----time (sec)--->", y="iostat - Disk Read (kB/s)")
+    p <- p + geom_line()
+    p <- addopts(p, paste("Disk Read (kB/s) : ", ip))
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef("Disk read across all hard drives (kB/s)")
+
+    p <- ggplot(stats, aes(time, write, color=buildinfo.version, label= stats)) + labs(x="----time (sec)--->", y="iostat - Disk Write (kB/s)")
+    p <- p + geom_line()
+    p <- addopts(p, paste("Disk Write (kB/s) : ", ip))
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef("Disk write across all hard drives (kB/s)")
 }
 
 cat("generating data disk size\n")
