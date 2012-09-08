@@ -68,6 +68,9 @@ class StatsCollector(object):
             sysstats_thread = Thread(target=self.system_stats,
                                      args=(nodes, pnames, frequency, self._verbosity))
             sysstats_thread.start()
+            iostats_thread = Thread(target=self.iostats,
+                                    args=(nodes, 5, self._verbosity))
+            iostats_thread.start()
             ns_server_stats_thread = Thread(target=self.ns_server_stats,
                                             args=([nodes[0]], bucket, 60, self._verbosity))
             ns_server_stats_thread.start()
@@ -139,6 +142,7 @@ class StatsCollector(object):
                "machineinfo": self._task.get("machinestats", {}),
                "membasestats": self._task.get("membasestats", []),
                "systemstats": self._task.get("systemstats", []),
+               "iostats": self._task.get("iostats", []),
                "name": name,
                "totalops":self._task["totalops"],
                "ops":self._task["ops"],
@@ -346,6 +350,17 @@ class StatsCollector(object):
         d = dict(zip(fields, o[0].split(' ')))
         return d
 
+    def _extract_io_info(self, shell):
+        """
+        Extract kB_read and kB_wrtn from iostat
+        """
+        CMD = "iostat -dk | grep 'sd. ' | " \
+              "awk '{read+=$5; write+=$6} END { print read, write }'"
+
+        out, err = shell.execute_command(CMD)
+
+        return out[0].split(' ')
+
     def system_stats(self, nodes, pnames, frequency, verbosity=False):
         shells = []
         for node in nodes:
@@ -379,6 +394,33 @@ class StatsCollector(object):
                 i += 1
         self._task["systemstats"] = d["snapshots"]
         print " finished system_stats"
+
+    def iostats(self, nodes, frequency, verbosity=False):
+
+        shells = []
+        for node in nodes:
+            try:
+                bucket = RestConnection(node).get_buckets()[0].name
+                MemcachedClientHelper.direct_client(node, bucket)
+                shells.append(RemoteMachineShellConnection(node))
+            except:
+                pass
+
+        self._task["iostats"] = []
+
+        print "started capturing io stats"
+
+        while not self._aborted():
+            time.sleep(frequency)
+            print "collecting io_stats"
+            for shell in shells:
+                kB_read, kB_wrtn = self._extract_io_info(shell)
+                if kB_read and kB_wrtn:
+                    self._task["iostats"].append({"time": time.time(),
+                                                 "ip": shell.ip,
+                                                 "read": kB_read,
+                                                 "write": kB_wrtn})
+        print "finished capturing io stats"
 
     def couchdb_stats(nodes):
         pass
