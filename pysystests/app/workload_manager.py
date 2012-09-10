@@ -275,7 +275,9 @@ def postcondition_handler():
                                        bucket = bucket,
                                        username = cfg.COUCHBASE_USER,
                                        password = cfg.COUCHBASE_PWD)
-            if stat_checker.check(workload.postconditions):
+            status = stat_checker.check(workload.postconditions)
+            if status == True:
+                # unblock bucket and deactivate workload
                 bs = BucketStatusCacher().bucketstatus(bucket)
                 bs.unblock(bucket)
                 BucketStatusCacher().store(bs)

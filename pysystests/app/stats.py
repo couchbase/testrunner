@@ -22,7 +22,6 @@ class StatChecker(object):
         self.username = username
         self.password = password
         self.bucket = bucket
-
         serverInfo = { "ip" : self.ip,
                        "port" : self.port,
                        "rest_username" : self.username,
@@ -35,12 +34,12 @@ class StatChecker(object):
         valid = False
         try:
             stat, cmp_type, value = self.parse_condition(condition)
-        except AttributeError:
+        except AttributeError as ex:
+            logger.error(ex)
             return valid
 
         value = datatype(value) 
-
-        stats = self.rest.get_bucket_stats_for_node(self.bucket, self.node)
+        stats = self.rest.get_bucket_stats(self.bucket)
        
         if len(stats) > 0:
             try:
@@ -49,7 +48,7 @@ class StatChecker(object):
                 logger.error('Invalid Stat Key: %s' % stat)
             
                 # invalid stat key
-                return valid 
+                return valid
 
             if (cmp_type  == StatChecker.EQUAL and curr_value == value) or\
                 (cmp_type == StatChecker.NOT_EQUAL and curr_value != value) or\
