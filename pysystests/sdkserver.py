@@ -1,6 +1,7 @@
 import eventlet
 import json
 import random
+import string
 import yajl
 import sys
 from couchbase.couchbaseclient import CouchbaseClient
@@ -73,7 +74,7 @@ def do_mset(data):
     if "flags" in template:
         flags = template['flags']
     if "size" in template:
-        size = template['size']
+        size = int(template['size'])
         kv_size = sys.getsizeof(kv)/8
         if  kv_size < size:
             padding = _random_string(size - kv_size)
@@ -138,7 +139,7 @@ def do_query( data):
     return res
 
 def _random_string(length):
-    return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
+    return ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(length))
 
 
 print "Python sdk starting on port 50008"

@@ -442,10 +442,11 @@ class Workload(object):
 class Template(object):
     def __init__(self, params):
         self.name = params["name"]
-        self.ttl = params["ttl"]
+        self.ttl = int(params["ttl"])
         self.flags = params["flags"]
-        self.cc_queues = params["cc_queues"]
+        self.cc_queues = str(params["cc_queues"])
         self.kv = params["kv"]
+        self.size = int(params["size"])
 
 class BucketStatus(object):
 
