@@ -842,7 +842,7 @@ class RestConnection(object):
     def diag_eval(self, code):
         api = '{0}{1}'.format(self.baseUrl, 'diag/eval/')
         status, content, header = self._http_request(api, "POST", code)
-        log.info("/diag/eval : status : {0} content : {1}".format(status, content))
+        log.info("/diag/eval status: {0} content: {1} command: {2}".format(status, content, code))
         return status, content
 
 
