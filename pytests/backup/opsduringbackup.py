@@ -29,7 +29,7 @@ class OpsDuringBackupTests(BackupBaseTest):
         gen_load = BlobGenerator('mysql', 'mysql-', self.value_size, end=self.num_items)
         data_load_thread = Thread(target=self._load_all_buckets,
                                   name="load_data",
-                                  args=(self.master, gen_load, "create", 0, 1, 0, True, 20000, 5, 180))
+                                  args=(self.master, gen_load, "create", 0, 1, 0, True))
         #store noise items during backup to kvstores[1]
 
         backup_thread = Thread(target=self.shell.execute_cluster_backup,
@@ -84,15 +84,15 @@ class OpsDuringBackupTests(BackupBaseTest):
             if("update" in self.doc_ops):
                 mutate_threads.append(Thread(target=self._load_all_buckets,
                                              name="update",
-                                             args=(self.master, gen_update, "update", 0, 1, 0, True, 20000, 5, 180)))
+                                             args=(self.master, gen_update, "update", 0, 1, 0, True)))
             if("delete" in self.doc_ops):
                 mutate_threads.append(Thread(target=self._load_all_buckets,
                                              name="delete",
-                                             args=(self.master, gen_delete, "delete", 0, 1, 0, True, 20000, 5, 180)))
+                                             args=(self.master, gen_delete, "delete", 0, 1, 0, True)))
             if("expire" in self.doc_ops):
                 mutate_threads.append(Thread(target=self._load_all_buckets,
                                              name="expire",
-                                             args=(self.master, gen_expire, "update", self.expire_time, 1, 0, True, 20000, 5, 180)))
+                                             args=(self.master, gen_expire, "update", self.expire_time, 1, 0, True)))
         for t in mutate_threads:
             t.start()
 
