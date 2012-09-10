@@ -18,8 +18,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
 
     This test begins by creating max number of buckets with bucket_size=100( by default):
     one default bucket, all other are sasl and standart buckets. Then we load
-    a given number of items into the cluster. It then removes one node,
-    rebalances that node out the cluster, and then rebalances it back
+    a given number of items into the cluster. It then removes two nodes,
+    rebalances that nodes out the cluster, and then rebalances them back
     in. During the rebalancing we update all of the items in the cluster. Once the
     node has been removed and added back we  wait for the disk queues to drain, and
     then verify that there has been no data loss. We then remove and add back two
