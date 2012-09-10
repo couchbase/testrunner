@@ -2049,10 +2049,14 @@ for(ip in levels(factor(system_stats$ip))) {
 
 cat("generating iostat \n")
 for(ip in levels(factor(iostats$ip))) {
-    stats = iostats[iostats$ip == ip, ]
-    stats$read = c(0 , diff(stats$read) / diff(stats$time))
-    stats$write = c(0, diff(stats$write) / diff(stats$time))
-    stats$time = stats$time - min(stats$time)
+    stats <- data.frame()
+    for (build in levels(factor(iostats$buildinfo.version))) {
+        tmp = iostats[iostats$ip == ip & iostats$buildinfo.version == build, ]
+        tmp$read = c(0 , diff(tmp$read) / diff(tmp$time))
+        tmp$write = c(0, diff(tmp$write) / diff(tmp$time))
+        tmp$time = tmp$time - min(tmp$time)
+        stats <- rbind(stats, tmp)
+    }
 
     p <- ggplot(stats, aes(time, read, color=buildinfo.version, label=stats)) + labs(x="----time (sec)--->", y="iostat - Disk Read (kB/s)")
     p <- p + geom_line()
