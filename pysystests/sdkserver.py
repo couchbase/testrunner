@@ -73,7 +73,7 @@ def do_mset(data):
         ttl = int(template['ttl'])
     if "flags" in template:
         flags = template['flags']
-    if "size" in template:
+    if template["size"] is not None:
         size = int(template['size'])
         kv_size = sys.getsizeof(kv)/8
         if  kv_size < size:
