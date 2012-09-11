@@ -70,6 +70,8 @@ class SwapRebalanceBase(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
+            #it is not guaranteed that the ejected nodes will immediately single nodes
+            time.sleep(10)
             rest = RestConnection(server)
             if server.data_path:
                 rest.set_data_path(data_path=server.data_path)
