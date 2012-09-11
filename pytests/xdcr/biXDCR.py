@@ -246,7 +246,9 @@ class bidirectional(XDCRReplicationBaseTest):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        if "source" in self._failover:
+        time.sleep(self._timeout / 3)
+
+        if "source" in self._failover and len(self.src_nodes) > 1:
             if len(self.src_nodes) > 1:
                 i = len(self.src_nodes) - 1
                 self._cluster_helper.failover(self.src_nodes, [self.src_nodes[i]])
@@ -257,7 +259,7 @@ class bidirectional(XDCRReplicationBaseTest):
             else:
                 self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                     len(self.src_nodes)))
-        if "destination" in self._failover:
+        if "destination" in self._failover and len(self.dest_nodes) > 1:
             if len(self.dest_nodes) > 1:
                 i = len(self.dest_nodes) - 1
                 self._cluster_helper.failover(self.dest_nodes, [self.dest_nodes[i]])
@@ -275,11 +277,13 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
+        self.verify_results(verify_src=True)
 
     def load_with_failover_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+
+        time.sleep(self._timeout / 3)
 
         if "source" in self._failover  and len(self.src_nodes) > 1:
             self._log.info(" Failing over Source Master Node {0}".format(self.src_master.ip))
@@ -288,7 +292,7 @@ class bidirectional(XDCRReplicationBaseTest):
             self._cluster_helper.rebalance(self.src_nodes, [], [self.src_master])
             self.src_nodes.remove(self.src_master)
             self.src_master = self.src_nodes[0]
-        elif "dest" in self._failover and len(self.src_nodes) <= 1:
+        elif "source" in self._failover and len(self.src_nodes) <= 1:
             self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                 len(self.src_nodes)))
 
@@ -299,7 +303,7 @@ class bidirectional(XDCRReplicationBaseTest):
             self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_master])
             self.dest_nodes.remove(self.dest_master)
             self.dest_master = self.dest_nodes[0]
-        elif "dest" in self._failover and len(self.dest_nodes) <= 1:
+        elif "destination" in self._failover and len(self.dest_nodes) <= 1:
             self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                 len(self.dest_nodes)))
 
@@ -309,7 +313,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
+        self.verify_results(verify_src=True)
 
     """Replication with compaction ddocs and view queries on both clusters.
 
