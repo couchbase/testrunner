@@ -712,7 +712,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 output, error = self.execute_command('/opt/membase/bin/mbenable_core_dumps.sh  {0}'.format(path))
                 self.log_command_output(output, error)
             else:
-                output, error = self.execute_command('/opt/couchbase/bin/mbenable_core_dumps.sh  {0}'.format(path))
+                output, error = self.execute_command('/opt/couchbase/bin/cbenable_core_dumps.sh  {0}'.format(path))
                 self.log_command_output(output, error)
 
             if vbuckets and is_couchbase:
