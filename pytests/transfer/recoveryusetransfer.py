@@ -100,6 +100,9 @@ class RecoveryUseTransferTests(TransferBaseTest):
         del kvs_before
         self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
         time.sleep(self.expire_time + 1)
+        for bucket in self.buckets:
+            self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        time.sleep(30)
 
         self._wait_for_stats_all_buckets([self.server_origin])
         self._verify_all_buckets(self.server_origin, 1, self.wait_timeout*50, None, True)
