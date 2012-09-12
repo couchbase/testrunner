@@ -367,8 +367,8 @@ class EPerfMaster(perf.PerfBase):
                       is_eperf=True)
             self.restartProxy()
 
-        if self.parami('wait_for_xdc_replication', 0):
-            self.wait_for_xdc_replication()
+            if self.parami('wait_for_xdc_replication', 0):
+                self.wait_for_xdc_replication()
 
     def access_phase_clients_start_at(self):
         self.access_phase_items = self.parami("items", PerfDefaults.items)
