@@ -423,7 +423,7 @@ class EPerfMaster(perf.PerfBase):
                 self.nru_monitor.start()
 
             if 'xperf' in self.param('conf_file', '') and 'bi' in self.id():
-                prefix = str(self.parami('prefix', 0))
+                prefix = self.params('prefix', '0')
             else:
                 prefix= ''
 
