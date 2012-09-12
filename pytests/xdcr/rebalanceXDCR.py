@@ -209,7 +209,10 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                     " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                         self.src_master.ip, add_node.ip, remove_node.ip))
                 self.src_nodes.remove(remove_node)
+            time.sleep(self._timeout / 2)
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
+                if "source" in self._rebalance:
+                    add_node = self._floating_servers_set[num_rebalance]
                 remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                 tasks.extend(self._async_rebalance(self.dest_nodes, [add_node], [remove_node]))
                 self._log.info(
