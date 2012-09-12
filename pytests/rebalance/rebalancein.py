@@ -47,7 +47,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
 
     def rebalance_in_with_ops_batch(self):
-        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start= (self.num_items / 2-1), end=self.num_items)
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=(self.num_items / 2 - 1), end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
         rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
@@ -337,7 +337,7 @@ class RebalanceInTests(RebalanceBaseTest):
         self.disable_compaction()
         fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
                          prefix + ddoc_name, fragmentation_value, self.default_bucket_name)
-        end_time = time.time() + self.wait_timeout * 10
+        end_time = time.time() + self.wait_timeout * 15
         # generate load until fragmentation reached
         while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
             # update docs to create fragmentation
