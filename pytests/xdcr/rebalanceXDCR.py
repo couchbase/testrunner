@@ -209,6 +209,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                     " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                         self.src_master.ip, add_node.ip, remove_node.ip))
                 self.src_nodes.remove(remove_node)
+                self.src_nodes.append(add_node)
             time.sleep(self._timeout / 2)
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                 if "source" in self._rebalance:
@@ -219,6 +220,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                     " Starting rebalance-out node{0} at Destination cluster {1}".format(self.dest_master.ip,
                         add_node.ip, remove_node.ip))
                 self.dest_nodes.remove(remove_node)
+                self.dest_nodes.append(add_node)
 
             time.sleep(self._timeout / 6)
             if self._replication_direction_str in "unidirection":
@@ -230,12 +232,12 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             for task in tasks:
                 task.result()
 
-                if self._replication_direction_str in "unidirection":
-                    self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                    self.verify_results()
-                elif self._replication_direction_str in "bidirection":
-                    self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                    self.verify_results(verify_src=True)
+        if self._replication_direction_str in "unidirection":
+            self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+            self.verify_results()
+        elif self._replication_direction_str in "bidirection":
+            self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+            self.verify_results(verify_src=True)
 
             """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
              Swap Rebalance-Out Master node at Source/Destination while
