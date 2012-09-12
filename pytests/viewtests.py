@@ -1,5 +1,6 @@
 import json
 import random
+from copy import deepcopy
 from threading import Thread, Event
 import unittest
 import uuid
@@ -7,7 +8,8 @@ from TestInput import TestInputSingleton
 import logger
 import time
 import datetime
-from couchbase.document import View
+from couchbase.document import DesignDocument, View
+from couchbase.cluster import Cluster
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -1424,6 +1426,37 @@ class ViewCreationDeletionTests(unittest.TestCase):
     def tearDown(self):
         ViewBaseTests.common_tearDown(self)
 
+    '''
+    Test scenario:
+    1) upload the dev and production design docs
+    2) query both with stale=false
+    3) delete the development design doc
+    4) query the production one with stale=ok
+    5) Verify that the results you got in step 4 are exactly the same as the ones you got in step 2
+    '''
+    def test_create_delete_similar_views(self):
+        ddoc_name_prefix = self.input.param("ddoc_name_prefix", "ddoc")
+        view_name = self.input.param("view_name", "test_view")
+        map_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
+        rest = RestConnection(self.servers[0])
+        ddocs = [DesignDocument(ddoc_name_prefix + "1", [View(view_name, map_fn,
+                                                             dev_view=False)],
+                                options={"updateMinChanges":0, "replicaUpdateMinChanges":0}),
+                DesignDocument(ddoc_name_prefix + "2", [View(view_name, map_fn,
+                                                            dev_view=True)],
+                               options={"updateMinChanges":0, "replicaUpdateMinChanges":0})]
+
+        ViewBaseTests._load_docs(self, self.num_docs, "test_")
+        for ddoc in ddocs:
+            results = self.create_ddoc(rest, 'default', ddoc)
+
+        Cluster().delete_view(self.servers[0], ddocs[1].name, ddocs[1].views[0])
+        results_new = rest.query_view(ddocs[0].name, ddocs[0].views[0].name, 'default',
+                                  {"stale" : "ok", "full_set" : "true"})
+        self.assertEquals(results.get(u'rows', []), results_new.get(u'rows', []),
+                          "Results returned previosly %s don't match with current %s" %(
+                          results.get(u'rows', []), results_new.get(u'rows', [])))
+
     def test_view_multiple_buckets(self):
         master = self.servers[0]
         rest = RestConnection(master)
@@ -1534,6 +1567,13 @@ class ViewCreationDeletionTests(unittest.TestCase):
             view_name = "dev_test_view-{0}".format(key)
             ViewBaseTests._verify_views_from_all(self, master, view_bucket[key], view_name, \
                 self.num_docs, value)
+
+    def create_ddoc(self, rest, bucket, ddoc):
+        ddoc_to_create = deepcopy(ddoc)
+        ddoc_to_create.set_name(("", "dev_")[ddoc.views[0].dev_view] + ddoc_to_create.name)
+        rest.create_design_document(bucket, ddoc_to_create)
+        return rest.query_view(ddoc_to_create.name, ddoc_to_create.views[0].name, bucket,
+                                      {"stale" : "false", "full_set" : "true"})
 
 class ViewMultipleNodeTests(unittest.TestCase):
 

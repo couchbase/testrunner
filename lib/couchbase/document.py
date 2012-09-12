@@ -1,10 +1,12 @@
 import json
 
 class DesignDocument():
-    def __init__(self, name, views, rev=None):
+    def __init__(self, name, views, rev=None, options=None):
         self.id = '_design/{0}'.format(name)
         self.rev = rev
         self.views = views
+        self.name = name
+        self.options = options
 
     @classmethod
     def _init_from_json(ddoc_self, design_doc_name, json_object):
@@ -40,10 +42,16 @@ class DesignDocument():
 
         return view_deleted
 
+    def set_name(self, name):
+        self.id = '_design/{0}'.format(name)
+        self.name = name
+
     def as_json(self):
         json_object = {'views': {}}
         for view in self.views:
             json_object['views'][view.name] = view.as_json()[view.name]
+        if self.options:
+            json_object['options'] = self.options
         return json_object
 
     def __str__(self):
