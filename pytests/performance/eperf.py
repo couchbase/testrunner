@@ -356,7 +356,7 @@ class EPerfMaster(perf.PerfBase):
             mvs = self.min_value_size(self.parami("avg_value_size",
                                                   PerfDefaults.avg_value_size))
             if 'xperf' in self.param('conf_file', '') and 'bi' in self.id():
-                prefix = self.params('prefix', '0')
+                prefix = self.params('cluster_prefix', '')
             else:
                 prefix= ''
 
@@ -428,7 +428,7 @@ class EPerfMaster(perf.PerfBase):
                 self.nru_monitor.start()
 
             if 'xperf' in self.param('conf_file', '') and 'bi' in self.id():
-                prefix = self.params('prefix', '0')
+                prefix = self.params('cluster_prefix', '')
             else:
                 prefix= ''
 

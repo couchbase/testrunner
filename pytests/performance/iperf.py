@@ -52,13 +52,14 @@ class PerfWrapper(object):
                 # Concurrent tasks (load_phase, access phase)
                 executors = list()
 
-                if is_bi_xperf and self.parami('access_phase', 0):
+                if is_bi_xperf:
                     # Resolve conflicting keyspaces
                     region = XPerfTests.get_region()
                     if region == 'east':
                         prefix_range = xrange(total_clients / 2)
                     elif region == 'west':
                         prefix_range = xrange(total_clients / 2, total_clients)
+                    self.input.test_params['cluster_prefix'] = region
                 else:
                     prefix_range = xrange(total_clients)
 
