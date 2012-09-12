@@ -31,14 +31,20 @@ class PerfWrapper(object):
 
             Processes don't share memory. However they share stdout/stderr.
             """
+            is_bi_xperf = isinstance(self, XPerfTests) and 'bi' in self.id()
+
             total_clients = self.parami('total_clients', 1)
-            # Limit number of workers during load phase
-            if self.parami('load_phase', 0):
-                total_clients = min(4, total_clients)
+
+            if is_bi_xperf:
+                total_clients *= 2
+            else:
+                # Limit number of workers during load phase
+                if self.parami('load_phase', 0):
+                    total_clients = min(4, total_clients)
+
             self.input.test_params['num_clients'] = total_clients
 
-            if self.parami('index_phase', 0) or \
-                    self.parami('hot_load_phase', 0):
+            if self.parami('index_phase', 0):
                 # Single-threaded tasks (hot load phase, index phase)
                 self.input.test_params['prefix'] = 0
                 return test(self, *args, **kargs)
@@ -46,16 +52,13 @@ class PerfWrapper(object):
                 # Concurrent tasks (load_phase, access phase)
                 executors = list()
 
-                if self.parami('access_phase', 0) and \
-                        isinstance(self, XPerfTests) and 'bi' in self.id():
+                if is_bi_xperf and self.parami('access_phase', 0):
                     # Resolve conflicting keyspaces
                     region = XPerfTests.get_region()
                     if region == 'east':
-                        prefix_range = xrange(total_clients)
+                        prefix_range = xrange(total_clients / 2)
                     elif region == 'west':
-                        prefix_range = xrange(total_clients - 1,
-                                              2 * total_clients - 1)
-                    self.input.test_params['num_clients'] = 2 * total_clients
+                        prefix_range = xrange(total_clients / 2, total_clients)
                 else:
                     prefix_range = xrange(total_clients)
 
