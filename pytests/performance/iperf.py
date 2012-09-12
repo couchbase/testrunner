@@ -46,7 +46,20 @@ class PerfWrapper(object):
                 # Concurrent tasks (load_phase, access phase)
                 executors = list()
 
-                for prefix in range(total_clients):
+                if self.parami('access_phase', 0) and \
+                        isinstance(self, XPerfTests) and 'bi' in self.id():
+                    # Resolve conflicting keyspaces
+                    region = XPerfTests.get_region()
+                    if region == 'east':
+                        prefix_range = xrange(total_clients)
+                    elif region == 'west':
+                        prefix_range = xrange(total_clients - 1,
+                                              2 * total_clients - 1)
+                    self.input.test_params['num_clients'] = 2 * total_clients
+                else:
+                    prefix_range = xrange(total_clients)
+
+                for prefix in prefix_range:
                     self.input.test_params['prefix'] = prefix
                     self.is_leader = bool(prefix == 0)
                     executor = Process(target=test, args=(self, ))

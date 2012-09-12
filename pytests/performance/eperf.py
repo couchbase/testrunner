@@ -422,6 +422,11 @@ class EPerfMaster(perf.PerfBase):
                 self.nru_monitor.daemon = True
                 self.nru_monitor.start()
 
+            if 'xperf' in self.param('conf_file', '') and 'bi' in self.id():
+                prefix = str(self.parami('prefix', 0))
+            else:
+                prefix= ''
+
             self.loop(num_ops=0,
                       num_items=items,
                       max_items=items + max_creates + 1,
@@ -442,7 +447,7 @@ class EPerfMaster(perf.PerfBase):
                       test_name=self.id(),
                       use_direct=self.parami('use_direct', 1),
                       doc_cache=self.parami('doc_cache', 0),
-                      prefix="",
+                      prefix=prefix,
                       collect_server_stats=self.is_leader,
                       start_at=start_at,
                       report=self.parami('report', int(max_creates * 0.1)),
