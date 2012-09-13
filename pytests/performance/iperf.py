@@ -53,13 +53,7 @@ class PerfWrapper(object):
                 executors = list()
 
                 if is_bi_xperf:
-                    # Resolve conflicting keyspaces
-                    region = XPerfTests.get_region()
-                    if region == 'east':
-                        prefix_range = xrange(total_clients / 2)
-                    elif region == 'west':
-                        prefix_range = xrange(total_clients / 2, total_clients)
-                    self.input.test_params['cluster_prefix'] = region
+                    prefix_range = xrange(total_clients / 2)
                 else:
                     prefix_range = xrange(total_clients)
 
@@ -156,6 +150,10 @@ class PerfWrapper(object):
 
                 # Execute performance test
                 region = XPerfTests.get_region()
+                if 'bi' in self.id():
+                    # Resolve conflicting keyspaces
+                    self.input.test_params['cluster_prefix'] = region
+
                 if region == 'east':
                     self.input.servers = self.input.clusters[0]
                     self.input.test_params['bucket'] = self.get_buckets()[0]
