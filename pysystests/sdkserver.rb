@@ -69,37 +69,17 @@ end
 
 def do_mset(data)
 
-    keys = data['args']
-    template = data['template']
-    kv = template['kv']
-    ttl = 0
-    flags = 0
 
-    if template["ttl"] != nil
-        ttl = Integer(template['ttl'])
-    end
-    if template["flags"] != nil
-        flags = template['flags']
-    end
-    if template["size"] != nil
-        size = Integer(template['size'])
-        kvsize = Integer(template['kvsize'])
-        if  kvsize < size:
-            padding = _random_string(size - kvsize)
-            kv["padding"] = padding
-        end
-    end
-
-    client = $client_map[data["bucket"]]
-    for key in keys
-        client.set key, template, :flags => flags, :ttl => ttl
+    for kv in data['args']
+        key = kv[0]
+        ttl = kv[1]
+        flags = kv[2]
+        value = kv[3]
+        $client_map[data["bucket"]].set key, value, :flags => flags, :ttl => ttl 
     end
 end
 
 
-def _random_string(length)
-    return rand(36**length).to_s(36)
-end
 
 def do_mget(data)
 

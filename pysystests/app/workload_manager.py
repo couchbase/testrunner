@@ -1,5 +1,4 @@
 from __future__ import absolute_import
-import sys
 from app.celery import celery
 from celery.task.sets import TaskSet
 from celery.task.control import revoke
@@ -169,6 +168,7 @@ def run(workload, prevWorkload = None):
             # read doc template 
             template = TemplateCacher().template(str(workload.template))
             
+
             if template != None:
 
                 if workload.cc_queues is not None:
@@ -448,7 +448,6 @@ class Template(object):
         self.flags = params["flags"]
         self.cc_queues = params["cc_queues"]
         self.kv = params["kv"]
-        self.kvsize = sys.getsizeof(self.kv)/8
         self.size = params["size"]
 
 class BucketStatus(object):
