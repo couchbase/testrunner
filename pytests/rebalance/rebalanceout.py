@@ -319,7 +319,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         self.disable_compaction()
         fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
                          prefix + ddoc_name, fragmentation_value, self.default_bucket_name)
-        end_time = time.time() + self.wait_timeout * 10
+        end_time = time.time() + self.wait_timeout * 20
         # generate load until fragmentation reached
         while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
             # update docs to create fragmentation
@@ -329,16 +329,18 @@ class RebalanceOutTests(RebalanceBaseTest):
                 self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
-            self.fail("impossible to reach compaction value after %s sec" % self.wait_timeout * 10)
+            self.fail("impossible to reach compaction value after %s sec" % self.wait_timeout * 20)
         fragmentation_monitor.result()
 
         active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
         result = active_task.result()
         self.assertTrue(result)
 
-        expected_rows = self.num_items / 10
+        expected_rows = None
+        if self.max_verify:
+            expected_rows = self.max_verify
+            query["limit"] = expected_rows
         query["stale"] = "false"
-        query["limit"] = expected_rows
 
         self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 2, expected_rows=expected_rows)
 
