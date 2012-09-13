@@ -872,7 +872,7 @@ class RestConnection(object):
                     log.error("apparently rebalance progress code in infinite loop: {0}".format(progress))
                     return False
             #sleep for 2 seconds
-            time.sleep(1)
+            time.sleep(2)
 
         if progress < 0:
             log.error("rebalance progress code : {0}".format(progress))

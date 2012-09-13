@@ -69,11 +69,20 @@ class SwapRebalanceBase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
-            ClusterOperationHelper.cleanup_cluster([server])
+            try:
+                ClusterOperationHelper.cleanup_cluster([server])
+            except Exception, e:
             #it is not guaranteed that the ejected nodes will immediately single nodes
+                if e.message.find('controller/rebalance failed when invoked with parameters') > -1:
+                    self.log.info(e.message)
+                    self.log.info("Try again in 60 seconds")
+                    time.sleep(60)
+                    ClusterOperationHelper.cleanup_cluster([server])
+                else:
+                    raise e
             time.sleep(10)
-            rest = RestConnection(server)
             if server.data_path:
+                rest = RestConnection(server)
                 rest.set_data_path(data_path=server.data_path)
         self.log.info("Stopping load in Teardown")
         SwapRebalanceBase.stop_load(self.loaders)
