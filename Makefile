@@ -22,8 +22,6 @@ else
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 endif
 
-test-simple:
-	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/simple.conf
 simple-test:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/simple.conf
 
