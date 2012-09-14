@@ -105,7 +105,7 @@ class BackupBaseTest(BaseTestCase):
             memcacheds, vBucketMap, vBucketMapReplica = VBucketAware.request_map(rest, bucket.name)
             valid_keys, deleted_keys = bucket.kvs[kv_store].key_set()
             for key in valid_keys:
-                vBucketId = crc32.crc32_hash(key) & (len(vBucketMap) - 1)
+                vBucketId = VBucketAware._get_vBucket_id(key)
                 which_server = vBucketMap[vBucketId]
                 sub = which_server.find(":")
                 which_server_ip = which_server[:sub]
