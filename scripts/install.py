@@ -359,7 +359,17 @@ class CouchbaseServerInstaller(Installer):
                     ClusterOperationHelper.change_erlang_async([server], erlang_threads)
                     # Start couchbase-server
                     ClusterOperationHelper.start_cluster([server])
-
+                if "erlang_gc_level" in params:
+                    erlang_gc_level = params.get('erlang_gc_level', None)
+                    if erlang_gc_level is None:
+                        # Don't change the value
+                        break
+                    # Stop couchbase-server
+                    ClusterOperationHelper.stop_cluster([server])
+                    # Change num erlang threads
+                    ClusterOperationHelper.change_erlang_gc([server], erlang_gc_level)
+                    # Start couchbase-server
+                    ClusterOperationHelper.start_cluster([server])
                 cluster_initialized = True
                 break
             except ServerUnavailableException:

@@ -322,6 +322,28 @@ class ClusterOperationHelper(object):
             log.info(msg % (value, server.ip))
 
     @staticmethod
+    def change_erlang_gc(servers, value=None):
+        """Change the frequency of erlang_gc process
+           export ERL_FULLSWEEP_AFTER=0 (most aggressive)
+
+        Default: None
+        """
+        log = logger.Logger.get_logger()
+        if value is None:
+            return
+        for server in servers:
+            sh = RemoteMachineShellConnection(server)
+            product = "membase"
+            if sh.is_couchbase_installed():
+                product = "couchbase"
+            command = "sed -i '/exec erl/i export ERL_FULLSWEEP_AFTER=%s' /opt/%s/bin/%s-server" %\
+                      (value, product, product)
+            o, r = sh.execute_command(command)
+            sh.log_command_output(o, r)
+            msg = "modified erlang gc to full_sweep_after %s on %s " % value
+            log.info(msg % (value, server.ip))
+
+    @staticmethod
     def begin_rebalance_in(master, servers, timeout=5):
         RebalanceHelper.begin_rebalance_in(master, servers, timeout)
 
