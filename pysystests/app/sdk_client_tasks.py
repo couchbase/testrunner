@@ -73,10 +73,6 @@ def _send_msg(message):
     message.update({"cb_ip" : cfg.COUCHBASE_IP,
                     "cb_port" : cfg.COUCHBASE_PORT})
 
-    if message["command"] == "mget" or message["command"] == "mdelete":
-        sdk_client = eventlet.connect((SDK_IP, SDK_PORT2))
-        sdk_client.sendall(yajl.dumps(message))
-    else: 
-        sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
-        sdk_client.sendall(yajl.dumps(message))
+    sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
+    sdk_client.sendall(yajl.dumps(message))
 

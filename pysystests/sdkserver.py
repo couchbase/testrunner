@@ -5,11 +5,35 @@ import string
 import yajl
 import sys
 from couchbase.couchbaseclient import CouchbaseClient
-
-#default_client = CouchbaseClient("http://localhost:9000/pools/default","default","")
-client_map = {}
+import testcfg as cfg
 pool = eventlet.GreenPool(1000)
 
+
+class SysCouchClient(CouchbaseClient):
+    def __init__(self, url, bucket, cred):
+        self.pending_get_msgs = 0
+        super(SysCouchClient, self).__init__(url, bucket, cred)
+
+    def incr_pending_get_msgs(self, val):
+        self.pending_get_msgs =  \
+            self.pending_get_msgs + val
+
+class CouchClientManager():
+    def __init__(self):
+        self.client_map = {}
+
+    def add_bucket_client(self, bucket = "default"):
+        ip = cfg.COUCHBASE_IP
+        port = cfg.COUCHBASE_PORT
+        url = "http://%s:%s/pools/default/"  % (ip, port)
+        client = SysCouchClient(url, bucket,"")
+        self.client_map[bucket] = client
+
+    def get_bucket_client(self, bucket):
+        if bucket not in self.client_map:
+            self.add_bucket_client(bucket)
+
+        return self.client_map[bucket]
 
 def requestHandler(client_sock):
     c = '' 
@@ -21,13 +45,6 @@ def requestHandler(client_sock):
             c = c + _recv 
     try:
         data = yajl.loads(c)
-
-        #multi-bucket support
-        bucket = data["bucket"]
-        if bucket not in client_map:
-            url = "http://%s:%s/pools/default/"  % (data["cb_ip"], data["cb_port"])
-            new_client = CouchbaseClient(url, bucket,"")
-            client_map[data["bucket"]] = new_client
 
         res = exec_request(data)
         client_sock.sendall(str(res))
@@ -63,6 +80,8 @@ def exec_request( data):
 
 
 def do_mset(data):
+
+    bucket = data["bucket"]
     keys = data['args']
     template = data['template']
     kv = template['kv']
@@ -80,13 +99,18 @@ def do_mset(data):
             padding = _random_string(size - kv_size)
             kv.update({"padding" : padding})
 
-    client = client_map[data["bucket"]]
+    client = client_mgr.get_bucket_client(bucket)
     for key in keys:
         doc = {"args" : [key, ttl, flags, kv]}
         try:
             do_setq(doc, client)
         except Exception as ex:
             print ex
+
+    rc = client.noop()
+
+    return True
+
 
 def _get_set_args( data):
     key = str(data['args'][0]) 
@@ -103,32 +127,50 @@ def do_setq(args, client):
  
 def do_set(data):
     key, exp, flags, value = _get_set_args(data)
-    client = client_map[data["bucket"]]
+    client = client_mgr.get_bucket_client(data["bucket"])
     return client.set(key,exp, flags, value)
 
 def do_get( data):
     key = str(data['args'][0])
-    client = client_map[data["bucket"]]
+    client = client_mgr.get_bucket_client(data["bucket"])
     client.get(key)
     return key
 
 
 def do_mget( data):
     keys = data['args']
-    results = []
-    client = client_map[data["bucket"]]
+    client = client_mgr.get_bucket_client(data["bucket"])
     for key in keys:
         key = str(key)
         client.getq(key)
-    return results
+
+    # increment getq count
+    client.incr_pending_get_msgs(len(keys))
+
+    if client.pending_get_msgs > 400:
+        rc = client.recv_bulk_responses()
+        client.pending_get_msgs = 0
+    else:
+        client.noop()
+    return True
 
 
 def do_delete( data):
 
     key = str(data['args'][0])
-    client = client_map[data["bucket"]]
+    client = client_mgr.get_bucket_client(data["bucket"])
     res = client.delete(key)
     return res
+
+def do_mdelete( data):
+    keys = data['args']
+    results = []
+    client = client_mgr.get_bucket_client(data["bucket"])
+    for key in keys:
+        key = str(key)
+        client.deleteq(key)
+
+    return True
 
 def do_query( data):
     design_doc_name = data['args'][0]
@@ -144,6 +186,7 @@ def _random_string(length):
 
 print "Python sdk starting on port 50008"
 server = eventlet.listen(('127.0.0.1', 50008))
+client_mgr = CouchClientManager()
 while True:
     new_sock, address = server.accept()
     pool.spawn_n(requestHandler, new_sock)
