@@ -217,7 +217,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
         #increase timeout for big data
-        timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items / 100000)
+        timeout = max(self.wait_timeout * 5, self.wait_timeout * self.num_items / 100000)
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
