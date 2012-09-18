@@ -9,6 +9,9 @@ memcached tasks
 from __future__ import absolute_import
 from app.celery import celery
 
+from celery.utils.log import get_task_logger
+logger = get_task_logger(__name__)
+
 import json
 import eventlet
 
@@ -73,6 +76,9 @@ def _send_msg(message):
     message.update({"cb_ip" : cfg.COUCHBASE_IP,
                     "cb_port" : cfg.COUCHBASE_PORT})
 
-    sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
-    sdk_client.sendall(json.dumps(message))
-
+    try:
+        sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
+        sdk_client.sendall(json.dumps(message))
+    except Exception as ex:
+        logger.error(ex)
+        logger.error("message suppressed: %s" % message)
