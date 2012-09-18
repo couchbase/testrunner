@@ -9,14 +9,13 @@ from membase.api.rest_client import RestConnection, Bucket
 from couchbase.cluster import Cluster
 from couchbase.document import View
 from TestInput import TestInputSingleton
-from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedError
 
-from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase.documentgenerator import BlobGenerator
 from basetestcase import BaseTestCase
 
 #===============================================================================
@@ -381,14 +380,14 @@ class XDCRBaseTest(unittest.TestCase):
             if key in valid_keys_first:
                 partition1 = kv_store_first[kvs_num].acquire_partition(key)
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                partition1.set(key, partition2.get_valid(key))
+                partition1.set(key, partition2.get_key(key))
                 kv_store_first[1].release_partition(key)
                 kv_store_second[1].release_partition(key)
             #add keys/values in first kvs if the keys are presented only in second one
             else:
                 partition1, num_part = kv_store_first[kvs_num].acquire_random_partition()
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                partition1.set(key, partition2.get_valid(key))
+                partition1.set(key, partition2.get_key(key))
                 kv_store_first[kvs_num].release_partition(num_part)
                 kv_store_second[kvs_num].release_partition(key)
             #add condition when key was deleted in first, but added in second
@@ -401,7 +400,7 @@ class XDCRBaseTest(unittest.TestCase):
             else:
                 partition1 = kv_store_first[kvs_num].acquire_partition(key)
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                partition1.deleted[key] = partition2.get_deleted(key)
+                partition1.deleted[key] = partition2.get_key(key)
                 kv_store_first[kvs_num].release_partition(key)
                 kv_store_second[kvs_num].release_partition(key)
             # return merged kvs, that we expect to get on both clusters

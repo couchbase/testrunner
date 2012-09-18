@@ -93,6 +93,11 @@ class Partition(object):
             self.deleted[key] = self.valid[key]["value"]
             del self.valid[key]
 
+    def get_key(self, key):
+        if key in self.valid:
+            return self.valid[key]
+        return None
+
     def get_valid(self, key):
         if key in self.valid:
             if not self._expired(key):
@@ -105,6 +110,7 @@ class Partition(object):
         if self._expired(key):
             return self.deleted[key]
         return None
+
 
     def get_random_valid_key(self):
         try:
