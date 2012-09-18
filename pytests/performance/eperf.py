@@ -1506,55 +1506,55 @@ class ViewGen:
 
     MAP_FUNCTIONS = [
         """
-        function(doc) {
+        function(doc, meta) {
             if (doc.city != null) {
                 emit(doc.city, null);
             }
         }
         """,
         """
-        function(doc) {
+        function(doc, meta) {
             if (doc.city != null) {
                 emit(doc.city, ["Name:" + doc.name, "E-mail:" + doc.email]);
             }
         }
         """,
         """
-        function(doc) {
+        function(doc, meta) {
             if (doc.realm != null) {
                 emit(doc.realm, null);
             }
         }
         """,
         """
-        function(doc) {
+        function(doc, meta) {
             if (doc.category == 2) {
                 emit([doc.name, doc.coins], null);
             }
         }
         """,
         """
-        function(doc) {
+        function(doc, meta) {
             emit([doc.category, doc.coins], null);
         }
         """,
         """
-        function(doc) {
+        function(doc, meta) {
             emit([doc.realm, doc.coins], null)
         }
         """,
         """
-        function(doc) {
-            emit([doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+        function(doc, meta) {
+            emit([doc.realm, doc.coins], [meta.id, doc.name, doc.email]);
         }
         """,
         """
-        function(doc) {
-            emit([doc.category, doc.realm, doc.coins], [doc._id,doc.name,doc.email]);
+        function(doc, meta) {
+            emit([doc.category, doc.realm, doc.coins], [meta.id, doc.name, doc.email]);
         }
         """,
         """
-        function (doc) {
+        function (doc, meta) {
             if (doc.achievements.length > 0) {
                 emit(doc.category, doc.coins);
             }
