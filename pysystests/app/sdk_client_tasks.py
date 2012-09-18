@@ -9,7 +9,7 @@ memcached tasks
 from __future__ import absolute_import
 from app.celery import celery
 
-import yajl
+import json
 import eventlet
 
 import testcfg as cfg
@@ -74,5 +74,5 @@ def _send_msg(message):
                     "cb_port" : cfg.COUCHBASE_PORT})
 
     sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
-    sdk_client.sendall(yajl.dumps(message))
+    sdk_client.sendall(json.dumps(message))
 

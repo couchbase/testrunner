@@ -5,7 +5,7 @@ from celery.task.control import revoke
 from datetime import timedelta
 from app.stats import StatChecker
 import app.sdk_client_tasks as client
-import yajl
+import json
 import uuid
 import time
 import Queue
@@ -23,13 +23,18 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
+
+@celery.task(base = PersistedMQ)
+def conn():
+    pass
+
 """Monitors the workload queue for new messages sent from clients.
 When a message is received it is caached and sent to sysTestRunner for processing 
 """
-@celery.task(base = PersistedMQ)
+@celery.task(base = PersistedMQ, ignore_result = True)
 def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_template"):
 
-    rabbitHelper = workloadConsumer.rabbitHelper 
+    rabbitHelper = workloadConsumer.rabbitHelper
     templateMsg = None
     workloadMsg = None
 
@@ -69,7 +74,7 @@ postcondition dependencies then bucket will be set to blocking mode, meaning wor
 cannot overwrite each other.  Note, if postcondition of previous workload never 
 finishes you will have to manually kill task via cbsystest script.
 """
-@celery.task(base = PersistedMQ)
+@celery.task(ignore_result = True)
 def sysTestRunner(workload):
    
 
@@ -116,7 +121,7 @@ def sysTestRunner(workload):
 def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None,
                          state = None, signal = None, retval = None):
 
-    rabbitHelper = sysTestRunner.rabbitHelper
+    rabbitHelper = conn.rabbitHelper
     if sender == sysTestRunner:
         # cleanup workload after handled by test runner
         workload = retval
@@ -138,7 +143,7 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
                         queue = str(queue)
                         rabbitHelper.declare(queue)
                         if keys is not None and len(keys) > 0:
-                            rabbitHelper.putMsg(queue, yajl.dumps(keys))
+                            rabbitHelper.putMsg(queue, json.dumps(keys))
         else:
             logger.error("Error during multi set")
             logger.error(retval)
@@ -148,7 +153,7 @@ task_postrun.connect(task_postrun_handler)
 """Generates list of tasks to run based on params passed in to workload
 until post conditions(if any) are hit
 """
-@celery.task(base = PersistedMQ, name = "run")
+@celery.task(base = PersistedMQ)
 def run(workload, prevWorkload = None):
     rabbitHelper = run.rabbitHelper
 
@@ -185,7 +190,6 @@ def run(workload, prevWorkload = None):
                 del_count = int(ops_sec *  workload.del_perc/100)
 
                 consume_queue =  workload.consume_queue
-
 
                 generate_pending_tasks.delay(task_queue, template, bucket, create_count,
                                               update_count, get_count, del_count, consume_queue)
@@ -229,13 +233,14 @@ task_prerun.connect(task_prerun_handler)
 
 """Retrieve all pending tasks from running workloads and distributes to workers
 """
-@celery.task(base = PersistedMQ)
+@celery.task(base = PersistedMQ, ignore_result = True)
 def taskScheduler():
 
     cache = WorkloadCacher()
     workloads = cache.workloads
 
-    rabbitHelper = taskScheduler.rabbitHelper 
+    rabbitHelper = taskScheduler.rabbitHelper
+    tasks = []
 
     for workload in workloads:
         if workload.active:    
@@ -243,7 +248,6 @@ def taskScheduler():
             # dequeue subtasks
             if rabbitHelper.qsize(task_queue) > 0:
                 tasks = rabbitHelper.getJsonMsg(task_queue)
-
                 if tasks is not None and len(tasks) > 0:
 
                     # apply async
@@ -253,13 +257,12 @@ def taskScheduler():
                     except TimeoutError:
                         pass
 
-
 """ scans active workloads for postcondition flags and 
 runs checks against bucket stats.  If postcondition
 is met, the workload is deactivated and bucket put
 back into nonblocking mode
 """
-@celery.task(base = PersistedMQ)
+@celery.task
 def postcondition_handler():
 
     cache = WorkloadCacher()
@@ -285,12 +288,12 @@ def postcondition_handler():
                 cache.store(workload)
 
 
-@celery.task(base = PersistedMQ)
+@celery.task(base = PersistedMQ, ignore_result = True)
 def generate_pending_tasks(task_queue, template, bucket, create_count,
                            update_count, get_count, del_count,
                            consume_queue):
 
-    rabbitHelper = generate_pending_tasks.rabbitHelper
+    rabbitHelper = generate_delete_tasks.rabbitHelper
     create_tasks , update_tasks , get_tasks , del_tasks = ([],[],[],[])
     if create_count > 0:
         create_tasks = generate_set_tasks(template, create_count, bucket)
@@ -302,7 +305,7 @@ def generate_pending_tasks(task_queue, template, bucket, create_count,
         del_tasks = generate_delete_tasks(del_count, consume_queue, bucket)
 
     pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks 
-    pending_tasks = yajl.dumps(pending_tasks)
+    pending_tasks = json.dumps(pending_tasks)
 
     rabbitHelper.putMsg(task_queue, pending_tasks)
 
@@ -310,10 +313,8 @@ def generate_pending_tasks(task_queue, template, bucket, create_count,
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
 
-@celery.task(base = PersistedMQ)
 def generate_set_tasks(template, count, bucket = "default", batch_size = 100):
 
-    rabbitHelper = generate_set_tasks.rabbitHelper 
 
     if batch_size > count:
         batch_size = count
@@ -343,7 +344,7 @@ def generate_set_tasks(template, count, bucket = "default", batch_size = 100):
 @celery.task(base = PersistedMQ)
 def generate_get_tasks(count, docs_queue, bucket="default"):
 
-    rabbitHelper = generate_get_tasks.rabbitHelper 
+    rabbitHelper = generate_get_tasks.rabbitHelper
 
     tasks = []
     keys_retrieved = 0
@@ -368,8 +369,8 @@ def generate_get_tasks(count, docs_queue, bucket="default"):
 @celery.task(base = PersistedMQ)
 def generate_update_tasks(template, count, docs_queue, bucket = "default"):
 
-    rabbitHelper = generate_update_tasks.rabbitHelper 
-    val = yajl.dumps(template.kv)
+    rabbitHelper = generate_update_tasks.rabbitHelper
+    val = json.dumps(template.kv)
 
     tasks = []
     keys_updated = 0
@@ -389,12 +390,11 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default"):
     return tasks 
 
 
-
 @celery.task(base = PersistedMQ)
 def generate_delete_tasks(count, docs_queue, bucket = "default"):
 
 
-    rabbitHelper = generate_delete_tasks.rabbitHelper 
+    rabbitHelper = generate_delete_tasks.rabbitHelper
 
     tasks = []
     keys_deleted = 0

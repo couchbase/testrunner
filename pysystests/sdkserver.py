@@ -2,7 +2,7 @@ import eventlet
 import json
 import random
 import string
-import yajl
+import json
 import sys
 from couchbase.couchbaseclient import CouchbaseClient
 import testcfg as cfg
@@ -44,7 +44,7 @@ def requestHandler(client_sock):
         else:
             c = c + _recv 
     try:
-        data = yajl.loads(c)
+        data = json.loads(c)
 
         res = exec_request(data)
         client_sock.sendall(str(res))
@@ -116,7 +116,7 @@ def _get_set_args( data):
     key = str(data['args'][0]) 
     exp = int(data['args'][1])
     flags = int(data['args'][2]) 
-    value = yajl.dumps(data['args'][3])
+    value = json.dumps(data['args'][3])
 
     return key, exp, flags, value
 

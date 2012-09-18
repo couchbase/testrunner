@@ -1,5 +1,5 @@
 from librabbitmq import Connection, Message
-import yajl
+import json
 import re
 from celery import Task
 import testcfg as cfg
@@ -15,26 +15,37 @@ class PersistedMQ(Task):
             self._conn = RabbitHelper()
         return self._conn
 
+    def close(self):
+        del self._conn
+        self._conn = None
 
 class RabbitHelper(object):
     def __init__(self, mq_server = cfg.RABBITMQ_IP):
-	self.connection = Connection(host= mq_server, userid="guest", password="guest", virtual_host="/")
-        self.channel = self.connection.channel()
-        self.channel_writer = self.connection.channel()
+        self.connection = Connection(host= mq_server, userid="guest", password="guest", virtual_host="/")
         self.declare("workload")
         self.declare("workload_template")
 
     def declare(self, queue, durable = False):
+        channel = self.connection.channel()
         if not isinstance(queue,str): queue = str(queue)
-        return self.channel.queue_declare(queue = queue, durable = durable)
-       
+        res = channel.queue_declare(queue = queue, durable = durable)
+        channel.close()
+        return res
+
+
     def purge(self, queue):
+        channel = self.connection.channel()
         if not isinstance(queue,str): queue = str(queue)
-        self.channel.queue_delete(queue=queue)
+        channel.queue_delete(queue=queue)
+        channel.close()
+
 
     def consume(self, callback, queue, no_ack = True):
-        self.channel.basic_consume(callback, queue = queue, no_ack = no_ack)
-        self.channel.start_consuming()
+        channel = self.connection.channel()
+        channel.basic_consume(callback, queue = queue, no_ack = no_ack)
+        channel.start_consuming()
+        channel.close()
+
 
     def qsize(self, queue):
         size = 0
@@ -48,13 +59,16 @@ class RabbitHelper(object):
         return size
 
     def putMsg(self, queue, body):
+        channel = self.connection.channel()
         if not isinstance(queue,str): queue = str(queue)
+        rc = channel.basic_publish(exchange = '', routing_key=queue,  body = body)
+        channel.close()
 
-        rc = self.channel_writer.basic_publish(exchange = '', routing_key=queue,  body = body)
 
     def getMsg(self, queue, no_ack = False, requeue = False):
 
-        message = self.channel.basic_get(queue = queue)
+        channel = self.connection.channel()
+        message = channel.basic_get(queue = queue)
         body = None
 
         if message is not None:
@@ -66,7 +80,7 @@ class RabbitHelper(object):
             if requeue:
                 self.putMsg(queue, body)
 
-
+        channel.close()
         return body
 
     def getJsonMsg(self, queue, no_ack = False, requeue = False):
@@ -75,7 +89,7 @@ class RabbitHelper(object):
         body = {}
         if msg is not None:
             try:
-                body = yajl.loads(msg)
+                body = json.loads(msg)
             except ValueError:
                 pass
 
@@ -84,4 +98,6 @@ class RabbitHelper(object):
     def close(self):
         self.connection.close()
 
+    def __del__(self):
+        self.close()
 
