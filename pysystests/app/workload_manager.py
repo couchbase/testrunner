@@ -33,7 +33,6 @@ When a message is received it is caached and sent to sysTestRunner for processin
 """
 @celery.task(base = PersistedMQ, ignore_result = True)
 def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_template"):
-
     rabbitHelper = workloadConsumer.rabbitHelper
     templateMsg = None
     workloadMsg = None
@@ -118,10 +117,11 @@ def sysTestRunner(workload):
     return runTask.get()
 
 
+@celery.task(base = PersistedMQ)
 def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None,
                          state = None, signal = None, retval = None):
 
-    rabbitHelper = conn.rabbitHelper
+    rabbitHelper = task_postrun_handler.rabbitHelper
     if sender == sysTestRunner:
         # cleanup workload after handled by test runner
         workload = retval
