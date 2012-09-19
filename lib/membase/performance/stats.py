@@ -548,7 +548,8 @@ class StatsCollector(object):
                 rest = RestConnection(node)
                 data_json = rest.fetch_bucket_stats(bucket=bucket, zoom='minute')
                 fixed_data = dict(
-                    (k, not_null(v)) for k, v in data_json["op"]["samples"].iteritems()
+                    (k, map(not_null, v))
+                    for k, v in data_json["op"]["samples"].iteritems()
                 )
                 data_json["op"]["samples"] = fixed_data
                 d[node]["snapshots"].append(data_json)
