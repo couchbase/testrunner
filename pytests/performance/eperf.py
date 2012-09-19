@@ -10,6 +10,8 @@ import gzip
 import copy
 import threading
 import socket
+from multiprocessing import Process
+from functools import wraps
 
 # membase imports
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -26,6 +28,49 @@ from perf_engines import mcsoda
 from scripts.perf.rel_cri_stats import CBStatsCollector
 from cbkarma.rest_client import CbKarmaClient
 
+def multi_buckets(test):
+    @wraps(test)
+    def wrapper(self, *args, **kwargs):
+
+        num_buckets = self.parami('num_buckets', 1)
+        if num_buckets <= 1:
+            return test(self, *args, **kwargs)
+
+        print "\n[multi_buckets] started"
+        buckets = self._get_bucket_names(num_buckets)
+
+        num_clients = self.parami("num_clients", 1)
+        self.set_param("num_clients", num_clients * num_buckets)
+
+        prefix = self.parami("prefix", 0)
+
+        procs = []
+        for bucket_id in reversed(range(num_buckets)):
+            self.set_param("bucket", buckets[bucket_id])
+            new_prefix = prefix + bucket_id * num_clients
+            self.set_param("prefix", str(new_prefix))
+            self.is_leader = new_prefix == 0
+
+            if bucket_id == 0:
+                print "[multi_buckets] start test for %s" % buckets[bucket_id]
+                test(self, *args, **kwargs)
+            else:
+                print "[multi_buckets] start test in a new process for %s"\
+                      % buckets[bucket_id]
+                proc = Process(target=test, args=(self, ))
+                proc.daemon = True
+                proc.start()
+                procs.append(proc)
+
+        print "[multi_buckets] %s finished, waiting for others"\
+              % buckets[bucket_id]
+
+        for proc in procs:
+            proc.join()
+
+        print "[multi_buckets] stopped"
+
+    return wrapper
 
 class EPerfMaster(perf.PerfBase):
 
@@ -598,6 +643,7 @@ class EPerfMaster(perf.PerfBase):
 
     # ---------------------------------------------
 
+    @multi_buckets
     def test_eperf_read(self):
         """
         Eperf read test, using parameters from conf/*.conf file.
@@ -627,6 +673,7 @@ class EPerfMaster(perf.PerfBase):
                               max_creates=self.parami("max_creates",
                                                       PerfDefaults.max_creates))
 
+    @multi_buckets
     def test_eperf_write(self):
         """
         Eperf write test, using parameters from conf/*.conf file.
@@ -656,6 +703,7 @@ class EPerfMaster(perf.PerfBase):
                               max_creates=self.parami("max_creates",
                                                       PerfDefaults.max_creates))
 
+    @multi_buckets
     def test_eperf_mixed(self, save_snapshot=False):
         """
         Eperf mixed test, using parameters from conf/*.conf file.
@@ -732,6 +780,7 @@ class EPerfMaster(perf.PerfBase):
         print "[test_eperf_warmup] unable to find snapshot file, rerun the test"
         self.test_eperf_mixed(save_snapshot=True)
 
+    @multi_buckets
     def test_eperf_rebalance(self):
         """
         Eperf rebalance test, using parameters from conf/*.conf file.
