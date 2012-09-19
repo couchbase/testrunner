@@ -63,10 +63,10 @@ if "setUp" in sys.argv:
     obj.setUp()
 else:
     obj.setUpBase0() # This will call tearDown on our behalf.
-    num_clients = obj.param("num_clients", 10)
+    num_clients = obj.parami("num_clients", 10)
     print num_clients
-    obj.aggregate_all_stats(int(num_clients), "load")
-    obj.aggregate_all_stats(int(num_clients), "reload")
-    obj.aggregate_all_stats(int(num_clients), "loop")
-    obj.aggregate_all_stats(int(num_clients), "warmup")
-    obj.aggregate_all_stats(int(num_clients), "index")
+    obj.aggregate_all_stats(num_clients, "load")
+    obj.aggregate_all_stats(num_clients, "reload")
+    obj.aggregate_all_stats(num_clients, "loop")
+    obj.aggregate_all_stats(num_clients, "warmup")
+    obj.aggregate_all_stats(num_clients, "index")
