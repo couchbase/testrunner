@@ -1,19 +1,14 @@
 from __future__ import absolute_import
 from app.celery import celery
 from celery.task.sets import TaskSet
-from celery.task.control import revoke
-from datetime import timedelta
 from app.stats import StatChecker
 import app.sdk_client_tasks as client
 import json
 import uuid
 import time
-import Queue
 from rabbit_helper import PersistedMQ
 from celery import current_task
 from celery import Task
-from celery.task.control import inspect
-from threading import Event
 from cache import Cache, WorkloadCacher, BucketStatusCacher, TemplateCacher
 import random
 import testcfg as cfg
@@ -435,6 +430,7 @@ class Workload(object):
         self.cc_queues = params["cc_queues"]
         self.wait = params["wait"]
         self.expires = params["expires"]
+        self.stats = {}
 
         # consume from cc_queue by default if not specified
         if self.cc_queues != None:

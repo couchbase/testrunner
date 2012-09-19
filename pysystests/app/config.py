@@ -33,10 +33,10 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'schedule': timedelta(seconds=2),
     },
 
-#   'cluster_health_checker': {
-#   'task': 'app.stats.health_checker',
-#   'schedule': timedelta(seconds=10),
-#   },
+    'cluster_resource_monitor': {
+    'task': 'app.stats.resource_monitor',
+    'schedule': timedelta(seconds=10),
+    },
   
 }
 

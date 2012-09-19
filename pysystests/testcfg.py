@@ -7,3 +7,7 @@ COUCHBASE_IP = '127.0.0.1'
 COUCHBASE_PORT = '9000'
 COUCHBASE_USER = "Administrator"
 COUCHBASE_PWD = "asdasd"
+SSH_USER = "root"
+SSH_PASSWORD = "password"
+WORKERS = ['127.0.0.1']
+ATOP_LOG_FILE = "/tmp/atop-node.log"

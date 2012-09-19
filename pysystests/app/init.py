@@ -2,6 +2,8 @@ import os
 import time
 from rabbit_helper import RabbitHelper
 from cache import WorkloadCacher, TemplateCacher, BucketStatusCacher, cacheClean
+import testcfg as cfg
+import paramiko
 
 # cleanup queues
 rabbitHelper = RabbitHelper()
@@ -20,7 +22,11 @@ for queue in test_queues:
 
 cacheClean()
 
-# kill+start sdk's
-os.system("ps aux | grep sdkserver | awk '{print $2'} | xargs kill")
+# kill old background processes
+kill_procs=["sdkserver"]
+for proc in kill_procs:
+    os.system("ps aux | grep %s | awk '{print $2}' | xargs kill" % proc)
+
+# start sdk servers
 os.system("ruby sdkserver.rb &")
 os.system("python sdkserver.py  &")
