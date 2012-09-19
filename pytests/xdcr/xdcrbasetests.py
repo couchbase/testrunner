@@ -380,14 +380,20 @@ class XDCRBaseTest(unittest.TestCase):
             if key in valid_keys_first:
                 partition1 = kv_store_first[kvs_num].acquire_partition(key)
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                partition1.set(key, partition2.get_key(key))
+                key_mod = partition2.get_key(key)
+                partition1.valid[key] = {"value"   : key_add["value"],
+                           "expires" : key_add["expires"],
+                           "flag"    : key_add["flag"]}
                 kv_store_first[1].release_partition(key)
                 kv_store_second[1].release_partition(key)
             #add keys/values in first kvs if the keys are presented only in second one
             else:
                 partition1, num_part = kv_store_first[kvs_num].acquire_random_partition()
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                partition1.set(key, partition2.get_key(key))
+                key_add = partition2.get_key(key)
+                partition1.valid[key] = {"value"   : key_add["value"],
+                           "expires" : key_add["expires"],
+                           "flag"    : key_add["flag"]}
                 kv_store_first[kvs_num].release_partition(num_part)
                 kv_store_second[kvs_num].release_partition(key)
             #add condition when key was deleted in first, but added in second
