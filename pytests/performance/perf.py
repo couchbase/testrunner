@@ -1080,6 +1080,12 @@ class PerfBase(unittest.TestCase):
             RebalanceHelper.wait_for_stats_on_all(master, bucket,
                                                   'ep_warmup_thread',
                                                   'complete', fn=fn)
+    def set_param(self, name, val):
+
+        input = getattr(self, "input", TestInputSingleton.input)
+        input.test_params[name] = str(val)
+
+        return True
 
     def param(self, name, default_value):
         input = getattr(self, "input", TestInputSingleton.input)
