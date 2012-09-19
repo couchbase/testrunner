@@ -107,7 +107,7 @@ def get_aware(awareness, rest, key):
             passed = True
         except mc_bin_client.MemcachedError as e:
             if e.status == 7:
-                awareness.reset_vbucket(rest, key)
+                awareness.reset_vbuckets(rest, key)
             else:
                 raise e
         except exceptions.EOFError:

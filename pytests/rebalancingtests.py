@@ -128,10 +128,10 @@ class RebalanceTestsUnderLoad(unittest.TestCase):
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
         log = logger.Logger().get_logger()
         master = self._servers[0]
-        num_of_docs = TestInputSingleton.input.param("num_of_docs",100000)
-        replica = TestInputSingleton.input.param("replica",100000)
-        add_items_count = TestInputSingleton.input.param("num_of_creates",30000)
-        size = TestInputSingleton.input.param("item_size",256)
+        num_of_docs = TestInputSingleton.input.param("num_of_docs", 100000)
+        replica = TestInputSingleton.input.param("replica", 100000)
+        add_items_count = TestInputSingleton.input.param("num_of_creates", 30000)
+        size = TestInputSingleton.input.param("item_size", 256)
         params = {"sizes": [size], "count": num_of_docs, "seed": str(uuid.uuid4())[:7]}
         rest = RestConnection(master)
         buckets = rest.get_buckets()
@@ -163,13 +163,13 @@ class RebalanceTestsUnderLoad(unittest.TestCase):
                 load_set_ops.update(params)
                 load_delete_ops = {"ops": "delete", "bucket": bucket.name,
                                    "sizes": [size], "count": add_items_count / 5, "seed": add_items_seed}
-                thread= RebalanceDataGenerator.start_load(rest, bucket.name,
+                thread = RebalanceDataGenerator.start_load(rest, bucket.name,
                     RebalanceDataGenerator.create_loading_tasks(load_set_ops), kv_store)
                 generators["set"] = {"thread": thread}
                 #restart three times
                 generators["set"]["thread"].start()
                 thread = RebalanceDataGenerator.start_load(rest, bucket.name,
-                    RebalanceDataGenerator.create_loading_tasks(load_delete_ops),kv_store)
+                    RebalanceDataGenerator.create_loading_tasks(load_delete_ops), kv_store)
                 generators["delete"] = {"thread": thread}
                 generators["delete"]["thread"].start()
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
@@ -189,11 +189,11 @@ class RebalanceTestsUnderLoad(unittest.TestCase):
     def test_rebalance_in(self):
         log = logger.Logger().get_logger()
         master = self._servers[0]
-        num_of_docs = TestInputSingleton.input.param("num_of_docs",100000)
-        replica = TestInputSingleton.input.param("replica",100000)
-        add_items_count = TestInputSingleton.input.param("num_of_creates",30000)
-        rebalance_in = TestInputSingleton.input.param("rebalance_in",1)
-        size = TestInputSingleton.input.param("item_size",256)
+        num_of_docs = TestInputSingleton.input.param("num_of_docs", 100000)
+        replica = TestInputSingleton.input.param("replica", 100000)
+        add_items_count = TestInputSingleton.input.param("num_of_creates", 30000)
+        rebalance_in = TestInputSingleton.input.param("rebalance_in", 1)
+        size = TestInputSingleton.input.param("item_size", 256)
         params = {"sizes": [size], "count": num_of_docs, "seed": str(uuid.uuid4())[:7]}
         RebalanceBaseTest.common_setup(self._input, self, replica=1)
         rest = RestConnection(master)
@@ -214,13 +214,13 @@ class RebalanceTestsUnderLoad(unittest.TestCase):
                 load_set_ops.update(params)
                 load_delete_ops = {"ops": "delete", "bucket": bucket.name,
                                    "sizes": [size], "count": add_items_count / 5, "seed": add_items_seed}
-                thread= RebalanceDataGenerator.start_load(rest, bucket.name,
+                thread = RebalanceDataGenerator.start_load(rest, bucket.name,
                     RebalanceDataGenerator.create_loading_tasks(load_set_ops), kv_store)
                 generators["set"] = {"thread": thread}
                 #restart three times
                 generators["set"]["thread"].start()
                 thread = RebalanceDataGenerator.start_load(rest, bucket.name,
-                    RebalanceDataGenerator.create_loading_tasks(load_delete_ops),kv_store)
+                    RebalanceDataGenerator.create_loading_tasks(load_delete_ops), kv_store)
                 generators["delete"] = {"thread": thread}
                 generators["delete"]["thread"].start()
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
@@ -374,6 +374,6 @@ class RebalanceDataGenerator(object):
                 ok = True
             except MemcachedError as error:
                 if error.status == 7:
-                    smart.reset_vbucket(rest, key)
+                    smart.reset_vbuckets(rest, key)
                 #                    traceback.print_exc(file=sys.stdout)
                 retry_count += 1
