@@ -53,6 +53,11 @@ class PerfBase(unittest.TestCase):
     def setUp(self):
         self.setUpBase0()
 
+        mc_threads = self.parami("mc_threads", PerfDefaults.mc_threads)
+        if mc_threads != PerfDefaults.mc_threads:
+            for node in self.input.servers:
+                self.set_mc_threads(node, mc_threads)
+
         master = self.input.servers[0]
 
         self.is_multi_node = False
@@ -163,6 +168,12 @@ class PerfBase(unittest.TestCase):
         loglevel = self.param('loglevel', None)
         if loglevel:
             self.rest.set_global_loglevel(loglevel)
+
+    def set_mc_threads(self, node, mc_threads):
+        """Change number of memcached threads"""
+        rest = RestConnection(node)
+        rest.set_mc_threads(mc_threads)
+        print "[perf.setUp] num of memcached threads = %s" % mc_threads
 
     def set_max_concurrent_reps_per_doc(self):
         """Set custom MAX_CONCURRENT_REPS_PER_DOC"""
