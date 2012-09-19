@@ -128,16 +128,24 @@ class PerfBase(unittest.TestCase):
                                            master.rest_password,
                                            memoryQuota=memory_quota)
 
+    def _get_bucket_names(self, num_buckets):
+        """
+        Get a list of bucket names
+        """
+        if num_buckets > 1:
+            buckets = ['bucket-{0}'.format(i) for i in range(num_buckets)]
+        else:
+            buckets = [self.param('bucket', 'default')]
+
+        return buckets
+
     def set_up_buckets(self):
         """Set up data bucket(s)"""
 
         print "[perf.setUp] Setting up buckets"
 
         num_buckets = self.parami('num_buckets', 1)
-        if num_buckets > 1:
-            self.buckets = ['bucket-{0}'.format(i) for i in range(num_buckets)]
-        else:
-            self.buckets = [self.param('bucket', 'default')]
+        self.buckets = self._get_bucket_names(num_buckets)
 
         for bucket in self.buckets:
             bucket_ram_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
