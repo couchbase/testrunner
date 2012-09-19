@@ -1388,6 +1388,17 @@ class RestConnection(object):
         log.info('Enabling/disabling consistent-views during rebalance: {0}'.format(cmd))
         return self.diag_eval(cmd)
 
+    def set_mc_threads(self, mc_threads=4):
+        """
+        Change number of memcached threads and restart the cluster
+        """
+        cmd = "[ns_config:update_key({node, N, memcached}, " \
+              "fun (PList) -> lists:keystore(verbosity, 1, PList," \
+              " {verbosity, \"-t %s\"}) end) " \
+              "|| N <- ns_node_disco:nodes_wanted()]." % mc_threads
+
+        return self.diag_eval(cmd)
+
     def set_auto_compaction(self, parallelDBAndVC="false",
                             dbFragmentThreshold=None,
                             viewFragmntThreshold=None,
