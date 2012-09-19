@@ -539,6 +539,7 @@ class StatsCollector(object):
         d = {}
         for node in nodes:
             d[node] = {"snapshots": [], "system_snapshots": [] }
+        not_null = lambda v: v if v is not None else 0
 
         while not self._aborted():
             time.sleep(frequency)
@@ -546,6 +547,10 @@ class StatsCollector(object):
             for node in nodes:
                 rest = RestConnection(node)
                 data_json = rest.fetch_bucket_stats(bucket=bucket, zoom='minute')
+                fixed_data = dict(
+                    (k, not_null(v)) for k, v in data_json["op"]["samples"].iteritems()
+                )
+                data_json["op"]["samples"] = fixed_data
                 d[node]["snapshots"].append(data_json)
 
                 data_json = rest.fetch_system_stats()
