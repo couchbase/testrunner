@@ -8,7 +8,9 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import LoadWithMcsoda
+from couchbase.stats_tools import StatsCommon
 from threading import Thread
+from basetestcase import BaseTestCase
 
 class SwapRebalanceBase(unittest.TestCase):
 
@@ -363,9 +365,13 @@ class SwapRebalanceBase(unittest.TestCase):
             expected_progress = 20 * i
             self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(expected_progress))
             RestHelper(rest).rebalance_reached(expected_progress)
-            command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
-            memcached_restarted = rest.diag_eval(command)
-            self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
+            bucket = rest.get_buckets()[0].name
+            pid = StatsCommon.get_stats([master], bucket, "", "pid")[master]
+            command = "os:cmd(\"kill -9 {0} \")".format(pid)
+            self.log.info(command)
+            killed = rest.diag_eval(command)
+            self.log.info("killed {0}:{1}??  {2} ".format(master.ip, master.port, killed))
+            BaseTestCase._wait_warmup_completed(self, [master], bucket, wait_time=600)
             time.sleep(5)
 
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],

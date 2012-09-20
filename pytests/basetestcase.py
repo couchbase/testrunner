@@ -292,15 +292,16 @@ class BaseTestCase(unittest.TestCase):
         self.log.info("%s %s documents..." % (data_op, self.num_items))
         self._load_all_buckets(self.master, gen_load, data_op, 0)
 
-    #returns true if warmup is completed in self.wait_timeout * 10 sec,
+    #returns true if warmup is completed in wait_time sec,
     #otherwise return false
-    def _wait_warmup_completed(self, servers, bucket_name):
+    @staticmethod
+    def _wait_warmup_completed(self, servers, bucket_name, wait_time=300):
         warmed_up = False
+        log = logger.Logger.get_logger()
         for server in servers:
             mc = None
             start = time.time()
-            wait_time = self.wait_timeout * 10
-                # Try to get the stats for 5 minutes, else hit out.
+            # Try to get the stats for 5 minutes, else hit out.
             while time.time() - start < wait_time:
                 # Get the wamrup time for each server
                 try:
@@ -308,16 +309,16 @@ class BaseTestCase(unittest.TestCase):
                     stats = mc.stats()
                     if stats is not None:
                         warmup_time = int(stats["ep_warmup_time"])
-                        self.log.info("ep_warmup_time is %s " % warmup_time)
-                        self.log.info(
+                        log.info("ep_warmup_time is %s " % warmup_time)
+                        log.info(
                             "Collected the stats %s for server %s:%s" % (stats["ep_warmup_time"], server.ip,
                                 server.port))
                         break
                     else:
-                        self.log.info(" Did not get the stats from the server yet, trying again.....")
+                        log.info(" Did not get the stats from the server yet, trying again.....")
                         time.sleep(2)
                 except Exception as e:
-                    self.log.error(
+                    log.error(
                         "Could not get warmup_time stats from server %s:%s, exception %s" % (server.ip,
                             server.port, e))
             else:
@@ -330,14 +331,14 @@ class BaseTestCase(unittest.TestCase):
             warmed_up = False
             while time.time() - start < wait_time and not warmed_up:
                 if mc.stats()["ep_warmup_thread"] == "complete":
-                    self.log.info("warmup completed, awesome!!! Warmed up. %s items " % (mc.stats()["curr_items_tot"]))
+                    log.info("warmup completed, awesome!!! Warmed up. %s items " % (mc.stats()["curr_items_tot"]))
                     warmed_up = True
                     continue
                 elif mc.stats()["ep_warmup_thread"] == "running":
-                    self.log.info(
+                    log.info(
                                 "still warming up .... curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
                 else:
-                    self.fail("Value of ep warmup thread does not exist, exiting from this server")
+                    fail("Value of ep warmup thread does not exist, exiting from this server")
                 time.sleep(5)
             mc.close()
         return warmed_up
