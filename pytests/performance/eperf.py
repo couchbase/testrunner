@@ -394,8 +394,7 @@ class EPerfMaster(perf.PerfBase):
 
             num_clients = self.parami("num_clients",
                                       len(self.input.clients) or 1)
-            start_at = int(self.paramf("start_at", 1.0) *
-                           self.parami("prefix", 0) * num_items / num_clients)
+            start_at = self.load_phase_clients_start_at(num_items, num_clients)
             items = self.parami("num_items", num_items) / num_clients
             self.is_multi_node = False
             mvs = self.min_value_size(self.parami("avg_value_size",
@@ -419,6 +418,28 @@ class EPerfMaster(perf.PerfBase):
 
             if self.parami('wait_for_xdc_replication', 0):
                 self.wait_for_xdc_replication()
+
+    def load_phase_clients_start_at(self, num_items, num_clients):
+        """
+        - normal load-phase or hot-load-phase with only one bucket:
+            keep the normal multi-client start_at calculation
+
+        - hot-load-phase with multiple buckets:
+            - shift an 'offset' distance to match the key space in the load phase
+            - apply the normal multi-client calculation
+        """
+        num_buckets = self.parami('num_buckets', 1)
+        if self.parami("hot_load_phase", 0) == 0 or num_buckets <= 1:
+            return int(self.paramf("start_at", 1.0) *
+                       self.parami("prefix", 0) * num_items / num_clients)
+
+        # multi-bucket, hot-load-phase
+        num_loaded_items = self.parami("items", PerfDefaults.items)
+        cpb = num_clients / num_buckets
+        offset = num_loaded_items / num_buckets * \
+                 (self.parami("prefix", 0) / cpb)
+        return int(offset + self.paramf("start_at", 1.0) *
+                   self.parami("prefix", 0) % cpb * num_items / num_clients)
 
     def access_phase_clients_start_at(self):
         self.access_phase_items = self.parami("items", PerfDefaults.items)
