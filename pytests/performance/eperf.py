@@ -649,7 +649,12 @@ class EPerfMaster(perf.PerfBase):
         Eperf read test, using parameters from conf/*.conf file.
         """
         self.spec("test_eperf_read")
-        items = self.parami("items", PerfDefaults.items)
+
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         if self.parami("access_phase", 1) == 1:
@@ -679,7 +684,12 @@ class EPerfMaster(perf.PerfBase):
         Eperf write test, using parameters from conf/*.conf file.
         """
         self.spec("test_eperf_write")
-        items = self.parami("items", PerfDefaults.items)
+
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
         if self.parami("access_phase", 1) == 1:
@@ -709,7 +719,11 @@ class EPerfMaster(perf.PerfBase):
         Eperf mixed test, using parameters from conf/*.conf file.
         """
         self.spec("test_eperf_mixed")
-        items = self.parami("items", PerfDefaults.items)
+
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
 
         self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes),
@@ -786,7 +800,12 @@ class EPerfMaster(perf.PerfBase):
         Eperf rebalance test, using parameters from conf/*.conf file.
         """
         self.spec("test_eperf_rebalance")
-        items = self.parami("items", PerfDefaults.items)
+
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes),
                         items)
@@ -872,7 +891,11 @@ class EPerfMaster(perf.PerfBase):
     def test_eperf_thruput(self):
         """test front-end throughput"""
         self.spec("test_eperf_thruput")
-        items = self.parami("items", PerfDefaults.items)
+
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
 
         self.gated_start(self.input.clients)
         self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
@@ -902,7 +925,11 @@ class EPerfMaster(perf.PerfBase):
         self.spec("evperf_workload2")
 
         # Load phase
-        items = self.parami('items', PerfDefaults.items)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
         self.load_phase(num_nodes, items)
 
@@ -948,7 +975,11 @@ class EPerfMaster(perf.PerfBase):
         self.spec('evperf_workload3')
 
         # Load phase
-        items = self.parami('items', PerfDefaults.items)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
         self.load_phase(num_nodes, items)
 
@@ -997,7 +1028,11 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        items = self.parami('items', PerfDefaults.items)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
         self.load_phase(num_nodes, items)
 
@@ -1055,7 +1090,11 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        items = self.parami('items', 45000000)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1109,7 +1148,11 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        items = self.parami('items', 45000000)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1159,7 +1202,11 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        items = self.parami('items', 45000000)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1210,7 +1257,11 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        items = self.parami('items', 45000000)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1259,7 +1310,11 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        items = self.parami('items', 45000000)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Index phase
@@ -1309,7 +1364,11 @@ class EPerfMaster(perf.PerfBase):
 
         self.gated_start(self.input.clients)
 
-        items = self.parami('items', PerfDefaults.items)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
 
         # Load phase
@@ -1397,7 +1456,11 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        items = self.parami('items', 1000)
+        if self.parami("hot_load_phase", 0) == 1:
+            items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            items = self.parami("items", PerfDefaults.items)
+
         self.load_phase(self.parami('num_nodes', 10), items)
 
         # Access phase
