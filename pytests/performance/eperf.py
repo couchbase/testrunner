@@ -29,6 +29,13 @@ from scripts.perf.rel_cri_stats import CBStatsCollector
 from cbkarma.rest_client import CbKarmaClient
 
 def multi_buckets(test):
+    """
+    Enable multiple buckets for perf tests
+
+    - buckets are named as bucket-0, bucket-1,...
+    - the whole key space is splitted and distributed to each bucket, w.r.t. bucket-id
+    - different buckets are handled by different client processes
+    """
     @wraps(test)
     def wrapper(self, *args, **kwargs):
 
