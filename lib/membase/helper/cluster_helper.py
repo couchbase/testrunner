@@ -340,8 +340,8 @@ class ClusterOperationHelper(object):
                       (value, product, product)
             o, r = sh.execute_command(command)
             sh.log_command_output(o, r)
-            msg = "modified erlang gc to full_sweep_after %s on %s " % value
-            log.info(msg % (value, server.ip))
+            msg = "modified erlang gc to full_sweep_after %s on %s " % (value, server.ip)
+            log.info(msg)
 
     @staticmethod
     def begin_rebalance_in(master, servers, timeout=5):
