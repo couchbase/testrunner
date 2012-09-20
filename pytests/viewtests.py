@@ -61,28 +61,6 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
-        #we don't need restart services if nodes were crashed, everything should be stable
-        '''if "restart_services" in TestInputSingleton.input.test_params:
-            master = self.servers[0]
-            try:
-                RestConnection(master).stop_rebalance()
-            except:
-                pass
-            for server in self.servers:
-                if server.port != '8091':
-                    continue
-                shell = RemoteMachineShellConnection(server)
-                if shell.is_couchbase_installed():
-                    shell.start_couchbase()
-                else:
-                    shell.start_membase()
-                shell.disconnect()
-
-            rest = RestConnection(master)
-            for view in self.created_views:
-                bucket = self.created_views[view]
-                rest.delete_view(bucket, view)
-                self.log.info("deleted view {0} from bucket {1}".format(view, bucket))'''
         if not self.input.param("skip_cleanup", False):
             ViewBaseTests._common_clenup(self)
         ViewBaseTests._log_finish(self)
@@ -465,13 +443,23 @@ class ViewBaseTests(unittest.TestCase):
                     ViewBaseTests._wait_for_indexer_ddoc(self, rest, view)
                     time.sleep(timeout)
             except Exception as ex:
-                if invalid_results and ex.message.find('view_undefined') < 0:
+                if invalid_results and ex.message.find('view_undefined') != -1:
                         raise ex
-                self.log.error("view_results not ready yet , try again in {1} seconds... , error {0}".format(ex, timeout))
-                ViewBaseTests._wait_for_indexer_ddoc(self, rest, view)
-                if i == num_tries:
-                    self.fail("unable to get view_results for {0} after {1} tries due to error {2}".format(view, num_tries, ex))
-                time.sleep(timeout)
+                if ex.message.find('view_undefined') != -1 or ex.message.find('missing') != -1 or \
+                 ex.message.find('unable to reach') != -1 or ex.message.find('timeout') != -1:
+                    self.log.error(
+                            "view_results not ready yet , try again in {1} seconds... , error {0}"
+                            .format(ex, timeout))
+                    ViewBaseTests._wait_for_indexer_ddoc(self, rest, view)
+                    if i == num_tries:
+                        self.fail("unable to get view_results for {0} after {1} tries due to error {2}"
+                                  .format(view, num_tries, ex))
+                    time.sleep(timeout)
+                else:
+                    if u'rows' in results:
+                        self.fail("Results are returned partially, but also error appears: {0}".format(ex))
+                    else:
+                        self.fail("Error appears during querying view {0} : {1}".format(view, ex))
         if results and results.get(u'errors', []):
             self.fail("unable to get view_results for {0} after {1} tries due to error {2}".format(view, num_tries, results.get(u'errors')))
         if results.get(u'error', ''):
