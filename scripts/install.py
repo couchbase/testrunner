@@ -329,7 +329,8 @@ class CouchbaseServerInstaller(Installer):
                     for cmd in ("rm -rf {0}/*".format(server.data_path),
                                 "chown -R couchbase:couchbase {0}".format(server.data_path)):
                         remote_client.execute_command(cmd)
-                    rest.set_data_path(data_path=server.data_path)
+                    rest.set_data_path(data_path=server.data_path,
+                                       index_path=server.index_path)
                     time.sleep(3)
 
                 # TODO: Symlink data-dir to custom path

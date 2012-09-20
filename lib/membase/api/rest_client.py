@@ -1330,10 +1330,13 @@ class RestConnection(object):
         return status
 
 
-    def set_data_path(self, data_path=None):
+    def set_data_path(self, data_path=None, index_path=None):
         if data_path:
             api = self.baseUrl + '/nodes/self/controller/settings'
-            params = urllib.urlencode({'path': data_path})
+            paths = {'path': data_path}
+            if index_path:
+                paths['index_path'] = index_path
+            params = urllib.urlencode(paths)
             log.info('/nodes/self/controller/settings params : {0}'.format(params))
 
             status, content, header = self._http_request(api, 'POST', params)
