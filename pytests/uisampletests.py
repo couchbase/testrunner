@@ -636,6 +636,7 @@ class DocsHelper():
         self.controls.create_doc.click()
         self.fill_create_doc_pop_up(doc.name)
         self.wait.until(lambda fn:
+                        self.controls.edit_document_screen().content is not None and \
                         self.controls.edit_document_screen().content.is_displayed(),
                         "edit doc screen didn't appeared")
         self.tc.log.info("edit doc screen appeared")
@@ -691,6 +692,8 @@ class DocsHelper():
     def verify_doc_in_documents_screen(self, doc):
         self.tc.log.info("verify doc '%s' on documents page" % doc)
         self.controls.edit_document_screen().documents_link.click()
+        time.sleep(1)
+        self.tc.driver.refresh()
         self.wait.until(lambda fn:
                         self.is_doc_present(doc.name, doc.content),
                         "Doc %s is not appeared" % doc.name)

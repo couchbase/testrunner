@@ -257,9 +257,20 @@ class TestInputParser():
     @staticmethod
     def get_ui_tests_config(config, section):
         conf = {}
+        server = TestInputServer()
         options = config.options(section)
         for option in options:
-            conf[option] = config.get(section, option)
+            if option == 'selenium_ip':
+                server.ip = config.get(section, option)
+            elif option == 'selenium_port':
+                server.port = config.get(section, option)
+            elif option == 'selenium_user':
+                server.ssh_username = config.get(section, option)
+            elif option == 'selenium_password':
+                server.ssh_password = config.get(section, option)
+            else:
+                conf[option] = config.get(section, option)
+        conf['server'] = server
         return conf
 
     @staticmethod

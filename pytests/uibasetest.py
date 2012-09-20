@@ -13,7 +13,7 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.common.exceptions import NoSuchElementException
 from threading import Thread
 import ConfigParser
-from TestInput import TestInputSingleton,TestInputParser
+from TestInput import TestInputSingleton,TestInputParser, TestInputServer
 from couchbase.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
@@ -26,23 +26,26 @@ class BaseUITestCase(unittest.TestCase):
     # selenium thread
 
     def _start_selenium(self):
-        host = self.input.ui_conf['selenium_ip']
+        host = self.machine.ip
         if host in ['localhost', '127.0.0.1']:
-            os.system("java -jar ~/Downloads/selenium-server-standalone-2.24.1.jar -Dwebdriver.chrome.driver=%s > selenium.log 2>&1"
-                      % self.input.ui_conf['chrome_path'])
+            os.system("java -jar %sselenium-server-standalone*.jar -Dwebdriver.chrome.driver=%s > selenium.log 2>&1"
+                      % (self.input.ui_conf['selenium_path'], self.input.ui_conf['chrome_path']))
         else:
-            os.system("ssh {0}@{1} 'bash -s' < 'java -jar ~/Downloads/selenium-server-standalone-2.24.1.jar -Dwebdriver.chrome.driver={2}' > /tmp/selenium.log 2>&1".format(self.input.servers[0].ssh_username, host, self.input.ui_conf['chrome_path']))
+            self.shell.execute_command('{0}start-selenium.bat > {0}selenium.log 2>&1 &'.format(self.input.ui_conf['selenium_path']))
 
     def _wait_for_selenium_is_started(self, timeout=10):
-        start_time = time.time()
-        while (time.time() - start_time) < timeout:
-            log = open("/tmp/selenium.log")
-            if log.read().find('Started org.openqa.jetty.jetty.Server') > -1:
-                log.close()
-                if self._is_selenium_running():
-                    time.sleep(1)
-                    return
-            time.sleep(1)
+        if self.machine.ip in ['localhost', '127.0.0.1']:
+            start_time = time.time()
+            while (time.time() - start_time) < timeout:
+                log = open("/tmp/selenium.log")
+                if log.read().find('Started org.openqa.jetty.jetty.Server') > -1:
+                    log.close()
+                    if self._is_selenium_running():
+                        time.sleep(1)
+                        return
+                time.sleep(1)
+        else:
+            time.sleep(timeout)
 
     def _start_selenium_thread(self):
         self.t = Thread(target=self._start_selenium,
@@ -51,14 +54,20 @@ class BaseUITestCase(unittest.TestCase):
         self.t.start()
 
     def _is_selenium_running(self):
-        host = self.input.ui_conf['selenium_ip']
+        host = self.machine.ip
         if host in ['localhost', '127.0.0.1']:
-             cmd = 'ps -ef|grep selenium-server'
+            cmd = 'ps -ef|grep selenium-server'
+            output = commands.getstatusoutput(cmd)
+            if str(output).find('selenium-server-standalone') > -1:
+                return True
         else:
-            cmd = "ssh {0}@{1} 'bash -s' < 'ps -ef|grep selenium-server'"
-        output = commands.getstatusoutput(cmd)
-        if str(output).find('selenium-server-standalone') > -1:
-            return True
+            #cmd = "ssh {0}@{1} 'bash -s' < 'tasklist |grep selenium-server'".format(self.input.servers[0].ssh_username,
+            #                                                                        host)
+            cmd = 'tasklist |grep java'
+            o, r = self.shell.execute_command(cmd)
+            #cmd = "ssh {0}@{1} 'bash -s' < 'ps -ef|grep selenium-server'"
+            if str(o).find('java') > -1:
+                return True
         return False
 
     @unittest.skipIf(skip_setup_failed, "setup was failed")
@@ -71,6 +80,8 @@ class BaseUITestCase(unittest.TestCase):
             self.replica  = self.input.param("replica", 1)
             self.case_number = self.input.param("case_number", 0)
             self.cluster = Cluster()
+            self.machine = self.input.ui_conf['server']
+            self.shell = RemoteMachineShellConnection(self.machine)
             #avoid clean up if the previous test has been tear down
             if not self.input.param("skip_cleanup", True) \
                                             or self.case_number == 1:
@@ -84,13 +95,13 @@ class BaseUITestCase(unittest.TestCase):
             self.log.info('start selenium session')
             if self.browser == 'ff':
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
-                                               .format(self.input.ui_conf['selenium_ip'],
-                                                       self.input.ui_conf['selenium_port']),
+                                               .format(self.machine.ip,
+                                                       self.machine.port),
                                                desired_capabilities=DesiredCapabilities.FIREFOX)
             elif self.browser == 'chrome':
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
-                                               .format(self.input.ui_conf['selenium_ip'],
-                                                       self.input.ui_conf['selenium_port']),
+                                               .format(self.machine.ip,
+                                                       self.machine.port),
                                                desired_capabilities=DesiredCapabilities.CHROME)
             self.log.info('start selenium started')
             self.driver.get("http://{0}:{1}".format(self.servers[0].ip,
@@ -120,7 +131,7 @@ class BaseUITestCase(unittest.TestCase):
 
     def tearDown(self):
         try:
-            path_screen = self.input.param('screenshots', 'logs/screens')
+            path_screen = self.input.ui_conf['screenshots'] or 'logs/screens'
             full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
             self.log.info('screenshot is available: %s' % full_path)
             if not os.path.exists(path_screen):
@@ -136,6 +147,7 @@ class BaseUITestCase(unittest.TestCase):
             #ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
             self.driver.close()
         finally:
+            self.shell.disconnect()
             self.cluster.shutdown()
 
 class Control():
