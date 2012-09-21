@@ -30,8 +30,9 @@ def resource_monitor():
 
             nodes = stat_checker.nodes()
             for node in nodes:
-
                 # check if atop running (could be new node)
+                if isinstance(node.ip, unicode):
+                    node.ip = str(node.ip)
                 check_atop_proc(node.ip)
 
                 # cache sample of latest stats on all nodes
@@ -48,10 +49,19 @@ def resource_monitor():
     return True
 
 def check_atop_proc(ip):
-    res = exec_cmd(ip, "ps aux | grep [a]top")
-    if len(res[0]) == 0:
-        # atop not running, start it
-        cmd = "nohup atop -a -w %s 3 > /dev/null 2>&1&" % cfg.ATOP_LOG_FILE
+    proc_signature = "atop -a -w %s 3" % cfg.ATOP_LOG_FILE
+    res = exec_cmd(ip, "ps aux |grep '%s' | wc -l " % proc_signature)
+
+    # one for grep, one for atop and one for bash
+    # Making sure, we always have one such atop
+    if int(res[0][0]) != 3:
+        cmd = "killall atop"
+        exec_cmd(ip, cmd)
+        # Clean up load log
+        cmd = "rm -rf %s" % cfg.ATOP_LOG_FILE
+        exec_cmd(ip, cmd)
+        # Start atop again
+        cmd = "nohup %s > /dev/null 2>&1&" % proc_signature
         exec_cmd(ip, cmd)
 
 def get_atop_sample(ip):
@@ -59,17 +69,21 @@ def get_atop_sample(ip):
     cpu = atop_cpu(ip)
     mem = atop_mem(ip)
     swap = sys_swap(ip)
-    wrdsk = atop_dsk(ip)
+    disk = atop_dsk(ip)
 
-    return {"sys_cpu" : cpu[0],
+    return {"ip" : ip,
+            "sys_cpu" : cpu[0],
             "usr_cpu" : cpu[1],
             "vsize" : mem[0],
             "rsize" : mem[1],
-            "swap" : swap,
-            "wrdsk" : wrdsk}
+            "swap" : swap[0][0],
+            "rddsk" : disk[0],
+            "wrdsk" : disk[1],
+            "disk_util" : disk[2]
+            }
 
 def atop_cpu(ip):
-    cmd = "grep ^CPU | awk '{print $4,$7}' | tail -1"
+    cmd = "grep ^CPU | awk '{print $4,$7}' "
     return _atop_exec(ip, cmd)
 
 def atop_mem(ip):
@@ -83,7 +97,7 @@ def sys_swap(ip):
 
 def atop_dsk(ip):
     flags = "-d"
-    cmd = "grep beam.smp | awk '{print $3}'"
+    cmd = "grep beam.smp | awk '{print $2, $3, $5}'"
     return _atop_exec(ip, cmd, flags)
 
 def _atop_exec(ip, cmd, flags = ""):

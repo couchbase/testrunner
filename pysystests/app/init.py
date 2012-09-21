@@ -1,9 +1,7 @@
 import os
-import time
 from rabbit_helper import RabbitHelper
 from cache import WorkloadCacher, TemplateCacher, BucketStatusCacher, cacheClean
 import testcfg as cfg
-import paramiko
 
 # cleanup queues
 rabbitHelper = RabbitHelper()

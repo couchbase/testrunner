@@ -1,5 +1,4 @@
 import json
-import uuid
 import pylibmc
 import hashlib
 from celery.utils.log import get_task_logger
