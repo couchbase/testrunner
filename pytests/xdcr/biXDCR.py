@@ -31,13 +31,13 @@ class bidirectional(XDCRReplicationBaseTest):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
             if "delete" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            time.sleep(10)
+            time.sleep(self._timeout / 6)
         if self._doc_ops_dest is not None:
             if "update" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            time.sleep(10)
+            time.sleep(self._timeout / 6)
         for task in tasks:
             task.result()
 
@@ -57,6 +57,7 @@ class bidirectional(XDCRReplicationBaseTest):
             if "delete" in self._doc_ops_dest:
                 self._load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0)
 
+        time.sleep(self._timeout)
         self._wait_for_stats_all_buckets(self.src_nodes)
         self._wait_for_stats_all_buckets(self.dest_nodes)
 
@@ -73,7 +74,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(60)
+        time.sleep(self._timeout)
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
@@ -89,7 +90,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(60)
+        time.sleep(self._timeout)
         tasks = []
         if "update" in self._doc_ops:
             tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
@@ -100,7 +101,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "delete" in self._doc_ops_dest:
             tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete, "delete", 0))
 
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
         for task in tasks:
             task.result()
 
@@ -114,7 +115,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(30)
+        time.sleep(self._timeout)
         #warmup
         warmupnodes = []
         dest_warm_flag = 0
@@ -130,13 +131,13 @@ class bidirectional(XDCRReplicationBaseTest):
         if dest_warm_flag == 1:
             warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
             self.do_a_warm_up(warmupnodes[1])
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        time.sleep(60)
+        time.sleep(self._timeout)
 
         self.wait_warmup_completed(warmupnodes)
 
@@ -148,7 +149,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(30)
+        time.sleep(self._timeout)
         #warmup
         warmupnodes = []
         dest_warm_flag = 0
@@ -163,11 +164,11 @@ class bidirectional(XDCRReplicationBaseTest):
         if dest_warm_flag == 1:
             warmupnodes.append(self.dest_master)
             self.do_a_warm_up(warmupnodes[1])
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
@@ -181,7 +182,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(30)
+        time.sleep(self._timeout)
         #warmup
         warmupnodes = []
         dest_warm_flag = 0
@@ -197,13 +198,13 @@ class bidirectional(XDCRReplicationBaseTest):
         if dest_warm_flag == 1:
             warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
             self.do_a_warm_up(warmupnodes[1])
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
 
         self.wait_warmup_completed(warmupnodes)
 
@@ -215,7 +216,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(30)
+        time.sleep(self._timeout)
         #warmup
         warmupnodes = []
         dest_warm_flag = 0
@@ -230,11 +231,11 @@ class bidirectional(XDCRReplicationBaseTest):
         if dest_warm_flag == 1:
             warmupnodes.append(self.dest_master)
             self.do_a_warm_up(warmupnodes[1])
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
@@ -245,8 +246,7 @@ class bidirectional(XDCRReplicationBaseTest):
     def load_with_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-
-        time.sleep(self._timeout / 3)
+        time.sleep(self._timeout)
 
         if "source" in self._failover and len(self.src_nodes) > 1:
             if len(self.src_nodes) > 1:
@@ -276,14 +276,13 @@ class bidirectional(XDCRReplicationBaseTest):
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-
+        time.sleep(self._timeout * 5)
         self.verify_results(verify_src=True)
 
     def load_with_failover_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-
-        time.sleep(self._timeout / 3)
+        time.sleep(self._timeout)
 
         if "source" in self._failover  and len(self.src_nodes) > 1:
             self._log.info(" Failing over Source Master Node {0}".format(self.src_master.ip))
@@ -312,7 +311,7 @@ class bidirectional(XDCRReplicationBaseTest):
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-
+        time.sleep(self._timeout * 5)
         self.verify_results(verify_src=True)
 
     """Replication with compaction ddocs and view queries on both clusters.
@@ -329,6 +328,8 @@ class bidirectional(XDCRReplicationBaseTest):
     def replication_with_ddoc_compaction(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+        time.sleep(self._timeout)
+
         src_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_buckets:
             views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
@@ -368,6 +369,8 @@ class bidirectional(XDCRReplicationBaseTest):
     def replication_with_view_queries_and_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+        time.sleep(self._timeout)
+
         src_buckets = self._get_cluster_buckets(self.src_master)
         dest_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_buckets:
@@ -437,6 +440,8 @@ class bidirectional(XDCRReplicationBaseTest):
     def replication_with_disabled_ddoc_compaction(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+        time.sleep(self._timeout)
+
         disable_src_comp = self._input.param("disable_src_comp", True)
         disable_dest_comp = self._input.param("disable_dest_comp", True)
         if disable_src_comp:
@@ -468,6 +473,8 @@ class bidirectional(XDCRReplicationBaseTest):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
         self._async_update_delete_data()
+        time.sleep(self._timeout)
+
         i = len(self.dest_nodes) - 1
         shell = RemoteMachineShellConnection(self.dest_nodes[i])
         o, r = shell.execute_command("reboot")

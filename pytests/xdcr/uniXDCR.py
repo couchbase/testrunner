@@ -37,7 +37,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self._modify_src_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
+        time.sleep(self._timeout)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
@@ -51,7 +51,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self._wait_for_stats_all_buckets(self.src_nodes)
-
+        time.sleep(self._timeout)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -113,6 +113,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_ops_with_warmup(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout)
 
         #warmup
         warmupnodes = []
@@ -144,6 +145,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_ops_with_warmup_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout)
 
         #warmup
         warmupnodes = []
@@ -175,6 +177,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout)
 
         if "source" in self._failover:
             if len(self.src_nodes) > 1:
@@ -217,6 +220,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_failover_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout)
 
         if "source" in self._failover:
             self._log.info(" Failing over Source Master Node {0}:{1}".format(self.src_master.ip, self.src_master.port))
@@ -248,6 +252,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout)
 
         tasks = []
         """Setting up failover while creates/updates/deletes at source nodes"""
@@ -294,6 +299,7 @@ class unidirectional(XDCRReplicationBaseTest):
         and then verify that there has been any data loss on all clusters."""
     def replication_with_ddoc_compaction(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout)
 
         src_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_buckets:
@@ -332,6 +338,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def replication_with_view_queries_and_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout)
 
         src_buckets = self._get_cluster_buckets(self.src_master)
         dest_buckets = self._get_cluster_buckets(self.src_master)
@@ -391,6 +398,7 @@ class unidirectional(XDCRReplicationBaseTest):
         and then verify that there has been no data loss on both all clusters."""
     def replication_with_disabled_ddoc_compaction(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout)
 
         if self.disable_src_comp:
             self.disable_compaction(self.src_master)
@@ -416,6 +424,8 @@ class unidirectional(XDCRReplicationBaseTest):
     def replication_while_rebooting_a_non_master_destination_node(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._async_modify_data()
+        time.sleep(self._timeout)
+
         i = len(self.dest_nodes) - 1
         shell = RemoteMachineShellConnection(self.dest_nodes[i])
         o, r = shell.execute_command("reboot")
