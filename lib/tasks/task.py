@@ -68,7 +68,12 @@ class NodeInitializeTask(Task):
         self.disable_consistent_view = disabled_consistent_view
 
     def execute(self, task_manager):
-        rest = RestConnection(self.server)
+        try:
+            rest = RestConnection(self.server)
+        except ServerUnavailableException as error:
+                self.state = FINISHED
+                self.set_exception(error)
+                return
         username = self.server.rest_username
         password = self.server.rest_password
 
