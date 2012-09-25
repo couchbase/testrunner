@@ -4,7 +4,7 @@ import re
 import sys
 from app.celery import celery
 import testcfg as cfg
-from cache import WorkloadCacher
+from cache import NodeStatsCacher
 
 sys.path=["../lib"] + sys.path
 from membase.api.rest_client import RestConnection
@@ -16,37 +16,46 @@ logger = get_task_logger(__name__)
 @celery.task
 def resource_monitor():
 
-    cache = WorkloadCacher()
-    for workload in cache.workloads:
+    rest = rest_connect(cfg.COUCHBASE_IP,
+                        cfg.COUCHBASE_PORT,
+                        cfg.COUCHBASE_USER,
+                        cfg.COUCHBASE_PWD)
 
-        # filter on active workload
-        if workload.active:
-            bucket = str(workload.bucket)
-            stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
-                                       bucket = bucket,
-                                       username = cfg.COUCHBASE_USER,
-                                       password = cfg.COUCHBASE_PWD)
+    nodes = rest.node_statuses()
 
+    # cache sample of latest stats on all nodes
+    for node in nodes:
 
-            nodes = stat_checker.nodes()
-            for node in nodes:
-                # check if atop running (could be new node)
-                if isinstance(node.ip, unicode):
-                    node.ip = str(node.ip)
-                check_atop_proc(node.ip)
+        # check if atop running (could be new node)
+        if isinstance(node.ip, unicode):
+            node.ip = str(node.ip)
+        check_atop_proc(node.ip)
 
-                # cache sample of latest stats on all nodes
-                sample = get_atop_sample(node.ip)
-                if node.ip not in workload.stats:
-                    workload.stats.update({node.ip : []})
-                workload.stats[node.ip].append(sample)
+        # retrieve stats from cache
+        node_stats = NodeStatsCacher().nodestats(node.ip)
+        if node_stats is None:
+            node_stats = NodeStats(node.ip)
 
-                #TODO: log to file, putting to stdout via error flag
-                logger.error(workload.stats[node.ip][-1])
+        # get stats from node
+        sample = get_atop_sample(node.ip)
 
-        WorkloadCacher().store(workload)
+        # update node state object
+        update_node_stats(node_stats, sample)
 
     return True
+
+def update_node_stats(node_stats, sample):
+
+    cache = NodeStatsCacher()
+    for key in sample.keys():
+        if key != 'ip':
+
+            if key not in node_stats.samples:
+                node_stats.samples[key] = []
+
+            val = float(re.sub(r'[^\d.]+', '', sample[key]))
+            node_stats.samples[key].append(val)
+    cache.store(node_stats)
 
 def check_atop_proc(ip):
     proc_signature = "atop -a -w %s 3" % cfg.ATOP_LOG_FILE
@@ -144,12 +153,7 @@ class StatChecker(object):
         self.username = username
         self.password = password
         self.bucket = bucket
-        serverInfo = { "ip" : self.ip,
-                       "port" : self.port,
-                       "rest_username" : self.username,
-                       "rest_password" : self.password }
-        self.node = _dict_to_obj(serverInfo)
-        self.rest = RestConnection(self.node)
+        self.rest = rest_connect(self.ip, self.port, self.username, self.password)
 
     def check(self, condition, datatype = int):
 
@@ -192,6 +196,20 @@ class StatChecker(object):
         except AttributeError:
             logger.error("Invalid condition syntax: %s" % condition)
             raise AttributeError(condition)
+
+class NodeStats(object):
+    def __init__(self, ip):
+        self.id = ip
+        self.samples = {}
+
+def rest_connect(ip, port, username, password):
+    serverInfo = { "ip" : ip,
+                   "port" : port,
+                   "rest_username" : username,
+                   "rest_password" : password }
+    node = _dict_to_obj(serverInfo)
+    rest = RestConnection(node)
+    return rest
 
 def _dict_to_obj(dict_):
     return type('OBJ', (object,), dict_)

@@ -7,6 +7,7 @@ import testcfg as cfg
 WORKLOADCACHEKEY = "WORKLOADCACHEKEY"
 TEMPLATECACHEKEY = "TEMPLATECACHEKEY"
 BUCKETSTATUSCACHEKEY = "BUCKETSTATUSCACHEKEY"
+NODESTATSCACHEKEY = "NODESTATSCACHEKEY"
 
 class Cache(object):
     def __init__(self):
@@ -170,9 +171,27 @@ class BucketStatusCacher(Cache):
     def clear(self):
         super(BucketStatusCacher, self).clear(BUCKETSTATUSCACHEKEY)
 
+class NodeStatsCacher(Cache):
+
+    @property
+    def allnodestats(self):
+        return self.fetchCollection(NODESTATSCACHEKEY)
+
+    def store(self, nodestats):
+        id_ = getContextKey(NODESTATSCACHEKEY, nodestats.id)
+        super(NodeStatsCacher, self).store(id_, nodestats, NODESTATSCACHEKEY)
+
+    def nodestats(self, key):
+        id_ = getContextKey(NODESTATSCACHEKEY, key)
+        return self.retrieve(id_)
+
+    def clear(self):
+        super(NodeStatsCacher, self).clear(NODESTATSCACHEKEY)
+
+
 
 def cacheClean():
-    for cacheKey in [WORKLOADCACHEKEY, BUCKETSTATUSCACHEKEY]:
+    for cacheKey in [WORKLOADCACHEKEY, BUCKETSTATUSCACHEKEY, NODESTATSCACHEKEY]:
         Cache().clear(cacheKey)
 
 

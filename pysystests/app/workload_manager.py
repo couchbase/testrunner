@@ -430,7 +430,6 @@ class Workload(object):
         self.cc_queues = params["cc_queues"]
         self.wait = params["wait"]
         self.expires = params["expires"]
-        self.stats = {}
 
         # consume from cc_queue by default if not specified
         if self.cc_queues != None:
@@ -481,5 +480,6 @@ class BucketStatus(object):
 
     def _set_mode(self, bucket, mode):
         self.history[bucket]["mode"] = mode 
+
 
 
