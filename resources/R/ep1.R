@@ -1682,13 +1682,35 @@ if (nrow(ns_server_data) > 0) {
     makeFootnote(footnote)
     makeMetricDef("Number of items queued for storage")
 
-    cat("generating ep_diskqueue_drain \n")
+    cat("generating ns_server: ep_diskqueue_drain \n")
     p <- ggplot(ns_server_data, aes(row, ep_diskqueue_drain, color=buildinfo.version , label= prettySize(ep_diskqueue_drain))) + labs(x="----time (sec)--->", y="ep_diskqueue_drain")
     p <- p + geom_point()
-    p <- addopts(p,"ep_diskqueue_drain")
+    p <- addopts(p,"ns_server: ep_diskqueue_drain")
     print(p)
     makeFootnote(footnote)
-    makeMetricDef("Total drained items on disk queue")
+    makeMetricDef(paste("Total number of items per second being",
+                        "written to disk in this bucket (from ns_server)",
+                        sep="\n"))
+
+    for(ip in levels(factor(memcached_stats$ip))) {
+
+        stats <- data.frame()
+        for (build in levels(factor(memcached_stats$buildinfo.version))) {
+            tmp = memcached_stats[memcached_stats$ip == ip & memcached_stats$buildinfo.version == build, ]
+            tmp$ep_diskqueue_drain = c(0 , diff(tmp$ep_diskqueue_drain) / diff(tmp$uptime))
+            stats <- rbind(stats, tmp)
+        }
+
+        cat(paste("generating ep-engine: ep_diskqueue_drain - \n", ip))
+        p <- ggplot(stats, aes(row, ep_diskqueue_drain, color=buildinfo.version , label= prettySize(ep_diskqueue_drain))) + labs(x="----time (sec)--->", y="ep_diskqueue_drain")
+        p <- p + geom_point()
+        p <- addopts(p, paste("ep-engine : ep_diskqueue_drain - ", ip))
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Total number of items per second being",
+                            "written to disk in this node (from ep-engine)",
+                            sep="\n"))
+    }
 
     cat("generating ep_bg_fetched \n")
     p <- ggplot(ns_server_data, aes(row, ep_bg_fetched, color=buildinfo.version , label= prettySize(ep_bg_fetched))) + labs(x="----time (sec)--->", y="ep_bg_fetched")
