@@ -295,6 +295,7 @@ ns_server_data $vb_active_resident_items_ratio <- as.numeric(ns_server_data $vb_
 ns_server_data $vb_replica_resident_items_ratio <- as.numeric(ns_server_data $vb_replica_resident_items_ratio)
 ns_server_data $vb_active_eject <- as.numeric(ns_server_data $vb_active_eject)
 ns_server_data $vb_replica_eject <- as.numeric(ns_server_data $vb_replica_eject)
+ns_server_data $ep_tap_replica_queue_drain <- as.numeric(ns_server_data$ep_tap_replica_queue_drain)
 ns_server_data $ep_tap_replica_queue_backoff <- as.numeric(ns_server_data $ep_tap_replica_queue_backoff)
 ns_server_data $mem_used <- as.numeric(ns_server_data$mem_used)
 tryCatch({
@@ -1718,6 +1719,17 @@ if (nrow(ns_server_data) > 0) {
     print(p)
     makeFootnote(footnote)
     makeMetricDef("Number of times item values got ejected")
+
+    cat("generating ep_tap_replica_queue_drain \n")
+    p <- ggplot(ns_server_data, aes(row, ep_tap_replica_queue_drain, color=buildinfo.version , label= prettySize(ep_tap_replica_queue_drain))) + labs(x="----time (sec)--->", y="ep_tap_replica_queue_backoff")
+    p <- p + geom_point()
+    p <- addopts(p,"ep_tap_replica_queue_drain/sec")
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef(paste("Number of items per second ",
+                        "been sent over replication ",
+                         "TAP connections",
+                         sep="\n"))
 
     cat("generating ep_tap_replica_queue_backoff \n")
     p <- ggplot(ns_server_data, aes(row, ep_tap_replica_queue_backoff, color=buildinfo.version , label= prettySize(ep_tap_replica_queue_backoff))) + labs(x="----time (sec)--->", y="ep_tap_replica_queue_backoff")
