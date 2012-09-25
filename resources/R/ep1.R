@@ -349,6 +349,7 @@ ns_server_data <- result_tmp
 ns_server_data$row = ns_server_data $row/1000
 
 cat("generating memcached stats ")
+warmup_stats <- data.frame()
 memcached_stats <- data.frame()
 for(index in 1:nrow(builds_list)) {
        tryCatch({
@@ -357,9 +358,10 @@ for(index in 1:nrow(builds_list)) {
                 doc_json <- fromJSON(file=url)
 				for(index in 1:length(doc_json)) {
 					unlisted <- plyr::ldply(doc_json[index], unlist)
+					memcached_stats <- rbind.fill(memcached_stats, unlisted)
                     if(unlisted$ep_warmup_thread == "complete") {
                         unlisted <- unlisted[c('row', 'ep_warmup_thread', 'ip', 'ep_warmup_time', 'buildinfo.version')]
-                        memcached_stats <- rbind.fill(memcached_stats, unlisted)
+                        warmup_stats <- rbind.fill(warmup_stats, unlisted)
 					}
 				}
        },error=function(e) {
@@ -367,8 +369,11 @@ for(index in 1:nrow(builds_list)) {
        })
 }
 
+warmup_stats$row <- as.numeric(warmup_stats$row)
+warmup_stats$ep_warmup_time <- as.numeric(memcached_stats$ep_warmup_time)
 memcached_stats$row <- as.numeric(memcached_stats$row)
-memcached_stats$ep_warmup_time <- as.numeric(memcached_stats$ep_warmup_time)
+memcached_stats$ep_diskqueue_drain <- as.numeric(memcached_stats$ep_diskqueue_drain)
+memcached_stats$uptime <- as.numeric(memcached_stats$uptime)
 
 # memcached_stats $ep_bg_wait_avg <- as.numeric(memcached_stats $ep_bg_wait_avg)
 # memcached_stats $ep_tap_bg_fetched <- as.numeric(memcached_stats $ep_tap_bg_fetched)
