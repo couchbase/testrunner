@@ -63,7 +63,7 @@ class StatsCollector(object):
 
         if collect_server_stats:
             mbstats_thread = Thread(target=self.membase_stats,
-                                    args=(nodes, bucket, 600, self._verbosity))
+                                    args=(nodes, bucket, 60, self._verbosity))
             mbstats_thread.start()
             sysstats_thread = Thread(target=self.system_stats,
                                      args=(nodes, pnames, frequency, self._verbosity))
