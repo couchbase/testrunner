@@ -11,7 +11,6 @@ from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from app.celery import celery
 import testcfg as cfg
-import collections
 import json
 import eventlet
 from rabbit_helper import PersistedMQ
@@ -22,10 +21,6 @@ logger = get_task_logger(__name__)
 SDK_IP = '127.0.0.1'
 SDK_PORT = 50008
 ###
-
-@celery.task(base = PersistedMQ)
-def conn():
-    pass
 
 
 @celery.task
@@ -43,60 +38,66 @@ def _send_msg(message):
     sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
     sdk_client.sendall(json.dumps(message))
 
-"""
-"""
-
 def perform_admin_tasks(adminMsg):
     rest = create_rest()
 
     # Add nodes
     servers = adminMsg["rebalance_in"]
-    if servers:
-        for server in servers.split():
-            logger.error("Adding node %s" % server)
-            ip,port = parse_server_arg(server)
-            rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port)
+    add_nodes(rest, servers)
 
+    # Get all nodes
     allNodes = []
     for node in rest.node_statuses():
         allNodes.append(node.id)
 
     # Remove nodes
     servers = adminMsg["rebalance_out"]
-    toBeEjectedNodes = []
-    if servers :
-        for server in servers.split():
-            for node in rest.node_statuses():
-                if "%s" % node.ip == "%s" % server:
-                    logger.error("Removing node %s" % node.id)
-                    toBeEjectedNodes.append(node.id)
+    toBeEjectedNodes  = remove_nodes(rest, servers)
 
     # Failover Node
-    failover_servers = adminMsg["failover"]
+    servers = adminMsg["failover"]
     only_failover = adminMsg["only_failover"]
-    if failover_servers:
-        for server in failover_servers.split():
-            for node in rest.node_statuses():
-                if "%s" % node.ip == "%s" % server:
-                    logger.error("Failing node %s" % node.id)
-                    rest.fail_over(node.id)
-                    if not only_failover:
-                        toBeEjectedNodes.append(node.id)
+    toBeEjectedNodes.extend(failover_nodes(rest, servers, only_failover))
 
     # SoftRestart a node
     servers = adminMsg["soft_restart"]
-    if servers:
-        logger.error('Soft Restart')
-        restart(servers)
+    restart(servers)
+
     # HardRestart a node
     servers = adminMsg["hard_restart"]
-    if servers:
-        logger.error('Hard Restart')
-        restart(servers, type='hard')
+    restart(servers, type='hard')
 
-    if len(allNodes) > 0 or len(toBeEjectedNodes) > 0:
+    if not only_failover and (len(allNodes) > 0 or len(toBeEjectedNodes) > 0):
         logger.error("Rebalance")
         rest.rebalance(otpNodes=allNodes, ejectedNodes=toBeEjectedNodes)
+
+def add_nodes(rest, servers=''):
+    for server in servers.split():
+        logger.error("Adding node %s" % server)
+        ip, port = parse_server_arg(server)
+        rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port)
+
+def remove_nodes(rest, servers=''):
+    toBeEjectedNodes = []
+    for server in servers.split():
+        for node in rest.node_statuses():
+            if "%s" % node.ip == "%s" % server:
+                logger.error("Removing node %s" % node.id)
+                toBeEjectedNodes.append(node.id)
+
+    return toBeEjectedNodes
+
+def failover_nodes(rest, servers='', only_failover=False):
+    toBeEjectedNodes = []
+    for server in servers.split():
+        for node in rest.node_statuses():
+            if "%s" % node.ip == "%s" % server:
+                logger.error("Failing node %s" % node.id)
+                rest.fail_over(node.id)
+                if not only_failover:
+                    toBeEjectedNodes.append(node.id)
+    return toBeEjectedNodes
+
 
 def parse_server_arg(server):
     ip = server
@@ -115,8 +116,10 @@ def restart(servers='', type='soft'):
     for server in servers.split():
         node_ssh, node = create_ssh_conn(server)
         if type is not 'soft':
+            logger.error('Hard Restart')
             cmd = "reboot"
         else:
+            logger.error('Soft Restart')
             cmd = "/etc/init.d/couchbase-server restart"
 
         logger.error(cmd)
