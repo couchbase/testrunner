@@ -10,8 +10,7 @@ from threading import Thread
 from datetime import datetime
 import socket
 
-sys.path.append(".")
-sys.path.append("lib")
+sys.path = [".", "lib"] + sys.path
 import testconstants
 import couchdb
 import time
