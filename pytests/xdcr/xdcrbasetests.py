@@ -727,16 +727,20 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             task.result()
 
     def _verify_revIds(self, src_server, dest_server, ops_perf, kv_store=1):
+        error_count = 0;
         tasks = []
-        buckets = self._get_cluster_buckets(src_server)
+        #buckets = self._get_cluster_buckets(src_server)
+        rest = RestConnection(src_server)
+        buckets = rest.get_buckets()
         for bucket in buckets:
             task_info = self._cluster_helper.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store],
                 ops_perf)
+            error_count += task_info.err_count
             tasks.append(task_info)
         for task in tasks:
             task.result()
 
-        return task_info.err_count
+        return error_count
 
     def _expiry_pager(self, master):
         buckets = self._get_cluster_buckets(master)
