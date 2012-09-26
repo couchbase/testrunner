@@ -1,5 +1,6 @@
 import getopt
 import sys
+import time
 from threading import Thread
 from datetime import datetime
 
@@ -81,6 +82,19 @@ if __name__ == "__main__":
 
     for remote_thread in remote_threads:
         remote_thread.start()
+        stop = False
+        start_time = 15
+        while not stop:
+            if remote_thread.isAlive():
+                print "collecting info.  Wait for 15 seconds"
+                time.sleep(15)
+                start_time += 15
+                if start_time >= 1200:
+                    print "cbcollect_info hang on this node.  Jump to next node"
+                    stop = True
+            else:
+                print "collect info done"
+                stop = True
 
     for remote_thread in remote_threads:
         remote_thread.join(1800)
