@@ -653,11 +653,10 @@ class CreateDeleteViewTests(ViewBaseTest):
                     self._load_doc_data_all_buckets("update")
                     for view in view_list:
                         # run queries to create indexes
-                        query = {"stale" : "false"}
+                        query = {"stale" : "false", "full_set" : "true"}
                         self.cluster.query_view(self.master, ddoc_name, view.name, query)
                 fragmentation_monitor.result()
 
-            for ddoc_name in ddoc_view_map:
                 # compact ddoc and make sure fragmentation is less than high_mark
                 # will throw exception if failed
                 compaction_task = self.cluster.async_compact_view(self.master, ddoc_name, 'default')
