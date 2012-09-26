@@ -1486,12 +1486,20 @@ class EVPerfClient(EPerfClient):
             self.bg_thread_cur = copy.deepcopy(cur)
             self.bg_thread_ctl = {'run_ok': True}
 
-            self.bg_stores = [StoreCouchbase()]
+            bg_protocol = self.param('bg_protocol', 'membase-binary')
+            if bg_protocol == 'membase-binary':
+                self.bg_stores = [mcsoda.StoreMembaseBinary()]
+                bg_host_port = host_port
+                bg_protocol = protocol
+            elif bg_protocol == 'memcached-binary':
+                self.bg_stores = [mcsoda.StoreMemcachedBinary()]
+                bg_host_port = host_port.split(':')[0] + ':11211'
+                bg_protocol = 'memcached-binary'
 
             self.bg_thread = threading.Thread(target=mcsoda.run,
                                               args=(self.bg_thread_cfg,
                                                     self.bg_thread_cur,
-                                                    protocol, host_port,
+                                                    bg_protocol, bg_host_port,
                                                     user, pswd,
                                                     stats_collector,
                                                     self.bg_stores,
