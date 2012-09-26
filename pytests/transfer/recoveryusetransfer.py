@@ -60,6 +60,11 @@ class RecoveryUseTransferTests(TransferBaseTest):
             self.shell.execute_cbtransfer(transfer_source, transfer_destination)
         del kvs_before
         time.sleep(self.expire_time + 1)
+        shell_server_recovery = RemoteMachineShellConnection(self.server_recovery)
+        for bucket in self.buckets:
+            self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        shell_server_recovery.disconnect()
+        time.sleep(30)
 
         self._wait_for_stats_all_buckets([self.server_recovery])
         self._verify_all_buckets(self.server_recovery, 1, self.wait_timeout*50, None, True)
