@@ -104,12 +104,12 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
         self.reader.start()
 
     def inflight_start(self):
-        inflight_grp = mcsoda.StoreMembaseBinary.inflight_start(self)
+        inflight_grp = super(StoreCouchbase, self).inflight_start()
         inflight_grp['queries'] = [] # Array of queries.
         return inflight_grp
 
     def inflight_complete(self, inflight_grp):
-        arr = mcsoda.StoreMembaseBinary.inflight_complete(self, inflight_grp)
+        arr = super(StoreCouchbase, self).inflight_complete(inflight_grp)
         # Returns tuple of...
         #   (array of tuples (memcached_server, buffer) for memcached sends,
         #    buffer for capi send).
@@ -124,7 +124,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
         for_mc, buf_capi, num_capi = t
 
-        sent_mc = mcsoda.StoreMembaseBinary.inflight_send(self, for_mc)
+        sent_mc = super(StoreCouchbase, self).inflight_send(for_mc)
 
         sent_capi = len(buf_capi)
         if sent_capi > 0:
@@ -156,9 +156,9 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
         if num_capi > 0:
             self.reader_go.set()
 
-        received_mc = mcsoda.StoreMembaseBinary.inflight_recv(self,
-                                                              inflight, inflight_grp,
-                                                              expectBuffer=expectBuffer)
+        received_mc = super(StoreCouchbase, self).inflight_recv(inflight,
+                                                                inflight_grp,
+                                                                expectBuffer=expectBuffer)
 
         if num_capi > 0:
             self.reader_done.wait()
@@ -206,8 +206,8 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
 
             return 0, 0, 0, 0, 1
 
-        return mcsoda.StoreMembaseBinary.cmd_append(self, cmd, key_num, key_str,
-                                                    data, expiration, grp)
+        return super(StoreCouchbase, self).cmd_append(cmd, key_num, key_str,
+                                                      data, expiration, grp)
 
 
 if __name__ == "__main__":
