@@ -29,7 +29,8 @@ def resource_monitor():
         # check if atop running (could be new node)
         if isinstance(node.ip, unicode):
             node.ip = str(node.ip)
-        check_atop_proc(node.ip)
+        if check_atop_proc(node.ip):
+            restart_atop(node.ip)
 
         # retrieve stats from cache
         node_stats = NodeStatsCacher().nodestats(node.ip)
@@ -39,10 +40,49 @@ def resource_monitor():
         # get stats from node
         sample = get_atop_sample(node.ip)
 
+        logger.error(sample)
+
         # update node state object
         update_node_stats(node_stats, sample)
 
     return True
+
+@celery.task
+def atop_log_rollover():
+    """ task to run every 3 hours to roll over atop logs
+        if atop is currently running it  will be
+        manually stopped and logs backed up before
+        starting new instance"""
+    logger.error("Rolling over logs")
+    rest = rest_connect(cfg.COUCHBASE_IP,
+                        cfg.COUCHBASE_PORT,
+                        cfg.COUCHBASE_USER,
+                        cfg.COUCHBASE_PWD)
+
+    nodes = rest.node_statuses()
+
+    for node in nodes:
+        if check_atop_proc(node.ip):
+            stop_atop(node.ip)
+
+        backup_log(node.ip)
+        start_atop(node.ip)
+
+def backup_log(ip):
+    atop_dir = "/".join(cfg.ATOP_LOG_FILE.split("/")[:-1])
+    atop_file = cfg.ATOP_LOG_FILE.split("/")[-1]
+    last_index_cmd = "ls  %s | grep %s | sort | tail -1 |  sed 's/.*%s\.\?//'" %\
+        (atop_dir,  atop_file, atop_file)
+    res = exec_cmd(ip, last_index_cmd)
+
+    last_index = 0
+    if len(res[0]) > 0 :
+        last_index = res[0][0]
+
+    new_index = int(last_index) + 1
+    new_atop_file = "%s.%s" % (cfg.ATOP_LOG_FILE, new_index)
+    backup_cmd = "mv %s %s" % (cfg.ATOP_LOG_FILE, new_atop_file)
+    exec_cmd(ip, backup_cmd)
 
 def update_node_stats(node_stats, sample):
 
@@ -58,38 +98,59 @@ def update_node_stats(node_stats, sample):
     cache.store(node_stats)
 
 def check_atop_proc(ip):
-    proc_signature = "atop -a -w %s 3" % cfg.ATOP_LOG_FILE
+    running = False
+    proc_signature = atop_proc_sig()
     res = exec_cmd(ip, "ps aux |grep '%s' | wc -l " % proc_signature)
 
     # one for grep, one for atop and one for bash
     # Making sure, we always have one such atop
     if int(res[0][0]) != 3:
-        cmd = "killall atop"
-        exec_cmd(ip, cmd)
-        # Clean up load log
-        cmd = "rm -rf %s" % cfg.ATOP_LOG_FILE
-        exec_cmd(ip, cmd)
-        # Start atop again
-        cmd = "nohup %s > /dev/null 2>&1&" % proc_signature
-        exec_cmd(ip, cmd)
+        running = True
+
+    return running
+
+def restart_atop(ip):
+    stop_atop(ip)
+    start_atop(ip)
+
+def stop_atop(ip):
+    cmd = "killall atop"
+    exec_cmd(ip, cmd)
+    # Clean up load log
+    cmd = "rm -rf %s" % cfg.ATOP_LOG_FILE
+    exec_cmd(ip, cmd)
+
+def start_atop(ip):
+    # Start atop again
+    cmd = "nohup %s > /dev/null 2>&1&" % atop_proc_sig()
+    exec_cmd(ip, cmd)
+
+def atop_proc_sig():
+    return "atop -a -w %s 3" % cfg.ATOP_LOG_FILE
 
 def get_atop_sample(ip):
 
+    sample = {"ip" : ip}
     cpu = atop_cpu(ip)
     mem = atop_mem(ip)
     swap = sys_swap(ip)
     disk = atop_dsk(ip)
+    if cpu:
+        sample.update({"sys_cpu" : cpu[0],
+                       "usr_cpu" : cpu[1]})
+    if mem:
+        sample.update({"vsize" : mem[0],
+                       "rsize" : mem[1]})
 
-    return {"ip" : ip,
-            "sys_cpu" : cpu[0],
-            "usr_cpu" : cpu[1],
-            "vsize" : mem[0],
-            "rsize" : mem[1],
-            "swap" : swap[0][0],
-            "rddsk" : disk[0],
-            "wrdsk" : disk[1],
-            "disk_util" : disk[2]
-            }
+    if swap:
+        sample.update({"swap" : swap[0][0]})
+
+    if disk:
+        sample.update({"rddsk" : disk[0],
+                       "wrdsk" : disk[1],
+                       "disk_util" : disk[2]})
+
+    return sample
 
 def atop_cpu(ip):
     cmd = "grep ^CPU | awk '{print $4,$7}' "

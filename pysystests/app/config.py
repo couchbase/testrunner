@@ -1,7 +1,8 @@
+from __future__ import absolute_import
 from kombu import Exchange, Queue
 from datetime import timedelta
 import testcfg as cfg
- 
+
 BROKER_URL = 'librabbitmq://'+cfg.RABBITMQ_IP
 CELERY_RESULT_BACKEND = 'cache'
 CELERY_TASK_SERIALIZER = 'pickle'
@@ -41,7 +42,12 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'task': 'app.stats.resource_monitor',
     'schedule': timedelta(seconds=10),
     },
-  
+
+    'atop_log_rollover': { # Execute every three hours
+    'task': 'app.stats.atop_log_rollover',
+    'schedule': timedelta(seconds=10800),
+    },
+
 }
 
 CELERY_QUEUES = (
