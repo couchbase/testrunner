@@ -38,14 +38,14 @@ class OpsChangeCasTests(CasBaseTest):
         self._wait_for_stats_all_buckets([self.master]) #we only need 1 node to do cas test
 
     def verify_cas(self, ops, generator):
-        """Verify CAS value manipulation. Since for delete and expire, they are
-        negative result test. So the test is expected to fail with an Memcached Error
+        """Verify CAS value manipulation.
 
         For update we use the latest CAS value return by set()
         to do the mutation again to see if there is any exceptions.
         We should be able to mutate that item with the latest CAS value.
-        For delete(), after it is called, the item cas is always reset to zero.
-        The cas() operation followed always succeeds.
+        For delete(), after it is called, we try to mutate that item with the
+        cas vavlue returned by delete(). We should see Memcached Error. Otherwise
+        the test should fail.
         For expire, We want to verify using the latest CAS value of that item
         can not mutate it because it is expired already."""
 
@@ -69,22 +69,32 @@ class OpsChangeCasTests(CasBaseTest):
                                           .format(cas_old, key, cas_new))
                 elif ops == "delete":
                     o, cas, d = self.clients[bucket.name].delete(key)
+                    time.sleep(1)
                     self.log.info("Delete operation set item cas with key {0} to {1}".format(key, cas))
-                    self.clients[bucket.name].cas(key, 0, 0, cas, value)
-                    #There is no way to verify CAS value changed by delete until now.
+                    try:
+                        self.clients[bucket.name].cas(key, 0, 0, cas, value)
+                        raise Exception("The item should already be deleted. We can't mutate it anymore")
+                    except MemcachedError as error:
+                    #It is expected to raise MemcachedError because the key is deleted.
+                        if error.status == ERR_NOT_FOUND:
+                            self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.msg))
+                            pass
+                        else:
+                            raise Exception(error)
                 elif ops == "expire":
                     o, cas, d = self.clients[bucket.name].set(key, self.expire_time, 0, value)
                     time.sleep(self.expire_time+1)
                     self.log.info("Try to mutate an expired item with its previous cas {0}".format(cas))
                     try:
                         self.clients[bucket.name].cas(key, 0, 0, cas, value)
+                        raise Exception("The item should already be expired. We can't mutate it anymore")
                     except MemcachedError as error:
                     #It is expected to raise MemcachedError becasue the key is expired.
                         if error.status == ERR_NOT_FOUND:
                             self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.msg))
                             pass
                         else:
-                            self.set_exception(error)
+                            raise Exception(error)
 
             if len(cas_error_collection) > 0:
                 for cas_value in cas_error_collection:
