@@ -1,6 +1,5 @@
 from librabbitmq import Connection, Message
 import json
-import re
 from celery import Task
 import testcfg as cfg
 from celery.utils.log import get_task_logger
@@ -60,7 +59,7 @@ class RabbitHelper(object):
 
     def putMsg(self, queue, body):
         channel = self.connection.channel()
-        if not isinstance(queue,str): queue = str(queue)
+        if not isinstance(queue, str): queue = str(queue)
         rc = channel.basic_publish(exchange = '', routing_key=queue,  body = body)
         channel.close()
 

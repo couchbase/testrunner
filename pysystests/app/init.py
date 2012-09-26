@@ -7,8 +7,7 @@ import testcfg as cfg
 rabbitHelper = RabbitHelper()
 
 cached_queues = WorkloadCacher().queues +  TemplateCacher().cc_queues
-
-test_queues = ["workload","workload_template"] + cached_queues
+test_queues = ["workload","workload_template", "admin_tasks"] + cached_queues
 
 for queue in test_queues:
     try:
@@ -16,7 +15,7 @@ for queue in test_queues:
             print "Purge Queue: "+queue +" "+ str(rabbitHelper.qsize(queue))
             rabbitHelper.purge(queue)
     except Exception as ex:
-        pass
+        print ex
 
 cacheClean()
 

@@ -28,6 +28,10 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'task': 'app.workload_manager.workloadConsumer',
     'schedule': timedelta(seconds=2),
     },
+    'admin_consumer': {
+    'task': 'app.admin_manager.adminConsumer',
+    'schedule': timedelta(seconds=2),
+    },
     'postcondition_handler': {
     'task': 'app.workload_manager.postcondition_handler',
     'schedule': timedelta(seconds=2),
@@ -65,7 +69,7 @@ CELERY_ROUTES = ({'app.sdk_client_tasks.mset': {
                   'queue': 'get',
                   'routing_key': 'memcached.get'
                 }},
-                {'app.rest_client_worker.query_view': {
+                {'app.rest_client_tasks.query_view': {
                   'queue': 'query',
                   'routing_key': 'rest.query'
                 }},

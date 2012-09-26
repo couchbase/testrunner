@@ -47,13 +47,18 @@ def add_workload_parser(parent):
 
 def add_admin_parser(parent):
     parser = parent.add_parser("admin")
-    parser.add_argument("rebalance_in", help="rebalance")
-    parser.add_argument("rebalance_out", help="rebalance")
+    parser.add_argument("--rebalance_in", help="rebalance_in", default='', type=str)
+    parser.add_argument("--rebalance_out", help="rebalance_out", default='', type=str)
+    parser.add_argument("--failover", help="failover", default='', type=str)
+    parser.add_argument("--only_failover", help="only_failover", default=False, action='store_true')
+    parser.add_argument("--soft_restart", help="soft_restart", default='', type=str)
+    parser.add_argument("--hard_restart", help="hard_restart", default='', type=str)
+
+    parser.set_defaults(handler=perform_admin_tasks)
 
 def add_test_parser(parent):
     parser = parent.add_parser("test")
     parser.add_argument("workloads", help="rebalance")
-
 
 def setup_run_parser():
     run_parser = subparser.add_parser('run')
@@ -137,6 +142,19 @@ def import_template(args):
 
     rabbitHelper.putMsg("workload_template", json.dumps(template))
 
+def perform_admin_tasks(args):
+
+    actions = {'rebalance_in': '' or args.rebalance_in,
+               'rebalance_out': '' or args.rebalance_out,
+               'failover': '' or args.failover,
+               'soft_restart': '' or args.soft_restart,
+               'hard_restart': '' or args.hard_restart,
+               'only_failover': False or args.only_failover
+              }
+
+    #TODO: Validate the user inputs, before passing to rabbit
+    print actions
+    rabbitHelper.putMsg("admin_tasks", json.dumps(actions))
 
 ### setup main arg parsers
 setup_run_parser()
