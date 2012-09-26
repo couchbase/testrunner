@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import re
 import sys
+import math
 from app.celery import celery
 import testcfg as cfg
 from cache import NodeStatsCacher
@@ -40,7 +41,6 @@ def resource_monitor():
         # get stats from node
         sample = get_atop_sample(node.ip)
 
-        logger.error(sample)
 
         # update node state object
         update_node_stats(node_stats, sample)
@@ -153,7 +153,7 @@ def get_atop_sample(ip):
     return sample
 
 def atop_cpu(ip):
-    cmd = "grep ^CPU | awk '{print $4,$7}' "
+    cmd = "grep ^CPU | grep sys | awk '{print $4,$7}' "
     return _atop_exec(ip, cmd)
 
 def atop_mem(ip):
@@ -262,6 +262,7 @@ class NodeStats(object):
     def __init__(self, ip):
         self.id = ip
         self.samples = {}
+        self.results = {}
 
 def rest_connect(ip, port, username, password):
     serverInfo = { "ip" : ip,
@@ -275,3 +276,45 @@ def rest_connect(ip, port, username, password):
 def _dict_to_obj(dict_):
     return type('OBJ', (object,), dict_)
 
+@celery.task
+def generate_node_stats_report():
+
+    allnodestats = NodeStatsCacher().allnodestats
+    for node_stats in allnodestats:
+        calculate_node_stat_results(node_stats)
+
+        if len(node_stats.results) > 0:
+            print_node_results(node_stats)
+
+
+def print_node_results(node_stats):
+    logger.error("NODE (%s) STATS " % node_stats.id)
+    logger.error("--------------------------")
+    results = node_stats.results
+    for key in results:
+        logger.error("%s: %s" % (key, results[key]))
+    logger.error("\n")
+
+def calculate_node_stat_results(node_stats):
+
+
+    # calculate results
+    for k,data in node_stats.samples.items():
+        if k not in node_stats.results:
+            node_stats.results[k] = {}
+
+        # for each stat key, calculate
+        # mean, max, and 99th %value
+        data.sort()
+        if len(data) > 0:
+            idx = int(math.ceil((len(data)) * 0.99))
+            if idx %2==0:
+                nn_perctile = (data[idx - 1] + data[idx-2])/2.0
+            else:
+                nn_perctile = data[idx - 1]
+        mean = sum(data) / float(len(data))
+
+        node_stats.results[k] = {"mean" : "%.2f" % mean,
+                                 "max"  : max(data),
+                                 "99th" : "%.2f" % nn_perctile}
+    NodeStatsCacher().store(node_stats)

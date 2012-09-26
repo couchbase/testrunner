@@ -40,12 +40,17 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
 
     'cluster_resource_monitor': {
     'task': 'app.stats.resource_monitor',
-    'schedule': timedelta(seconds=10),
+    'schedule': timedelta(seconds=20),
     },
 
     'atop_log_rollover': { # Execute every three hours
     'task': 'app.stats.atop_log_rollover',
     'schedule': timedelta(seconds=10800),
+    },
+
+    'generate_node_stats_report': { # every 2 minutes print out report from collected stats
+    'task': 'app.stats.generate_node_stats_report',
+    'schedule': timedelta(seconds=120),
     },
 
 }
