@@ -3,6 +3,8 @@ from __future__ import absolute_import
 import re
 import sys
 import math
+import time
+import datetime
 from app.celery import celery
 import testcfg as cfg
 from cache import NodeStatsCacher
@@ -150,6 +152,8 @@ def get_atop_sample(ip):
                        "wrdsk" : disk[1],
                        "disk_util" : disk[2]})
 
+    sample.update({"ts" : str(time.time())})
+
     return sample
 
 def atop_cpu(ip):
@@ -263,6 +267,25 @@ class NodeStats(object):
         self.id = ip
         self.samples = {}
         self.results = {}
+        self.start_time = time.time()
+
+    def get_run_interval(self):
+        curr_time = time.time()
+        runtime_s = curr_time - self.start_time
+        return str(datetime.timedelta(seconds=runtime_s))[:-4]
+
+    def __repr__(self):
+        interval = self.get_run_interval()
+
+        str_ = "\n"
+        str_ = str_ + "Runtime: %20s \n" % interval
+        for key in self.results:
+            str_ = str_ + "%10s: " % (key)
+            for k, v  in self.results[key].items():
+                str_ = str_ + "%10s: %10s"  % (k,v)
+            str_ = str_ + "\n"
+        return str_
+
 
 def rest_connect(ip, port, username, password):
     serverInfo = { "ip" : ip,
@@ -280,19 +303,37 @@ def _dict_to_obj(dict_):
 def generate_node_stats_report():
 
     allnodestats = NodeStatsCacher().allnodestats
-    for node_stats in allnodestats:
-        calculate_node_stat_results(node_stats)
 
-        if len(node_stats.results) > 0:
-            print_node_results(node_stats)
+    if len(allnodestats) > 0:
+        # print current time at top of each report
+        # TODO: add active tasks at time of report generation
+        ts = time.localtime()
+        ts_string = "%s/%s/%s %s:%s:%s" %\
+            (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
+        print_separator()
+        logger.error("\tSTAT REPORT: (%s)" % ts_string)
+
+        for node_stats in allnodestats:
+            calculate_node_stat_results(node_stats)
+
+            if len(node_stats.results) > 0:
+                print_node_results(node_stats)
+        logger.error("\tEND OF REPORT: (%s)" % ts_string)
+        print_separator()
+        new_line()
 
 
 def print_node_results(node_stats):
-    logger.error("NODE (%s) STATS " % node_stats.id)
-    logger.error("--------------------------")
-    results = node_stats.results
-    for key in results:
-        logger.error("%s: %s" % (key, results[key]))
+    print_separator()
+    logger.error("\tNODE: (%s)" % node_stats.id)
+    print_separator()
+    logger.error(node_stats)
+    new_line()
+
+def print_separator():
+    logger.error("---------------------------------------")
+
+def new_line():
     logger.error("\n")
 
 def calculate_node_stat_results(node_stats):
@@ -300,6 +341,8 @@ def calculate_node_stat_results(node_stats):
 
     # calculate results
     for k,data in node_stats.samples.items():
+        if k == 'ts' : continue
+
         if k not in node_stats.results:
             node_stats.results[k] = {}
 
@@ -316,5 +359,7 @@ def calculate_node_stat_results(node_stats):
 
         node_stats.results[k] = {"mean" : "%.2f" % mean,
                                  "max"  : max(data),
-                                 "99th" : "%.2f" % nn_perctile}
+                                 "99th" : "%.2f" % nn_perctile,
+                                 "samples" : len(data)}
+
     NodeStatsCacher().store(node_stats)
