@@ -380,7 +380,7 @@ class XDCRBaseTest(unittest.TestCase):
             if key in valid_keys_first:
                 partition1 = kv_store_first[kvs_num].acquire_partition(key)
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                key_mod = partition2.get_key(key)
+                key_add = partition2.get_key(key)
                 partition1.valid[key] = {"value"   : key_add["value"],
                            "expires" : key_add["expires"],
                            "flag"    : key_add["flag"]}
