@@ -19,7 +19,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
     # verify we did not lose items
 
     # maximum time we allow ns_server to take to detect a failed node
-    MAX_FAIL_DETECT_TIME = 5
+    MAX_FAIL_DETECT_TIME = 60
 
     @staticmethod
     def common_setup(input, testcase):
