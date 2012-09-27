@@ -38,6 +38,7 @@ def _send_msg(message):
     sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
     sdk_client.sendall(json.dumps(message))
 
+@celery.task
 def perform_admin_tasks(adminMsg):
     rest = create_rest()
 

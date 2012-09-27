@@ -1405,7 +1405,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         # Start server
         self.start_couchbase()
 
-    def execute_cluster_backup(self, login_info, backup_location, command_options):
+    def execute_cluster_backup(self, login_info="Administrator:password", backup_location="/tmp/backup",
+                               command_options='', cluster_ip="", cluster_port="8091"):
         self.delete_files(backup_location)
         self.create_directory(backup_location)
 
@@ -1417,11 +1418,14 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             #backup_command = "%scbbackup.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
         command_options_string = ""
-        if command_options is not None:
+        if command_options is not '':
             command_options_string = ' '.join(command_options)
+        cluster_ip = cluster_ip or self.ip
+        cluster_port = cluster_port or self.port
 
         command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
-                                           self.ip, self.port, backup_location, command_options_string)
+                                           cluster_ip, cluster_port, backup_location, command_options_string)
+
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 

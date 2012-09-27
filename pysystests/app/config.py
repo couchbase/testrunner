@@ -1,14 +1,17 @@
 from __future__ import absolute_import
 from kombu import Exchange, Queue
 from datetime import timedelta
+from celery.task.schedules import crontab
 import testcfg as cfg
 
 BROKER_URL = 'librabbitmq://'+cfg.RABBITMQ_IP
 CELERY_RESULT_BACKEND = 'cache'
 CELERY_TASK_SERIALIZER = 'pickle'
 CELERY_RESULT_SERIALIZER = 'pickle'
-CELERY_TIMEZONE = 'Europe/Oslo'
-CELERY_ENABLE_UTC = True
+# By default the current local timezone is used
+#CELERY_TIMEZONE = 'Europe/Oslo'
+#CELERY_ENABLE_UTC = True
+
 CELERY_CACHE_BACKEND = 'memcached://%s:%s' % (cfg.RESULT_CACHE_IP, cfg.RESULT_CACHE_PORT)
 CELERY_CACHE_BACKEND_OPTIONS = {"binary": True,
                                "behaviors": {"tcp_nodelay": True}}
@@ -53,6 +56,11 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'schedule': timedelta(seconds=120),
     },
 
+    'do_backup': { # every once per day
+    'task': 'app.admin_manager.backup_task',
+    'schedule': crontab(minute=0, hour=0), #Execute daily at midnight.
+    'args': [cfg.ENABLE_BACKUPS]
+    },
 }
 
 CELERY_QUEUES = (
