@@ -11,6 +11,7 @@ SSH_USER = "root"
 SSH_PASSWORD = "password"
 WORKERS = ['127.0.0.1']
 ATOP_LOG_FILE = "/tmp/atop-node.log"
+LOGDIR="logs"  # relative to current dir
 
 #Backup Config
 ENABLE_BACKUPS = False

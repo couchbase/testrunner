@@ -12,7 +12,7 @@ from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
 from celery.utils.log import get_task_logger
-logger = get_task_logger(__name__)
+logger = get_task_logger("app.stats")
 
 @celery.task
 def resource_monitor():
