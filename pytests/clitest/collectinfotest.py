@@ -8,7 +8,8 @@ import logger
 LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log",
                       "ns_server.couchdb.log", "ns_server.debug.log",
                       "ns_server.error.log", "ns_server.info.log",
-                      "ns_server.views.log", "stats.log"]
+                      "ns_server.views.log", "stats.log",
+                      "memcached.log"]
 
 class collectinfoTests(CliBaseTest):
 
@@ -73,7 +74,11 @@ class collectinfoTests(CliBaseTest):
                 raise Exception("uable to list the files. Check ls command output for help")
             missing_logs = False
             for x in LOG_FILE_NAME_LIST:
-                if output[0].find(x) == -1 and output[1].find(x) == -1:
+                find_log = False
+                for output_line in output:
+                    if output_line.find(x) >= 0:
+                        find_log = True
+                if not find_log:
                    missing_logs = True
                    self.log.error("The log zip file miss %s" % (x))
 
