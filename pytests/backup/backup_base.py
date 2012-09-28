@@ -18,8 +18,8 @@ class BackupBaseTest(BaseTestCase):
         self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
                                                self.input.membase_settings.rest_password)
         self.backup_location = self.input.param("backup_location", "/tmp/backup")
-        self.command_options = self.input.param("command_options", None)
-        if self.command_options is not None:
+        self.command_options = self.input.param("command_options", '')
+        if self.command_options is not '':
             self.command_options = self.command_options.split(";")
         self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
