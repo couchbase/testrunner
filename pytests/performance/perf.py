@@ -168,6 +168,7 @@ class PerfBase(unittest.TestCase):
 
         self.set_loglevel()
         self.set_max_concurrent_reps_per_doc()
+        self.set_xdcr_doc_batch_size_kb()
         self.set_autocompaction()
 
     def set_loglevel(self):
@@ -182,6 +183,16 @@ class PerfBase(unittest.TestCase):
         rest = RestConnection(node)
         rest.set_mc_threads(mc_threads)
         print "[perf.setUp] num of memcached threads = %s" % mc_threads
+
+    def set_xdcr_doc_batch_size_kb(self):
+        """Set custom XDCR_DOC_BATCH_SIZE_KB"""
+
+        xdcr_doc_batch_size_kb = self.param('xdcr_doc_batch_size_kb', None)
+        if xdcr_doc_batch_size_kb:
+            for server in self.input.servers:
+                rc = RemoteMachineShellConnection(server)
+                rc.set_environment_variable('XDCR_DOC_BATCH_SIZE_KB',
+                                            xdcr_doc_batch_size_kb)
 
     def set_max_concurrent_reps_per_doc(self):
         """Set custom MAX_CONCURRENT_REPS_PER_DOC"""
