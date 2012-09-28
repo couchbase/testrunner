@@ -10,6 +10,7 @@ import gzip
 import copy
 import threading
 import socket
+import signal
 from multiprocessing import Process
 from functools import wraps
 
@@ -19,6 +20,13 @@ from membase.performance.stats import CallbackStatsCollector
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
+# cbtop imports
+try:
+    from libcbtop.main import main as cbtop_run
+except ImportError:
+    print "unable to import cbtop: see http://pypi.python.org/pypi/cbtop"
+    cbtop_run = None
+
 # testrunner imports
 from TestInput import TestInputSingleton
 from perf_defaults import PerfDefaults
@@ -27,6 +35,35 @@ from perf_engines.cbsoda import StoreCouchbase
 from perf_engines import mcsoda
 from scripts.perf.rel_cri_stats import CBStatsCollector
 from cbkarma.rest_client import CbKarmaClient
+
+def cbtop(func):
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not cbtop_run or not self.parami("prefix", 1) == 0:
+            return func(self, *args, **kwargs)
+
+        try:
+            ip = self.input.servers[0].ip
+        except:
+            return func(self, *args, **kwargs)
+
+        kws = {"itv": self.parami("cbtop_itv", 10)}
+        proc = Process(target=cbtop_run, args=(ip, ), kwargs=kws)
+        proc.start()
+        os.setpgid(proc.pid, proc.pid)
+
+        try:
+            ret = func(self, *args, **kwargs)
+        except:
+            raise
+        finally:
+            os.killpg(proc.pid, signal.SIGKILL)   # TODO - gracefully shutdown
+
+        # post-processing
+        return ret
+
+    return wrapper
 
 def multi_buckets(test):
     """
@@ -431,6 +468,7 @@ class EPerfMaster(perf.PerfBase):
         return _outer
 
     @_dashboard(phase='load')
+    @cbtop
     def load_phase(self, num_nodes):
 
         if self.parami("hot_load_phase", 0) == 1:
@@ -509,6 +547,7 @@ class EPerfMaster(perf.PerfBase):
 
     @_dashboard(phase='access')
     @measure_sched_delays
+    @cbtop
     def access_phase(self,
                      ratio_sets=0,
                      ratio_misses=0,
@@ -602,6 +641,7 @@ class EPerfMaster(perf.PerfBase):
 
     # restart the cluster and wait for it to warm up
     @_dashboard(phase='warmup')
+    @cbtop
     def warmup_phase(self):
         if not self.is_leader:
             return
@@ -636,6 +676,7 @@ class EPerfMaster(perf.PerfBase):
         self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
     @_dashboard(phase='index')
+    @cbtop
     def index_phase(self, ddocs):
         """Create design documents and views"""
 
