@@ -45,6 +45,12 @@ class PerfDefaults:
     carbon_timeout      =    5           # socket timeout value if carbon server is not responsive
     carbon_cache_size   =    10          # number of stats msgs queue up before flushing to carbon server
 
+    # cbtop
+    cbtop_itv           =    20          # stats polling interval (seconds)
+    cbtop_dbhost        =    "127.0.0.1" # host where seriesly database is located
+    cbtop_dbslow        =    "slow"      # seriesly database to store slow changing data
+    cbtop_dbfast        =    "fast"      # seriesly database to store fast changing data
+
     # rebalance
     rebalance_after     =    200000
     num_nodes_after     =    7           # num of nodes after rebalance.

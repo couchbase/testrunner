@@ -48,7 +48,10 @@ def cbtop(func):
         except:
             return func(self, *args, **kwargs)
 
-        kws = {"itv": self.parami("cbtop_itv", 10)}
+        kws = {"itv": self.parami("cbtop_itv", PerfDefaults.cbtop_itv),
+               "dbhost": self.param("cbtop_dbhost", PerfDefaults.cbtop_dbhost),
+               "dbslow": self.param("cbtop_dbslow", PerfDefaults.cbtop_dbslow),
+               "dbfast": self.param("cbtop_dbfast", PerfDefaults.cbtop_dbfast)}
         proc = Process(target=cbtop_run, args=(ip, ), kwargs=kws)
         proc.start()
         os.setpgid(proc.pid, proc.pid)
