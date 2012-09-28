@@ -174,7 +174,7 @@ class CheckpointTests(BaseTestCase):
         generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
         generate_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items/2))
         self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=self.checkpoint_size, pause_secs=5, timeout_secs=180)
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        self._wait_for_stats_all_buckets([self.master, self.replica2, self.replica3])
 
         data_load_thread = Thread(target=self._load_all_buckets,
                                   name="load_data",
@@ -204,6 +204,10 @@ class CheckpointTests(BaseTestCase):
         stat_key = 'vb_0:open_checkpoint_id'
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
+        failover_node = None
+        for node in nodes:
+            if node.id.find(self.master.ip) >= 0:
+                failover_node = node
 
         self._set_checkpoint_size(self.servers[:self.num_servers], self.bucket, self.checkpoint_size)
         generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
@@ -215,14 +219,14 @@ class CheckpointTests(BaseTestCase):
         prev_backfill_timestamp_R1 = self._get_backfill_timestamp(self.replica1, self.replica2)
         prev_backfill_timestamp_R2 = self._get_backfill_timestamp(self.replica2, self.replica3)
 
-        failed_over = rest.fail_over(nodes[0].id)
+        failed_over = rest.fail_over(failover_node.id)
         if not failed_over:
             self.log.info("unable to failover the node the first time. try again in  60 seconds..")
             #try again in 60 seconds
             time.sleep(75)
-            failed_over = rest.fail_over(nodes[0].id)
+            failed_over = rest.fail_over(failover_node.id)
         self.assertTrue(failed_over, "unable to failover node %s" % (self.master.ip))
-        self.log.info("failed over node : {0}".format(nodes[0].id))
+        self.log.info("failed over node : {0}".format(failover_node.id))
         data_load_thread.join()
 
         self._verify_backfill_happen(self.replica1, self.replica2, prev_backfill_timestamp_R1)
@@ -238,6 +242,10 @@ class CheckpointTests(BaseTestCase):
         stat_key = 'vb_0:open_checkpoint_id'
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
+        failover_node = None
+        for node in nodes:
+            if node.id.find(self.replica2.ip) >= 0:
+                failover_node = node
 
         self._set_checkpoint_size(self.servers[:self.num_servers], self.bucket, self.checkpoint_size)
         generate_load_one = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
@@ -253,14 +261,14 @@ class CheckpointTests(BaseTestCase):
                                           args=(self.master, generate_load_two, "create", 0, 1, 0, True, self.checkpoint_size, 5, 180))
         data_load_thread.start()
 
-        failed_over = rest.fail_over(nodes[2].id)
+        failed_over = rest.fail_over(failover_node.id)
         if not failed_over:
             self.log.info("unable to failover the node the first time. try again in  60 seconds..")
             #try again in 60 seconds
             time.sleep(75)
-            failed_over = rest.fail_over(nodes[2].id)
+            failed_over = rest.fail_over(failover_node.id)
         self.assertTrue(failed_over, "unable to failover node %s".format(self.replica2.ip))
-        self.log.info("failed over node : {0}".format(nodes[2].id))
+        self.log.info("failed over node : {0}".format(failover_node.id))
         data_load_thread.join()
         self._start_replication(self.replica3, self.bucket)
 
