@@ -5,9 +5,7 @@ import sys
 from threading import Thread
 from datetime import datetime
 import uuid
-
-sys.path.append(".")
-sys.path.append("lib")
+sys.path = [".", "lib"] + sys.path
 from remote.remote_util import RemoteMachineShellConnection
 import TestInput
 
