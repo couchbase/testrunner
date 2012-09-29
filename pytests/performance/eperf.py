@@ -46,6 +46,7 @@ from cbkarma.rest_client import CbKarmaClient
 class EventType:
     START = "start"
     STOP = "stop"
+    ABORT = "abort"
 
 def cbtop(func):
 
@@ -82,6 +83,8 @@ def cbtop(func):
         try:
             ret = func(self, *args, **kwargs)
         except:
+            event["type"] = EventType.ABORT
+            self.seriesly[dbevent].append(event)
             raise
         finally:
             os.killpg(proc.pid, signal.SIGKILL)   # TODO - gracefully shutdown
