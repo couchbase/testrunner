@@ -27,6 +27,13 @@ except ImportError:
     print "unable to import cbtop: see http://pypi.python.org/pypi/cbtop"
     cbtop_run = None
 
+try:
+    from seriesly import Seriesly
+    import seriesly.exceptions
+except ImportError:
+    print "unable to import seriesly: see http://pypi.python.org/pypi/seriesly"
+    Seriesly = None
+
 # testrunner imports
 from TestInput import TestInputSingleton
 from perf_defaults import PerfDefaults
@@ -35,6 +42,10 @@ from perf_engines.cbsoda import StoreCouchbase
 from perf_engines import mcsoda
 from scripts.perf.rel_cri_stats import CBStatsCollector
 from cbkarma.rest_client import CbKarmaClient
+
+class EventType:
+    START = "start"
+    STOP = "stop"
 
 def cbtop(func):
 
@@ -48,10 +59,22 @@ def cbtop(func):
         except:
             return func(self, *args, **kwargs)
 
+        dbhost = self.param("cbtop_dbhost", PerfDefaults.cbtop_dbhost)
+        dbevent = self.param("cbtop_dbevent", PerfDefaults.cbtop_dbevent)
+
+        if not self.init_seriesly(dbhost, dbevent):
+            return func(self, *args, **kwargs)
+
+        event = self.seriesly_event()
+        event["name"] = func.__name__
+        event["type"] = EventType.START
+        self.seriesly[dbevent].append(event)
+
         kws = {"itv": self.parami("cbtop_itv", PerfDefaults.cbtop_itv),
-               "dbhost": self.param("cbtop_dbhost", PerfDefaults.cbtop_dbhost),
+               "dbhost": dbhost,
                "dbslow": self.param("cbtop_dbslow", PerfDefaults.cbtop_dbslow),
                "dbfast": self.param("cbtop_dbfast", PerfDefaults.cbtop_dbfast)}
+
         proc = Process(target=cbtop_run, args=(ip, ), kwargs=kws)
         proc.start()
         os.setpgid(proc.pid, proc.pid)
@@ -63,7 +86,9 @@ def cbtop(func):
         finally:
             os.killpg(proc.pid, signal.SIGKILL)   # TODO - gracefully shutdown
 
-        # post-processing
+        event["type"] = EventType.STOP
+        self.seriesly[dbevent].append(event)
+
         return ret
 
     return wrapper
@@ -1529,6 +1554,7 @@ class EPerfClient(EPerfMaster):
         self.bg_max_ops_per_sec = 0
         self.fg_max_ops = 0
         self.get_bucket_conf()
+        self.seriesly = None
 
         pass  # Skip super's setUp().  The master should do the real work.
 
@@ -1549,6 +1575,32 @@ class EPerfClient(EPerfMaster):
 
     def test_wait_until_drained(self):
         self.wait_until_drained()
+
+    def seriesly_event(self):
+        servers = [server.ip for server in self.input.servers]
+        return {"test_params": self.input.test_params,
+                "servers": servers}
+
+    def init_seriesly(self, host, db):
+        if not Seriesly:
+            print "unable to initialize seriesly: library not installed"
+            return False
+
+        if self.seriesly:
+            return True
+
+        self.seriesly = Seriesly(host=host)
+
+        try:
+            dbs = self.seriesly.list_dbs()
+        except seriesly.exceptions.ConnectionError, e:
+            print "unable to connect to seriesly server %s: %s" % (host, e)
+            return False
+
+        if db and db not in dbs:
+            self.seriesly.create_db(db)
+
+        return True
 
 
 # The EVPerfClient subclass deploys another background thread to drive

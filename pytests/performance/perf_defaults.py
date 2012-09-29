@@ -50,6 +50,7 @@ class PerfDefaults:
     cbtop_dbhost        =    "127.0.0.1" # host where seriesly database is located
     cbtop_dbslow        =    "slow"      # seriesly database to store slow changing data
     cbtop_dbfast        =    "fast"      # seriesly database to store fast changing data
+    cbtop_dbevent       =    "event"     # seriesly database to store events
 
     # rebalance
     rebalance_after     =    200000
