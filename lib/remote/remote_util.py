@@ -124,8 +124,8 @@ class RemoteMachineShellConnection:
         except paramiko.BadHostKeyException:
             log.info("Invalid Host key")
             exit(1)
-        except Exception:
-            log.info("Can't establish SSH session")
+        except Exception as e:
+            log.info("Can't establish SSH session: {0}".format(e.message))
             exit(1)
         log.info("Connected")
 
@@ -150,7 +150,7 @@ class RemoteMachineShellConnection:
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
             log.info("STOP SERVER")
-            o, r = self.execute_command("net stop membaseserver")
+            o, r = self.execute_command("net stop membaseserver", info)
             self.log_command_output(o, r)
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
@@ -158,16 +158,16 @@ class RemoteMachineShellConnection:
             time.sleep(10)
         if info.type.lower() == "linux":
             #check if /opt/membase exists or /opt/couchbase or /opt/couchbase-single
-            o, r = self.execute_command("/etc/init.d/membase-server stop")
+            o, r = self.execute_command("/etc/init.d/membase-server stop", info)
             self.log_command_output(o, r)
 
     def start_membase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            o, r = self.execute_command("net start membaseserver")
+            o, r = self.execute_command("net start membaseserver", info)
             self.log_command_output(o, r)
         if info.type.lower() == "linux":
-            o, r = self.execute_command("/etc/init.d/membase-server start")
+            o, r = self.execute_command("/etc/init.d/membase-server start", info)
             self.log_command_output(o, r)
 
     def start_server(self, os="unix"):
@@ -258,10 +258,10 @@ class RemoteMachineShellConnection:
     def disable_firewall(self):
         info = self.extract_remote_info()
         if info.type.lower() == "windows":
-            self.execute_command('netsh advfirewall set publicprofile state off')
+            self.execute_command('netsh advfirewall set publicprofile state off', info)
             self.execute_command('netsh advfirewall set privateprofile state off')
         else:
-            output, error = self.execute_command('/sbin/iptables -F')
+            output, error = self.execute_command('/sbin/iptables -F', info)
             self.log_command_output(output, error)
             output, error = self.execute_command('/sbin/iptables -t nat -F')
             self.log_command_output(output, error)
@@ -269,7 +269,7 @@ class RemoteMachineShellConnection:
     def download_binary(self, url, deliverable_type, filename):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            self.execute_command('taskkill /F /T /IM msiexec32.exe')
+            self.execute_command('taskkill /F /T /IM msiexec32.exe', info)
             self.execute_command('taskkill /F /T /IM msiexec.exe')
             self.execute_command('taskkill /F /T IM setup.exe')
             self.execute_command('taskkill /F /T /IM ISBEW64.*')
@@ -291,7 +291,7 @@ class RemoteMachineShellConnection:
         #build.product has the full name
         #first remove the previous file if it exist ?
         #fix this :
-            output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
+            output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename), info)
             self.log_command_output(output, error)
             log.info('get md5 sum for local and remote')
             output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
@@ -560,7 +560,6 @@ class RemoteMachineShellConnection:
         #run the right command
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
-        info = self.extract_remote_info()
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
         command = ''
         if info.type.lower() == 'windows':
@@ -581,7 +580,7 @@ class RemoteMachineShellConnection:
             else:
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
 
-        output, error = self.execute_command(command)
+        output, error = self.execute_command(command, info)
         self.log_command_output(output, error)
 
     def membase_upgrade_win(self, architecture, windows_name, version, initial_version=''):
@@ -632,7 +631,6 @@ class RemoteMachineShellConnection:
             raise Exception("its not a couchbase-single ?")
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
-        info = self.extract_remote_info()
         type = info.type.lower()
         if type == 'windows':
             win_processes = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
@@ -1267,21 +1265,21 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
     def stop_couchbase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            o, r = self.execute_command("net stop couchbaseserver")
+            o, r = self.execute_command("net stop couchbaseserver", info)
             self.log_command_output(o, r)
             log.info("Wait 10 seconds to stop service completely")
             time.sleep(10)
         if info.type.lower() == "linux":
-            o, r = self.execute_command("/etc/init.d/couchbase-server stop")
+            o, r = self.execute_command("/etc/init.d/couchbase-server stop", info)
             self.log_command_output(o, r)
 
     def start_couchbase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':
-            o, r = self.execute_command("net start couchbaseserver")
+            o, r = self.execute_command("net start couchbaseserver", info)
             self.log_command_output(o, r)
         if info.type.lower() == "linux":
-            o, r = self.execute_command("/etc/init.d/couchbase-server start")
+            o, r = self.execute_command("/etc/init.d/couchbase-server start", info)
             self.log_command_output(o, r)
 
     def pause_memcached(self):
@@ -1307,7 +1305,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if info.type.lower() == "linux":
             o, r = self.execute_command("sync")
             self.log_command_output(o, r)
-            o, r = self.execute_command("/sbin/sysctl vm.drop_caches=3")
+            o, r = self.execute_command("/sbin/sysctl vm.drop_caches=3", info)
             self.log_command_output(o, r)
 
     def get_data_file_size(self, path=None):
@@ -1338,7 +1336,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             remote_command.append(" " + process_pid)
 
         if info.type.lower() == "windows":
-            o, r = self.execute_command(remote_command)
+            o, r = self.execute_command(remote_command, info)
             if r:
                 log.error("Command didn't run successfully. Error: {0}".format(r))
             return o;
