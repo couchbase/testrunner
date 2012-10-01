@@ -68,6 +68,9 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
                 rest = RestConnection(self.master)
+                alerts = rest.get_alerts()
+                if alerts is not None and len(alerts) != 0:
+                    self.log.warn("Alerts were found: {0}".format(alerts))
                 if rest._rebalance_progress_status() == 'running':
                     self.log.warning("rebalancing is still running, test should be verified")
                     stopped = rest.stop_rebalance()
