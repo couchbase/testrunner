@@ -386,7 +386,13 @@ class EPerfMaster(perf.PerfBase):
         return _outer
 
     @_dashboard(phase='load')
-    def load_phase(self, num_nodes, num_items):
+    def load_phase(self, num_nodes):
+
+        if self.parami("hot_load_phase", 0) == 1:
+            num_items = self.parami("hot_init_items", PerfDefaults.items)
+        else:
+            num_items = self.parami("items", PerfDefaults.items)
+
         # Cluster nodes if master
         if self.is_master:
             self.rebalance_nodes(num_nodes)
@@ -457,7 +463,7 @@ class EPerfMaster(perf.PerfBase):
         return num_clients, start_at
 
     @_dashboard(phase='access')
-    def access_phase(self, items,
+    def access_phase(self,
                      ratio_sets=0,
                      ratio_misses=0,
                      ratio_creates=0,
@@ -476,7 +482,7 @@ class EPerfMaster(perf.PerfBase):
                      ddoc=None):
         if self.parami("access_phase", 1) > 0:
             print "Accessing"
-            items = self.parami("items", items)
+            items = self.parami("items", PerfDefaults.items)
             num_clients, start_at = self.access_phase_clients_start_at()
             start_delay = self.parami("start_delay", PerfDefaults.start_delay)
             if start_delay > 0:
@@ -678,16 +684,10 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_read")
 
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
         if self.parami("access_phase", 1) == 1:
-            self.access_phase(items,
-                              ratio_sets=self.paramf('ratio_sets',
+            self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
                               ratio_misses=self.paramf('ratio_misses',
                                                        PerfDefaults.ratio_misses),
@@ -713,16 +713,10 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_write")
 
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
         if self.parami("access_phase", 1) == 1:
-            self.access_phase(items,
-                              ratio_sets=self.paramf('ratio_sets',
+            self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
                               ratio_misses=self.paramf('ratio_misses',
                                                        PerfDefaults.ratio_misses),
@@ -748,14 +742,8 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_mixed")
 
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes),
-                        items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
 
         if self.parami("index_phase", 0) and self.param("woq_pattern", 0):
             view_gen = ViewGen()
@@ -774,8 +762,7 @@ class EPerfMaster(perf.PerfBase):
                                                   cb_exc=cb_exc,
                                                   frequency=frequency)
 
-            self.access_phase(items,
-                              ratio_sets=self.paramf('ratio_sets',
+            self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
                               ratio_misses=self.paramf('ratio_misses',
                                                        PerfDefaults.ratio_misses),
@@ -829,14 +816,8 @@ class EPerfMaster(perf.PerfBase):
         """
         self.spec("test_eperf_rebalance")
 
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes),
-                        items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
 
         if not self.parami("nru_task", PerfDefaults.nru_task) and \
@@ -866,8 +847,7 @@ class EPerfMaster(perf.PerfBase):
                 max_creates= \
                     self.parami("max_creates", PerfDefaults.max_creates)
 
-            self.access_phase(items,
-                              ratio_sets=self.paramf('ratio_sets',
+            self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
                               ratio_misses=self.paramf('ratio_misses',
                                                        PerfDefaults.ratio_misses),
@@ -920,17 +900,11 @@ class EPerfMaster(perf.PerfBase):
         """test front-end throughput"""
         self.spec("test_eperf_thruput")
 
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes), items)
+        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
 
         if self.parami("access_phase", 1) == 1:
-            self.access_phase(items,
-                              ratio_sets=self.paramf('ratio_sets',
+            self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
                               ratio_misses=self.paramf('ratio_misses',
                                                        PerfDefaults.ratio_misses),
@@ -953,13 +927,8 @@ class EPerfMaster(perf.PerfBase):
         self.spec("evperf_workload2")
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
-        self.load_phase(num_nodes, items)
+        self.load_phase(num_nodes)
 
         # Index phase
         view_gen = ViewGen()
@@ -980,8 +949,7 @@ class EPerfMaster(perf.PerfBase):
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets', 0.3),
+        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
                           ratio_misses=self.paramf('ratio_misses', 0.05),
                           ratio_creates=self.paramf('ratio_creates', 0.33),
                           ratio_deletes=self.paramf('ratio_deletes', 0.25),
@@ -1003,13 +971,8 @@ class EPerfMaster(perf.PerfBase):
         self.spec('evperf_workload3')
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
-        self.load_phase(num_nodes, items)
+        self.load_phase(num_nodes)
 
         # Index phase
         view_gen = ViewGen()
@@ -1031,8 +994,7 @@ class EPerfMaster(perf.PerfBase):
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets', 0.3),
+        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
                           ratio_misses=self.paramf('ratio_misses', 0.05),
                           ratio_creates=self.paramf('ratio_creates', 0.33),
                           ratio_deletes=self.paramf('ratio_deletes', 0.25),
@@ -1056,13 +1018,8 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
-        self.load_phase(num_nodes, items)
+        self.load_phase(num_nodes)
 
         # Index phase
         view_gen = ViewGen()
@@ -1083,8 +1040,7 @@ class EPerfMaster(perf.PerfBase):
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets',
+        self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                  PerfDefaults.ratio_sets),
                           ratio_misses=self.paramf('ratio_misses',
                                                    PerfDefaults.ratio_misses),
@@ -1118,12 +1074,7 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
-        self.load_phase(self.parami('num_nodes', 10), items)
+        self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         view_gen = ViewGen()
@@ -1148,8 +1099,7 @@ class EPerfMaster(perf.PerfBase):
             server_sn = self.parami('prefix', 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets', 0.3),
+        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
                           ratio_misses=self.paramf('ratio_misses', 0.05),
                           ratio_creates=self.paramf('ratio_creates', 0.33),
                           ratio_deletes=self.paramf('ratio_deletes', 0.25),
@@ -1176,12 +1126,7 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
-        self.load_phase(self.parami('num_nodes', 10), items)
+        self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         view_gen = ViewGen()
@@ -1202,8 +1147,7 @@ class EPerfMaster(perf.PerfBase):
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets', 0.3),
+        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
                           ratio_misses=self.paramf('ratio_misses', 0.05),
                           ratio_creates=self.paramf('ratio_creates', 0.33),
                           ratio_deletes=self.paramf('ratio_deletes', 0.25),
@@ -1230,12 +1174,7 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
-        self.load_phase(self.parami('num_nodes', 10), items)
+        self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         view_gen = ViewGen()
@@ -1257,8 +1196,7 @@ class EPerfMaster(perf.PerfBase):
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets', 0.3),
+        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
                           ratio_misses=self.paramf('ratio_misses', 0.05),
                           ratio_creates=self.paramf('ratio_creates', 0.33),
                           ratio_deletes=self.paramf('ratio_deletes', 0.25),
@@ -1285,12 +1223,7 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
-        self.load_phase(self.parami('num_nodes', 10), items)
+        self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         pass
@@ -1310,8 +1243,7 @@ class EPerfMaster(perf.PerfBase):
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets', 0.3),
+        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
                           ratio_misses=self.paramf('ratio_misses', 0.05),
                           ratio_creates=self.paramf('ratio_creates', 0.33),
                           ratio_deletes=self.paramf('ratio_deletes', 0.25),
@@ -1338,12 +1270,7 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
-        self.load_phase(self.parami('num_nodes', 10), items)
+        self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         view_gen = ViewGen()
@@ -1365,8 +1292,7 @@ class EPerfMaster(perf.PerfBase):
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets', 0.3),
+        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
                           ratio_misses=self.paramf('ratio_misses', 0.05),
                           ratio_creates=self.paramf('ratio_creates', 0.33),
                           ratio_deletes=self.paramf('ratio_deletes', 0.25),
@@ -1391,17 +1317,11 @@ class EPerfMaster(perf.PerfBase):
         self.spec("evperf2")
 
         self.gated_start(self.input.clients)
-
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
 
         # Load phase
         if self.parami("load_phase", 0):
-            self.load_phase(num_nodes, items)
+            self.load_phase(num_nodes)
 
         # Index phase
         view_gen = ViewGen()
@@ -1421,8 +1341,7 @@ class EPerfMaster(perf.PerfBase):
         host = self.input.servers[server_sn].ip
 
         if self.parami("access_phase", 0):
-            self.access_phase(items,
-                              ratio_sets=self.paramf('ratio_sets',
+            self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
                               ratio_misses=self.paramf('ratio_misses',
                                                        PerfDefaults.ratio_misses),
@@ -1484,12 +1403,7 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        if self.parami("hot_load_phase", 0) == 1:
-            items = self.parami("hot_init_items", PerfDefaults.items)
-        else:
-            items = self.parami("items", PerfDefaults.items)
-
-        self.load_phase(self.parami('num_nodes', 10), items)
+        self.load_phase(self.parami('num_nodes', 10))
 
         # Access phase
         max_creates = self.parami('max_creates', 100)
@@ -1498,8 +1412,7 @@ class EPerfMaster(perf.PerfBase):
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
         host = self.input.servers[server_sn].ip
 
-        self.access_phase(items,
-                          ratio_sets=self.paramf('ratio_sets', 0.5),
+        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.5),
                           ratio_misses=self.paramf('ratio_misses', 0.2),
                           ratio_creates=self.paramf('ratio_creates', 0.5),
                           ratio_deletes=self.paramf('ratio_deletes', 0.5),
