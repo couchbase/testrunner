@@ -215,7 +215,7 @@ class CheckpointTests(BaseTestCase):
                                   name="load_data",
                                   args=(self.master, generate_load, "create", 0, 1, 0, True, self.checkpoint_size, 5, 180))
         data_load_thread.start()
-        time.sleep(2)
+        time.sleep(5)
         prev_backfill_timestamp_R1 = self._get_backfill_timestamp(self.replica1, self.replica2)
         prev_backfill_timestamp_R2 = self._get_backfill_timestamp(self.replica2, self.replica3)
 
@@ -272,6 +272,9 @@ class CheckpointTests(BaseTestCase):
         data_load_thread.join()
         self._start_replication(self.replica3, self.bucket)
 
+        self.servers = []
+        self.servers = [self.master, self.replica1, self.replica3]
+        self.num_servers = len(self.servers)
         self._verify_checkpoint_id(param, stat_key, m_stats)
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_backfill_happen(self.replica1, self.replica2, prev_backfill_timestamp_R1)
@@ -296,12 +299,11 @@ class CheckpointTests(BaseTestCase):
         m_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key)
         self._stop_server(self.replica2)
         time.sleep(5)
-        data_load_thread = Thread(target=self._load_data_use_workloadgen, name="load_data", args=(self.master))
+        data_load_thread = Thread(target=self._load_data_use_workloadgen, name="load_data", args=(self.master,))
         data_load_thread.start()
-        time.sleep(5)
-        self._start_server(self.replica2)
         data_load_thread.join()
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        self._start_server(self.replica2)
+        time.sleep(5)
 
         self._verify_checkpoint_id(param, stat_key, m_stats)
         self._verify_backfill_happen(self.replica1, self.replica2, prev_backfill_timestamp_R1, True)
@@ -320,7 +322,7 @@ class CheckpointTests(BaseTestCase):
             except TimeoutError:
                 self.fail("New checkpoint not created")
 
-        time.sleep(timeout)
+        time.sleep(timeout/10)
         # verify Master and all replicas are in sync with checkpoint ids
         m_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key)
         chk_pnt = int(m_stats[m_stats.keys()[0]])
@@ -337,6 +339,7 @@ class CheckpointTests(BaseTestCase):
         param = 'tap'
         stat_key = 'eq_tapq:replication_ns_1@%s:backfill_start_timestamp' % (replica_server.ip)
         m_stats = StatsCommon.get_stats([server], self.bucket, param, stat_key)
+        self.log.info("eq_tapq:replication_ns_1@%s:backfill_start_timestamp: %s" % (replica_server.ip, m_stats[m_stats.keys()[0]]))
         return int(m_stats[m_stats.keys()[0]])
 
     def _verify_backfill_happen(self, server, replica_server, previous_timestamp, backfill_happen=False):
@@ -383,7 +386,7 @@ class CheckpointTests(BaseTestCase):
         os = "linux"
         shell = RemoteMachineShellConnection(server)
         if os == "linux":
-            command = "%scbworkloadgen -n %s:8091 -i %s" % (testconstants.LINUX_COUCHBASE_BIN_PATH, server.ip, self.num_items)
+            command = "%stools/cbworkloadgen -n %s:8091 -i %s" % (testconstants.LINUX_COUCHBASE_BIN_PATH, server.ip, self.num_items)
             output, error = shell.execute_command(command.format(command))
             shell.log_command_output(output, error)
         shell.disconnect()
