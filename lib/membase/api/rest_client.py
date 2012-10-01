@@ -37,9 +37,10 @@ class RestHelper(object):
         nodes = self.rest.node_statuses(timeout)
         return all(node.status == 'healthy' for node in nodes)
 
-    def rebalance_reached(self, percentage=100):
+    def rebalance_reached(self, percentage=100, track_hangs=False):
         start = time.time()
         progress = 0
+        previous_progress = 0
         retry = 0
         while progress is not -1 and progress < percentage and retry < 20:
             #-1 is error , -100 means could not retrieve progress
@@ -48,7 +49,11 @@ class RestHelper(object):
                 log.error("unable to retrieve rebalanceProgress.try again in 2 seconds")
                 retry += 1
             else:
-                retry = 0
+                if previous_progress == progress:
+                    retry += 0.5
+                else:
+                    retry = 0
+                    previous_progress = progress
             #sleep for 2 seconds
             time.sleep(2)
         if progress < 0:
@@ -1483,6 +1488,18 @@ class RestConnection(object):
                                                                       value)
 
         return self.diag_eval(cmd)
+
+    def get_alerts(self):
+        api = self.baseUrl + "pools/default/"
+
+        status, content, header = self._http_request(api)
+
+        json_parsed = json.loads(content)
+        if status:
+            if "alerts" in json_parsed:
+                return json_parsed['alerts']
+        else:
+            return None
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
