@@ -6,10 +6,10 @@ from multiprocessing import Process, Event
 from multiprocessing.sharedctypes import Value
 from collections import defaultdict
 
-from membase.api import httplib2
-from membase.api.rest_client import RestConnection
+from lib.membase.api import httplib2
+from lib.membase.api.rest_client import RestConnection
 
-from performance.eperf import EPerfClient, EVPerfClient
+from pytests.performance.eperf import EPerfClient, EVPerfClient
 
 
 class PerfWrapper(object):
