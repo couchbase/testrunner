@@ -1474,6 +1474,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                                                                             testconstants.LINUX_CB_PATH, file)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
+        return output, error
 
     def execute_cbcollect_info(self, file):
         cbcollect_command = "%scbcollect_info" % (testconstants.LINUX_COUCHBASE_BIN_PATH)

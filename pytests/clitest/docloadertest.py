@@ -22,8 +22,14 @@ class docloaderTests(CliBaseTest):
         doc files in zipped sample file package"""
 
         for bucket in self.buckets:
-            self.shell.execute_cbdocloader(self.couchbase_usrname, self.couchbase_password,
-                                           bucket.name, self.memory_quota, self.load_filename)
+            output, error = self.shell.execute_cbdocloader(self.couchbase_usrname, self.couchbase_password,
+                                                           bucket.name, self.memory_quota, self.load_filename)
+            if len(error) > 0:
+                raise Exception("Command throw out error message. Please check the output of remote_util")
+            for output_line in output:
+                if output_line.find("ERROR") >= 0 or output_line.find("error") >= 0:
+                    raise Exception("Command throw out error message. Please check the output of remote_util")
+
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.load_filename)
 
