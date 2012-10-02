@@ -3,7 +3,7 @@ from app.celery import celery
 import testcfg as cfg
 from rabbit_helper import PersistedMQ
 
-from app.rest_client_tasks import perform_admin_tasks, create_ssh_conn
+from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn
 
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
@@ -21,6 +21,21 @@ def adminConsumer(adminQueue = "admin_tasks"):
 
     except Exception as ex:
         logger.error(ex)
+
+@celery.task(base = PersistedMQ)
+def xdcrConsumer(xdcrQueue = "xdcr_tasks"):
+
+    rabbitHelper = xdcrConsumer.rabbitHelper
+    try:
+        xdcrQueueSize = rabbitHelper.qsize(xdcrQueue)
+        if xdcrQueueSize > 0:
+            xdcrMsg = rabbitHelper.getJsonMsg(xdcrQueue)
+            logger.error(xdcrMsg)
+            perform_xdcr_tasks.apply_async(args=[xdcrMsg])
+
+    except Exception as ex:
+        logger.error(ex)
+
 
 @celery.task
 def backup_task(do_backups=False):

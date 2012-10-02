@@ -36,6 +36,10 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'task': 'app.admin_manager.adminConsumer',
     'schedule': timedelta(seconds=2),
     },
+    'xdcr_consumer': {
+    'task': 'app.admin_manager.xdcrConsumer',
+    'schedule': timedelta(seconds=2),
+    },
     'postcondition_handler': {
     'task': 'app.workload_manager.postcondition_handler',
     'schedule': timedelta(seconds=2),

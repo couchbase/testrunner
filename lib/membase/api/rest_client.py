@@ -634,11 +634,8 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-    #password:password username:Administrator hostname:127.0.0.1:9002 name:two
     def add_remote_cluster(self, remoteIp, remotePort, username, password, name):
         #example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
-        otpNode = None
-        remoteCluster = {}
         msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4}"
         log.info(msg.format(remoteIp, remotePort, username, password, name))
         api = self.baseUrl + 'pools/default/remoteClusters'

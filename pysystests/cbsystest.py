@@ -56,6 +56,15 @@ def add_admin_parser(parent):
 
     parser.set_defaults(handler=perform_admin_tasks)
 
+def add_xdcr_parser(parent):
+    parser = parent.add_parser("xdcr")
+    parser.add_argument("--dest_cluster_ip", help="Dest. cluster ip", default='', type=str)
+    parser.add_argument("--dest_cluster_username", help="Dest. cluster rest username", default='Administrator', type=str)
+    parser.add_argument("--dest_cluster_pwd", help="Dest. cluster rest pwd", default='password', type=str)
+    parser.add_argument("--dest_cluster_name", help="Dest. cluster name", default='', type=str)
+    parser.add_argument("--replication_type", help="unidirection or bidirection", default='unidirection', type=str)
+    parser.set_defaults(handler=perform_xdcr_tasks)
+
 def add_test_parser(parent):
     parser = parent.add_parser("test")
     parser.add_argument("workloads", help="rebalance")
@@ -65,6 +74,7 @@ def setup_run_parser():
     subparser_ = run_parser.add_subparsers()
     add_workload_parser(subparser_)
     add_admin_parser(subparser_)
+    add_xdcr_parser(subparser_)
     add_test_parser(subparser_)
 
 def setup_import_parser():
@@ -144,17 +154,31 @@ def import_template(args):
 
 def perform_admin_tasks(args):
 
-    actions = {'rebalance_in': '' or args.rebalance_in,
-               'rebalance_out': '' or args.rebalance_out,
-               'failover': '' or args.failover,
-               'soft_restart': '' or args.soft_restart,
-               'hard_restart': '' or args.hard_restart,
-               'only_failover': False or args.only_failover
+    actions = {'rebalance_in': args.rebalance_in,
+               'rebalance_out': args.rebalance_out,
+               'failover': args.failover,
+               'soft_restart': args.soft_restart,
+               'hard_restart': args.hard_restart,
+               'only_failover': args.only_failover
               }
 
     #TODO: Validate the user inputs, before passing to rabbit
     print actions
     rabbitHelper.putMsg("admin_tasks", json.dumps(actions))
+
+def perform_xdcr_tasks(args):
+
+    xdcrMsg = {'dest_cluster_ip': args.dest_cluster_ip,
+               'dest_cluster_rest_username': args.dest_cluster_username,
+               'dest_cluster_rest_pwd':  args.dest_cluster_pwd,
+               'dest_cluster_name': args.dest_cluster_name,
+               'replication_type': args.replication_type,
+    }
+
+    #TODO: Validate the user inputs, before passing to rabbit
+    print xdcrMsg
+    rabbitHelper.putMsg("xdcr_tasks", json.dumps(xdcrMsg))
+
 
 ### setup main arg parsers
 setup_run_parser()

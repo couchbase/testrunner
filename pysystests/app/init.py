@@ -8,7 +8,7 @@ def worker_init():
     rabbitHelper = RabbitHelper()
 
     cached_queues = WorkloadCacher().queues +  TemplateCacher().cc_queues
-    test_queues = ["workload","workload_template", "admin_tasks"] + cached_queues
+    test_queues = ["workload","workload_template", "admin_tasks", "xdcr_tasks"] + cached_queues
 
     for queue in test_queues:
         try:

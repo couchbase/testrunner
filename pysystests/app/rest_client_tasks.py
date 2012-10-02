@@ -13,7 +13,6 @@ from app.celery import celery
 import testcfg as cfg
 import json
 import eventlet
-from rabbit_helper import PersistedMQ
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
@@ -70,7 +69,37 @@ def perform_admin_tasks(adminMsg):
 
     if not only_failover and (len(allNodes) > 0 or len(toBeEjectedNodes) > 0):
         logger.error("Rebalance")
+        logger.error(allNodes)
+        logger.error(toBeEjectedNodes)
         rest.rebalance(otpNodes=allNodes, ejectedNodes=toBeEjectedNodes)
+
+@celery.task
+def perform_xdcr_tasks(xdcrMsg):
+    print xdcrMsg
+    src_master = create_server_obj()
+    dest_master = create_server_obj(server_ip=xdcrMsg['dest_cluster_ip'], username=xdcrMsg['dest_cluster_rest_username'],
+                                    password=xdcrMsg['dest_cluster_rest_pwd'])
+    dest_cluster_name = xdcrMsg['dest_cluster_name']
+    xdcr_link_cluster(src_master, dest_master, dest_cluster_name)
+    xdcr_start_replication(src_master, dest_cluster_name)
+
+    if xdcrMsg['replication_type'] == "bidirection":
+        src_cluster_name = dest_cluster_name + "_temp"
+        xdcr_link_cluster(dest_master, src_master, src_cluster_name)
+        xdcr_start_replication(dest_master, src_cluster_name)
+
+def xdcr_link_cluster(src_master, dest_master, dest_cluster_name):
+    rest_conn_src = RestConnection(src_master)
+    rest_conn_src.add_remote_cluster(dest_master.ip, dest_master.port,
+                                 dest_master.rest_username,
+                                 dest_master.rest_password, dest_cluster_name)
+
+def xdcr_start_replication(src_master, dest_cluster_name):
+        rest_conn_src = RestConnection(src_master)
+        for bucket in rest_conn_src.get_buckets():
+            (rep_database, rep_id) = rest_conn_src.start_replication("continuous",
+                                                                     bucket.name, dest_cluster_name)
+            print (rep_database, rep_id)
 
 def add_nodes(rest, servers=''):
     for server in servers.split():
@@ -127,16 +156,19 @@ def restart(servers='', type='soft'):
         result = node_ssh.execute_command(cmd, node)
         logger.error(result)
 
-def create_rest(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
-                username=cfg.COUCHBASE_USER, password=cfg.COUCHBASE_PWD):
+def create_server_obj(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
+                      username=cfg.COUCHBASE_USER, password=cfg.COUCHBASE_PWD):
     serverInfo = { "ip" : server_ip,
                    "port" : port,
                    "rest_username" : username,
                    "rest_password" :  password
-                }
-    print serverInfo
+    }
     node = _dict_to_obj(serverInfo)
-    return RestConnection(node)
+    return node
+
+def create_rest(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
+                username=cfg.COUCHBASE_USER, password=cfg.COUCHBASE_PWD):
+    return RestConnection(create_server_obj(server_ip, port, username, password))
 
 def create_ssh_conn(server_ip = '', port=22, username = cfg.SSH_USER,
                password = cfg.SSH_PASSWORD, os='linux'):

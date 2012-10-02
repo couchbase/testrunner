@@ -12,6 +12,7 @@ from cache import NodeStatsCacher
 sys.path=["../lib"] + sys.path
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from app.rest_client_tasks import create_rest, create_ssh_conn
 
 from celery.utils.log import get_task_logger
 logger = get_task_logger("app.stats")
@@ -19,11 +20,7 @@ logger = get_task_logger("app.stats")
 @celery.task
 def resource_monitor():
 
-    rest = rest_connect(cfg.COUCHBASE_IP,
-                        cfg.COUCHBASE_PORT,
-                        cfg.COUCHBASE_USER,
-                        cfg.COUCHBASE_PWD)
-
+    rest = create_rest()
     nodes = rest.node_statuses()
 
     # cache sample of latest stats on all nodes
@@ -56,11 +53,7 @@ def atop_log_rollover():
         manually stopped and logs backed up before
         starting new instance"""
     logger.error("Rolling over logs")
-    rest = rest_connect(cfg.COUCHBASE_IP,
-                        cfg.COUCHBASE_PORT,
-                        cfg.COUCHBASE_USER,
-                        cfg.COUCHBASE_PWD)
-
+    rest = create_rest()
     nodes = rest.node_statuses()
 
     for node in nodes:
@@ -193,15 +186,7 @@ def _atop_exec(ip, cmd, flags = ""):
     return res
 
 def exec_cmd(ip, cmd, os = "linux"):
-    serverInfo = {"ip" : ip,
-                  "port" : 22,
-                  "ssh_username" : cfg.SSH_USER,
-                  "ssh_password" : cfg.SSH_PASSWORD,
-                  "ssh_key" : "",
-                  "type" : os }
-
-    node = _dict_to_obj(serverInfo)
-    shell = RemoteMachineShellConnection(node)
+    shell, node = create_ssh_conn(server_ip=ip, os=os)
     shell.use_sudo  = False
     return shell.execute_command(cmd, node)
 
@@ -218,7 +203,7 @@ class StatChecker(object):
         self.username = username
         self.password = password
         self.bucket = bucket
-        self.rest = rest_connect(self.ip, self.port, self.username, self.password)
+        self.rest = create_rest(self.ip, self.port, self.username, self.password)
 
     def check(self, condition, datatype = int):
 
@@ -286,18 +271,6 @@ class NodeStats(object):
             str_ = str_ + "\n"
         return str_
 
-
-def rest_connect(ip, port, username, password):
-    serverInfo = { "ip" : ip,
-                   "port" : port,
-                   "rest_username" : username,
-                   "rest_password" : password }
-    node = _dict_to_obj(serverInfo)
-    rest = RestConnection(node)
-    return rest
-
-def _dict_to_obj(dict_):
-    return type('OBJ', (object,), dict_)
 
 @celery.task
 def generate_node_stats_report():
