@@ -333,6 +333,8 @@ tryCatch({
     ns_server_data $ep_num_ops_get_meta <- as.numeric(ns_server_data$ep_num_ops_get_meta)
     ns_server_data $ep_num_ops_set_meta <- as.numeric(ns_server_data$ep_num_ops_set_meta)
     ns_server_data $ep_num_ops_del_meta <- as.numeric(ns_server_data$ep_num_ops_del_meta)
+    ns_server_data $replication_commit_time <- as.numeric(ns_server_data$replication_commit_time)
+    ns_server_data $replication_work_time <- as.numeric(ns_server_data$replication_work_time)
 }, error=function(e) {
     print("Cannot find XDC stats")
 })
@@ -2026,6 +2028,27 @@ if (nrow(ns_server_data) > 0) {
         makeMetricDef(paste("Number of del operations per second",
                             "related to this bucket being the",
                             "target of cross datacenter replication",
+                            sep="\n"))
+
+        cat("generating replication_work_time \n")
+        p <- ggplot(ns_server_data, aes(row, replication_work_time, color=buildinfo.version, label=replication_work_time)) + labs(x="----time (sec)--->", y="secs")
+        p <- p + geom_point()
+        p <- addopts(p,"XDCR secs working")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Total time all vb replicators",
+                            "spent checking and writing",
+                            sep="\n"))
+
+        cat("generating replication_commit_time \n")
+        p <- ggplot(ns_server_data, aes(row, replication_commit_time, color=buildinfo.version, label=replication_commit_time)) + labs(x="----time (sec)--->", y="secs")
+        p <- p + geom_point()
+        p <- addopts(p,"XDCR secs committing")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Total time all vb replicators",
+                            "spent waiting for commit",
+                            "and checkpoint",
                             sep="\n"))
 
     }
