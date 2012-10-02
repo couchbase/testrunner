@@ -404,3 +404,7 @@ class RebalanceTests(EVPerfClient):
     @PerfWrapper.rebalance
     def test_view_rebalance_1(self):
         super(RebalanceTests, self).test_vperf2()
+
+    @PerfWrapper.rebalance
+    def test_view_rebalance_2(self):
+        super(RebalanceTests, self).test_vperf4()
