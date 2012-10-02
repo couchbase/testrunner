@@ -671,6 +671,8 @@ class ValidateDataTask(GenericLoadingTask):
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and\
             self.itr < self.max_verify:
+            if not self.itr % 50000:
+                self.log.info("{0} items were verified".format(self.itr))
             return True
         return False
 
