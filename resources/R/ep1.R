@@ -1542,7 +1542,7 @@ for(build in levels(builds)) {
 }
 
 for(build in levels(builds)) {
-    fi <- memcached_stats[memcached_stats$buildinfo.version == build, ]
+    fi <- warmup_stats[warmup_stats$buildinfo.version == build, ]
 	d <- fi$ep_warmup_time[1] / 1000000
 
     if(build == baseline){
@@ -1556,7 +1556,7 @@ for(build in levels(builds)) {
 }
 
 for(build in levels(builds)) {
-    fi <- memcached_stats[memcached_stats$buildinfo.version == build, ]
+    fi <- warmup_stats[warmup_stats$buildinfo.version == build, ]
 	d <- fi$ep_warmup_time[2] / 1000000
 
     if(build == baseline){
