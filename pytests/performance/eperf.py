@@ -79,6 +79,29 @@ def multi_buckets(test):
 
     return wrapper
 
+
+def measure_sched_delays(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if self.parami("prefix", -1) or\
+            not self.parami("sched_delays", PerfDefaults.sched_delays):
+            return func(self, *args, **kwargs)
+
+        file = "%s-%s" % (self.param("spec", ""),
+                          time.strftime(PerfDefaults.strftime))
+
+        self.start_measure_sched_delay(file)
+        print "started measuring sched delays"
+
+        ret = func(self, *args, **kwargs)
+
+        self.stop_measure_sched_delay()
+        print "stopped measuring sched delays"
+
+        return ret
+
+    return wrapper
+
 class EPerfMaster(perf.PerfBase):
 
     """
@@ -314,6 +337,20 @@ class EPerfMaster(perf.PerfBase):
         rest = RestConnection(node)
         rest.set_reb_cons_view(disable=disable)
 
+    def start_measure_sched_delay(self, file="sched-delay"):
+        for server in self.input.servers:
+            shell = RemoteMachineShellConnection(server)
+            cmd = "nohup collect-sched-delays.rb %s > /dev/null 2>&1 &" % file
+            self._exec_and_log(shell, cmd)
+            shell.disconnect()
+
+    def stop_measure_sched_delay(self):
+        for server in self.input.servers:
+            shell = RemoteMachineShellConnection(server)
+            cmd = "killall -9 -r .*measure-sched-delays"
+            self._exec_and_log(shell, cmd)
+            shell.disconnect()
+
     # Gets the vbucket count
     def gated_start(self, clients):
         """
@@ -463,6 +500,7 @@ class EPerfMaster(perf.PerfBase):
         return num_clients, start_at
 
     @_dashboard(phase='access')
+    @measure_sched_delays
     def access_phase(self,
                      ratio_sets=0,
                      ratio_misses=0,
