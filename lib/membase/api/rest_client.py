@@ -10,7 +10,7 @@ from memcached.helper.kvstore import KVStore
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
 from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
-    ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException
+    ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, BucketFlushFailed
 log = logger.Logger.get_logger()
 #helper library methods built on top of RestConnection interface
 
@@ -1522,6 +1522,21 @@ class RestConnection(object):
                 return json_parsed['alerts']
         else:
             return None
+
+    def flush_bucket(self, bucket="default"):
+
+        if isinstance(bucket, Bucket):
+            bucket_name = bucket.name
+        else:
+            bucket_name = bucket
+
+        api = self.baseUrl + "pools/default/buckets/%s/controller/doFlush" % (bucket_name)
+
+        status, content, header = self._http_request(api, 'POST')
+        if not status:
+            raise BucketFlushFailed(self.ip, bucket_name)
+        log.info("Flush for bucket '%s' was triggered" % bucket_name)
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):

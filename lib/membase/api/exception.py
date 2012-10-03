@@ -149,3 +149,8 @@ class AddNodeException(MembaseHttpException):
         self.parameters = dict()
         self.parameters['nodeIp'] = nodeIp
         self.parameters['remoteIp'] = remoteIp
+
+class BucketFlushFailed(MembaseHttpException):
+    def __init__(self, ip='', bucket_name=''):
+        self._message = 'unable to flush bucket {0} on the host @ {1}'.\
+            format(bucket_name, ip)

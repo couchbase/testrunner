@@ -595,3 +595,28 @@ class Cluster(object):
             boolean - Whether or not the failover was successful"""
         _task = self.async_failover(servers, to_failover)
         return _task.result(timeout)
+
+    def async_bucket_flush(self, server, bucket='default'):
+        """Asynchronously flushes a bucket
+
+        Parameters:
+            server - The server to flush the bucket on. (TestInputServer)
+            bucket - The name of the bucket to be flushed. (String)
+
+        Returns:
+            BucketFlushTask - A task future that is a handle to the scheduled task."""
+        _task = BucketFlushTask(server, bucket)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def bucket_flush(self, server, bucket='default', timeout=None):
+        """Synchronously flushes a bucket
+
+        Parameters:
+            server - The server to flush the bucket on. (TestInputServer)
+            bucket - The name of the bucket to be flushed. (String)
+
+        Returns:
+            boolean - Whether or not the bucket was flushed."""
+        _task = self.async_bucket_flush(server, bucket)
+        return _task.result(timeout)

@@ -17,7 +17,7 @@ from couchbase.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
-                                        GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, ServerUnavailableException
+                                        GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, ServerUnavailableException, BucketFlushFailed
 
 from couchbase.documentgenerator import BatchedDocumentGenerator
 
@@ -1950,3 +1950,44 @@ class ViewQueryVerificationTask(Task):
                 doc_integrity_errors.append("doc_id %s could not be retrieved for verification \n" % doc_id)
 
         return doc_integrity_errors
+
+class BucketFlushTask(Task):
+    def __init__(self, server, bucket="default"):
+        Task.__init__(self, "bucket_flush_task")
+        self.server = server
+        self.bucket = bucket
+        if isinstance(bucket, Bucket):
+            self.bucket = bucket.name
+
+    def execute(self, task_manager):
+        rest = RestConnection(self.server)
+        try:
+            if rest.flush_bucket(self.bucket):
+                self.state = CHECKING
+                task_manager.schedule(self)
+            else:
+                self.state = FINISHED
+                self.set_result(False)
+
+        except BucketFlushFailed as e:
+            self.state = FINISHED
+            self.set_exception(e)
+
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
+            #check if after flush the vbuckets are ready
+            if BucketOperationHelper.wait_for_vbuckets_ready_state(self.server, self.bucket):
+                self.set_result(True)
+            else:
+                self.log.error("Unable to reach bucket {0} on server {1} after flush".format(self.bucket, self.server))
+                self.set_result(False)
+            self.state = FINISHED
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
