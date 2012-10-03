@@ -19,7 +19,11 @@ class PersistedMQ(Task):
         self._conn = None
 
 class RabbitHelper(object):
-    def __init__(self, mq_server = cfg.RABBITMQ_IP):
+    def __init__(self, mq_server = None):
+
+        if mq_server == None:
+            mq_server = cfg.RABBITMQ_IP
+
         self.connection = Connection(host= mq_server, userid="guest", password="guest", virtual_host="/")
         self.declare("workload")
         self.declare("workload_template")

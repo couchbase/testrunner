@@ -2,10 +2,9 @@ import argparse
 import json
 from rabbit_helper import RabbitHelper
 
+
 parser = argparse.ArgumentParser(description='CB System Test Tool')
 subparser = parser.add_subparsers(dest="subparsers")
-rabbitHelper = RabbitHelper()
-
 
 def add_modifier_args(parser):
     parser.add_argument("--cc_queues",    nargs='+', help="queues to copy created keys into")
@@ -15,9 +14,13 @@ def add_modifier_args(parser):
     parser.add_argument("--wait",  nargs=3,  help="time to wait before starting workload: <hour> <min> <sec>", metavar = ('HOUR','MIN','SEC'), type=int)
     parser.add_argument("--expires",nargs=3,  help="time to wait before terminating workload: <hour> <min> <sec>", metavar = ('HOUR','MIN','SEC'), type=int)
 
+def add_broker_arg(parser):
+    parser.add_argument("--broker", required = True, help="ip address of broker used to consume options")
+
 def add_template_parser(parent):
     parser = parent.add_parser("template")
 
+    add_broker_arg(parser)
     parser.add_argument("--name",     help="template name", required = True)
     parser.add_argument("--ttl",      default=0, help="document expires time")
     parser.add_argument("--flags",    default=0, help="document create flags")
@@ -33,6 +36,7 @@ def add_template_parser(parent):
 def add_workload_parser(parent):
     parser = parent.add_parser("workload")
 
+    add_broker_arg(parser)
     parser.add_argument("--name",    help="predefind workload", default="default")
     parser.add_argument("--bucket",  help="bucket", default="default")
     parser.add_argument("--ops",     help="ops per sec", default=0, type=int)
@@ -47,6 +51,8 @@ def add_workload_parser(parent):
 
 def add_admin_parser(parent):
     parser = parent.add_parser("admin")
+
+    add_broker_arg(parser)
     parser.add_argument("--rebalance_in", help="rebalance_in", default='', type=str)
     parser.add_argument("--rebalance_out", help="rebalance_out", default='', type=str)
     parser.add_argument("--failover", help="failover", default='', type=str)
@@ -121,6 +127,7 @@ def run_workload(args):
                  "expires"  : args.expires,
                  "template"  : args.template}
 
+    rabbitHelper = RabbitHelper(args.broker)
     rabbitHelper.putMsg("workload", json.dumps(workload))
 
 
@@ -150,6 +157,7 @@ def import_template(args):
                  "size" : args.size,
                  "kv" : val}
 
+    rabbitHelper = RabbitHelper(args.broker)
     rabbitHelper.putMsg("workload_template", json.dumps(template))
 
 def perform_admin_tasks(args):
@@ -164,6 +172,7 @@ def perform_admin_tasks(args):
 
     #TODO: Validate the user inputs, before passing to rabbit
     print actions
+    rabbitHelper = RabbitHelper(args.broker)
     rabbitHelper.putMsg("admin_tasks", json.dumps(actions))
 
 def perform_xdcr_tasks(args):
