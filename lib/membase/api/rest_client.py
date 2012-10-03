@@ -1386,6 +1386,7 @@ class RestConnection(object):
     def set_reb_cons_view(self, disable=None):
         #do not change if None
         if disable is None:
+            log.info("default consistent_view value will be used on server")
             return
         """Enable/disable consistent view for rebalance tasks"""
         cmd = 'ns_config:set(index_aware_rebalance_disabled, %s).'\

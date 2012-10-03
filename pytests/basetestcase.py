@@ -38,7 +38,8 @@ class BaseTestCase(unittest.TestCase):
         self.dgm_run = self.input.param("dgm_run", False)
         #max items number to verify in ValidateDataTask, None - verify all
         self.max_verify = self.input.param("max_verify", None)
-        self.disabled_consistent_view = self.input.param("disabled_consistent_view", True)
+        #we don't change consistent_view on server by default
+        self.disabled_consistent_view = self.input.param("disabled_consistent_view", None)
         self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
         #avoid clean up if the previous test has been tear down
