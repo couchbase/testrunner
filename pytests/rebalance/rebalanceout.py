@@ -281,7 +281,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         except RebalanceFailedException:
             self.log.info("rebalance was failed as expected")
             self.assertTrue(self._wait_warmup_completed(self, [warmup_node], self.default_bucket_name),
-                            wait_time=self.self.wait_timeout * 10)
+                            wait_time=self.wait_timeout * 10)
 
             self.log.info("second attempt to rebalance")
             rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
