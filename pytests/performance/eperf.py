@@ -90,6 +90,7 @@ def measure_sched_delays(func):
         file = "%s-%s" % (self.param("spec", ""),
                           time.strftime(PerfDefaults.strftime))
 
+        self.remove_sched_delay_logs()
         self.start_measure_sched_delay(file)
         print "started measuring sched delays"
 
@@ -348,6 +349,13 @@ class EPerfMaster(perf.PerfBase):
         for server in self.input.servers:
             shell = RemoteMachineShellConnection(server)
             cmd = "killall -9 -r .*measure-sched-delays"
+            self._exec_and_log(shell, cmd)
+            shell.disconnect()
+
+    def remove_sched_delay_logs(self):
+        for server in self.input.servers:
+            shell = RemoteMachineShellConnection(server)
+            cmd = "rm -rf *.cpu*"
             self._exec_and_log(shell, cmd)
             shell.disconnect()
 
