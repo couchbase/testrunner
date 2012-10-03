@@ -118,19 +118,12 @@ class bidirectional(XDCRReplicationBaseTest):
         time.sleep(self._timeout)
         #warmup
         warmupnodes = []
-        dest_warm_flag = 0
-        if self._warmup == "source":
-            warmupnode = self.src_nodes
-        elif self._warmup == "destination":
-            warmupnode = self.dest_nodes
-        elif self._warmup == "all":
-            warmupnode = self.src_nodes
-            dest_warm_flag = 1
-        warmupnodes.append(warmupnode[randrange(1, len(warmupnode))])
-        self.do_a_warm_up(warmupnodes[0])
-        if dest_warm_flag == 1:
+        if "source" in self._warmup:
+            warmupnodes.append(self.src_nodes[randrange(1, len(self.src_nodes))])
+        if "destination" in self._warmup:
             warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
-            self.do_a_warm_up(warmupnodes[1])
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
         time.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
@@ -152,18 +145,12 @@ class bidirectional(XDCRReplicationBaseTest):
         time.sleep(self._timeout)
         #warmup
         warmupnodes = []
-        dest_warm_flag = 0
-        if self._warmup == "source":
+        if "source" in self._warmup:
             warmupnodes.append(self.src_master)
-        elif self._warmup == "destination":
-            warmupnodes.append(self.dest_master)
-        elif self._warmup == "all":
+        if "destination" in self._warmup:
             warmupnodes.append(self.src_master)
-            dest_warm_flag = 1
-        self.do_a_warm_up(warmupnodes[0])
-        if dest_warm_flag == 1:
-            warmupnodes.append(self.dest_master)
-            self.do_a_warm_up(warmupnodes[1])
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
         time.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
@@ -185,19 +172,12 @@ class bidirectional(XDCRReplicationBaseTest):
         time.sleep(self._timeout)
         #warmup
         warmupnodes = []
-        dest_warm_flag = 0
-        if self._warmup == "source":
-            warmupnode = self.src_nodes
-        elif self._warmup == "destination":
-            warmupnode = self.dest_nodes
-        elif self._warmup == "all":
-            warmupnode = self.src_nodes
-            dest_warm_flag = 1
-        warmupnodes.append(warmupnode[randrange(1, len(warmupnode))])
-        self.do_a_warm_up(warmupnodes[0])
-        if dest_warm_flag == 1:
+        if "source" in self._warmup:
+            warmupnodes.append(self.src_nodes[randrange(1, len(self.src_nodes))])
+        if "destination" in self._warmup:
             warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
-            self.do_a_warm_up(warmupnodes[1])
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
         time.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
@@ -219,18 +199,12 @@ class bidirectional(XDCRReplicationBaseTest):
         time.sleep(self._timeout)
         #warmup
         warmupnodes = []
-        dest_warm_flag = 0
-        if self._warmup == "source":
+        if "source" in self._warmup:
             warmupnodes.append(self.src_master)
-        elif self._warmup == "destination":
-            warmupnodes.append(self.dest_master)
-        elif self._warmup == "all":
+        if "destination" in self._warmup:
             warmupnodes.append(self.src_master)
-            dest_warm_flag = 1
-        self.do_a_warm_up(warmupnodes[0])
-        if dest_warm_flag == 1:
-            warmupnodes.append(self.dest_master)
-            self.do_a_warm_up(warmupnodes[1])
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
         time.sleep(self._timeout / 2)
 
         self._async_update_delete_data()

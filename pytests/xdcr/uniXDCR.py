@@ -61,20 +61,13 @@ class unidirectional(XDCRReplicationBaseTest):
     def load_with_ops_with_warmup(self):
         #warmup
         warmupnodes = []
-        dest_warm_flag = 0
-        if self._warmup == "source":
-            warmupnode = self.src_nodes
-        elif self._warmup == "destination":
-            warmupnode = self.dest_nodes
-        elif self._warmup == "all":
-            warmupnode = self.src_nodes
-            dest_warm_flag = 1
-        warmupnodes.append(warmupnode[randrange(1, len(warmupnode))])
-        self.do_a_warm_up(warmupnodes[0])
-        if dest_warm_flag == 1:
+        if "source" in self._warmup:
+            warmupnodes.append(self.src_nodes[randrange(1, len(self.src_nodes))])
+        if "destination" in self._warmup:
             warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
-            self.do_a_warm_up(warmupnodes[1])
-        time.sleep(30)
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
+        time.sleep(self._timeout / 2)
 
         self._modify_src_data()
 
@@ -89,19 +82,13 @@ class unidirectional(XDCRReplicationBaseTest):
     def load_with_ops_with_warmup_master(self):
         #warmup
         warmupnodes = []
-        dest_warm_flag = 0
-        if self._warmup == "source":
+        if "source" in self._warmup:
             warmupnodes.append(self.src_master)
-        elif self._warmup == "destination":
-            warmupnodes.append(self.dest_master)
-        elif self._warmup == "all":
+        if "destination" in self._warmup:
             warmupnodes.append(self.src_master)
-            dest_warm_flag = 1
-        self.do_a_warm_up(warmupnodes[0])
-        if dest_warm_flag == 1:
-            warmupnodes.append(self.dest_master)
-            self.do_a_warm_up(warmupnodes[1])
-        time.sleep(30)
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
+        time.sleep(self._timeout / 2)
 
         self._modify_src_data()
 
@@ -117,20 +104,13 @@ class unidirectional(XDCRReplicationBaseTest):
 
         #warmup
         warmupnodes = []
-        dest_warm_flag = 0
-        if self._warmup == "source":
-            warmupnode = self.src_nodes
-        elif self._warmup == "destination":
-            warmupnode = self.dest_nodes
-        elif self._warmup == "all":
-            warmupnode = self.src_nodes
-            dest_warm_flag = 1
-        warmupnodes.append(warmupnode[randrange(1, len(warmupnode))])
-        self.do_a_warm_up(warmupnodes[0])
-        if dest_warm_flag == 1:
+        if "source" in self._warmup:
+            warmupnodes.append(self.src_nodes[randrange(1, len(self.src_nodes))])
+        if "destination" in self._warmup:
             warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
-            self.do_a_warm_up(warmupnodes[1])
-        time.sleep(30)
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
+        time.sleep(self._timeout / 2)
 
         self._async_modify_data()
 
@@ -149,27 +129,21 @@ class unidirectional(XDCRReplicationBaseTest):
 
         #warmup
         warmupnodes = []
-        dest_warm_flag = 0
-        if self._warmup == "source":
+        if "source" in self._warmup:
             warmupnodes.append(self.src_master)
-        elif self._warmup == "destination":
-            warmupnodes.append(self.dest_master)
-        elif self._warmup == "all":
+        if "destination" in self._warmup:
             warmupnodes.append(self.src_master)
-            dest_warm_flag = 1
-        self.do_a_warm_up(warmupnodes[0])
-        if dest_warm_flag == 1:
-            warmupnodes.append(self.dest_master)
-            self.do_a_warm_up(warmupnodes[1])
-        time.sleep(30)
+        for node in warmupnodes:
+            self.do_a_warm_up(node)
+        time.sleep(self._timeout / 2)
 
         self._async_modify_data()
 
-        time.sleep(30)
+        time.sleep(self._timeout / 2)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
-        self._wait_for_stats_all_buckets(self.src_nodes)
+        self._wait_for_stats_all_buckets(self.dest_nodes)
 
         self.wait_warmup_completed(warmupnodes)
 
@@ -422,6 +396,8 @@ class unidirectional(XDCRReplicationBaseTest):
         self.verify_results()
 
     def replication_while_rebooting_a_non_master_destination_node(self):
+        self.set_environ_param(1)
+
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._async_modify_data()
         time.sleep(self._timeout)
@@ -437,6 +413,8 @@ class unidirectional(XDCRReplicationBaseTest):
         self.verify_results()
 
     def replication_with_firewall_enabled(self):
+        self.set_environ_param(1)
+
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._async_modify_data()
         time.sleep(self._timeout / 6)

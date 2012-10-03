@@ -151,9 +151,11 @@ class XDCRBaseTest(unittest.TestCase):
         self._timeout = self._input.param("timeout", 60)
         self._percent_update = self._input.param("upd", 30)
         self._percent_delete = self._input.param("del", 30)
-        self._warmup = self._input.param("warm", "all")
+        self._warmup = self._input.param("warm", None)
         self._failover = self._input.param("failover", None)
         self._rebalance = self._input.param("rebalance", None)
+        if self._warmup is not None:
+            self._warmup = self._warmup.split("-")
         if self._failover is not None:
             self._failover = self._failover.split("-")
         if self._rebalance is not None:
@@ -665,7 +667,19 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._log.info("Completed Load")
 
 
+    def set_environ_param(self, interval_time):
+        for server in self.src_nodes:
+            shell = RemoteMachineShellConnection(server)
+            shell.set_environment_variable('XDCR_FAILURE_RESTART_INTERVAL', interval_time)
+        if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+            for server in self.dest_nodes:
+                shell = RemoteMachineShellConnection(server)
+                shell.set_environment_variable('XDCR_FAILURE_RESTART_INTERVAL', interval_time)
+
+
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
+        if self._failover is not None or self._warmup is not None:
+            self.set_environ_param(1)
         time.sleep(self._timeout / 2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)
