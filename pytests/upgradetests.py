@@ -52,8 +52,8 @@ def _create_load_multiple_bucket(self, server, bucket_data, howmany=2):
         self.assertTrue(ready, "wait_for_memcached failed")
         #let's insert some data
         distribution = {2 * 1024: 0.5, 20: 0.5}
-        bucket_data[bucket.name]["inserted_keys"],\
-            bucket_data[bucket.name]["reject_keys"] =\
+        bucket_data[bucket.name]["inserted_keys"], \
+            bucket_data[bucket.name]["reject_keys"] = \
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server],
             name=bucket.name, ram_load_ratio=2.0, number_of_threads=2,
             value_size_distribution=distribution, write_only=True,
@@ -85,7 +85,6 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         else:
             product = 'couchbase-server-enterprise'
         remote = RemoteMachineShellConnection(server)
-        rest = RestConnection(server)
         info = remote.extract_remote_info()
         remote.membase_uninstall()
         remote.couchbase_uninstall()
@@ -109,6 +108,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         remote.download_build(older_build)
         #now let's install ?
         remote.membase_install(older_build)
+        rest = RestConnection(server)
         RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
         rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
         bucket_data = {}
@@ -569,7 +569,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                              create_buckets=False,
                              insert_data=False,
                              start_upgraded_first=True,
-                             load_ratio=-1,
+                             load_ratio= -1,
                              roll_upgrade=False,
                              upgrade_path=[],
                              do_new_rest=False):
@@ -594,7 +594,6 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         # install older build on all nodes
         for server in servers:
             remote = RemoteMachineShellConnection(server)
-            rest = RestConnection(server)
             info = remote.extract_remote_info()
             # check to see if we are installing from latestbuilds or releases
             # note: for newer releases (1.8.0) even release versions can have the
@@ -619,6 +618,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             remote.download_build(older_build)
             #now let's install ?
             remote.membase_install(older_build)
+            rest = RestConnection(server)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
             rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
@@ -812,7 +812,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             load_ratio = 0.1
         distribution = {1024: 0.5, 20: 0.5}
         #TODO: with write_only = False, sometimes the load hangs, debug this
-        inserted_keys, rejected_keys =\
+        inserted_keys, rejected_keys = \
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
                                                               ram_load_ratio=load_ratio,
                                                               number_of_threads=1,
