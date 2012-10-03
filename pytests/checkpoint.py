@@ -162,20 +162,20 @@ class CheckpointTests(BaseTestCase):
     def checkpoint_deduplication(self):
         """Disable replication of R1. Load N items to master, then mutate some of them.
         Restart replication of R1, only N items should be in stats. In this test, we can
-        only load number of items < checkpoint_size to observe deduplication"""
+        only load number of items <= checkpoint_size to observe deduplication"""
 
         param = 'checkpoint'
         stat_key = 'vb_0:num_open_checkpoint_items'
+        stat_key_id= 'vb_0:open_checkpoint_id'
 
         self._set_checkpoint_size(self.servers[:self.num_servers], self.bucket, self.checkpoint_size)
-        m_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key)
         self._stop_replication(self.replica1, self.bucket)
 
         generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        generate_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items/2))
+        generate_update = BlobGenerator('nosql', 'sql-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=self.checkpoint_size, pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets([self.master, self.replica2, self.replica3])
-
+        m_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key_id)
         data_load_thread = Thread(target=self._load_all_buckets,
                                   name="load_data",
                                   args=(self.master, generate_update, "update", 0, 1, 0, True, self.checkpoint_size, 5, 180))
@@ -183,11 +183,17 @@ class CheckpointTests(BaseTestCase):
         self._start_replication(self.replica1, self.bucket)
         data_load_thread.join()
 
+        chk_pnt = int(m_stats[m_stats.keys()[0]])
         tasks = []
         tasks.append(self.cluster.async_wait_for_stats([self.master], self.bucket, param,
                                                        stat_key, '==', self.num_items))
         tasks.append(self.cluster.async_wait_for_stats([self.replica1], self.bucket, param,
                                                        stat_key, '==', self.num_items))
+        tasks.append(self.cluster.async_wait_for_stats([self.master], self.bucket, param,
+                                                       stat_key_id, '==', chk_pnt))
+        tasks.append(self.cluster.async_wait_for_stats([self.replica1], self.bucket, param,
+                                                       stat_key_id, '==', chk_pnt))
+
         for task in tasks:
             try:
                 task.result(60)
