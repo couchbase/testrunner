@@ -424,7 +424,7 @@ class GenericLoadingTask(Thread, Task):
                 self.set_exception(error)
 
 class LoadDocumentsTask(GenericLoadingTask):
-    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=False):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.generator = generator
         self.op_type = op_type
@@ -452,7 +452,7 @@ class LoadDocumentsTask(GenericLoadingTask):
         self.kv_store.release_partition(key)
 
 class BatchedLoadDocumentsTask(GenericLoadingTask):
-    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=False, batch_size=100, pause_secs=1, timeout_secs=30):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=30):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.batch_generator = BatchedDocumentGenerator(generator, batch_size)
         self.op_type = op_type
@@ -656,7 +656,7 @@ class WorkloadTask(GenericLoadingTask):
         self.kv_store.release_partition(part_num)
 
 class ValidateDataTask(GenericLoadingTask):
-    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=False):
+    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
@@ -731,7 +731,7 @@ class ValidateDataTask(GenericLoadingTask):
 
 
 class BatchedValidateDataTask(GenericLoadingTask):
-    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=False, batch_size=100):
+    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, batch_size=100):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)

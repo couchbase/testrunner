@@ -194,7 +194,7 @@ class BaseTestCase(unittest.TestCase):
     Returns:
         A list of all of the tasks created.
     """
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=False, batch_size=1, pause_secs=1, timeout_secs=30):
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
         tasks = []
         for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
@@ -212,7 +212,7 @@ class BaseTestCase(unittest.TestCase):
         exp - The expiration for the items if updated or created (int)
         kv_store - The index of the bucket's kv_store to use. (int)
     """
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=False, batch_size=1, pause_secs=1, timeout_secs=30):
+    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
@@ -245,7 +245,7 @@ class BaseTestCase(unittest.TestCase):
         server - A server in the cluster. (TestInputServer)
         kv_store - The kv store index to check. (int)
     """
-    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=False, batch_size=1):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1):
         tasks = []
         for bucket in self.buckets:
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
