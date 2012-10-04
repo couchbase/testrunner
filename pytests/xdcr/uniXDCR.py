@@ -231,11 +231,11 @@ class unidirectional(XDCRReplicationBaseTest):
         tasks = []
         """Setting up failover while creates/updates/deletes at source nodes"""
         if "source" in self._failover:
-            i = randrange(1, len(self.src_nodes))
+            i = len(self.src_nodes) - 1
             tasks.extend(self._async_failover(self.src_nodes, [self.src_nodes[i]]))
             self._log.info(" Failing over Source Node {0}".format(self.src_nodes[i].ip))
         if "destination" in self._failover:
-            i = randrange(1, len(self.dest_nodes))
+            i = len(self.dest_nodes) - 1
             tasks.extend(self._async_failover(self.dest_nodes, [self.dest_nodes[i]]))
             self._log.info(" Failing over Destination Node {0}".format(self.dest_nodes[i].ip))
 
