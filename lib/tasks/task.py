@@ -17,7 +17,7 @@ from couchbase.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
-                                        GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException
+                                        GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, ServerUnavailableException
 
 from couchbase.documentgenerator import BatchedDocumentGenerator
 
