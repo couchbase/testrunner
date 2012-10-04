@@ -142,7 +142,7 @@ class CheckpointTests(BaseTestCase):
         data_load_thread.join()
         for task in tasks:
             try:
-                task.result(120)
+                task.result(60)
             except TimeoutError:
                 self.fail("Checkpoint not collapsed")
 
@@ -152,7 +152,7 @@ class CheckpointTests(BaseTestCase):
                                                        stat_chk_itms, '<', self.num_items))
         for task in tasks:
             try:
-                task.result(120)
+                task.result(60)
             except TimeoutError:
                 self.fail("Checkpoints not replicated to replica2")
 
@@ -184,6 +184,8 @@ class CheckpointTests(BaseTestCase):
         data_load_thread.join()
 
         chk_pnt = int(m_stats[m_stats.keys()[0]])
+        timeout = 60 if (self.num_items * .001) < 60 else self.num_items * .001
+        time.sleep(timeout)
         tasks = []
         tasks.append(self.cluster.async_wait_for_stats([self.master], self.bucket, param,
                                                        stat_key, '==', self.num_items))
