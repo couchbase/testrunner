@@ -275,6 +275,7 @@ class NodeInitializeControls():
         self.first_name = self.helper.find_control('step_4', 'first_name')
         self.last_name = self.helper.find_control('step_4', 'last_name')
         self.company = self.helper.find_control('step_4', 'company')
+        self.agree_terms = self.helper.find_control('step_4', 'agree_terms')
         return self
 
     def step_5(self):
@@ -562,6 +563,8 @@ class NodeInitializeHelper():
         self.controls.step_4().first_name.type(input.param("first_name", None))
         self.controls.step_4().last_name.type(input.param("last_name", None))
         self.controls.step_4().company.type(input.param("company", None))
+        if input.param("agree_terms", None) is not None:
+            self.controls.step_4().agree_terms.check(setTrue=input.param("agree_terms", None))
 
     def _fill_5_step(self, input):
         self.controls.step_5().password_confirm.type(input.membase_settings.rest_password)
