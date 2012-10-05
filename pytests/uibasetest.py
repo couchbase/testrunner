@@ -81,6 +81,7 @@ class BaseUITestCase(unittest.TestCase):
             self.case_number = self.input.param("case_number", 0)
             self.cluster = Cluster()
             self.machine = self.input.ui_conf['server']
+            self.driver = None
             self.shell = RemoteMachineShellConnection(self.machine)
             #avoid clean up if the previous test has been tear down
             if not self.input.param("skip_cleanup", True) \
@@ -131,12 +132,13 @@ class BaseUITestCase(unittest.TestCase):
 
     def tearDown(self):
         try:
-            path_screen = self.input.ui_conf['screenshots'] or 'logs/screens'
-            full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
-            self.log.info('screenshot is available: %s' % full_path)
-            if not os.path.exists(path_screen):
-                os.mkdir(path_screen)
-            self.driver.get_screenshot_as_file(os.path.abspath(full_path))
+            if self.driver:
+                path_screen = self.input.ui_conf['screenshots'] or 'logs/screens'
+                full_path = '{1}/screen_{0}.png'.format(time.time(), path_screen)
+                self.log.info('screenshot is available: %s' % full_path)
+                if not os.path.exists(path_screen):
+                    os.mkdir(path_screen)
+                self.driver.get_screenshot_as_file(os.path.abspath(full_path))
             rest = RestConnection(self.servers[0])
             if rest._rebalance_progress_status() == 'running':
                 stopped = rest.stop_rebalance()
@@ -145,9 +147,11 @@ class BaseUITestCase(unittest.TestCase):
             #for server in self.servers:
             #    ClusterOperationHelper.cleanup_cluster([server])
             #ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-            self.driver.close()
+            if self.driver:
+                self.driver.close()
         finally:
-            self.shell.disconnect()
+            if self.driver:
+                self.shell.disconnect()
             self.cluster.shutdown()
 
 class Control():
