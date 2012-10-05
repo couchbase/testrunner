@@ -671,9 +671,13 @@ class PerfBase(unittest.TestCase):
             self.protocol_parse(protocol, use_direct=use_direct)
 
         if not user.strip():
-            user = self.input.servers[0].rest_username
+            if "11211" in host_port:
+                user = self.param("bucket", "default")
+            else:
+                user = self.input.servers[0].rest_username
         if not pswd.strip():
-            pswd = self.input.servers[0].rest_password
+            if not "11211" in host_port:
+                pswd = self.input.servers[0].rest_password
 
         self.log.info("mcsoda - %s %s %s %s" %
                       (protocol, host_port, user, pswd))
@@ -931,9 +935,13 @@ class PerfBase(unittest.TestCase):
             self.protocol_parse(protocol, use_direct=use_direct)
 
         if not user.strip():
-            user = self.input.servers[0].rest_username
+            if "11211" in host_port:
+                user = self.param("bucket", "default")
+            else:
+                user = self.input.servers[0].rest_username
         if not pswd.strip():
-            pswd = self.input.servers[0].rest_password
+            if not "11211" in host_port:
+                pswd = self.input.servers[0].rest_password
 
         self.log.info("mcsoda - %s %s %s %s" %
                       (protocol, host_port, user, pswd))
