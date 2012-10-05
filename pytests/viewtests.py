@@ -1154,6 +1154,59 @@ class ViewBasicTests(unittest.TestCase):
         run_view_time = self.input.param('run-view-time', 0)
         ViewBaseTests._test_load_data_get_view_x_mins_multiple_design_docs(self, load_time, self.num_docs, run_view_time, self.num_design_docs)
 
+    def test_all_docs_startkey_endkey_validation(self):
+        """Regression test for MB-6591
+
+        This tests makes sure that the validation of startkey/endkey
+        works with _all_docs which uses raw collation. Return results
+        when startkey is smaller than endkey. When endkey is smaller than
+        the startkey and exception should be raised. With raw collation
+        "Foo" < "foo", with Unicode collation "foo" < "Foo".
+        """
+        bucket = "default"
+        master = self.servers[0]
+        rest = RestConnection(master)
+        ViewBaseTests._setup_cluster(self)
+
+        startkey = '"Foo"'
+        endkey = '"foo"'
+
+        params = {"startkey": startkey, "endkey": endkey}
+        results = rest.all_docs(bucket, params)
+        self.assertTrue('rows' in results, "Results were returned")
+
+        # Flip startkey and endkey
+        params = {"startkey": endkey, "endkey": startkey}
+        self.assertRaises(Exception, rest.all_docs, bucket, params)
+
+    def test_view_startkey_endkey_validation(self):
+        """Regression test for MB-6591
+
+        This tests makes sure that the validation of startkey/endkey works
+        with view, which uses Unicode collation. Return results
+        when startkey is smaller than endkey. When endkey is smaller than
+        the startkey and exception should be raised. With Unicode collation
+        "foo" < "Foo", with raw collation "Foo" < "foo".
+        """
+        bucket = "default"
+        master = self.servers[0]
+        rest = RestConnection(master)
+        ViewBaseTests._setup_cluster(self)
+        ViewBaseTests._create_view_doc_name(self, "startkey-endkey-validation")
+
+        view_name = "dev_test_view-startkey-endkey-validation"
+        startkey = '"foo"'
+        endkey = '"Foo"'
+
+        params = {"startkey": startkey, "endkey": endkey}
+        results = rest.query_view(view_name, view_name, bucket, params)
+        self.assertTrue('rows' in results, "Results were returned")
+
+        # Flip startkey and endkey
+        params = {"startkey": endkey, "endkey": startkey}
+        self.assertRaises(Exception, rest.query_view, view_name, view_name,
+                          bucket, params)
+
 
 class ViewRebalanceTests(unittest.TestCase):
 
