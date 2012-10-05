@@ -14,6 +14,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedError
+from membase.api.rest_client import RestConnection
 
 from couchbase.documentgenerator import BlobGenerator
 from basetestcase import BaseTestCase
@@ -353,6 +354,13 @@ class XDCRBaseTest(unittest.TestCase):
         time.sleep(5)
         shell.start_couchbase()
         shell.disconnect()
+
+    def adding_back_a_node(self, master, server):
+        rest = RestConnection(master)
+        nodes = rest.node_statuses()
+        for node in nodes:
+            if server.ip == node.ip and int(server.port) == int(node.port):
+                rest.add_back_node(node.id)
 
     def _get_cluster_buckets(self, master_server):
         rest = RestConnection(master_server)

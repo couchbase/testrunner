@@ -816,6 +816,24 @@ class RestConnection(object):
 
         return status
 
+    def add_back_node(self, otpNode=None):
+        if otpNode is None:
+            log.error('otpNode parameter required')
+            return False
+
+        api = self.baseUrl + 'controller/reAddNode'
+        params = urllib.urlencode({'otpNode': otpNode})
+
+        status, content, header = self._http_request(api, 'POST', params)
+
+        if status:
+            log.info('add_back_node successful')
+        else:
+            log.error('add_back_node error : {0}'.format(content))
+            raise InvalidArgumentException('controller/reAddNode',
+                                           parameters=params)
+
+        return status
 
     def rebalance(self, otpNodes, ejectedNodes):
         knownNodes = ','.join(otpNodes)
