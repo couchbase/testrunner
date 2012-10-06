@@ -154,7 +154,7 @@ class PerfBase(unittest.TestCase):
 
         for bucket in self.buckets:
             bucket_ram_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
-            bucket_ram_quota = bucket_ram_quota / num_buckets
+            bucket_ram_quota = bucket_ram_quota / self.parami('num_buckets', 1)
             replicas = self.parami('replicas', getattr(self, 'replicas', 1))
 
             self.rest.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram_quota,
