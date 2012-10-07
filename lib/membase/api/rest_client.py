@@ -167,6 +167,9 @@ class RestConnection(object):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
             if not success and type(http_res) == str and\
                http_res.find('Node is unknown to this cluster') > -1:
+                log.error("Error 'Node is unknown to this cluster' was gotten,\
+                    5 seconds sleep before retry")
+                time.sleep(5)
                 continue
             else:
                 break
@@ -201,6 +204,9 @@ class RestConnection(object):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
             if not success and type(http_res) == str and\
                http_res.find('Node is unknown to this cluster') > -1:
+                log.error("Error 'Node is unknown to this cluster' was gotten,\
+                    5 seconds sleep before retry")
+                time.sleep(5)
                 continue
             else:
                 break
@@ -224,7 +230,7 @@ class RestConnection(object):
             else:
                 return json_parsed, False
         except ValueError:
-            return "", False
+            return content, False
 
     def active_tasks(self):
         api = self.capiBaseUrl + "_active_tasks"
