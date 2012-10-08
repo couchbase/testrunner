@@ -1799,9 +1799,17 @@ class QueryView:
                         if num_keys != expected_num_docs:
                             ViewBaseTests._wait_for_indexer_ddoc(tc, rest, view_name)
 
-                    if num_keys == expected_num_docs and verify_expected_keys and not self.reduce_fn:
-                        QueryHelper.verify_query_ids_full(rest, query, results)
-                        self.log.info("Keys in query results are equal to expected")
+                        if num_keys == expected_num_docs and verify_expected_keys and not self.reduce_fn:
+                            try:
+                                QueryHelper.verify_query_ids_full(rest, query, results)
+                                self.log.info("Keys in query results are equal to expected")
+                            except Exception as e:
+                                if e.message.find('Current ids and expected are not equal') != -1:
+                                    attempt += 1
+                                    if attempt == 15:
+                                        raise Exception("After 14 attemps expected number of groups {0} is not reached. {1}".format(query.expected_num_groups, ex))
+                                    else:
+                                        continue
 
                     try:
                         if(num_keys != expected_num_docs):
