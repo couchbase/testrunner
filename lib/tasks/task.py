@@ -191,6 +191,7 @@ class RebalanceTask(Task):
         self.to_add = to_add
         self.to_remove = to_remove
         self.start_time = None
+        self.rest = RestConnection(self.servers[0])
 
     def execute(self, task_manager):
         try:
@@ -204,15 +205,13 @@ class RebalanceTask(Task):
 
     def add_nodes(self, task_manager):
         master = self.servers[0]
-        rest = RestConnection(master)
         for node in self.to_add:
             self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
-            rest.add_node(master.rest_username, master.rest_password,
+            self.rest.add_node(master.rest_username, master.rest_password,
                           node.ip, node.port)
 
     def start_rebalance(self, task_manager):
-        rest = RestConnection(self.servers[0])
-        nodes = rest.node_statuses()
+        nodes = self.rest.node_statuses()
 
         #Determine whether its a cluster_run/not
         cluster_run = True
@@ -235,14 +234,13 @@ class RebalanceTask(Task):
                 else:
                     if server.ip == node.ip and int(server.port) == int(node.port):
                         ejectedNodes.append(node.id)
-        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
+        self.rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
         self.start_time = time.time()
 
     def check(self, task_manager):
-        rest = RestConnection(self.servers[0])
         progress = -100
         try:
-            progress = rest._rebalance_progress()
+            progress = self.rest._rebalance_progress()
         except RebalanceFailedException as ex:
             self.state = FINISHED
             self.set_exception(ex)
@@ -255,10 +253,26 @@ class RebalanceTask(Task):
         if progress != -1 and progress != 100:
             task_manager.schedule(self, 10)
         else:
+            success_cleaned = []
+            for removed in self.to_remove:
+                rest = RestConnection(removed)
+                start = time.time()
+                while time.time() - start < 10:
+                    if len(rest.get_pools_info()["pools"]) == 0:
+                        success_cleaned.append(removed)
+                        break
+                    else:
+                        time.sleep(0.1)
+            result = True
+            for node in set(self.to_remove) - set(success_cleaned):
+                self.log.error("node {0}:{1} was not cleaned after removing from cluster".format(
+                           node.ip, node.port))
+                result = False
+
             self.log.info("rebalancing was completed with progress: {0}% in {1} sec".
                           format(progress, time.time() - self.start_time))
             self.state = FINISHED
-            self.set_result(True)
+            self.set_result(result)
 
 class StatsWaitTask(Task):
     EQUAL = '=='
