@@ -7,7 +7,7 @@ import time
 import datetime
 from app.celery import celery
 import testcfg as cfg
-from cache import NodeStatsCacher
+from cache import ObjCacher, CacheHelper
 
 sys.path=["../lib"] + sys.path
 from membase.api.rest_client import RestConnection
@@ -33,7 +33,8 @@ def resource_monitor():
             restart_atop(node.ip)
 
         # retrieve stats from cache
-        node_stats = NodeStatsCacher().nodestats(node.ip)
+        node_stats = NodeStats.from_cache(node.ip)
+
         if node_stats is None:
             node_stats = NodeStats(node.ip)
 
@@ -81,7 +82,6 @@ def backup_log(ip):
 
 def update_node_stats(node_stats, sample):
 
-    cache = NodeStatsCacher()
     for key in sample.keys():
         if key != 'ip':
 
@@ -90,7 +90,6 @@ def update_node_stats(node_stats, sample):
 
             val = float(re.sub(r'[^\d.]+', '', sample[key]))
             node_stats.samples[key].append(val)
-    cache.store(node_stats)
 
 def check_atop_proc(ip):
     running = False
@@ -271,11 +270,18 @@ class NodeStats(object):
             str_ = str_ + "\n"
         return str_
 
+    def __setattr__(self, name, value):
+        super(NodeStats, self).__setattr__(name, value)
+        ObjCacher().store(CacheHelper.NODESTATSCACHEKEY, self)
+
+    @staticmethod
+    def from_cache(id_):
+        return ObjCacher().instance(CacheHelper.NODESTATSCACHEKEY, id_)
 
 @celery.task
 def generate_node_stats_report():
 
-    allnodestats = NodeStatsCacher().allnodestats
+    allnodestats = CacheHelper.allnodestats()
 
     if len(allnodestats) > 0:
         # print current time at top of each report
@@ -334,5 +340,3 @@ def calculate_node_stat_results(node_stats):
                                  "max"  : max(data),
                                  "99th" : "%.2f" % nn_perctile,
                                  "samples" : len(data)}
-
-    NodeStatsCacher().store(node_stats)

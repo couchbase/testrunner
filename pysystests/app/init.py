@@ -1,13 +1,14 @@
 import os
 from rabbit_helper import RabbitHelper
-from cache import WorkloadCacher, TemplateCacher, BucketStatusCacher, cacheClean
+from cache import CacheHelper
 import testcfg as cfg
 
 def worker_init():
     # cleanup queues
     rabbitHelper = RabbitHelper()
 
-    cached_queues = WorkloadCacher().queues +  TemplateCacher().cc_queues
+    cached_queues = CacheHelper.queues()
+
     test_queues = ["workload","workload_template", "admin_tasks", "xdcr_tasks"] + cached_queues
 
     for queue in test_queues:
@@ -18,7 +19,7 @@ def worker_init():
         except Exception as ex:
             print ex
 
-    cacheClean()
+    CacheHelper.cacheClean()
 
     # kill old background processes
     kill_procs=["sdkserver"]

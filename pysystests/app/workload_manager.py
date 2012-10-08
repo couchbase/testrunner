@@ -9,7 +9,7 @@ import time
 from rabbit_helper import PersistedMQ
 from celery import current_task
 from celery import Task
-from cache import Cache, WorkloadCacher, BucketStatusCacher, TemplateCacher
+from cache import ObjCacher, CacheHelper
 import random
 import testcfg as cfg
 from celery.exceptions import TimeoutError
@@ -37,7 +37,6 @@ def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_templ
         if templateQueueSize > 0:
             templateMsg = rabbitHelper.getJsonMsg(templateQueue)
             template = Template(templateMsg)
-            TemplateCacher().store(template)
     except ValueError as ex:
         logger.error("Error parsing template msg %s: " % templateMsg)
         logger.error(ex)
@@ -50,7 +49,6 @@ def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_templ
         if workloadQueueSize > 0:
             workloadMsg = rabbitHelper.getJsonMsg(workloadQueue)
             workload = Workload(workloadMsg)
-            WorkloadCacher().store(workload)
 
             # launch workload
             sysTestRunner.delay(workload)
@@ -73,21 +71,18 @@ def sysTestRunner(workload):
    
 
     bucket = str(workload.bucket)
-    latestWorkloadTask = None
     prevWorkload = None
 
-    cache = BucketStatusCacher()
-    bucketStatus = cache.bucketstatus(bucket)
+    bucketStatus = BucketStatus.from_cache(bucket)
     
     if bucketStatus is not None:
-        latestWorkloadTask, prevWorkload  = bucketStatus.latestWorkloadTask(bucket)
+        prevWorkload = bucketStatus.latestWorkload(bucket)
     else:
         bucketStatus = BucketStatus(bucket)
 
 
     # make this the latest taskid against this bucket
     bucketStatus.addTask(bucket, current_task.request.id, workload)
-    cache.store(bucketStatus)
 
     if workload.wait is not None:
         # wait before processing
@@ -105,7 +100,6 @@ def sysTestRunner(workload):
             # it's not allowed to override previous workload
             if workload.preconditions is None:
                 prevWorkload.active = False
-                WorkloadCacher().store(prevWorkload)
 
     
     runTask = run.apply_async(args=[workload, prevWorkload], expires = workload.expires)
@@ -119,9 +113,11 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
     rabbitHelper = task_postrun_handler.rabbitHelper
     if sender == sysTestRunner:
         # cleanup workload after handled by test runner
-        workload = retval
-        rabbitHelper.purge(workload.task_queue)
-        WorkloadCacher().delete(workload)
+        if isinstance(retval, Workload):
+            workload = retval
+            rabbitHelper.purge(workload.task_queue)
+        else:
+            logger.error(retval)
 
     if sender == client.mset:
 
@@ -150,24 +146,21 @@ until post conditions(if any) are hit
 """
 @celery.task(base = PersistedMQ)
 def run(workload, prevWorkload = None):
+
     rabbitHelper = run.rabbitHelper
 
-    cache = WorkloadCacher()
     workload.active = True
-    cache.store(workload)
 
     bucket = str(workload.bucket)
     task_queue = workload.task_queue
 
     inflight = 0
-
     while workload.active:
         
         if inflight < 20:
 
             # read doc template 
-            template = TemplateCacher().template(str(workload.template))
-            
+            template = Template.from_cache(str(workload.template))
 
             if template != None:
 
@@ -194,20 +187,21 @@ def run(workload, prevWorkload = None):
             inflight = rabbitHelper.qsize(task_queue)
             time.sleep(1)
 
-        workload = cache.workload(workload.id)
+        workload = Workload.from_cache(workload.id)
 
     return workload
 
 def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, signal = None):
     if sender == run:
         workload = args[0]
-        prevWorkload = args[1] 
+        prevWorkload = args[1]
+
         if workload.preconditions is not None:
+
             # block tasks against bucket until pre-conditions met
             bucket = str(workload.bucket)
-            bs = BucketStatusCacher().bucketstatus(bucket)
+            bs = BucketStatus.from_cache(bucket)
             bs.block(bucket)
-            BucketStatusCacher().store(bs)
 
             stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
                                        bucket = bucket,
@@ -215,11 +209,10 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
                                        password = cfg.COUCHBASE_PWD)
             while not stat_checker.check(workload.preconditions):
                 time.sleep(1)
+
             prevWorkload.active = False
-            WorkloadCacher().store(prevWorkload)
-            bs = BucketStatusCacher().bucketstatus(bucket)
+            bs = BucketStatus.from_cache(bucket)
             bs.unblock(bucket)
-            BucketStatusCacher().store(bs)
             
 
 task_prerun.connect(task_prerun_handler)
@@ -231,8 +224,7 @@ task_prerun.connect(task_prerun_handler)
 @celery.task(base = PersistedMQ, ignore_result = True)
 def taskScheduler():
 
-    cache = WorkloadCacher()
-    workloads = cache.workloads
+    workloads = CacheHelper.workloads()
 
     rabbitHelper = taskScheduler.rabbitHelper
     tasks = []
@@ -260,14 +252,13 @@ back into nonblocking mode
 @celery.task
 def postcondition_handler():
 
-    cache = WorkloadCacher()
+    workloads = CacheHelper.workloads()
 
-    for workload in  cache.workloads:
+    for workload in workloads:
         if workload.postconditions and workload.active:
             bucket = workload.bucket
-            bs = BucketStatusCacher().bucketstatus(bucket)
+            bs = BucketStatus.from_cache(bucket)
             bs.block(bucket)
-            BucketStatusCacher().store(bs)
 
             stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
                                        bucket = bucket,
@@ -276,11 +267,9 @@ def postcondition_handler():
             status = stat_checker.check(workload.postconditions)
             if status == True:
                 # unblock bucket and deactivate workload
-                bs = BucketStatusCacher().bucketstatus(bucket)
+                bs = BucketStatus.from_cache(bucket)
                 bs.unblock(bucket)
-                BucketStatusCacher().store(bs)
                 workload.active = False
-                cache.store(workload)
 
 
 @celery.task(base = PersistedMQ, ignore_result = True)
@@ -410,7 +399,6 @@ def generate_delete_tasks(count, docs_queue, bucket = "default"):
 
     return tasks
 
-
 class Workload(object):
     def __init__(self, params):
         self.id = "workload_"+str(uuid.uuid4())[:7]
@@ -436,14 +424,33 @@ class Workload(object):
             if self.consume_queue == None:
                 self.consume_queue = self.cc_queues[0]
 
+    def __setattr__(self, name, value):
+        super(Workload, self).__setattr__(name, value)
+
+        # cache when active key mutated
+        if name == 'active':
+            ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, self)
+
+    @staticmethod
+    def from_cache(id_):
+        return ObjCacher().instance(CacheHelper.WORKLOADCACHEKEY, id_)
+
 class Template(object):
     def __init__(self, params):
         self.name = params["name"]
+        self.id = self.name
         self.ttl = params["ttl"]
         self.flags = params["flags"]
         self.cc_queues = params["cc_queues"]
         self.kv = params["kv"]
         self.size = params["size"]
+
+        # cache
+        ObjCacher().store(CacheHelper.TEMPLATECACHEKEY, self)
+
+    @staticmethod
+    def from_cache(id_):
+        return ObjCacher().instance(CacheHelper.TEMPLATECACHEKEY, id_)
 
 class BucketStatus(object):
 
@@ -453,18 +460,18 @@ class BucketStatus(object):
 
     def addTask(self, bucket, taskid, workload):
         newPair = (taskid, workload)
-
         if bucket not in self.history:
             self.history[bucket] = {"tasks" : [newPair]}
         else:
             self.history[bucket]["tasks"].append(newPair)
+        ObjCacher().store(CacheHelper.BUCKETSTATUSCACHEKEY, self)
             
-    def latestWorkloadTask(self, bucket):
-        taskId = None
+    def latestWorkload(self, bucket):
+        workload = None
         if len(self.history) > 0 and bucket in self.history:
-            taskId = self.history[bucket]["tasks"][-1]
+            taskId, workload = self.history[bucket]["tasks"][-1]
 
-        return taskId
+        return workload
 
     def mode(self, bucket):
         mode = "nonblocking"
@@ -482,4 +489,10 @@ class BucketStatus(object):
         self.history[bucket]["mode"] = mode 
 
 
+    def __setattr__(self, name, value):
+        super(BucketStatus, self).__setattr__(name, value)
+        ObjCacher().store(CacheHelper.BUCKETSTATUSCACHEKEY, self)
 
+    @staticmethod
+    def from_cache(id_):
+        return ObjCacher().instance(CacheHelper.BUCKETSTATUSCACHEKEY, id_)

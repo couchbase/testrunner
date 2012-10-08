@@ -4,10 +4,7 @@ import hashlib
 from celery.utils.log import get_task_logger
 import testcfg as cfg
 
-WORKLOADCACHEKEY = "WORKLOADCACHEKEY"
-TEMPLATECACHEKEY = "TEMPLATECACHEKEY"
-BUCKETSTATUSCACHEKEY = "BUCKETSTATUSCACHEKEY"
-NODESTATSCACHEKEY = "NODESTATSCACHEKEY"
+logger = get_task_logger(__name__)
 
 class Cache(object):
     def __init__(self):
@@ -15,7 +12,6 @@ class Cache(object):
         self.logger = get_task_logger(__name__)
 
     def store(self, key, data, collectionKey):
-#TODO: this instead key = getContextKey(collectionKey, key)
 
         if isinstance(data, dict):
             data = json.dumps(data)
@@ -81,118 +77,80 @@ class Cache(object):
             pass # index already deleted
 
 
-class WorkloadCacher(Cache):
-    @property
-    def workloads(self):
-        return self.fetchCollection(WORKLOADCACHEKEY)
+class ObjCacher(Cache):
 
-    def store(self, workload):
-        id_ = getContextKey(WORKLOADCACHEKEY, workload.id)
-        super(WorkloadCacher, self).store(id_, workload, WORKLOADCACHEKEY)
+    def allinstances(self, cachekey):
+        return self.fetchCollection(cachekey)
 
-    def workload(self, key):
-        id_ = getContextKey(WORKLOADCACHEKEY, key)
-        return self.retrieve(id_)
+    def store(self, cachekey, obj):
+        id_ = getContextKey(cachekey, obj.id)
+        super(ObjCacher, self).store(id_, obj, cachekey)
 
-    def delete(self, workload):
-        id_ = getContextKey(WORKLOADCACHEKEY, workload.id)
-        super(WorkloadCacher, self).delete(id_, WORKLOADCACHEKEY)
-         
-    def clear(self):
-        super(WorkloadCacher, self).clear(WORKLOADCACHEKEY)
+    def instance(self, cachekey, id_):
+        key = getContextKey(cachekey, id_)
+        return self.retrieve(key)
 
-    @property
-    def queues(self):
-        return self.task_queues + self.cc_queues + self.consume_queues
+    def delete(self, cachekey, obj):
+        id_ = getContextKey(cachekey, obj.id)
+        super(ObjCacher, self).delete(id_, cachekey)
 
-    @property
-    def task_queues(self):
-        return [workload.task_queue for workload in self.workloads]
+    def clear(self, cachekey):
+        super(ObjCacher, self).clear(cachekey)
 
-    @property
-    def cc_queues(self):
+
+class CacheHelper():
+
+    WORKLOADCACHEKEY = "WORKLOADCACHEKEY"
+    TEMPLATECACHEKEY = "TEMPLATECACHEKEY"
+    BUCKETSTATUSCACHEKEY = "BUCKETSTATUSCACHEKEY"
+    NODESTATSCACHEKEY = "NODESTATSCACHEKEY"
+
+    @staticmethod
+    def workloads():
+        return ObjCacher().allinstances(CacheHelper.WORKLOADCACHEKEY)
+
+    @staticmethod
+    def templates():
+        return ObjCacher().allinstances(CacheHelper.TEMPLATECACHEKEY)
+
+    @staticmethod
+    def allnodestats():
+        return ObjCacher().allinstances(CacheHelper.NODESTATSCACHEKEY)
+
+    @staticmethod
+    def cc_queues():
         queues = []
-        for workload in self.workloads:
+        for workload in CacheHelper.workloads():
             if workload.cc_queues is not None:
                 [queues.append(q) for q in workload.cc_queues]
         return queues
 
-    @property
-    def consume_queues(self):
+    @staticmethod
+    def consume_queues():
         queues = []
-        for workload in self.workloads:
+        for workload in CacheHelper.workloads():
             if workload.consume_queue is not None:
                 queues.append(workload.consume_queue)
         return queues
 
-            
+    @staticmethod
+    def task_queues():
+        return [workload.task_queue for workload in CacheHelper.workloads()]
 
-class TemplateCacher(Cache):
+    @staticmethod
+    def queues():
+        return CacheHelper.task_queues() +\
+            CacheHelper.cc_queues() +\
+            CacheHelper.consume_queues()
 
-    def store(self, template):
-        id_ = getContextKey(TEMPLATECACHEKEY, template.name)
-        super(TemplateCacher, self).store(id_, template, TEMPLATECACHEKEY)
+    @staticmethod
+    def cacheClean():
+        objCacheKeys = [CacheHelper.WORKLOADCACHEKEY,
+                        CacheHelper.BUCKETSTATUSCACHEKEY,
+                        CacheHelper.NODESTATSCACHEKEY]
 
-    @property
-    def templates(self):
-        return self.fetchCollection(TEMPLATECACHEKEY)
-
-    def template(self, name):
-        id_ = getContextKey(TEMPLATECACHEKEY, name)
-        return self.retrieve(id_)
-
-    def clear(self):
-        super(TemplateCacher, self).clear(TEMPLATECACHEKEY)
-
-    @property
-    def cc_queues(self):
-        queues = []
-        for template in self.templates:
-            if template.cc_queues is not None:
-                [queues.append(q) for q in template.cc_queues]
-        return queues
-
-
-
-class BucketStatusCacher(Cache):
-
-    @property
-    def bucketstatuses(self):
-        return self.fetchCollection(BUCKETSTATUSCACHEKEY)
-
-    def store(self, bucketstatus):
-        id_ = getContextKey(BUCKETSTATUSCACHEKEY, bucketstatus.id)
-        super(BucketStatusCacher, self).store(id_, bucketstatus, BUCKETSTATUSCACHEKEY)
-
-    def bucketstatus(self, key):
-        id_ = getContextKey(BUCKETSTATUSCACHEKEY, key)
-        return self.retrieve(id_)
-
-    def clear(self):
-        super(BucketStatusCacher, self).clear(BUCKETSTATUSCACHEKEY)
-
-class NodeStatsCacher(Cache):
-
-    @property
-    def allnodestats(self):
-        return self.fetchCollection(NODESTATSCACHEKEY)
-
-    def store(self, nodestats):
-        id_ = getContextKey(NODESTATSCACHEKEY, nodestats.id)
-        super(NodeStatsCacher, self).store(id_, nodestats, NODESTATSCACHEKEY)
-
-    def nodestats(self, key):
-        id_ = getContextKey(NODESTATSCACHEKEY, key)
-        return self.retrieve(id_)
-
-    def clear(self):
-        super(NodeStatsCacher, self).clear(NODESTATSCACHEKEY)
-
-
-
-def cacheClean():
-    for cacheKey in [WORKLOADCACHEKEY, BUCKETSTATUSCACHEKEY, NODESTATSCACHEKEY]:
-        Cache().clear(cacheKey)
+        for cacheKey in objCacheKeys:
+            ObjCacher().clear(cacheKey)
 
 
 # ensure no collisions during object caching
