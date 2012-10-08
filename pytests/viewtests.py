@@ -442,6 +442,14 @@ class ViewBaseTests(unittest.TestCase):
                     self.log.info("view returned empty results in {0} seconds, sleeping for {1}".format(delta, timeout))
                     ViewBaseTests._wait_for_indexer_ddoc(self, rest, view)
                     time.sleep(timeout)
+            except ServerUnavailableException:
+                self.log.error(
+                            "view_results not ready yet , try again in {0} seconds... , unable to reach host"
+                            .format(timeout))
+                if i == num_tries:
+                    self.fail("unable to get view_results for {0} after {1} tries due to error {2}"
+                                  .format(view, num_tries, ex))
+                time.sleep(timeout)
             except Exception as ex:
                 if invalid_results and ex.message.find('view_undefined') != -1:
                         raise ex
