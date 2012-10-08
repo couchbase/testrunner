@@ -6,6 +6,7 @@ from membase.api.rest_client import RestConnection
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
+from couchbase.documentgenerator import DocumentGenerator
 
 class CreateDeleteViewTests(ViewBaseTest):
 
@@ -783,3 +784,61 @@ class CreateDeleteViewTests(ViewBaseTest):
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
             self._verify_ddoc_data_all_buckets()
+
+
+    def test_view_big_int_positive(self):
+
+        num_items = 10
+        self._big_int_test_setup(num_items)
+
+        start_key = [929342299234203, 13403751757202]
+        end_keys = [ [929342299234203, 13990000000000], [929342299234203, 13900000000000] ]
+
+        for key in end_keys:
+            query_negative = {"startkey" : start_key,
+                              "endkey" : key,
+                              "stale" : "false", "connection_timeout" : 60000}
+
+            result = self.cluster.query_view(self.master, 'ddoc_big_int', 'view_big_int', query_negative, num_items)
+            if not result:
+                self.fail("View query for big int(positive test) didn't return expected result")
+            self.log.info("View query for big int(positive test) Successful")
+
+
+    def test_view_big_int_negative(self):
+
+        num_items = 10
+        self._big_int_test_setup(num_items)
+
+        start_key = [929342299234203, 13403751757602]
+        end_keys = [ [929342299234203, 13990000000000], [929342299234203, 13900000000000] ]
+
+        for key in end_keys:
+            query_negative = {"startkey" : start_key,
+                              "endkey" : key,
+                              "stale" : "false", "connection_timeout" : 60000}
+
+            result = self.cluster.query_view(self.master, 'ddoc_big_int', 'view_big_int', query_negative, 0)
+            if not result:
+                self.fail("View query for big int(negative test) didn't return expected result")
+            self.log.info("View query for big int(negative test) Successful")
+
+
+    def _big_int_test_setup(self, num_items):
+
+        timestamp = [13403751757202, 13403751757402, 13403751757302]
+        docId = ['0830c075-2a81-448a-80d6-85214ee3ad64', '0830c075-2a81-448a-80d6-85214ee3ad65', '0830c075-2a81-448a-80d6-85214ee3ad66']
+        conversationId = [929342299234203]
+        msg = ['msg1', 'msg2']
+        template = '{{ "docId": "{0}", "conversationId": {1}, "timestamp": {2}, "msg": "{3}" }}'
+
+        gen_load = DocumentGenerator('test_docs', template, docId, conversationId, timestamp, msg, start=0, end=num_items)
+
+        self.log.info("Inserting json data into bucket")
+        self._load_all_buckets(self.master, gen_load, "create", 0)
+
+        map_fn = 'function (doc) {emit([doc.conversationId, doc.timestamp], doc);}'
+        view = [View('view_big_int', map_fn, dev_view=False)]
+
+        self.create_views(self.master, 'ddoc_big_int', view)
+
