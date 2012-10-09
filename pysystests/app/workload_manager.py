@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from app.celery import celery
 from celery.task.sets import TaskSet
 from app.stats import StatChecker
+from app.query import activeQueryWorkload
 import app.sdk_client_tasks as client
 import json
 import uuid
@@ -48,10 +49,14 @@ def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_templ
         workloadQueueSize = rabbitHelper.qsize(workloadQueue)
         if workloadQueueSize > 0:
             workloadMsg = rabbitHelper.getJsonMsg(workloadQueue)
-            workload = Workload(workloadMsg)
+            if "queries_per_sec" in workloadMsg:
+                # launch query workload
+                activeQueryWorkload.delay(workloadMsg)
+            else:
+                workload = Workload(workloadMsg)
+                # launch kvworkload
+                sysTestRunner.delay(workload)
 
-            # launch workload
-            sysTestRunner.delay(workload)
     except ValueError as ex:
         logger.error("Error parsing workloadMsg %s: " % workloadMsg)
         logger.error(ex)
@@ -103,7 +108,6 @@ def sysTestRunner(workload):
 
     
     runTask = run.apply_async(args=[workload, prevWorkload], expires = workload.expires)
-    return runTask.get()
 
 
 @celery.task(base = PersistedMQ)
@@ -111,7 +115,7 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
                          state = None, signal = None, retval = None):
 
     rabbitHelper = task_postrun_handler.rabbitHelper
-    if sender == sysTestRunner:
+    if sender == run:
         # cleanup workload after handled by test runner
         if isinstance(retval, Workload):
             workload = retval
@@ -239,10 +243,6 @@ def taskScheduler():
 
                     # apply async
                     result = TaskSet(tasks = tasks).apply_async()
-                    try:
-                        res = result.join(timeout = 1)
-                    except TimeoutError:
-                        pass
 
 """ scans active workloads for postcondition flags and 
 runs checks against bucket stats.  If postcondition
@@ -290,9 +290,7 @@ def generate_pending_tasks(task_queue, template, bucket, create_count,
 
     pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks 
     pending_tasks = json.dumps(pending_tasks)
-
     rabbitHelper.putMsg(task_queue, pending_tasks)
-
 
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")

@@ -104,6 +104,7 @@ class CacheHelper():
     TEMPLATECACHEKEY = "TEMPLATECACHEKEY"
     BUCKETSTATUSCACHEKEY = "BUCKETSTATUSCACHEKEY"
     NODESTATSCACHEKEY = "NODESTATSCACHEKEY"
+    QUERYCACHEKEY = "QUERYCACHEKEY"
 
     @staticmethod
     def workloads():
@@ -116,6 +117,19 @@ class CacheHelper():
     @staticmethod
     def allnodestats():
         return ObjCacher().allinstances(CacheHelper.NODESTATSCACHEKEY)
+
+    @staticmethod
+    def queries():
+        return ObjCacher().allinstances(CacheHelper.QUERYCACHEKEY)
+
+    @staticmethod
+    def active_query():
+        active = None
+        for query in CacheHelper.queries():
+            if query.active:
+                active = query
+                break
+        return active
 
     @staticmethod
     def cc_queues():
@@ -135,7 +149,9 @@ class CacheHelper():
 
     @staticmethod
     def task_queues():
-        return [workload.task_queue for workload in CacheHelper.workloads()]
+        kv = [workload.task_queue for workload in CacheHelper.workloads()]
+        query = [workload.task_queue for workload in CacheHelper.queries()]
+        return kv + query
 
     @staticmethod
     def queues():
@@ -147,7 +163,8 @@ class CacheHelper():
     def cacheClean():
         objCacheKeys = [CacheHelper.WORKLOADCACHEKEY,
                         CacheHelper.BUCKETSTATUSCACHEKEY,
-                        CacheHelper.NODESTATSCACHEKEY]
+                        CacheHelper.NODESTATSCACHEKEY,
+                        CacheHelper.QUERYCACHEKEY]
 
         for cacheKey in objCacheKeys:
             ObjCacher().clear(cacheKey)

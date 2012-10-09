@@ -28,6 +28,10 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'task': 'app.workload_manager.taskScheduler',
     'schedule': timedelta(seconds=1),
     },
+    'query_scheduler': {
+    'task': 'app.query.queryScheduler',
+    'schedule': timedelta(seconds=1),
+    },
 
     'workload_consumer': {
     'task': 'app.workload_manager.workloadConsumer',
@@ -113,6 +117,10 @@ CELERY_ROUTES = ({'app.sdk_client_tasks.mset': {
                 {'app.workload_manager.taskScheduler': {
                   'queue': 'manager',
                   'routing_key': 'workload.scheduler'
+                }},
+                {'app.query.queryScheduler': {
+                  'queue': 'query',
+                  'routing_key': 'rest.query'
                 }},
                 {'app.workload_manager.postcondition_handler': {
                   'queue': 'manager',

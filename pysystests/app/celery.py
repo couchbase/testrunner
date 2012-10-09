@@ -11,7 +11,7 @@ from app.init import worker_init
 # initialize worker
 worker_init()
 
-celery = Celery(include=['app.sdk_client_tasks','app.rest_client_tasks','app.workload_manager','app.stats','app.admin_manager'])
+celery = Celery(include=['app.sdk_client_tasks','app.rest_client_tasks','app.workload_manager','app.stats','app.admin_manager','app.query'])
 celery.config_from_object(config)
 
 # setup celery process logger

@@ -15,7 +15,7 @@ def add_modifier_args(parser):
     parser.add_argument("--expires",nargs=3,  help="time to wait before terminating workload: <hour> <min> <sec>", metavar = ('HOUR','MIN','SEC'), type=int)
 
 def add_broker_arg(parser):
-    parser.add_argument("--broker", required = True, help="ip address of broker used to consume options")
+    parser.add_argument("--broker", help="ip address of broker used to consume options")
 
 def add_template_parser(parent):
     parser = parent.add_parser("template")
@@ -64,12 +64,25 @@ def add_admin_parser(parent):
 
 def add_xdcr_parser(parent):
     parser = parent.add_parser("xdcr")
+
+    add_broker_arg(parser)
     parser.add_argument("--dest_cluster_ip", help="Dest. cluster ip", default='', type=str)
     parser.add_argument("--dest_cluster_username", help="Dest. cluster rest username", default='Administrator', type=str)
     parser.add_argument("--dest_cluster_pwd", help="Dest. cluster rest pwd", default='password', type=str)
     parser.add_argument("--dest_cluster_name", help="Dest. cluster name", default='', type=str)
     parser.add_argument("--replication_type", help="unidirection or bidirection", default='unidirection', type=str)
     parser.set_defaults(handler=perform_xdcr_tasks)
+
+def add_query_parser(parent):
+    parser = parent.add_parser("query")
+
+    add_broker_arg(parser)
+    parser.add_argument("--ddoc", help="Design Document", required = True, type=str)
+    parser.add_argument("--view", help="Name of view", required = True, type=str)
+    parser.add_argument("--bucket", help="Bucket with documents to query", default="default", type=str)
+    parser.add_argument("--password", help="Sasl password of bucket", default="", type=str)
+    parser.add_argument("--queries_per_sec", help="Queries per second", default=1, type=int, metavar = 'N')
+    parser.set_defaults(handler=perform_query_tasks)
 
 def add_test_parser(parent):
     parser = parent.add_parser("test")
@@ -81,6 +94,7 @@ def setup_run_parser():
     add_workload_parser(subparser_)
     add_admin_parser(subparser_)
     add_xdcr_parser(subparser_)
+    add_query_parser(subparser_)
     add_test_parser(subparser_)
 
 def setup_import_parser():
@@ -186,7 +200,17 @@ def perform_xdcr_tasks(args):
 
     #TODO: Validate the user inputs, before passing to rabbit
     print xdcrMsg
+    rabbitHelper = RabbitHelper(args.broker)
     rabbitHelper.putMsg("xdcr_tasks", json.dumps(xdcrMsg))
+
+def perform_query_tasks(args):
+    queryMsg = {'queries_per_sec' : args.queries_per_sec,
+                'ddoc' : args.ddoc,
+                'view' : args.view,
+                'bucket' : args.bucket,
+                'password' : args.password}
+    rabbitHelper = RabbitHelper(args.broker)
+    rabbitHelper.putMsg('workload', json.dumps(queryMsg))
 
 
 ### setup main arg parsers

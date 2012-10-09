@@ -13,6 +13,7 @@ from app.celery import celery
 import testcfg as cfg
 import json
 import eventlet
+from eventlet.green import urllib2
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
@@ -23,15 +24,22 @@ SDK_PORT = 50008
 
 
 @celery.task
-def query_view(design_doc_name, view_name, bucket = "default", params = None):
+def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", type_ = "view", batch_size = 100):
 
-    if params == None:
-        params = {"stale" : "update_after"}
+    pool = eventlet.GreenPool(batch_size)
+    capiUrl = "http://%s:%s/couchBase/" % (cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT)
+    url = capiUrl + '%s/_design/%s/_%s/%s' % (bucket,
+                                                design_doc_name, type_,
+                                                view_name) # TODO: support filters
 
-    message = {"command" : "query",
-               "args" : [design_doc_name, view_name, bucket, params]}
+    for res in pool.imap(send_query, [url for i in xrange(count)]):
+        pass
 
-    return  _send_msg(message)
+def send_query(url):
+    try:
+        urllib2.urlopen(url)
+    except urllib2.URLError:
+        pass
 
 def _send_msg(message):
     sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
