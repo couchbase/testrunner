@@ -1480,12 +1480,8 @@ class MonitorViewFragmentationTask(Task):
                 if "Error occured reading set_view _info" in e.message and with_new_nodes:
                     print("node {0} {1} is not ready yet?: {2}".format(
                                     node.id, node.port, e.message))
-                    continue
                 else:
-                    print e.message
-                    self.state = FINISHED
-                    self.set_result(False)
-                    return
+                    raise e
             if status:
                 info.append(content)
         return info
