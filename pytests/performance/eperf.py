@@ -825,7 +825,9 @@ class EPerfMaster(perf.PerfBase):
         self.spec("test_eperf_read")
 
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
+
         if self.parami("access_phase", 1) == 1:
             self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
@@ -854,7 +856,9 @@ class EPerfMaster(perf.PerfBase):
         self.spec("test_eperf_write")
 
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
+
         if self.parami("access_phase", 1) == 1:
             self.access_phase(ratio_sets=self.paramf('ratio_sets',
                                                      PerfDefaults.ratio_sets),
@@ -883,7 +887,8 @@ class EPerfMaster(perf.PerfBase):
         self.spec("test_eperf_mixed")
 
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
 
         if self.parami("index_phase", 0) and self.param("woq_pattern", 0):
             view_gen = ViewGen()
@@ -957,7 +962,9 @@ class EPerfMaster(perf.PerfBase):
         self.spec("test_eperf_rebalance")
 
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
+
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
 
         if not self.parami("nru_task", PerfDefaults.nru_task) and \
@@ -1043,7 +1050,8 @@ class EPerfMaster(perf.PerfBase):
         self.spec("test_eperf_thruput")
 
         self.gated_start(self.input.clients)
-        self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami("num_nodes", PerfDefaults.num_nodes))
 
         if self.parami("access_phase", 1) == 1:
             self.access_phase(ratio_sets=self.paramf('ratio_sets',
@@ -1070,7 +1078,8 @@ class EPerfMaster(perf.PerfBase):
 
         # Load phase
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
-        self.load_phase(num_nodes)
+        if self.parami("load_phase", 0):
+            self.load_phase(num_nodes)
 
         # Index phase
         view_gen = ViewGen()
@@ -1114,7 +1123,8 @@ class EPerfMaster(perf.PerfBase):
 
         # Load phase
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
-        self.load_phase(num_nodes)
+        if self.parami("load_phase", 0):
+            self.load_phase(num_nodes)
 
         # Index phase
         view_gen = ViewGen()
@@ -1161,7 +1171,8 @@ class EPerfMaster(perf.PerfBase):
 
         # Load phase
         num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
-        self.load_phase(num_nodes)
+        if self.parami("load_phase", 0):
+            self.load_phase(num_nodes)
 
         # Index phase
         view_gen = ViewGen()
@@ -1216,7 +1227,8 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        self.load_phase(self.parami('num_nodes', 10))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         view_gen = ViewGen()
@@ -1268,7 +1280,8 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        self.load_phase(self.parami('num_nodes', 10))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         view_gen = ViewGen()
@@ -1316,7 +1329,8 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        self.load_phase(self.parami('num_nodes', 10))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         view_gen = ViewGen()
@@ -1365,7 +1379,8 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        self.load_phase(self.parami('num_nodes', 10))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         pass
@@ -1412,7 +1427,8 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
 
         # Load phase
-        self.load_phase(self.parami('num_nodes', 10))
+        if self.parami("load_phase", 0):
+            self.load_phase(self.parami('num_nodes', 10))
 
         # Index phase
         view_gen = ViewGen()
