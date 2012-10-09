@@ -772,10 +772,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             #get the process list
             exists = self.file_exists(remotepath, filename)
             if exists:
-                log.error('at {2} file still exists : {0}/{1}'.format(remotepath, filename, self.ip))
+                log.error('at {2} file still exists : {0}{1}'.format(remotepath, filename, self.ip))
                 time.sleep(5)
             else:
-                log.info('at {2} FILE DOES NOT EXIST ANYMORE : {0}/{1}'.format(remotepath, filename, self.ip))
+                log.info('at {2} FILE DOES NOT EXIST ANYMORE : {0}{1}'.format(remotepath, filename, self.ip))
                 deleted = True
         return deleted
 
@@ -786,10 +786,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             #get the process list
             exists = self.file_exists(remotepath, filename)
             if not exists:
-                log.error('at {2} file does not exist : {0}/{1}'.format(remotepath, filename, self.ip))
+                log.error('at {2} file does not exist : {0}{1}'.format(remotepath, filename, self.ip))
                 time.sleep(5)
             else:
-                log.info('at {2} FILE EXISTS : {0}/{1}'.format(remotepath, filename, self.ip))
+                log.info('at {2} FILE EXISTS : {0}{1}'.format(remotepath, filename, self.ip))
                 added = True
         return added
 
@@ -1409,15 +1409,17 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def execute_cluster_backup(self, login_info="Administrator:password", backup_location="/tmp/backup",
                                command_options='', cluster_ip="", cluster_port="8091"):
-        self.delete_files(backup_location)
-        self.create_directory(backup_location)
-
         backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
-        #info = self.extract_remote_info()
-        #type = info.type.lower()
-        #if type == 'windows':
-            #backup_command = "%scbbackup.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        backup_file_location = backup_location
+        #TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            backup_command = "%scbbackup.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            backup_file_location = "/cygdrive/c%s" % (backup_location)
+
+        self.delete_files(backup_file_location)
+        self.create_directory(backup_file_location)
 
         command_options_string = ""
         if command_options is not '':
@@ -1433,11 +1435,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def restore_backupFile(self, login_info, backup_location, buckets):
         restore_command = "%scbrestore" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
-        #info = self.extract_remote_info()
-        #type = info.type.lower()
-            #if type == 'windows':
-            #restore_command = "%scbrestore.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            restore_command = "%scbrestore.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
         for bucket in buckets:
             command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_location, "http://",
@@ -1452,11 +1453,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def execute_cbtransfer(self, source, destination):
         transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
-        #info = self.extract_remote_info()
-        #type = info.type.lower()
-        #if type == 'windows':
-            #transfer_command = "%scbtransfer.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            transfer_command = "%scbtransfer.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
         command = "%s %s %s" % (transfer_command, source, destination)
         output, error = self.execute_command(command.format(command))
@@ -1464,27 +1464,29 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
         cbdocloader_command = "%stools/cbdocloader" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-
-#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
-        #info = self.extract_remote_info()
-        #type = info.type.lower()
-        #if type == 'windows':
-            #cbdocloader_command = "%stools/cbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
         command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
                                                                             testconstants.LINUX_CB_PATH, file)
+        if type == 'windows':
+            cbdocloader_command = "%stools/cbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            WIN_COUCHBASE_SAMPLES_PATH = "C:/Program\ Files/Couchbase/Server/samples/"
+            command = "%s -u %s -p %s -n %s:%s -b %s -s %s %s%s.zip" % (cbdocloader_command,
+                                                                        username, password, self.ip,
+                                                                        self.port, bucket, memory_quota,
+                                                                        WIN_COUCHBASE_SAMPLES_PATH, file)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
         return output, error
 
     def execute_cbcollect_info(self, file):
         cbcollect_command = "%scbcollect_info" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-#TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
-        #info = self.extract_remote_info()
-        #type = info.type.lower()
-        #if type == 'windows':
-            #cbcollect_command = "%scbcollect_info" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            cbcollect_command = "%scbcollect_info.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         command = "%s %s" % (cbcollect_command, file)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
@@ -1492,11 +1494,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def execute_cbepctl(self, bucket, persistence, param_type, param, value):
         cbepctl_command = "%scbepctl" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        #TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
-        #info = self.extract_remote_info()
-        #type = info.type.lower()
-        #if type == 'windows':
-        #cbcollect_command = "%scbepctl" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            cbepctl_command = "%scbepctl.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if bucket.saslPassword == None:
             bucket.saslPassword = ''
         if persistence != "":
@@ -1513,11 +1514,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def execute_cbstats(self, bucket, command, keyname="", vbid=0):
         cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        #TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
-        #info = self.extract_remote_info()
-        #type = info.type.lower()
-        #if type == 'windows':
-        #cbcollect_command = "%scbepctl" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            cbstat_command = "%scbepctl.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if bucket.saslPassword == None:
             bucket.saslPassword = ''
         if command != "key":

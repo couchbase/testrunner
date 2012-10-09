@@ -12,6 +12,8 @@ class BackupBaseTest(BaseTestCase):
         self.times_teardown_called = 1
         super(BackupBaseTest, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
+        info = self.shell.extract_remote_info()
+        self.os = info.type.lower()
         self.value_size = self.input.param("value_size", 256)
         self.expire_time = self.input.param("expire_time", 60)
         self.item_flag = self.input.param("item_flag", 0)
@@ -33,13 +35,19 @@ class BackupBaseTest(BaseTestCase):
         super(BackupBaseTest, self).tearDown()
         if not self.input.param("skip_cleanup", True):
             if times_tear_down_called > 1 :
-                self.shell.delete_files(self.backup_location)
+                if self.os == 'windows':
+                    self.shell.delete_files("/cygdrive/c%s" % (self.backup_location))
+                else:
+                    self.shell.delete_files(self.backup_location)
                 self.shell.disconnect()
                 del self.buckets
                 gc.collect()
         if self.input.param("skip_cleanup", True):
             if self.case_number > 1 or self.times_teardown_called >1:
-                self.shell.delete_files(self.backup_location)
+                if self.os == 'windows':
+                    self.shell.delete_files("/cygdrive/c%s" % (self.backup_location))
+                else:
+                    self.shell.delete_files(self.backup_location)
                 self.shell.disconnect()
                 del self.buckets
                 gc.collect()

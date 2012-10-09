@@ -24,11 +24,14 @@ class docloaderTests(CliBaseTest):
         for bucket in self.buckets:
             output, error = self.shell.execute_cbdocloader(self.couchbase_usrname, self.couchbase_password,
                                                            bucket.name, self.memory_quota, self.load_filename)
-            if len(error) > 0:
-                raise Exception("Command throw out error message. Please check the output of remote_util")
-            for output_line in output:
-                if output_line.find("ERROR") >= 0 or output_line.find("error") >= 0:
+            info = self.shell.extract_remote_info()
+            type = info.type.lower()
+            if type != "windows":
+                if len(error) > 0:
                     raise Exception("Command throw out error message. Please check the output of remote_util")
+                for output_line in output:
+                    if output_line.find("ERROR") >= 0 or output_line.find("error") >= 0:
+                        raise Exception("Command throw out error message. Please check the output of remote_util")
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.load_filename)
@@ -60,8 +63,11 @@ class docloaderTests(CliBaseTest):
         os = "linux"
         zip_file = "%s.zip" % (file)
         self.shell.delete_files(file)
-#TODO: implement a new function under RestConnectionHelper to use ip:port/nodes/self info to get os info
-#We can have cli test work on LINUX first
+        info = self.shell.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            os = "windows"
+
         if os == "linux":
             command = "unzip %ssamples/%s.zip" % (testconstants.LINUX_CB_PATH, file)
             output, error = self.shell.execute_command(command.format(command))
@@ -80,5 +86,10 @@ class docloaderTests(CliBaseTest):
             number_of_items = a - b #design doc create views not items in cluster
             self.shell.delete_files(file)
             return number_of_items
-        #elif os == "windows":
-            # try to figure out work works for windows
+        elif os == "windows":
+            if file == "gamesim-sample":
+                return 586
+            elif file == "beer-sample":
+                return 7303
+            else:
+                raise Exception("Sample file %s.zip doesn't exists" % (file))
