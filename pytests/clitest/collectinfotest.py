@@ -63,8 +63,11 @@ class collectinfoTests(CliBaseTest):
     def verify_results(self, file):
         os = "linux"
         zip_file = "%s.zip" % (file)
-#TODO: implement a new function under RestConnectionHelper to use ip:port/nodes/self info to get os info
-#We can have cli test work on LINUX first
+        info = self.shell.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            os = "windows"
+
         if os == "linux":
             command = "unzip %s" % (zip_file)
             output, error = self.shell.execute_command(command.format(command))
@@ -102,8 +105,9 @@ class collectinfoTests(CliBaseTest):
                 raise Exception("Bad log file package generated. Missing logs")
             if missing_buckets is True:
                 raise Exception("Bad stats.log which miss some bucket information")
-        #elif os == "windows":
-            # try to figure out what command works for windows
+        elif os == "windows":
+            # try to figure out what command works for windows for verification
+            pass
 
         self.shell.delete_files(zip_file)
         self.shell.delete_files("cbcbcollect_info*")
