@@ -1517,7 +1517,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         info = self.extract_remote_info()
         type = info.type.lower()
         if type == 'windows':
-            cbstat_command = "%cbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if bucket.saslPassword == None:
             bucket.saslPassword = ''
         if command != "key":
