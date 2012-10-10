@@ -1236,7 +1236,8 @@ class RestConnection(object):
                       replicaNumber=1,
                       proxyPort=11211,
                       bucketType='membase',
-                      replica_index=1):
+                      replica_index=1,
+                      flushEnabled=1):
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
         #this only works for default bucket ?
@@ -1248,7 +1249,8 @@ class RestConnection(object):
                                        'replicaNumber': replicaNumber,
                                        'proxyPort': proxyPort,
                                        'bucketType': bucketType,
-                                       'replicaIndex': replica_index})
+                                       'replicaIndex': replica_index,
+                                       'flushEnabled': flushEnabled})
 
         elif authType == 'none':
             params = urllib.urlencode({'name': bucket,
@@ -1257,7 +1259,8 @@ class RestConnection(object):
                                        'replicaNumber': replicaNumber,
                                        'proxyPort': proxyPort,
                                        'bucketType': bucketType,
-                                       'replicaIndex': replica_index})
+                                       'replicaIndex': replica_index,
+                                       'flushEnabled': flushEnabled})
 
         elif authType == 'sasl':
             params = urllib.urlencode({'name': bucket,
@@ -1267,7 +1270,8 @@ class RestConnection(object):
                                        'replicaNumber': replicaNumber,
                                        'proxyPort': self.get_nodes_self().moxi,
                                        'bucketType': bucketType,
-                                       'replicaIndex': replica_index})
+                                       'replicaIndex': replica_index,
+                                       'flushEnabled': flushEnabled})
 
 
 
