@@ -1476,8 +1476,9 @@ class MonitorViewFragmentationTask(Task):
             rest = RestConnection(server_info)
             try:
                 status, content = rest.set_view_info(bucket, design_doc_name)
-            except Exception, e:
-                if "Error occured reading set_view _info" in e.message and with_new_nodes:
+            except Exception as e:
+                print(str(e))
+                if "Error occured reading set_view _info" in str(e) and with_new_nodes:
                     print("node {0} {1} is not ready yet?: {2}".format(
                                     node.id, node.port, e.message))
                 else:
