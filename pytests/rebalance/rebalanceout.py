@@ -343,7 +343,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             query["limit"] = expected_rows
         query["stale"] = "false"
 
-        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 2, expected_rows=expected_rows)
+        self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 5, expected_rows=expected_rows)
 
         compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name, self.default_bucket_name)
 

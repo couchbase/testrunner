@@ -6,7 +6,6 @@ from rebalance.rebalance_base import RebalanceBaseTest
 from membase.api.rest_client import RestConnection
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
-from tasks.task import MonitorActiveTask
 from membase.api.exception import RebalanceFailedException
 
 class RebalanceInTests(RebalanceBaseTest):
