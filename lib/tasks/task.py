@@ -1560,7 +1560,7 @@ class ViewCompactionTask(Task):
                 self.log.info("design doc {0} is compacting".format(self.design_doc_name))
                 task_manager.schedule(self, 2)
             elif new_compaction_count > self.num_of_compactions:
-                self.log("compactor was run, compaction count was changed on %s".format(new_compaction_count))
+                self.log.info("compactor was run, compaction count was changed on %s".format(new_compaction_count))
                 frag_val_diff = compacted_frag_val - self.precompacted_frag_val
                 self.log.info("fragmentation went from %d to %d" % \
                               (self.precompacted_frag_val, compacted_frag_val))
