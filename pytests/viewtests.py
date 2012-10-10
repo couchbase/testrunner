@@ -10,6 +10,7 @@ import time
 import datetime
 from couchbase.document import DesignDocument, View
 from couchbase.cluster import Cluster
+from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -495,7 +496,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _wait_for_task_pid(self, pid, end_time):
         while (time.time() < end_time):
-            new_pid, _ =  ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
+            new_pid, _ = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
             if pid == new_pid:
                 time.sleep(5)
                 continue
@@ -839,7 +840,7 @@ class ViewBaseTests(unittest.TestCase):
             results = ViewBaseTests._get_view_results(self, rest, bucket, view_name, limit=2 * len(doc_names))
             doc_names_view = ViewBaseTests._get_doc_names(self, results)
         if sorted(doc_names_view) != sorted(doc_names):
-            self.log.error("view returned %s items, expected to return %s items" %(
+            self.log.error("view returned %s items, expected to return %s items" % (
                             len(doc_names_view), len(doc_names)))
             if len(doc_names) > len(doc_names_view):
                 self.log.error("There is a dataloss")
@@ -1451,7 +1452,7 @@ class ViewCreationDeletionTests(unittest.TestCase):
         results_new = rest.query_view(ddocs[0].name, ddocs[0].views[0].name, 'default',
                                   {"stale" : "ok", "full_set" : "true"})
         self.assertEquals(results.get(u'rows', []), results_new.get(u'rows', []),
-                          "Results returned previosly %s don't match with current %s" %(
+                          "Results returned previosly %s don't match with current %s" % (
                           results.get(u'rows', []), results_new.get(u'rows', [])))
 
     def test_view_multiple_buckets(self):
