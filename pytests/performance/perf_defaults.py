@@ -56,7 +56,7 @@ class PerfDefaults:
     rebalance_after     =    200000
     num_nodes_after     =    7           # num of nodes after rebalance.
     reb_max_retries     =    0           # num of retries if rebalance fails
-    reb_cons_view       =    0           # consistent view for rebalance task, 1: enable, 0: disable
+    reb_cons_view       =    -1          # consistent view for rebalance task, 1: enable, 0: disable
     reb_no_fg           =    0           # rebalance without foreground load. 1: enable, 0: disable
 
     # control

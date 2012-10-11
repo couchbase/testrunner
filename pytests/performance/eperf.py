@@ -401,10 +401,11 @@ class EPerfMaster(perf.PerfBase):
                   "at %d UTC, curr_time is %s" \
                    % (server.ip, min_left, tm_hour, gmt_now)
 
-    def set_reb_cons_view(self, node, disable=True):
+    def set_reb_cons_view(self, node, disable=False):
         """Set up consistent view for rebalance task"""
         rest = RestConnection(node)
         rest.set_reb_cons_view(disable=disable)
+        print "[set_reb_cons_view] disable consistent view = %s" % disable
 
     def start_measure_sched_delay(self, file="sched-delay"):
         for server in self.input.servers:
@@ -945,8 +946,10 @@ class EPerfMaster(perf.PerfBase):
             self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
                                 getattr(self, "latched_rebalance"))]
 
-        if self.parami("reb_cons_view", PerfDefaults.reb_cons_view):
-            self.set_reb_cons_view(self.input.servers[0], disable=False)
+        reb_cons_view = self.parami("reb_cons_view", PerfDefaults.reb_cons_view)
+        if reb_cons_view != PerfDefaults.reb_cons_view:
+            self.set_reb_cons_view(self.input.servers[0],
+                                   disable=(reb_cons_view == 0))
 
         if self.parami("access_phase", 1) == 1:
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
