@@ -9,6 +9,7 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import testconstants
 import gzip
 import urllib
+from collections import defaultdict
 
 from mc_bin_client import MemcachedError
 
@@ -87,9 +88,12 @@ class StatsCollector(object):
             if ddoc is not None:
                 view_stats_thread = Thread(target=self.collect_indexing_stats ,
                                            args=(nodes, bucket, ddoc, frequency))
+                indexing_stats_thread = Thread(target=self.measure_indexing_throughput,
+                                               args=(nodes, ))
                 view_stats_thread.start()
+                indexing_stats_thread.start()
                 self._task["threads"].append(view_stats_thread)
-
+                self._task["threads"].append(indexing_stats_thread)
 
             # Getting build/machine stats from only one node in the cluster
             self.build_stats(nodes)
@@ -151,6 +155,7 @@ class StatsCollector(object):
                "ns_server_data": self._task.get("ns_server_stats", []),
                "ns_server_data_system": self._task.get("ns_server_stats_system", []),
                "view_info": self._task.get("view_info", []),
+               "indexer_info": self._task.get("indexer_info", []),
                "timings": self._task.get("timings", []),
                "dispatcher": self._task.get("dispatcher", []),
                "bucket-size":self._task.get("bucket_size", []),
@@ -591,6 +596,40 @@ class StatsCollector(object):
                                                     'timestamp': time.time()})
 
         print "Finished collecting view indexing stats"
+
+    def measure_indexing_throughput(self, nodes):
+        self._task['indexer_info'] = list()
+        indexers = defaultdict(dict)
+        while not self._aborted():
+            time.sleep(15)  # 15 seconds by default
+
+            # Grab indexer tasks from all nodes
+            tasks = list()
+            for node in nodes:
+                rest = RestConnection(node)
+                tasks.extend(filter(lambda t: t['type'] == 'indexer',
+                                    rest.active_tasks()))
+
+            # Calculate throughput for every unique PID
+            thr = 0
+            for task in tasks:
+                uiid = task['pid'] + str(task['started_on'])
+
+                changes_delta = \
+                    task['changes_done'] - indexers[uiid].get('changes_done', 0)
+                time_delta = \
+                    task['updated_on'] - indexers[uiid].get('updated_on',
+                                                            task['started_on'])
+                if time_delta:
+                    thr += changes_delta / time_delta
+                indexers[uiid]['changes_done'] = task['changes_done']
+                indexers[uiid]['updated_on'] = task['updated_on']
+
+            # Average throughput
+            self._task['indexer_info'].append({
+                'indexing_throughput': thr,
+                'timestamp': time.time()
+            })
 
     def _aborted(self):
         return self._task["state"] == "stopped"
