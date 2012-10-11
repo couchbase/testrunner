@@ -407,9 +407,10 @@ class ViewBaseTests(unittest.TestCase):
 
 
     @staticmethod
-    def _get_view_results(self, rest, bucket, view, limit=20, extra_params={}, type_="view", invalid_results=False):
+    def _get_view_results(self, rest, bucket, view, limit=20, extra_params={}, type_="view", invalid_results=False,
+                          num_tries=None):
         # increase number of try to 40 to test on windows
-        num_tries = self.input.param('num-tries', 40)
+        num_tries = num_tries or self.input.param('num-tries', 40)
         timeout = self.input.param('timeout', 10)
         results = json.loads("{}")
         #if view name starts with "dev" then we should append the full_set

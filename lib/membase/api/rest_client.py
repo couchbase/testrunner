@@ -267,11 +267,11 @@ class RestConnection(object):
             return ""
 
     # DEPRECATED: use create_ddoc() instead.
-    def create_view(self, design_doc_name, bucket_name, views):
-        return self.create_ddoc(design_doc_name, bucket_name, views)
+    def create_view(self, design_doc_name, bucket_name, views, options=None):
+        return self.create_ddoc(design_doc_name, bucket_name, views, options)
 
-    def create_ddoc(self, design_doc_name, bucket, views):
-        design_doc = DesignDocument(design_doc_name, views)
+    def create_ddoc(self, design_doc_name, bucket, views, options=None):
+        design_doc = DesignDocument(design_doc_name, views, options=options)
         return self.create_design_document(bucket, design_doc)
 
     def create_design_document(self, bucket, design_doc):

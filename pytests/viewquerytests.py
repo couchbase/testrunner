@@ -232,6 +232,48 @@ class ViewQueryTests(unittest.TestCase):
         data_set.preload_matching_query_keys()
         self._query_all_views(data_set.views, verify_expected_keys=True)
 
+    def test_employee_dataset_check_consistency(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Load data
+            2. Wait for persistence
+            3. Start querying(starkey endkey descending
+            inclusive_end combinations) - all result shoul appear consistent
+            4. Start rebalance
+        '''
+        docs_per_day = self.input.param('docs-per-day', 200)
+        options = {"updateMinChanges" : docs_per_day,
+                   "replicaUpdateMinChanges" : docs_per_day}
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit,
+                                   ddoc_options=options)
+
+        data_set.load(self, data_set.views[0])
+        RebalanceHelper.wait_for_persistence(self.servers[0], data_set.bucket)
+
+        data_set.add_stale_queries(stale_param="ok")
+        data_set.preload_matching_query_keys()
+
+        for view in data_set.views:
+            view.consistent_view = True
+        self.log.info("QUERY BEFORE REBALANCE")
+        self._query_all_views(data_set.views, verify_expected_keys=True)
+        self.log.info("START REBALANCE AND QUERY")
+        rebalance_thread = StoppableThread(target=self.cluster.rebalance,
+               name="rebalance",
+               args=(self.servers[:1], self.servers[1:], []))
+        rebalance_thread.start()
+        while rebalance_thread.is_alive():
+            self._query_all_views(data_set.views, verify_expected_keys=True)
+
     def test_employee_dataset_alldocs_queries(self):
         '''
         Test uses employee data set:
@@ -1679,14 +1721,16 @@ class ViewQueryTests(unittest.TestCase):
 class QueryView:
     def __init__(self, rest,
                  index_size,
-                 bucket = "default",
+                 bucket="default",
                  prefix=None,
-                 name = None,
-                 fn_str = None,
-                 reduce_fn = None,
-                 queries = None,
-                 create_on_init = True,
-                 type_filter = None):
+                 name=None,
+                 fn_str=None,
+                 reduce_fn=None,
+                 queries=None,
+                 create_on_init=True,
+                 type_filter=None,
+                 consistent_view=False,
+                 ddoc_options=None):
 
         self.index_size = index_size
 
@@ -1702,12 +1746,13 @@ class QueryView:
         self.reduce_fn = reduce_fn
         self.results = unittest.TestResult()
         self.type_filter = type_filter or None
+        self.consisent_view = consistent_view
 
         # queries defined for this view
         self.queries = (queries, list())[queries is None]
 
         if create_on_init:
-            rest.create_view(self.name, self.bucket, [View(self.name, self.fn_str, self.reduce_fn, dev_view=False)])
+            rest.create_view(self.name, self.bucket, [View(self.name, self.fn_str, self.reduce_fn, dev_view=False)], ddoc_options)
 
     # query this view
     def run_queries(self, tc, verify_results = False, kv_store = None, limit=None,
@@ -1727,7 +1772,10 @@ class QueryView:
 
             for query in self.queries:
                 params = query.params
-
+                attempts_num = query.attempt_num or 15
+                num_tries = None
+                if attempts_num < 15:
+                    num_tries = attempts_num
                 params["debug"] = "true"
 
                 if self.reduce_fn is not None and "include_docs" in params:
@@ -1745,14 +1793,14 @@ class QueryView:
                     # first verify all doc_names get reported in the view
                     # for windows, we need more than 20+ times
                     result_count_stats = {}
-                    while attempt < 15 and num_keys != expected_num_docs:
+                    while attempt < attempts_num and num_keys != expected_num_docs:
                         if attempt > 11:
                             params["stale"] = 'false'
 
                         self.log.info("Quering view {0} with params: {1}".format(view_name, params))
                         results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
                                                                       limit=limit, extra_params=params,
-                                                                      type_ = query.type_)
+                                                                      type_ = query.type_, num_tries=num_tries)
                        # check if this is a reduced query using _count
                         if self.reduce_fn and (not query.params.has_key("reduce") or query.params.has_key("reduce") and query.params["reduce"] == "true"):
                             if self.reduce_fn == "_count":
@@ -1776,7 +1824,7 @@ class QueryView:
                                     num_keys = self._verify_count_reduce_helper(query, results, reduce_fn=self.reduce_fn)
                                 except Exception as ex:
                                     attempt += 1
-                                    if attempt == 15:
+                                    if attempt == attempts_num:
                                         raise Exception("After 14 attemps expected number of groups {0} is not reached. {1}".format(query.expected_num_groups, ex))
                                     else:
                                         continue
@@ -1804,12 +1852,15 @@ class QueryView:
                                 QueryHelper.verify_query_ids_full(rest, query, results)
                                 self.log.info("Keys in query results are equal to expected")
                             except Exception as e:
-                                if e.message.find('Current ids and expected are not equal') != -1:
+                                if e.message.find('Current ids and expected are not equal') != -1 and \
+                                                not consisent_view:
                                     attempt += 1
-                                    if attempt == 15:
-                                        raise Exception("After 14 attemps expected number of groups {0} is not reached. {1}".format(query.expected_num_groups, ex))
+                                    if attempt == attempts_num:
+                                        raise Exception("After 14 attemps expected number of groups {0} is not reached. {1}".format(query.expected_num_groups, e))
                                     else:
                                         continue
+                                else:
+                                    raise e
 
                     try:
                         if(num_keys != expected_num_docs):
@@ -1831,7 +1882,8 @@ class QueryView:
                                                                           view_name,
                                                                           limit=limit,
                                                                           extra_params=params,
-                                                                          type_ = query.type_)
+                                                                          type_ = query.type_,
+                                                                          num_tries=num_tries)
 
                             # verify keys
                             key_failures = QueryHelper.verify_query_keys(rest, query,
@@ -1848,7 +1900,7 @@ class QueryView:
                     except:
                         self.log.error("Query failed: see test result logs for details")
                         self.results.addFailure(tc, sys.exc_info())
-                        tc.log.error("Query data thread is crashed: " + sys.exc_info())
+                        tc.log.error("Query data thread is crashed: %s" % sys.exc_info())
                         tc.thread_crashed.set()
 
                 else:
@@ -1858,7 +1910,8 @@ class QueryView:
                         results = ViewBaseTests._get_view_results(tc, rest, self.bucket, view_name,
                                                                   limit=limit, extra_params=params,
                                                                   type_ = query.type_,
-                                                                  invalid_results=query.error and True or False)
+                                                                  invalid_results=query.error and True or False,
+                                                                  num_tries=num_tries)
                     except Exception as ex:
                             if query.error:
                                 if ex.message.find(query.error) > -1:
@@ -1930,7 +1983,7 @@ class QueryView:
         return num_keys
 
 class EmployeeDataSet:
-    def __init__(self, rest, docs_per_day = 200, bucket = "default", limit=None):
+    def __init__(self, rest, docs_per_day = 200, bucket = "default", limit=None, ddoc_options=None):
         self.docs_per_day = docs_per_day
         self.years = 1
         self.months = 12
@@ -1945,6 +1998,7 @@ class EmployeeDataSet:
                                "desc" : "As a Member of Technical Staff, Senior Architect, you will design and implement cutting-edge distributed, scale-out data infrastructure software systems, which is a pillar for the growing cloud infrastructure. More specifically, you will bring Unix systems and server tech kung-fu to the team.",
                                "type" : "arch"}
         self.bucket = bucket
+        self.ddoc_options = ddoc_options
         self.views = self.create_views(rest, bucket=self.bucket)
         self.rest = rest
         self.name = "employee_dataset"
@@ -2323,14 +2377,16 @@ class EmployeeDataSet:
                                              complex_query_key_count - offset - all_docs_per_day)]
 
 
-    def add_stale_queries(self, views=None, limit=None):
+    def add_stale_queries(self, views=None, limit=None, stale_param=None):
         if views is None:
             views = self.views
         if limit is None:
             limit = self.limit
 
         for view in views:
-            if limit:
+            if stale_param:
+                view.queries += [QueryHelper({"stale" :  stale_param}, view.index_size),]
+            elif limit:
                 view.queries += [QueryHelper({"stale" : "false", "limit" : limit}, min(limit, view.index_size)),
                                  QueryHelper({"stale" : "ok", "limit" : limit}, min(limit, view.index_size)),
                                  QueryHelper({"stale" : "update_after", "limit" : limit}, min(limit, view.index_size))]
@@ -2399,12 +2455,18 @@ class EmployeeDataSet:
         full_index_size = self.calc_total_doc_count()
         partial_index_size = full_index_size/3
 
-        return [QueryView(rest, full_index_size,    bucket=bucket, fn_str = vfn4),
-                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn1, type_filter = "ui"),
-                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn2, type_filter = "admin"),
-                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn3, type_filter = "arch"),
-                QueryView(rest, full_index_size,    bucket=bucket, fn_str = vfn4, reduce_fn="_count"),
-                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn5, type_filter = "admin")]
+        return [QueryView(rest, full_index_size,    bucket=bucket, fn_str = vfn4,
+                          ddoc_options=self.ddoc_options),
+                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn1, type_filter = "ui",
+                          ddoc_options=self.ddoc_options),
+                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn2, type_filter = "admin",
+                          ddoc_options=self.ddoc_options),
+                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn3, type_filter = "arch",
+                          ddoc_options=self.ddoc_options),
+                QueryView(rest, full_index_size,    bucket=bucket, fn_str = vfn4, reduce_fn="_count",
+                          ddoc_options=self.ddoc_options),
+                QueryView(rest, partial_index_size, bucket=bucket, fn_str = vfn5, type_filter = "admin",
+                          ddoc_options=self.ddoc_options)]
 
     def get_data_sets(self):
         return [self.sys_admin_info, self.ui_eng_info, self.senior_arch_info]
@@ -3061,6 +3123,7 @@ class QueryHelper:
                  expected_num_groups = 1,
                  type_ = "view",
                  error=None,
+                 attempt_num=None,
                  expected_statistics = {}):
 
         self.params = params
@@ -3072,6 +3135,7 @@ class QueryHelper:
         self.expected_keys = []
         self.error = error
         self.expected_statistics = expected_statistics
+        self.attempt_num = attempt_num
 
     # less open clients
     @staticmethod
