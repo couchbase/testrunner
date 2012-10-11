@@ -76,6 +76,7 @@ class PerfDefaults:
     mcsoda_fg_stats_ops     =   1000     # fg ops threshold to persist latency stats
     num_value_samples       =   100      # number of value samples (in memory, use large number with caution)
     nru_freq                =   1440     # NRU access scanner running freqency, in minutes
+    nru_wait                =   300      # time to wait for access scanner to finish, in seconds
     nru_reb_delay           =   3600     # num of seconds to wait before triggering rebalance
     nru_polling_freq        =   10       # frequency to poll access scanner running status, in seconds
     nru_task                =   0        # schedule the NRU access scanner to run in the next hour, 1: enabled, 0: disabled

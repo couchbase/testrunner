@@ -383,6 +383,25 @@ class EPerfMaster(perf.PerfBase):
             self._exec_and_log(shell, cmd)
             shell.disconnect()
 
+    def build_alog(self):
+        """
+        Build access log based on current working set
+        TODO: check # access scanner runs
+        """
+        # schedule to the next minute
+        self.set_nru_freq(1)
+
+        # wait for access scanner
+        nru_wait = self.parami("nru_wait", PerfDefaults.nru_wait)
+        print "[build_alog] waiting %s seconds for access scanner" % nru_wait
+        time.sleep(nru_wait)
+
+        # set back to default
+        self.set_nru_freq(PerfDefaults.nru_freq)
+
+        print "[build_alog] finished at %s" % \
+              time.strftime(PerfDefaults.strftime)
+
     def set_nru_task(self, tm_hour=0):
         """UTC/GMT time (hour) to schedule NRU access scanner"""
         gmt = time.gmtime()
@@ -678,6 +697,7 @@ class EPerfMaster(perf.PerfBase):
         if not self.is_leader:
             return
 
+        self.build_alog()
         server = self.input.servers[0]
         client_id = self.parami("prefix", 0)
         test_params = {'test_time': time.time(),
