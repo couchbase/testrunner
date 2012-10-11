@@ -1561,7 +1561,7 @@ class ViewCompactionTask(Task):
                 self.log.info("design doc {0} is compacting".format(self.design_doc_name))
                 task_manager.schedule(self, 2)
             elif new_compaction_count > self.num_of_compactions:
-                self.log.info("compactor was run, compaction count was changed on %s".format(new_compaction_count))
+                self.log.info("compactor was run, compaction count was changed on {0}".format(new_compaction_count))
                 frag_val_diff = compacted_frag_val - self.precompacted_frag_val
                 self.log.info("fragmentation went from %d to %d" % \
                               (self.precompacted_frag_val, compacted_frag_val))
@@ -1572,7 +1572,7 @@ class ViewCompactionTask(Task):
                     # perhaps we are still compacting
                     if self._is_compacting():
                         task_manager.schedule(self, 2)
-                    self.log.info("compaction was completed, but fragmentation value %s is more than before compaction %s".
+                    self.log.info("compaction was completed, but fragmentation value {0} is more than before compaction {1}".
                                   format(compacted_frag_val, self.precompacted_frag_val))
                     # probably we already compacted, but no work needed to be done
                     # returning False
