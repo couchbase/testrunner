@@ -437,6 +437,7 @@ class StatsCollector(object):
             bucket = RestConnection(node).get_buckets()[0].name
             mc = MemcachedClientHelper.direct_client(node, bucket)
             stats = mc.stats()
+            stats.update(mc.stats("warmup"))
         except Exception as e:
             print "[capture_mb_snapshot] Exception: {0}".format(str(e))
             return False
