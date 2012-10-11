@@ -28,18 +28,22 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'task': 'app.workload_manager.taskScheduler',
     'schedule': timedelta(seconds=1),
     },
+
     'workload_consumer': {
     'task': 'app.workload_manager.workloadConsumer',
     'schedule': timedelta(seconds=2),
     },
+
     'admin_consumer': {
     'task': 'app.admin_manager.adminConsumer',
     'schedule': timedelta(seconds=2),
     },
+
     'xdcr_consumer': {
     'task': 'app.admin_manager.xdcrConsumer',
     'schedule': timedelta(seconds=2),
     },
+
     'postcondition_handler': {
     'task': 'app.workload_manager.postcondition_handler',
     'schedule': timedelta(seconds=2),
@@ -47,7 +51,13 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
 
     'cluster_resource_monitor': {
     'task': 'app.stats.resource_monitor',
-    'schedule': timedelta(seconds=20),
+    'schedule': timedelta(seconds=120), # every 2 minutes
+    },
+
+    'sync_time': {
+    'task': 'app.stats.sync_time',
+    #'schedule': crontab(minute=0, hour=0), #Execute daily at midnight.
+    'schedule': timedelta(seconds=10800),
     },
 
     'atop_log_rollover': { # Execute every three hours
@@ -55,9 +65,9 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'schedule': timedelta(seconds=10800),
     },
 
-    'generate_node_stats_report': { # every 2 minutes print out report from collected stats
+    'generate_node_stats_report': { # every 5 minutes print out report from collected stats
     'task': 'app.stats.generate_node_stats_report',
-    'schedule': timedelta(seconds=120),
+    'schedule': timedelta(seconds=300),
     },
 
     'do_backup': { # every once per day

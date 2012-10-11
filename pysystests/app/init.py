@@ -4,11 +4,12 @@ from cache import CacheHelper
 import testcfg as cfg
 
 def worker_init():
+    clean_up()
+    #os.system("ntpdate pool.ntp.org")
     # cleanup queues
     rabbitHelper = RabbitHelper()
 
     cached_queues = CacheHelper.queues()
-
     test_queues = ["workload","workload_template", "admin_tasks", "xdcr_tasks"] + cached_queues
 
     for queue in test_queues:
@@ -30,5 +31,10 @@ def worker_init():
     os.system("ruby sdkserver.rb &")
     os.system("python sdkserver.py  &")
 
+
+def clean_up():
     # make sure logdir exists
     os.system("mkdir -p "+cfg.LOGDIR)
+
+    #make sure celeybeat-schedule.db file is deleted
+    os.system("rm -rf celerybeat-schedule.db")

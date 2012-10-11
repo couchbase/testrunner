@@ -75,7 +75,7 @@ def perform_admin_tasks(adminMsg):
 
 @celery.task
 def perform_xdcr_tasks(xdcrMsg):
-    print xdcrMsg
+    logger.error(xdcrMsg)
     src_master = create_server_obj()
     dest_master = create_server_obj(server_ip=xdcrMsg['dest_cluster_ip'], username=xdcrMsg['dest_cluster_rest_username'],
                                     password=xdcrMsg['dest_cluster_rest_pwd'])
@@ -99,7 +99,7 @@ def xdcr_start_replication(src_master, dest_cluster_name):
         for bucket in rest_conn_src.get_buckets():
             (rep_database, rep_id) = rest_conn_src.start_replication("continuous",
                                                                      bucket.name, dest_cluster_name)
-            print (rep_database, rep_id)
+            logger.error("rep_database: %s rep_id: %s" % (rep_database, rep_id))
 
 def add_nodes(rest, servers=''):
     for server in servers.split():

@@ -17,6 +17,9 @@ from app.rest_client_tasks import create_rest, create_ssh_conn
 from celery.utils.log import get_task_logger
 logger = get_task_logger("app.stats")
 
+# Assumption is that celery workers and cluster nodes
+# are always in time sync.
+
 @celery.task
 def resource_monitor():
 
@@ -34,15 +37,13 @@ def resource_monitor():
 
         # retrieve stats from cache
         node_stats = NodeStats.from_cache(node.ip)
-
         if node_stats is None:
+            logger.error("Creating Stats Cache for node %s" % node.ip)
             node_stats = NodeStats(node.ip)
 
-        # get stats from node
-        sample = get_atop_sample(node.ip)
-
-
-        # update node state object
+        last_updated_time = node_stats.get_last_updated_time()
+        sample = get_atop_sample(node.ip, ts=last_updated_time)
+        node_stats.set_last_updated_time(ts=time.time())
         update_node_stats(node_stats, sample)
 
     return True
@@ -64,6 +65,15 @@ def atop_log_rollover():
         backup_log(node.ip)
         start_atop(node.ip)
 
+@celery.task
+def sync_time():
+    rest = create_rest()
+    nodes = rest.node_statuses()
+
+    for node in nodes:
+        cmd = "ntpdate pool.ntp.org"
+        exec_cmd(node.ip, cmd)
+
 def backup_log(ip):
     atop_dir = "/".join(cfg.ATOP_LOG_FILE.split("/")[:-1])
     atop_file = cfg.ATOP_LOG_FILE.split("/")[-1]
@@ -82,14 +92,12 @@ def backup_log(ip):
 
 def update_node_stats(node_stats, sample):
 
-    for key in sample.keys():
-        if key != 'ip':
+        for key in sample.keys():
+            if key != 'ip':
 
-            if key not in node_stats.samples:
-                node_stats.samples[key] = []
-
-            val = float(re.sub(r'[^\d.]+', '', sample[key]))
-            node_stats.samples[key].append(val)
+                if key not in node_stats.samples:
+                    node_stats.samples[key] = []
+                node_stats.samples[key].append(sample[key])
 
 def check_atop_proc(ip):
     running = False
@@ -122,69 +130,67 @@ def start_atop(ip):
 def atop_proc_sig():
     return "atop -a -w %s 3" % cfg.ATOP_LOG_FILE
 
-def get_atop_sample(ip):
-
+def get_atop_sample(ip, ts=None):
     sample = {"ip" : ip}
-    cpu = atop_cpu(ip)
-    mem = atop_mem(ip)
-    swap = sys_swap(ip)
-    disk = atop_dsk(ip)
-    if cpu:
-        sample.update({"sys_cpu" : cpu[0],
-                       "usr_cpu" : cpu[1]})
-    if mem:
-        sample.update({"vsize" : mem[0],
-                       "rsize" : mem[1]})
+    if ts:
+        cpu_samples = atop_cpu(ip, "beam.smp", ts)
+        mem_samples = atop_mem(ip, "beam.smp", ts)
+        disk_samples = atop_dsk(ip,"beam.smp", ts)
+        swap = sys_swap(ip)
 
-    if swap:
-        sample.update({"swap" : swap[0][0]})
+        if cpu_samples:
+            sample.update({"PRC" : cpu_samples})
+        if mem_samples:
+            sample.update({"PRM" : mem_samples})
+        if disk_samples:
+            sample.update({"PRD" : disk_samples})
+        if swap:
+            sample.update({"swap" : swap[0][0]})
 
-    if disk:
-        sample.update({"rddsk" : disk[0],
-                       "wrdsk" : disk[1],
-                       "disk_util" : disk[2]})
-
-    sample.update({"ts" : str(time.time())})
-
+        sample.update({"worker_timestamp" : str(time.time())})
     return sample
 
-def atop_cpu(ip):
-    cmd = "grep ^CPU | grep sys | awk '{print $4,$7}' "
-    return _atop_exec(ip, cmd)
+def atop_cpu(ip, process=None, ts=None):
+    if process and ts:
+        # utc, cpu_usr, cpu_sys, cpu_curr
+        cmd = "grep %s" % process + "|" + "grep PRC | grep -v bash |" + "awk '{print $3,$11,$12,$17}'"
+        return _atop_exec(ip, cmd, ts)
 
-def atop_mem(ip):
-    flags = "-M -m"
-    cmd = "grep beam.smp | head -1 |  awk '{print $5,$6}'"
-    return _atop_exec(ip, cmd, flags)
+def atop_mem(ip, process=None, ts=None):
+    if process and ts:
+        # utc, virt_mem_size, rsize, virt_mem_growth, rsize_growth, minor_page_fauls, major_page_faults
+        cmd = "grep %s" % process + "|" + "grep PRM | grep -v bash |" + "awk '{print $3,$11,$12,$14,$15,$16,$17}'"
+        return _atop_exec(ip, cmd, ts)
 
 def sys_swap(ip):
     cmd = "free | grep Swap | awk '{print $3}'"
     return exec_cmd(ip, cmd)
 
-def atop_dsk(ip):
-    flags = "-d"
-    cmd = "grep beam.smp | awk '{print $2, $3, $5}'"
-    return _atop_exec(ip, cmd, flags)
+def atop_dsk(ip, process=None, ts=None):
+    if process and ts:
+        # utc, num_disk_reads, num_disk_writes
+        cmd = "grep %s" % process + "|" + "grep PRD | grep -v bash |" + "awk '{print $3,$12,$14}'"
+        return _atop_exec(ip, cmd, ts)
 
-def _atop_exec(ip, cmd, flags = ""):
-    """ runs atop program where -b <begin_time> and -e <end_time>
-    are the current times.  then filters the last sample of this collection
-    via tail -1"""
+def _atop_exec(ip, cmd, ts=None):
 
     res = None
-
-    #prefix standard atop prefix
-    prefix = "date=`date +%H:%M` && atop -r "+cfg.ATOP_LOG_FILE+" -b $date -e $date " + flags
-    cmd = prefix + "|" + cmd + " | tail -1"
-
+    hh_mm = convert_epoch(int(ts))
+    #Get the parseable atop output
+    prefix = "atop -r "+cfg.ATOP_LOG_FILE+" -b %s " % hh_mm + " -P ALL"
+    cmd = prefix + "|" + cmd
     rc  = exec_cmd(ip, cmd)
-
     # parse result based on what is expected from atop commands
     if len(rc[0]) > 0:
-        res = rc[0][0].split()
+        res = rc[0]
     return res
 
+def convert_epoch(ts=None):
+    l = time.strftime('%H:%M', time.localtime(ts))
+    return l
+
 def exec_cmd(ip, cmd, os = "linux"):
+    #TODO: Cache ssh connections
     shell, node = create_ssh_conn(server_ip=ip, os=os)
     shell.use_sudo  = False
     return shell.execute_command(cmd, node)
@@ -252,11 +258,21 @@ class NodeStats(object):
         self.samples = {}
         self.results = {}
         self.start_time = time.time()
+        self.last_updated_time = self.start_time
 
     def get_run_interval(self):
         curr_time = time.time()
         runtime_s = curr_time - self.start_time
         return str(datetime.timedelta(seconds=runtime_s))[:-4]
+
+    def get_last_updated_time(self):
+        return self.last_updated_time
+
+    def get_start_time(self):
+        return self.start_time
+
+    def set_last_updated_time(self, ts=None):
+        self.last_updated_time = ts
 
     def __repr__(self):
         interval = self.get_run_interval()
@@ -277,6 +293,7 @@ class NodeStats(object):
     @staticmethod
     def from_cache(id_):
         return ObjCacher().instance(CacheHelper.NODESTATSCACHEKEY, id_)
+
 
 @celery.task
 def generate_node_stats_report():
@@ -317,7 +334,6 @@ def new_line():
 
 def calculate_node_stat_results(node_stats):
 
-
     # calculate results
     for k,data in node_stats.samples.items():
         if k == 'ts' : continue
@@ -340,3 +356,4 @@ def calculate_node_stat_results(node_stats):
                                  "max"  : max(data),
                                  "99th" : "%.2f" % nn_perctile,
                                  "samples" : len(data)}
+
