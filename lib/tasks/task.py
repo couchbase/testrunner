@@ -943,7 +943,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                 self.set_exception(error)
 
 class ViewCreateTask(Task):
-    def __init__(self, server, design_doc_name, view, bucket="default"):
+    def __init__(self, server, design_doc_name, view, bucket="default", with_query=True):
         Task.__init__(self, "create_view_task")
         self.server = server
         self.bucket = bucket
@@ -953,14 +953,14 @@ class ViewCreateTask(Task):
             prefix = ("", "dev_")[self.view.dev_view]
         self.design_doc_name = prefix + design_doc_name
         self.ddoc_rev_no = 0
+        self.with_query = with_query
+        self.rest = RestConnection(self.server)
 
     def execute(self, task_manager):
 
-        rest = RestConnection(self.server)
-
         try:
             # appending view to existing design doc
-            content, meta = rest.get_ddoc(self.bucket, self.design_doc_name)
+            content, meta = self.rest.get_ddoc(self.bucket, self.design_doc_name)
             ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
             #if view is to be updated
             if self.view:
@@ -976,7 +976,7 @@ class ViewCreateTask(Task):
                 ddoc = DesignDocument(self.design_doc_name, [])
 
         try:
-            rest.create_design_document(self.bucket, ddoc)
+            self.rest.create_design_document(self.bucket, ddoc)
             self.state = CHECKING
             task_manager.schedule(self)
 
@@ -991,14 +991,18 @@ class ViewCreateTask(Task):
             self.set_exception(e)
 
     def check(self, task_manager):
-        rest = RestConnection(self.server)
-
         try:
             #only query if the DDoc has a view
             if self.view:
-                query = {"stale" : "ok"}
-                content = \
-                    rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
+                if self.with_query:
+                    query = {"stale" : "ok"}
+                    content = \
+                        self.rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
+                else:
+                     _, json_parsed, _ = self.rest._get_design_doc(self.bucket, self.design_doc_name)
+                     if self.view.name not in json_parsed["views"].keys():
+                         self.set_exception(Exception("design doc {O} doesn't contain view {1}".format(
+                            self.design_doc_name, self.view.name)))
                 self.log.info("view : {0} was created successfully in ddoc: {1}".format(self.view.name, self.design_doc_name))
             else:
                 #if we have reached here, it means design doc was successfully updated
@@ -1024,10 +1028,8 @@ class ViewCreateTask(Task):
 
     def _check_ddoc_revision(self):
         valid = False
-        rest = RestConnection(self.server)
-
         try:
-            content, meta = rest.get_ddoc(self.bucket, self.design_doc_name)
+            content, meta = self.rest.get_ddoc(self.bucket, self.design_doc_name)
             new_rev_id = self._parse_revision(meta['rev'])
             if new_rev_id != self.ddoc_rev_no:
                 self.ddoc_rev_no = new_rev_id

@@ -314,7 +314,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
         tasks = []
-        tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
+        tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name, with_query=False)
         for task in tasks:
             task.result(self.wait_timeout * 2)
         self.disable_compaction()

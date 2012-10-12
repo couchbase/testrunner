@@ -263,14 +263,14 @@ class BaseTestCase(unittest.TestCase):
                       "viewFragmntThreshold" : None}
         self.cluster.modify_fragmentation_config(server, new_config, bucket)
 
-    def async_create_views(self, server, design_doc_name, views, bucket="default"):
+    def async_create_views(self, server, design_doc_name, views, bucket="default", with_query=True ):
         tasks = []
         if len(views):
             for view in views:
-                t_ = self.cluster.async_create_view(server, design_doc_name, view, bucket)
+                t_ = self.cluster.async_create_view(server, design_doc_name, view, bucket, with_query)
                 tasks.append(t_)
         else:
-            t_ = self.cluster.async_create_view(server, design_doc_name, None, bucket)
+            t_ = self.cluster.async_create_view(server, design_doc_name, None, bucket, with_query)
             tasks.append(t_)
         return tasks
 
