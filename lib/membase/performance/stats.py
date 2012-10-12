@@ -468,6 +468,7 @@ class StatsCollector(object):
 
         while not self._aborted():
             time_left = frequency
+            print "Collecting membase stats"
             timings = None
             # at minimum we want to check for aborted every minute
             while not self._aborted() and time_left > 0:
@@ -498,12 +499,6 @@ class StatsCollector(object):
                 d[mc.host]["timings"].append(timings)
                 dispatcher = mc.stats('dispatcher')
                 d[mc.host]["dispatcher"].append(dispatcher)
-            print "\nDumping disk timing stats: {0}".format(time.strftime('%X %x %Z'))
-            if timings:
-                # TODO dump timings for all servers
-                for key, value in sorted(timings.iteritems()):
-                    if key.startswith("disk"):
-                        print "{0:50s}:     {1}".format(key, value)
 
         start_time = str(self._task["time"])
         for mc in mcs:
@@ -530,6 +525,13 @@ class StatsCollector(object):
                 dispatcher['time'] = current_time
                 dispatcher['ip'] = ip
                 self._task["dispatcher"].append(dispatcher)
+
+        if timings:
+            # TODO dump timings for all servers
+            print "Dumping disk timing stats: {0}".format(time.strftime('%X %x %Z'))
+            for key, value in sorted(timings.iteritems()):
+                if key.startswith("disk"):
+                    print "{0:50s}:     {1}".format(key, value)
 
         print " finished membase_stats"
 
