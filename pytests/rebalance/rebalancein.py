@@ -237,7 +237,7 @@ class RebalanceInTests(RebalanceBaseTest):
     Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_in_with_queries(self):
         num_views = self.input.param("num_views", 5)
-        is_dev_ddoc = self.input.param("is_dev_ddoc", True)
+        is_dev_ddoc = self.input.param("is_dev_ddoc", False)
         views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]

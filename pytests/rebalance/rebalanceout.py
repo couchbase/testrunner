@@ -146,7 +146,7 @@ class RebalanceOutTests(RebalanceBaseTest):
     Once successful view queries the test is finished."""
     def rebalance_out_with_queries(self):
         num_views = self.input.param("num_views", 5)
-        is_dev_ddoc = self.input.param("is_dev_ddoc", True)
+        is_dev_ddoc = self.input.param("is_dev_ddoc", False)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
 
