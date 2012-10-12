@@ -90,7 +90,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(self._timeout)
+        time.sleep(self._timeout * 2)
         tasks = []
         if "update" in self._doc_ops:
             tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
