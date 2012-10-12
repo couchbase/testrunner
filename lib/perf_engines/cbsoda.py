@@ -48,9 +48,7 @@ class Reader(threading.Thread):
                 self.received += len(data)
 
                 found = len(re.findall("HTTP", data))
-                if data[:7] == "TTP/1.1" or data[:6] == "TP/1.1" or \
-                        data[:5] == "P/1.1":
-                    found +=1
+                found += int("P/1.1" in data[:7])
 
                 self.inflight -= found
             except Exception as e:
