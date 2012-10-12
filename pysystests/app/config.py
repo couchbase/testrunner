@@ -5,16 +5,7 @@ from celery.task.schedules import crontab
 import testcfg as cfg
 
 BROKER_URL = 'librabbitmq://'+cfg.RABBITMQ_IP
-CELERY_RESULT_BACKEND = 'cache'
-CELERY_TASK_SERIALIZER = 'pickle'
-CELERY_RESULT_SERIALIZER = 'pickle'
-# By default the current local timezone is used
-#CELERY_TIMEZONE = 'Europe/Oslo'
-#CELERY_ENABLE_UTC = True
 
-CELERY_CACHE_BACKEND = 'memcached://%s:%s' % (cfg.RESULT_CACHE_IP, cfg.RESULT_CACHE_PORT)
-CELERY_CACHE_BACKEND_OPTIONS = {"binary": True,
-                               "behaviors": {"tcp_nodelay": True}}
 CELERY_ACKS_LATE = True
 CELERYD_PREFETCH_MULTIPLIER = 1 
 CELERY_DISABLE_RATE_LIMITS = True
@@ -41,8 +32,7 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'admin_consumer': {
     'task': 'app.admin_manager.adminConsumer',
     'schedule': timedelta(seconds=2),
-    },
-
+   },
     'xdcr_consumer': {
     'task': 'app.admin_manager.xdcrConsumer',
     'schedule': timedelta(seconds=2),
@@ -52,7 +42,6 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     'task': 'app.workload_manager.postcondition_handler',
     'schedule': timedelta(seconds=2),
     },
-
     'cluster_resource_monitor': {
     'task': 'app.stats.resource_monitor',
     'schedule': timedelta(seconds=120), # every 2 minutes
@@ -63,17 +52,14 @@ CELERYBEAT_SCHEDULE = { ## TODO schedule start of sdk imediately, and do not all
     #'schedule': crontab(minute=0, hour=0), #Execute daily at midnight.
     'schedule': timedelta(seconds=10800),
     },
-
     'atop_log_rollover': { # Execute every three hours
     'task': 'app.stats.atop_log_rollover',
     'schedule': timedelta(seconds=10800),
     },
-
-    'generate_node_stats_report': { # every 5 minutes print out report from collected stats
+    'generate_node_stats_report': { # every 2 minutes print out report from collected stats
     'task': 'app.stats.generate_node_stats_report',
     'schedule': timedelta(seconds=300),
     },
-
     'do_backup': { # every once per day
     'task': 'app.admin_manager.backup_task',
     'schedule': crontab(minute=0, hour=0), #Execute daily at midnight.
