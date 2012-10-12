@@ -174,14 +174,17 @@ class RestConnection(object):
             else:
                 break
         #if node was not initialized we can't get response from 'nodes/self'
-        if not http_res or http_res["version"][0:2] == "1.":
+        if not http_res or http_res["version"][0:2] == "1.":\
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
-            try:
-                self.capiBaseUrl = http_res["couchApiBase"]
-            except Exception as e:
-                log.error("unexpected response was gotten: %s " % http_res)
-                raise Exception(e)
+            for iteration in xrange(10):
+                if "couchApiBase" not in http_res.keys():
+                    time.sleep(0.1)
+                    http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
+                else:
+                    self.capiBaseUrl = http_res["couchApiBase"]
+                    return
+            raise Exception("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
 
     def __init__(self, serverInfo):
@@ -211,14 +214,17 @@ class RestConnection(object):
             else:
                 break
         #couchApiBase appeared in version 2.*
-        try:
-            if not http_res or http_res["version"][0:2] == "1.":
-                self.capiBaseUrl = self.baseUrl + "/couchBase"
-            else:
-                self.capiBaseUrl = http_res["couchApiBase"]
-        except Exception as e:
-            log.error("unexpected response was gotten: %s " % http_res)
-            raise Exception(e)
+        if not http_res or http_res["version"][0:2] == "1.":\
+            self.capiBaseUrl = self.baseUrl + "/couchBase"
+        else:
+            for iteration in xrange(10):
+                if "couchApiBase" not in http_res.keys():
+                    time.sleep(0.1)
+                    http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
+                else:
+                    self.capiBaseUrl = http_res["couchApiBase"]
+                    return
+            raise Exception("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
 
     def init_http_request(self, api):
@@ -483,7 +489,7 @@ class RestConnection(object):
     def _delete_design_doc(self, bucket, name):
         status, design_doc, meta = self._get_design_doc(bucket, name)
         if not status:
-            raise Exception("unable to delete design document")
+            raise Exception("unable to find for deletion design document")
 
         api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
         if isinstance(bucket, Bucket):
