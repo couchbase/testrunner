@@ -91,13 +91,14 @@ def backup_log(ip):
     exec_cmd(ip, backup_cmd)
 
 def update_node_stats(node_stats, sample):
+    for key in sample.keys():
+        if key != 'ip' and key != 'worker_timestamp':
+            if key not in node_stats.samples:
+                node_stats.samples[key] = []
+            # sample[key] would be a list of samples
+            node_stats.samples[key].extend(sample[key])
 
-        for key in sample.keys():
-            if key != 'ip':
-
-                if key not in node_stats.samples:
-                    node_stats.samples[key] = []
-                node_stats.samples[key].append(sample[key])
+    ObjCacher().store(CacheHelper.NODESTATSCACHEKEY, node_stats)
 
 def check_atop_proc(ip):
     running = False
@@ -274,21 +275,41 @@ class NodeStats(object):
     def set_last_updated_time(self, ts=None):
         self.last_updated_time = ts
 
-    def __repr__(self):
-        interval = self.get_run_interval()
-
-        str_ = "\n"
-        str_ = str_ + "Runtime: %20s \n" % interval
-        for key in self.results:
-            str_ = str_ + "%10s: " % (key)
-            for k, v  in self.results[key].items():
-                str_ = str_ + "%10s: %10s"  % (k,v)
-            str_ = str_ + "\n"
-        return str_
+#    def __repr__(self):
+#        interval = self.get_run_interval()
+#        print self.results
+#        str_ = "\n"
+#        str_ = str_ + "Runtime: %20s \n" % interval
+#        for key in self.results:
+#            str_ = str_ + "%10s: " % (key)
+#            for k, v  in self.results[key].items():
+#                str_ = str_ + "%10s: %10s"  % (k,v)
+#            str_ = str_ + "\n"
+#
+#        return str_
 
     def __setattr__(self, name, value):
         super(NodeStats, self).__setattr__(name, value)
         ObjCacher().store(CacheHelper.NODESTATSCACHEKEY, self)
+
+    # Takes data as list of value
+    def compute_stats(self, key, data):
+        data = map(int, data)
+        if len(data) > 0:
+            # Sort data to compute
+            data.sort()
+            idx = int(math.ceil((len(data)) * 0.99))
+            if idx %2==0:
+                nn_perctile = (data[idx - 1] + data[idx-2])/2.0
+            else:
+                nn_perctile = data[idx - 1]
+            mean = sum(data) / float(len(data))
+
+            self.results[key] = {'mean': mean,
+                                 'max': max(data),
+                                 '99th': "%.2f" % nn_perctile,
+                                 "samples" : len(data)
+                                }
 
     @staticmethod
     def from_cache(id_):
@@ -323,7 +344,7 @@ def print_node_results(node_stats):
     print_separator()
     logger.error("\tNODE: (%s)" % node_stats.id)
     print_separator()
-    logger.error(node_stats)
+    logger.error(node_stats.results)
     new_line()
 
 def print_separator():
@@ -335,25 +356,32 @@ def new_line():
 def calculate_node_stat_results(node_stats):
 
     # calculate results
-    for k,data in node_stats.samples.items():
-        if k == 'ts' : continue
+    for k, data in node_stats.samples.items():
+        if k == 'worker_timestamp' : continue
 
         if k not in node_stats.results:
             node_stats.results[k] = {}
 
         # for each stat key, calculate
         # mean, max, and 99th %value
-        data.sort()
-        if len(data) > 0:
-            idx = int(math.ceil((len(data)) * 0.99))
-            if idx %2==0:
-                nn_perctile = (data[idx - 1] + data[idx-2])/2.0
-            else:
-                nn_perctile = data[idx - 1]
-        mean = sum(data) / float(len(data))
-
-        node_stats.results[k] = {"mean" : "%.2f" % mean,
-                                 "max"  : max(data),
-                                 "99th" : "%.2f" % nn_perctile,
-                                 "samples" : len(data)}
-
+        if k == 'PRC':
+            key = 'curr_cpu'
+            temp = [sample.split()[2] for sample in data]
+            node_stats.compute_stats(key, temp)
+        elif k == 'PRD':
+            # num_disk_write
+            key = 'disk_write'
+            temp = [sample.split()[1] for sample in data]
+            node_stats.compute_stats(key, temp)
+            # num_disk_reads
+            key = 'disk_read'
+            temp = [sample.split()[2] for sample in data]
+            node_stats.compute_stats(key, temp)
+        elif k =='PRM':
+            key = 'rsize'
+            temp = [sample.split()[2] for sample in data]
+            node_stats.compute_stats(key, temp)
+        elif k == 'swap':
+            key = 'swap'
+            temp = data
+            node_stats.compute_stats(key, temp)

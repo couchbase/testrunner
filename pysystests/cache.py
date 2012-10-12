@@ -12,7 +12,6 @@ class Cache(object):
         self.logger = get_task_logger(__name__)
 
     def store(self, key, data, collectionKey):
-
         if isinstance(data, dict):
             data = json.dumps(data)
 
