@@ -75,7 +75,7 @@ class SwapRebalanceBase(unittest.TestCase):
                 ClusterOperationHelper.cleanup_cluster([server])
             except Exception, e:
             #it is not guaranteed that the ejected nodes will immediately single nodes
-                if e.message.find('controller/rebalance failed when invoked with parameters') > -1:
+                if str(e).find('controller/rebalance failed when invoked with parameters') > -1:
                     self.log.info(e.message)
                     self.log.info("Try again in 60 seconds")
                     time.sleep(60)
