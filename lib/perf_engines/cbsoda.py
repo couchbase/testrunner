@@ -74,7 +74,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
         self.capi_skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.capi_skt.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         # We really need timeout. Otherwise reader hangs up from time to time
-        self.capi_skt.settimeout(180)
+        self.capi_skt.settimeout(60)
         if port == 8091:
             self.capi_host_port = (host, 8092)
         else:
