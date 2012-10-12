@@ -136,15 +136,15 @@ def get_atop_sample(ip, ts=None):
     if ts:
         cpu_samples = atop_cpu(ip, "beam.smp", ts)
         mem_samples = atop_mem(ip, "beam.smp", ts)
-        disk_samples = atop_dsk(ip,"beam.smp", ts)
+        disk_samples = atop_dsk(ip,"memcached", ts)
         swap = sys_swap(ip)
 
         if cpu_samples:
-            sample.update({"PRC" : cpu_samples})
+            sample.update({"PRC_beam" : cpu_samples})
         if mem_samples:
-            sample.update({"PRM" : mem_samples})
+            sample.update({"PRM_beam" : mem_samples})
         if disk_samples:
-            sample.update({"PRD" : disk_samples})
+            sample.update({"PRD_memcached" : disk_samples})
         if swap:
             sample.update({"swap" : swap[0][0]})
 
@@ -364,20 +364,20 @@ def calculate_node_stat_results(node_stats):
 
         # for each stat key, calculate
         # mean, max, and 99th %value
-        if k == 'PRC':
+        if k == 'PRC_beam':
             key = 'curr_cpu'
             temp = [sample.split()[2] for sample in data]
             node_stats.compute_stats(key, temp)
-        elif k == 'PRD':
+        elif k == 'PRD_memcached':
             # num_disk_write
-            key = 'disk_write'
+            key = 'disk_write_memcached'
             temp = [sample.split()[1] for sample in data]
             node_stats.compute_stats(key, temp)
             # num_disk_reads
-            key = 'disk_read'
+            key = 'disk_read_memcached'
             temp = [sample.split()[2] for sample in data]
             node_stats.compute_stats(key, temp)
-        elif k =='PRM':
+        elif k =='PRM_beam':
             key = 'rsize'
             temp = [sample.split()[2] for sample in data]
             node_stats.compute_stats(key, temp)
