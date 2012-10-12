@@ -900,6 +900,34 @@ if (nrow(update_history) > 0) {
         update_history <- result
 }
 
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","indexer_info", sep='')
+		doc_json <- fromJSON(file=url)
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	}, error=function(e) e)
+}
+
+indexer_stats <- result
+if (nrow(indexer_stats) > 0) {
+    indexer_stats$row <- as.numeric(indexer_stats$row)
+    indexer_stats$indexing_throughput <- as.numeric(indexer_stats$indexing_throughput)
+    indexer_stats$timestamp <- as.numeric(indexer_stats$timestamp)
+
+        all_builds = factor(indexer_stats$buildinfo.version)
+        result <- data.frame()
+        for(a_build in levels(all_builds)) {
+            tt <- indexer_stats[indexer_stats $buildinfo.version==a_build,]
+            tt$timestamp <- as.numeric(tt$timestamp)
+            min_timestamp = min(tt$timestamp)
+            filtered = transform(tt, row=timestamp-min_timestamp)
+            result <- rbind(result, filtered)
+        }
+        indexer_stats <- result
+}
+
 # Get Latency-get histogram
 cat("generating latency-get histogram")
 result <- data.frame()
@@ -2733,6 +2761,15 @@ if (nrow(update_history) > 0) {
         print(p)
         makeFootnote(footnote)
     }
+}
+
+if (nrow(indexer_stats) > 0) {
+    p <- ggplot(indexer_stats, aes(row, indexing_throughput, color=buildinfo.version, label=indexing_throughput))
+    p <- p + labs(x="----time (sec)--->", y="ops/sec")
+    p <- p + geom_point()
+    p <- addopts(p, paste("Indexing throughput", ns_node, sep=" - "))
+    print(p)
+    makeFootnote(footnote)
 }
 
 #memcached stats
