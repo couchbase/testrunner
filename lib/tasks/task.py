@@ -1466,7 +1466,7 @@ class MonitorViewFragmentationTask(Task):
             task_manager.schedule(self, 2)
 
     @staticmethod
-    def aggregate_ddoc_info(rest, design_doc_name, bucket="default", with_new_nodes=False):
+    def aggregate_ddoc_info(rest, design_doc_name, bucket="default", with_rebalance=False):
 
         nodes = rest.node_statuses()
         info = []
@@ -1480,7 +1480,7 @@ class MonitorViewFragmentationTask(Task):
                 status, content = rest.set_view_info(bucket, design_doc_name)
             except Exception as e:
                 print(str(e))
-                if "Error occured reading set_view _info" in str(e) and with_new_nodes:
+                if "Error occured reading set_view _info" in str(e) and with_rebalance:
                     print("node {0} {1} is not ready yet?: {2}".format(
                                     node.id, node.port, e.message))
                 else:
@@ -1490,7 +1490,7 @@ class MonitorViewFragmentationTask(Task):
         return info
 
     @staticmethod
-    def calc_ddoc_fragmentation(rest, design_doc_name, bucket="default", with_new_nodes=False):
+    def calc_ddoc_fragmentation(rest, design_doc_name, bucket="default", with_rebalance=False):
 
         total_disk_size = 0
         total_data_size = 0
@@ -1499,7 +1499,7 @@ class MonitorViewFragmentationTask(Task):
         nodes_ddoc_info = \
             MonitorViewFragmentationTask.aggregate_ddoc_info(rest,
                                                          design_doc_name,
-                                                         bucket, with_new_nodes)
+                                                         bucket, with_rebalance)
         total_disk_size = sum([content['disk_size'] for content in nodes_ddoc_info])
         total_data_size = sum([content['data_size'] for content in nodes_ddoc_info])
 
@@ -1518,25 +1518,25 @@ class ViewCompactionTask(Task):
         history for design doc is incremented and if any work was really done.
     """
 
-    def __init__(self, server, design_doc_name, bucket="default", with_new_nodes=False):
+    def __init__(self, server, design_doc_name, bucket="default", with_rebalance=False):
 
         Task.__init__(self, "view_compaction_task")
         self.server = server
         self.bucket = bucket
         self.design_doc_name = design_doc_name
         self.ddoc_id = "_design%2f" + design_doc_name
-        self.num_of_compactions = 0
-        self.precompacted_frag_val = 0
-        self.with_new_nodes = with_new_nodes
+        self.compaction_revision = 0
+        self.precompacted_fragmentation = 0
+        self.with_rebalance = with_rebalance
 
     def execute(self, task_manager):
         rest = RestConnection(self.server)
 
         try:
-            self.num_of_compactions, self.precompacted_frag_val = \
+            self.compaction_revision, self.precompacted_fragmentation = \
                 self._get_compaction_details()
             self.log.info("stats compaction before triggering it: ({0},{1})".
-                          format(self.num_of_compactions, self.precompacted_frag_val))
+                          format(self.compaction_revision, self.precompacted_fragmentation))
             rest.ddoc_compaction(self.ddoc_id)
             self.state = CHECKING
             task_manager.schedule(self, 2)
@@ -1553,20 +1553,20 @@ class ViewCompactionTask(Task):
     def check(self, task_manager):
 
         try:
-            new_compaction_count, compacted_frag_val = self._get_compaction_details()
+            new_compaction_revision, fragmentation = self._get_compaction_details()
             self.log.info("stats compaction: ({0},{1})".
-                          format(new_compaction_count, compacted_frag_val))
+                          format(new_compaction_revision, fragmentation))
 
-            if new_compaction_count == self.num_of_compactions and self._is_compacting():
-                # compaction ran successfully but compactions was not changed
+            if new_compaction_revision == self.compaction_revision and self._is_compacting():
+                # compaction ran successfully but compaction was not changed
                 # perhaps we are still compacting
                 self.log.info("design doc {0} is compacting".format(self.design_doc_name))
-                task_manager.schedule(self, 2)
-            elif new_compaction_count > self.num_of_compactions:
-                self.log.info("compactor was run, compaction count was changed on {0}".format(new_compaction_count))
-                frag_val_diff = compacted_frag_val - self.precompacted_frag_val
+                task_manager.schedule(self, 3)
+            elif new_compaction_revision > self.compaction_revision:
+                self.log.info("compactor was run, compaction revision was changed on {0}".format(new_compaction_revision))
+                frag_val_diff = fragmentation - self.precompacted_fragmentation
                 self.log.info("fragmentation went from %d to %d" % \
-                              (self.precompacted_frag_val, compacted_frag_val))
+                              (self.precompacted_fragmentation, fragmentation))
 
                 if frag_val_diff > 0:
 
@@ -1575,7 +1575,7 @@ class ViewCompactionTask(Task):
                     if self._is_compacting():
                         task_manager.schedule(self, 2)
                     self.log.info("compaction was completed, but fragmentation value {0} is more than before compaction {1}".
-                                  format(compacted_frag_val, self.precompacted_frag_val))
+                                  format(fragmentation, self.precompacted_fragmentation))
                     # probably we already compacted, but no work needed to be done
                     # returning False
                     self.set_result(False)
@@ -1588,7 +1588,18 @@ class ViewCompactionTask(Task):
                 if self._is_compacting():
                     task_manager.schedule(self, 2)
                 else:
-                    self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
+                    new_compaction_revision, fragmentation = self._get_compaction_details()
+                    self.log.info("stats compaction: ({0},{1})".
+                          format(new_compaction_revision, fragmentation))
+                    #case of rebalance when with concurrent updates it's possible that
+                    #compaction value has not changed significantly
+                    if new_compaction_revision > self.compaction_revision and self.with_rebalance:
+                        self.log.warn("the compaction revision was increased,\
+                             but the actual fragmentation value has not changed significantly")
+                        self.set_result(True)
+                        self.state = FINISHED
+                    else:
+                        self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
 
         except (SetViewInfoNotFound) as ex:
             self.state = FINISHED
@@ -1604,7 +1615,7 @@ class ViewCompactionTask(Task):
         status, content = rest.set_view_info(self.bucket, self.design_doc_name)
         curr_no_of_compactions = content["stats"]["compactions"]
         curr_ddoc_fragemtation = \
-            MonitorViewFragmentationTask.calc_ddoc_fragmentation(rest, self.design_doc_name, self.bucket, self.with_new_nodes)
+            MonitorViewFragmentationTask.calc_ddoc_fragmentation(rest, self.design_doc_name, self.bucket, self.with_rebalance)
         return (curr_no_of_compactions, curr_ddoc_fragemtation)
 
     def _is_compacting(self):

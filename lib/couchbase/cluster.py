@@ -536,7 +536,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task.result(timeout)
 
-    def async_compact_view(self, server, design_doc_name, bucket="default", with_new_nodes=False):
+    def async_compact_view(self, server, design_doc_name, bucket="default", with_rebalance=False):
         """Asynchronously run view compaction.
 
         Compacts index file represented by views within the specified <design_doc_name>
@@ -545,18 +545,21 @@ class Cluster(object):
             server - The server to handle fragmentation config task. (TestInputServer)
             design_doc_name - design doc with views represented in index file. (String)
             bucket - The name of the bucket design_doc belongs to. (String)
-            with_new_nodes - "Error occured reading set_view _info" will be ignored if True
-                (This applies to rebalance in case)
+            with_rebalance - there are two cases that process this parameter:
+                "Error occured reading set_view _info" will be ignored if True
+                (This applies to rebalance in case),
+                and with concurrent updates(for instance, with rebalance)
+                it's possible that compaction value has not changed significantly
 
         Returns:
             ViewCompactionTask - A task future that is a handle to the scheduled task."""
 
 
-        _task = ViewCompactionTask(server, design_doc_name, bucket, with_new_nodes)
+        _task = ViewCompactionTask(server, design_doc_name, bucket, with_rebalance)
         self.task_manager.schedule(_task)
         return _task
 
-    def compact_view(self, server, design_doc_name, bucket="default", timeout=None, with_new_nodes=False):
+    def compact_view(self, server, design_doc_name, bucket="default", timeout=None, with_rebalance=False):
         """Synchronously run view compaction.
 
         Compacts index file represented by views within the specified <design_doc_name>
@@ -565,12 +568,14 @@ class Cluster(object):
             server - The server to handle fragmentation config task. (TestInputServer)
             design_doc_name - design doc with views represented in index file. (String)
             bucket - The name of the bucket design_doc belongs to. (String)
-            with_new_nodes - "Error occured reading set_view _info" will be ignored if True
+            with_rebalance - "Error occured reading set_view _info" will be ignored if True
+                and with concurrent updates(for instance, with rebalance)
+                it's possible that compaction value has not changed significantly
 
         Returns:
             boolean - True file size reduced after compaction, False if successful but no work done """
 
-        _task = self.async_compact_view(server, design_doc_name, bucket, with_new_nodes)
+        _task = self.async_compact_view(server, design_doc_name, bucket, with_rebalance)
         return _task.result(timeout)
 
     def async_failover(self, servers, to_failover):

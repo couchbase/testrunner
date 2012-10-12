@@ -370,7 +370,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 3, expected_rows=expected_rows)
 
-        compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name, self.default_bucket_name, with_new_nodes=True)
+        compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name, self.default_bucket_name, with_rebalance=True)
         servs_in = self.servers[1:self.nodes_in + 1]
         rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         result = compaction_task.result()
