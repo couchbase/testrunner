@@ -1,6 +1,4 @@
 RABBITMQ_IP = '127.0.0.1'
-RESULT_CACHE_IP ='127.0.0.1'
-RESULT_CACHE_PORT ='11211'
 OBJECT_CACHE_IP = "127.0.0.1"
 OBJECT_CACHE_PORT = "11211"
 COUCHBASE_IP = '127.0.0.1'
@@ -10,6 +8,8 @@ COUCHBASE_PWD = "asdasd"
 SSH_USER = "root"
 SSH_PASSWORD = "password"
 WORKERS = ['127.0.0.1']
+# valid configs ["kv","query","admin","stats"] or ["all"]
+WORKER_CONFIGS = ["kv","query","admin","stats"]
 ATOP_LOG_FILE = "/tmp/atop-node.log"
 LOGDIR="logs"  # relative to current dir
 
