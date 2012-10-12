@@ -462,7 +462,10 @@ class ViewBaseTests(unittest.TestCase):
                     self.log.error(
                             "view_results not ready yet , try again in {1} seconds... , error {0}"
                             .format(ex, timeout))
-                    ViewBaseTests._wait_for_indexer_ddoc(self, rest, view)
+                    try:
+                        ViewBaseTests._wait_for_indexer_ddoc(self, rest, view)
+                    except:
+                        pass
                     if i == num_tries:
                         self.fail("unable to get view_results for {0} after {1} tries due to error {2}"
                                   .format(view, num_tries, ex))
