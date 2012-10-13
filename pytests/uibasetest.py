@@ -144,9 +144,9 @@ class BaseUITestCase(unittest.TestCase):
                 stopped = rest.stop_rebalance()
                 self.assertTrue(stopped, msg="unable to stop rebalance")
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-            #for server in self.servers:
-            #    ClusterOperationHelper.cleanup_cluster([server])
-            #ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+            for server in self.servers:
+                ClusterOperationHelper.cleanup_cluster([server])
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
             if self.driver:
                 self.driver.close()
         finally:

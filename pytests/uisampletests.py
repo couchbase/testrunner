@@ -172,6 +172,28 @@ class DocumentsTest(BaseUITestCase):
             if page != num_pages:
                 DocsHelper(self).go_to_next_page()
 
+class SettingsTests(BaseUITestCase):
+    def setUp(self):
+        super(SettingsTests, self).setUp()
+        self.helper = BaseHelper(self)
+
+    def tearDown(self):
+        super(SettingsTests, self).tearDown()
+
+    def test_alerts(self):
+        self.helper.login()
+        NavigationHelper(self).navigate('Settings')
+        SettingsHelper(self).navigate('Alerts')
+        SettingsHelper(self).fill_alerts_info(self.input)
+        NavigationHelper(self).navigate('Server Nodes')
+        ServerHelper(self).add(self.input)
+        ServerHelper(self).rebalance()
+        NavigationHelper(self).navigate('Settings')
+        SettingsHelper(self).navigate('Auto-Failover')
+        SettingsHelper(self).fill_auto_failover_info(self.input)
+        time.sleep(self.input.param("auto_failover_timeout", 40))
+        time.sleep(10)
+
 '''
 Controls classes for tests
 '''
@@ -179,13 +201,33 @@ class NavigationTestControls():
      def __init__(self, driver):
         self.helper = ControlsHelper(driver)
      def _navigation_tab(self, text):
-         return self.helper.find_control('navigation', 'navigation_tab',
-                                         parent_locator='navigation_bar',
-                                         text=text)
+        return self.helper.find_control('navigation', 'navigation_tab',
+                                        parent_locator='navigation_bar',
+                                        text=text)
      def _navigation_tab_link(self, text):
         return self.helper.find_control('navigation', 'navigation_tab_link',
                                         parent_locator='navigation_bar',
                                         text=text)
+class ServerTestControls():
+    def __init__(self, driver):
+        self.helper = ControlsHelper(driver)
+        self.add_server_btn = self.helper.find_control('server_nodes', 'add_server_btn')
+        self.rebalance_btn = self.helper.find_control('server_nodes', 'rebalance_btn')
+        self.num_pend_rebalance = self.helper.find_control('server_nodes', 'num_pend_rebalance',
+                                                           parent_locator='pend_rebalance_btn')
+
+    def add_server_dialog(self, parent='add_server_pop_up'):
+        self.parent = parent
+        self.add_server_pop_up = self.helper.find_control('server_nodes', 'add_server_pop_up')
+        self.ip_address = self.helper.find_control('server_nodes', 'ip_address', parent_locator=self.parent)
+        self.username = self.helper.find_control('server_nodes', 'username', parent_locator=self.parent)
+        self.password = self.helper.find_control('server_nodes', 'password', parent_locator=self.parent)
+        self.add_server_dialog_btn = self.helper.find_control('server_nodes', 'add_server_dialog_btn',
+                                                              parent_locator=self.parent)
+        self.confirm_server_addition = self.helper.find_control('server_nodes', 'confirm_server_addition')
+        self.add_server_confirm_btn = self.helper.find_control('server_nodes', 'add_server_dialog_btn',
+                                                               parent_locator='confirm_server_addition')
+        return self
 
 class BucketTestsControls():
     def __init__(self, driver):
@@ -374,6 +416,38 @@ class DocumentsControls():
                                                      parent_locator='screen')
         self.documents_link = self.helper.find_control('edit_doc_screen', 'documents_link')
         return self
+
+class SettingsTestControls():
+    def __init__(self, driver):
+        self.helper = ControlsHelper(driver)
+
+    def _settings_tab_link(self, text):
+        return self.helper.find_control('settings', 'settings_tab_link',
+                                        parent_locator='settings_bar',
+                                        text=text)
+
+    def alerts_info(self):
+        self.enable_email_alerts = self.helper.find_control('alerts', 'enable_email_alerts')
+        self.email_host = self.helper.find_control('alerts', 'email_host')
+        self.email_user = self.helper.find_control('alerts', 'email_user')
+        self.email_port = self.helper.find_control('alerts', 'email_port')
+        self.email_pass = self.helper.find_control('alerts', 'email_pass')
+        self.email_encrypt = self.helper.find_control('alerts', 'email_encrypt')
+        self.email_sender = self.helper.find_control('alerts', 'email_sender')
+        self.email_recipients = self.helper.find_control('alerts', 'email_recipients')
+        self.test_email_btn = self.helper.find_control('alerts', 'test_email_btn')
+        self.sent_email_btn = self.helper.find_control('alerts', 'sent_email_btn')
+        self.save_btn = self.helper.find_control('settings', 'save_btn', parent_locator='alert_screen')
+        self.done_btn = self.helper.find_control('settings', 'done_btn', parent_locator='alert_screen')
+        return self
+
+    def auto_failover_info(self):
+        self.enable_auto_failover = self.helper.find_control('auto_failover', 'enable_auto_failover')
+        self.failover_timeout = self.helper.find_control('auto_failover', 'failover_timeout')
+        self.what_is_this = self.helper.find_control('auto_failover', 'what_is_this')
+        self.save_btn = self.helper.find_control('settings', 'save_btn', parent_locator='auto_failover_screen')
+        self.done_btn = self.helper.find_control('settings', 'done_btn', parent_locator='auto_failover_screen')
+        return self
 '''
 Helpers
 '''
@@ -398,6 +472,49 @@ class NavigationHelper():
         self.wait.until(lambda fn: self._is_tab_selected(tab),
                         "tab '%s' is not selected in %d sec" % (tab, self.wait._timeout))
         self.tc.log.info("tab '%s' is selected" % tab)
+
+class ServerHelper():
+    def __init__(self, tc):
+        self.tc = tc
+        self.wait = WebDriverWait(tc.driver, timeout=25)
+        self.controls = ServerTestControls(tc.driver)
+
+    def _is_btn_enabled(self, btn):
+        return btn.get_attribute('class').find('disabled') == -1
+
+    def add(self, input):
+        self.tc.log.info("trying add server %s" % (input.param("add_server_ip", "10.1.3.72:8091")))
+        self.wait.until(lambda fn: self.controls.add_server_btn.is_displayed(),
+                        "Add Server btn is not displayed in %d sec" % (self.wait._timeout))
+        self.controls.add_server_btn.click()
+        self.wait.until(lambda fn: self.controls.add_server_dialog().add_server_pop_up.is_displayed(),
+                        "no reaction for click create new bucket btn in %d sec" % (self.wait._timeout))
+        self.fill_server_info(input)
+        self.controls.add_server_dialog().add_server_dialog_btn.click()
+        self.controls.add_server_dialog().add_server_confirm_btn.click()
+        self.wait.until_not(lambda fn:
+                            self.controls.add_server_dialog().confirm_server_addition.is_displayed(),
+                            "Add server pop up is not closed in %d sec" % self.wait._timeout)
+        self.wait.until_not(lambda fn:
+                            self.controls.add_server_dialog().add_server_pop_up.is_displayed(),
+                            "Add server pop up is not closed in %d sec" % self.wait._timeout)
+        self.tc.log.info("added server %s" % (input.param("add_server_ip", "10.1.3.72:8091")))
+
+    def fill_server_info(self, input):
+        self.controls.add_server_dialog().ip_address.type(input.param("add_server_ip", "10.1.3.72:8091"))
+        self.controls.add_server_dialog().username.type(input.membase_settings.rest_username)
+        self.controls.add_server_dialog().password.type(input.membase_settings.rest_password)
+
+    def rebalance(self):
+        self.wait.until(lambda fn: self.controls.num_pend_rebalance.is_displayed(),
+                        "Number of pending rebalance servers is not displayed in %d sec" % (self.wait._timeout))
+        self.wait.until(lambda fn: self._is_btn_enabled(self.controls.rebalance_btn),
+                        "Rebalance btn is not enabled in %d sec" % (self.wait._timeout))
+        self.controls.rebalance_btn.click()
+        self.tc.log.info("Start rebalancing")
+        self.wait.until_not(lambda fn: self._is_btn_enabled(self.controls.rebalance_btn),
+                            "Rebalance btn is enabled in %d sec" % (self.wait._timeout))
+        time.sleep(5)
 
 class BucketHelper():
     def __init__(self, tc):
@@ -761,6 +878,54 @@ class DocsHelper():
                         self.controls.edit_document_screen(doc=doc.name).name.is_displayed(),
                         "Doc %s is not found" % doc_name)
 
+class SettingsHelper():
+    def __init__(self, tc):
+        self.tc = tc
+        self.controls = SettingsTestControls(tc.driver)
+        self.wait = WebDriverWait(tc.driver, timeout=10)
+
+    def navigate(self, tab):
+        self.wait.until(lambda fn: self.controls._settings_tab_link(tab).is_displayed(),
+                        "tab '%s' is not displayed in %d sec" % (tab, self.wait._timeout))
+        self.tc.log.info("try to navigate to '%s' tab" % tab)
+        self.controls._settings_tab_link(tab).click()
+        self.tc.log.info("tab '%s' is selected" % tab)
+
+    def fill_alerts_info(self, input):
+        self.controls.alerts_info().enable_email_alerts.check(setTrue=input.param("enable_email_alerts", True))
+        self.controls.alerts_info().email_host.type(input.param("alerts_email_host", 'itweb01.hq.northscale.net'))
+        self.controls.alerts_info().email_user.type(input.param("alerts_email_username", None))
+        self.controls.alerts_info().email_port.type(input.param("alerts_email_port", None))
+        self.controls.alerts_info().email_pass.type(input.param("alerts_email_password", None))
+        self.controls.alerts_info().email_encrypt.check(setTrue=input.param("alerts_email_encrypt", True))
+        self.controls.alerts_info().email_sender.type(input.param("alerts_email_sender", 'qa@couchbase.com'))
+        self.controls.alerts_info().email_recipients.type(input.param("alerts_email_recipients", 'chisheng@couchbase.com'))
+        self.wait.until(lambda fn: self.controls.alerts_info().test_email_btn.is_displayed(),
+                        "Test Mail btn is not displayed in %d sec" % (self.wait._timeout))
+        self.controls.alerts_info().test_email_btn.click()
+        #        self.wait.until(lambda fn: self.controls.alerts_info().sent_email_btn.is_displayed(),
+        #           "Test Mail btn is not selected in %d sec" % (self.wait._timeout))
+        self.tc.log.info("Test Mail btn is selected")
+
+        self.wait.until(lambda fn: self.controls.alerts_info().save_btn.is_displayed(),
+                        "Save btn is not displayed in %d sec" % (self.wait._timeout))
+        self.controls.alerts_info().save_btn.click()
+        self.wait.until(lambda fn: self.controls.alerts_info().done_btn.is_displayed(),
+                        "Save btn is not selected in %d sec" % (self.wait._timeout))
+        self.tc.log.info("Save btn is selected")
+
+    def fill_auto_failover_info(self, input):
+        self.controls.auto_failover_info().enable_auto_failover.check(setTrue=input.param("enable_auto_failover", True))
+        self.controls.auto_failover_info().failover_timeout.type(input.param("auto_failover_timeout", 40))
+        self.wait.until(lambda fn: self.controls.auto_failover_info().what_is_this.is_displayed(),
+                        "What is this? link is not displayed in %s sec" % (self.wait._timeout))
+        self.controls.auto_failover_info().what_is_this.click()
+        self.wait.until(lambda fn: self.controls.auto_failover_info().save_btn.is_displayed(),
+                        "Save tab is not displayed in %s sec" % (self.wait._timeout))
+        self.controls.auto_failover_info().save_btn.click()
+        self.wait.until(lambda fn: self.controls.auto_failover_info().done_btn.is_displayed(),
+                        "Save btn is not selected in %d sec" % (self.wait._timeout))
+        self.tc.log.info("Save btn is selected")
 '''
 Objects
 '''
