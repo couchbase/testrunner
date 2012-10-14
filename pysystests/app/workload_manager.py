@@ -2,7 +2,6 @@ from __future__ import absolute_import
 from app.celery import celery
 from celery.task.sets import TaskSet
 from app.stats import StatChecker
-from app.query import activeQueryWorkload
 import app.sdk_client_tasks as client
 import json
 import uuid
@@ -28,8 +27,10 @@ def conn():
 When a message is received it is caached and sent to sysTestRunner for processing 
 """
 @celery.task(base = PersistedMQ, ignore_result = True)
-def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_template"):
+def workloadConsumer(workloadQueue = "workload_default", templateQueue = "workload_template_default"):
+
     rabbitHelper = workloadConsumer.rabbitHelper
+
     templateMsg = None
     workloadMsg = None
 
@@ -37,7 +38,11 @@ def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_templ
         templateQueueSize = rabbitHelper.qsize(templateQueue)
         if templateQueueSize > 0:
             templateMsg = rabbitHelper.getJsonMsg(templateQueue)
-            template = Template(templateMsg)
+            try:
+                template = Template(templateMsg)
+            except KeyError:
+                logger.info("Ignoring malformated msg: %s" % templateMsg)
+
     except ValueError as ex:
         logger.error("Error parsing template msg %s: " % templateMsg)
         logger.error(ex)
@@ -49,13 +54,13 @@ def workloadConsumer(workloadQueue = "workload", templateQueue = "workload_templ
         workloadQueueSize = rabbitHelper.qsize(workloadQueue)
         if workloadQueueSize > 0:
             workloadMsg = rabbitHelper.getJsonMsg(workloadQueue)
-            if "queries_per_sec" in workloadMsg:
-                # launch query workload
-                activeQueryWorkload.delay(workloadMsg)
-            else:
+            try:
                 workload = Workload(workloadMsg)
+                logger.error(workloadMsg)
                 # launch kvworkload
                 sysTestRunner.delay(workload)
+            except KeyError:
+                logger.info("Ignoring malformated msg: %s" % workloadMsg)
 
     except ValueError as ex:
         logger.error("Error parsing workloadMsg %s: " % workloadMsg)

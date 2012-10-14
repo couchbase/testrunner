@@ -13,35 +13,58 @@ from celery.exceptions import TimeoutError
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
+"""
+Monitors the query queue for new messages sent from clients.
+When a message is received it is activated for detection
+in the queryRunner task
+"""
 @celery.task(base = PersistedMQ)
-def activeQueryWorkload(workloadMsg):
+def queryConsumer(queryQueue = "query_default"):
 
-    rabbitHelper = activeQueryWorkload.rabbitHelper
+    rabbitHelper = queryConsumer.rabbitHelper
+    queryQueueSize = rabbitHelper.qsize(queryQueue)
 
-    prevWorkload = CacheHelper.active_query()
-    if prevWorkload is not None:
-        prevWorkload.active = False
-
-    workload = QueryWorkload(workloadMsg)
-    task_queue = workload.task_queue
-
-    workload.active = True
-
-
-@celery.task(base = PersistedMQ)
-def queryScheduler(batch_size = 100):
-
-    rabbitHelper = queryScheduler.rabbitHelper
-
+    # retreive currently active query workload
     active_query = CacheHelper.active_query()
-    if active_query is not None:
-        count = int(active_query.qps)
+    if queryQueueSize> 0:
+
+        # setup new query workload from queued message
+        queryMsg = rabbitHelper.getJsonMsg(queryQueue)
+        logger.error(queryMsg)
+        try:
+            queryWorkload = QueryWorkload(queryMsg)
+
+            # deactivate old query workload
+            if active_query is not None:
+                active_query.active = False
+
+
+            # activate new query workload
+            # to be detected in queryRunner task
+            queryWorkload.active = True
+        except KeyError:
+            logger.info("Invalid query workload message: %s" % queryMsg)
+
+
+"""
+Looks for active query workloads in the cache and runs them
+"""
+@celery.task
+def queryRunner():
+
+    # retreive currently active query workload
+    query = CacheHelper.active_query()
+
+    if query is not None:
+
+        count = int(query.qps)
         params = {"stale" : "update_after"}
         multi_query.delay(count,
-                          active_query.ddoc,
-                          active_query.view,
+                          query.ddoc,
+                          query.view,
                           params,
-                          active_query.bucket)
+                          query.bucket)
+
 
 class QueryWorkload(object):
     def __init__(self, params):

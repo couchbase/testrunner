@@ -16,6 +16,7 @@ def add_modifier_args(parser):
 
 def add_broker_arg(parser):
     parser.add_argument("--broker", help="ip address of broker used to consume options")
+    parser.add_argument("--cluster", default="deafult", help="queue suffix within broker used to consume option")
 
 def add_template_parser(parent):
     parser = parent.add_parser("template")
@@ -140,9 +141,10 @@ def run_workload(args):
                  "wait"  : args.wait,
                  "expires"  : args.expires,
                  "template"  : args.template}
+    cluster = args.cluster
 
     rabbitHelper = RabbitHelper(args.broker)
-    rabbitHelper.putMsg("workload", json.dumps(workload))
+    rabbitHelper.putMsg("workload_"+cluster, json.dumps(workload))
 
 
 def import_template(args):
@@ -170,9 +172,10 @@ def import_template(args):
                  "cc_queues" : args.cc_queues,
                  "size" : args.size,
                  "kv" : val}
+    cluster = args.cluster
 
     rabbitHelper = RabbitHelper(args.broker)
-    rabbitHelper.putMsg("workload_template", json.dumps(template))
+    rabbitHelper.putMsg("workload_template_"+cluster, json.dumps(template))
 
 def perform_admin_tasks(args):
 
@@ -183,11 +186,12 @@ def perform_admin_tasks(args):
                'hard_restart': args.hard_restart,
                'only_failover': args.only_failover
               }
+    cluster = args.cluster
 
     #TODO: Validate the user inputs, before passing to rabbit
     print actions
     rabbitHelper = RabbitHelper(args.broker)
-    rabbitHelper.putMsg("admin_tasks", json.dumps(actions))
+    rabbitHelper.putMsg("admin_"+cluster, json.dumps(actions))
 
 def perform_xdcr_tasks(args):
 
@@ -197,11 +201,12 @@ def perform_xdcr_tasks(args):
                'dest_cluster_name': args.dest_cluster_name,
                'replication_type': args.replication_type,
     }
+    cluster = args.cluster
 
     #TODO: Validate the user inputs, before passing to rabbit
     print xdcrMsg
     rabbitHelper = RabbitHelper(args.broker)
-    rabbitHelper.putMsg("xdcr_tasks", json.dumps(xdcrMsg))
+    rabbitHelper.putMsg("xdcr_"+cluster, json.dumps(xdcrMsg))
 
 def perform_query_tasks(args):
     queryMsg = {'queries_per_sec' : args.queries_per_sec,
@@ -209,8 +214,10 @@ def perform_query_tasks(args):
                 'view' : args.view,
                 'bucket' : args.bucket,
                 'password' : args.password}
+    cluster = args.cluster
+
     rabbitHelper = RabbitHelper(args.broker)
-    rabbitHelper.putMsg('workload', json.dumps(queryMsg))
+    rabbitHelper.putMsg('query_'+cluster, json.dumps(queryMsg))
 
 
 ### setup main arg parsers

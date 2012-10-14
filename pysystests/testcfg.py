@@ -1,3 +1,5 @@
+#TODO: allow workers to pull this from cache
+
 RABBITMQ_IP = '127.0.0.1'
 OBJECT_CACHE_IP = "127.0.0.1"
 OBJECT_CACHE_PORT = "11211"
@@ -9,7 +11,8 @@ SSH_USER = "root"
 SSH_PASSWORD = "password"
 WORKERS = ['127.0.0.1']
 # valid configs ["kv","query","admin","stats"] or ["all"]
-WORKER_CONFIGS = ["kv","query","admin","stats"]
+WORKER_CONFIGS = ["all"]
+CB_CLUSTER_TAG = "plum"
 ATOP_LOG_FILE = "/tmp/atop-node.log"
 LOGDIR="logs"  # relative to current dir
 

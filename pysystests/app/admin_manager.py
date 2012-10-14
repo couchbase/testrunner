@@ -9,9 +9,10 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 @celery.task(base = PersistedMQ)
-def adminConsumer(adminQueue = "admin_tasks"):
+def adminConsumer(adminQueue = "admin_default"):
 
     rabbitHelper = adminConsumer.rabbitHelper
+
     try:
         adminQueueSize = rabbitHelper.qsize(adminQueue)
         if adminQueueSize > 0:
@@ -23,9 +24,10 @@ def adminConsumer(adminQueue = "admin_tasks"):
         logger.error(ex)
 
 @celery.task(base = PersistedMQ)
-def xdcrConsumer(xdcrQueue = "xdcr_tasks"):
+def xdcrConsumer(xdcrQueue = "xdcr_default"):
 
     rabbitHelper = xdcrConsumer.rabbitHelper
+
     try:
         xdcrQueueSize = rabbitHelper.qsize(xdcrQueue)
         if xdcrQueueSize > 0:

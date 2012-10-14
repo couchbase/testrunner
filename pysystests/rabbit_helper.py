@@ -25,13 +25,12 @@ class RabbitHelper(object):
             mq_server = cfg.RABBITMQ_IP
 
         self.connection = Connection(host= mq_server, userid="guest", password="guest", virtual_host="/")
-        self.declare("workload")
-        self.declare("workload_template")
 
-    def declare(self, queue, durable = False):
+
+    def declare(self, queue, durable = True):
         channel = self.connection.channel()
         if not isinstance(queue,str): queue = str(queue)
-        res = channel.queue_declare(queue = queue, durable = durable)
+        res = channel.queue_declare(queue = queue, durable = durable, auto_delete = True)
         channel.close()
         return res
 

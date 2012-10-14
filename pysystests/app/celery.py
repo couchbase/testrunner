@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-
+import sys
 from celery import Celery
 from app.config import BaseConfig
 from celery.app.log import Logging
@@ -9,12 +9,53 @@ import testcfg as cfg
 
 
 celery = Celery(include=['app.sdk_client_tasks','app.rest_client_tasks','app.workload_manager','app.stats','app.admin_manager','app.query'])
-config = BaseConfig(cfg.WORKER_CONFIGS)
+config = None
+
+
+"""
+    Worker behavior can be set in testcfg
+    and also at start of worker using the -n option as 'name'
+
+    examaple of starting 4 isolated workers on one vm with 2 process dedicated to each:
+
+        celeryd-multi start kv query admin stats -A app --purge -l ERROR  -B -I:kv app.init \
+        -n:kv kv -n:query query -n:admin admin -n:stats stats -c 2
+
+    Where syntax (-n:kv  kv) means for worker named kv, start the kv scheduler , create it's queues and routes
+    Note also init is only started once along with the kv worker, although it can be started as standalone.
+
+    To start all types in a single worker do:
+
+        celeryd-multi start all -A app --purge -l ERROR  -B  -n:all all -c 8
+
+    One worker with two schedulers:
+
+        celeryd-multi start kv query -A app --purge -l ERROR  -B -I:kv app.init \
+        -n:kv kv -n:query query  -c 4
+
+"""
+
+if "-n" in sys.argv:
+    opt_pos = sys.argv.index("-n")
+
+    # retrieve option value
+    workerTypes = sys.argv[opt_pos + 1].split(',')
+
+    # create custom config
+    config = BaseConfig(workerTypes)
+
+    # remove from worker opts
+    # so we don't crash when it's
+    # started in main since
+    # comma separated list isn't acceptable here
+    del sys.argv[opt_pos:opt_pos+2]
+
+if config is None:
+    config = BaseConfig(cfg.WORKER_CONFIGS)
+
 celery.config_from_object(config)
 
-# setup celery process logger
-
-
+# separate stat process logger
 def stats_tasks_setup_logging(**kw):
     logger = logging.getLogger('app.stats')
     handler = logging.FileHandler(cfg.LOGDIR+'/celery-stats.log')
