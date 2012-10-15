@@ -13,9 +13,15 @@ from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+try:
+    import logging
+    logging.config.fileConfig("scripts.logging.conf")
+    self.log = logging.getLogger()
+except:
+     pass
+
 
 class BaseTestCase(unittest.TestCase):
-
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
@@ -263,7 +269,7 @@ class BaseTestCase(unittest.TestCase):
                       "viewFragmntThreshold" : None}
         self.cluster.modify_fragmentation_config(server, new_config, bucket)
 
-    def async_create_views(self, server, design_doc_name, views, bucket="default", with_query=True ):
+    def async_create_views(self, server, design_doc_name, views, bucket="default", with_query=True):
         tasks = []
         if len(views):
             for view in views:
