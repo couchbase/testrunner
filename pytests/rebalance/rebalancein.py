@@ -26,23 +26,30 @@ class RebalanceInTests(RebalanceBaseTest):
     and then verify that there has been no data loss.
     Once all nodes have been rebalanced in the test is finished."""
     def rebalance_in_with_ops(self):
+        nodes_init = self.input.param("nodes_init", 1)
+        if nodes_init > 1:
+            servs_init = self.servers[:nodes_init]
+            self.cluster.rebalance(self.servers[:1], servs_init[1:], [])
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
-        servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
-        rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
+        servs_in = [self.servers[i + nodes_init] for i in range(self.nodes_in)]
+        rebalance = self.cluster.async_rebalance(self.servers[:nodes_init], servs_in, [])
         if(self.doc_ops is not None):
+            tasks = []
             # define which doc's ops will be performed during rebalancing
             # allows multiple of them but one by one
             if("update" in self.doc_ops):
-                self._load_all_buckets(self.master, self.gen_update, "update", 0)
+                tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             if("create" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_create, "create", 0)
+                tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
             if("delete" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_delete, "delete", 0)
+                tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
+            for task in tasks:
+                task.result()
         rebalance.result()
-        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
 
 
     def rebalance_in_with_ops_batch(self):
