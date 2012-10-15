@@ -787,12 +787,13 @@ class EPerfMaster(perf.PerfBase):
     def latched_rebalance(self, cur=None, delay=0.01, sync=False):
         if not self.latched_rebalance_done:
             self.latched_rebalance_done = True
+            reb_out = self.parami("reb_out", PerfDefaults.reb_out) == 1
             self.delayed_rebalance(self.parami("num_nodes_after",
                                                PerfDefaults.num_nodes_after),
                                    delay,
                                    self.parami("reb_max_retries",
                                                PerfDefaults.reb_max_retries),
-                                   sync)
+                                   reb_out, sync)
 
     # ---------------------------------------------
 

@@ -58,6 +58,7 @@ class PerfDefaults:
     reb_max_retries     =    0           # num of retries if rebalance fails
     reb_cons_view       =    -1          # consistent view for rebalance task, 1: enable, 0: disable
     reb_no_fg           =    0           # rebalance without foreground load. 1: enable, 0: disable
+    reb_out             =    0           # rebalance out, 1: rebalance nodes out, 0: rebalance nodes in
 
     # control
     avg_value_size          =   2048     # average size of document body
