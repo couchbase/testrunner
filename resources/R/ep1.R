@@ -1993,7 +1993,7 @@ if (nrow(ns_server_data) > 0) {
                         "from curr_connections)",
                         sep="\n"))
 
-    if(!is.null(ns_server_data$replication_changes_left)) {
+    if(!is.null(ns_server_data$replication_work_time)) {
         cat("generating replication_changes_left \n")
         p <- ggplot(ns_server_data, aes(row, replication_changes_left, color=buildinfo.version, label=replication_changes_left)) + labs(x="----time (sec)--->", y="items")
         p <- p + geom_point()
