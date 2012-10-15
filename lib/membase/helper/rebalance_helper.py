@@ -451,6 +451,29 @@ class RebalanceHelper():
         return False, servers_rebalanced
 
     @staticmethod
+    def rebalance_out(servers, how_many, monitor=True):
+        rest = RestConnection(servers[0])
+        cur_ips = map(lambda node: node.ip, rest.node_statuses())
+        servers = filter(lambda server: server.ip in cur_ips, servers)
+        if len(servers) <= how_many or how_many < 1:
+            log.error("failed to rebalance %s servers out: not enough servers"
+                      % how_many)
+            return False, []
+
+        ejections = servers[1:how_many+1]
+
+        log.info("rebalancing out %s" % ejections)
+        RebalanceHelper.begin_rebalance_out(servers[0], ejections)
+
+        if not monitor:
+            return True, ejections
+        try:
+            return rest.monitorRebalance(), ejections
+        except RebalanceFailedException, e:
+            log.error("failed to rebalance %s servers out: %s" % (how_many, e))
+            return False, ejections
+
+    @staticmethod
     def begin_rebalance_in(master, servers, timeout=5):
         log = logger.Logger.get_logger()
         rest = RestConnection(master)
