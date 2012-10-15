@@ -329,6 +329,8 @@ ns_server_data$cache_miss <- ns_server_data$cache_miss*100
 ns_server_data$curr_connections <- as.numeric(ns_server_data$curr_connections)
 tryCatch({
     ns_server_data $replication_changes_left <- as.numeric(ns_server_data$replication_changes_left)
+    ns_server_data $replication_docs_rep_queue <- as.numeric(ns_server_data$replication_docs_rep_queue)
+    ns_server_data $replication_size_rep_queue <- as.numeric(ns_server_data$replication_size_rep_queue)
     ns_server_data $xdc_ops <- as.numeric(ns_server_data$xdc_ops)
     ns_server_data $ep_num_ops_get_meta <- as.numeric(ns_server_data$ep_num_ops_get_meta)
     ns_server_data $ep_num_ops_set_meta <- as.numeric(ns_server_data$ep_num_ops_set_meta)
@@ -1997,11 +1999,31 @@ if (nrow(ns_server_data) > 0) {
         cat("generating replication_changes_left \n")
         p <- ggplot(ns_server_data, aes(row, replication_changes_left, color=buildinfo.version, label=replication_changes_left)) + labs(x="----time (sec)--->", y="items")
         p <- p + geom_point()
-        p <- addopts(p, "XDC replication Queue")
+        p <- addopts(p, "XDCR docs to replicate")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef(paste("Number of items waiting to be",
-                            "replicated to other clusters",
+        makeMetricDef(paste("Document mutations",
+                            "pending XDC replication",
+                            sep="\n"))
+
+        cat("generating replication_docs_rep_queue \n")
+        p <- ggplot(ns_server_data, aes(row, replication_docs_rep_queue, color=buildinfo.version, label=replication_docs_rep_queue)) + labs(x="----time (sec)--->", y="items")
+        p <- p + geom_point()
+        p <- addopts(p, "XDCR docs in queue")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of document mutations",
+                            "in XDC replication queue",
+                            sep="\n"))
+
+        cat("generating replication_size_rep_queue \n")
+        p <- ggplot(ns_server_data, aes(row, replication_size_rep_queue, color=buildinfo.version, label=replication_size_rep_queue)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p, "XDCR queue size")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Size in bytes of XDC",
+                            "replication queue",
                             sep="\n"))
 
         cat("generating xdc_ops \n")
