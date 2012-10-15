@@ -346,7 +346,10 @@ class RebalanceHelper():
         msg = 'sum : {0} and sum * (replica_factor + 1) ({1}) : {2}'
         log.info(msg.format(sum, replica_factor + 1, (sum * (replica_factor + 1))))
         master_stats = rest.get_bucket_stats(bucket)
-        log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
+        if "curr_items_tot" in master_stats:
+            log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
+        else:
+           self.fail("bucket {O} stats doesnt contain 'curr_items_tot':".format(bucket))
         delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
         delta = abs(delta)
 
