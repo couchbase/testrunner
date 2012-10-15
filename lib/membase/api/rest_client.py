@@ -240,8 +240,10 @@ class RestConnection(object):
             if status in ['200', '201', '202']:
                 return json_parsed, True
             else:
+                print("nodes/self with status {0}: {1}".format(status, json_parsed))
                 return json_parsed, False
         except ValueError:
+            print("nodes/self: {1}".format(content))
             return content, False
 
     def active_tasks(self):
