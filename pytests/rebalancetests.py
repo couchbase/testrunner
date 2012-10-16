@@ -37,7 +37,7 @@ class RebalanceBaseTest(unittest.TestCase):
         self.load_ratio = self.input.param("load-ratio", 6)
         self.expiry_ratio = self.input.param("expiry-ratio", 0.1)
         self.delete_ratio = self.input.param("delete-ratio", 0.1)
-        self.access_ratio = self.input.param("access-ratio", 0.8)
+        self.access_ratio = self.input.param("access-ratio", 1 - self.expiry_ratio - self.delete_ratio)
         self.num_buckets = self.input.param("num-buckets", 1)
         self.num_rebalance = self.input.param("num-rebalance", 1)
         self.do_ascii = self.input.param("ascii", False)

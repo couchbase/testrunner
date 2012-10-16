@@ -935,8 +935,8 @@ class VBucketAwareMemcached(object):
             else:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
-                rec_caller_fn(exp, flags, keyval, pause, timeout - pause)   # Start all over again for these key vals.
-                return []                                                    # Note: If used for async,too many recursive threads could get spwan here.
+                rec_caller_fn(exp, flags, keyval, pause, timeout - pause) # Start all over again for these key vals.
+                return [] # Note: If used for async,too many recursive threads could get spwan here.
         except BaseException as error:
             if timeout <= 0:
                 return [error]
@@ -1146,11 +1146,10 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         try:
             self._rlock.acquire()
             opaque, cas, data = self.memcached(key).delete(key)
-            if self.store_enabled and cas == 0:
+            if self.store_enabled:
                 self.kv_store.delete(key)
-                self._rlock.release()
-            else:
-                self._rlock.release()
+            self._rlock.release()
+            if cas == 0:
                 raise MemcachedError(7, "Invalid cas value")
         except Exception as e:
             self._rlock.release()
