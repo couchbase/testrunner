@@ -1900,7 +1900,7 @@ class QueryView:
                     except:
                         self.log.error("Query failed: see test result logs for details")
                         self.results.addFailure(tc, sys.exc_info())
-                        tc.log.error("Query data thread is crashed: %s" % sys.exc_info())
+                        tc.log.error("Query data thread is crashed: %s" % sys.exc_info()[2])
                         tc.thread_crashed.set()
 
                 else:
