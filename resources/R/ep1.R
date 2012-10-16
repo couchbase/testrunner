@@ -379,8 +379,12 @@ memcached_stats$row <- as.numeric(memcached_stats$row)
 memcached_stats$ep_diskqueue_drain <- as.numeric(memcached_stats$ep_diskqueue_drain)
 memcached_stats$uptime <- as.numeric(memcached_stats$uptime)
 
-memcached_stats$ep_bg_wait_avg <- as.numeric(memcached_stats$ep_bg_wait_avg) / 1000
-memcached_stats$ep_bg_load_avg <- as.numeric(memcached_stats$ep_bg_load_avg) / 1000
+if (!is.null(memcached_stats$ep_bg_wait_avg)) {
+    memcached_stats$ep_bg_wait_avg <- as.numeric(memcached_stats$ep_bg_wait_avg) / 1000
+}
+if (!is.null(memcached_stats$ep_bg_load_avg)) {
+    memcached_stats$ep_bg_load_avg <- as.numeric(memcached_stats$ep_bg_load_avg) / 1000
+}
 # memcached_stats $ep_tap_bg_fetched <- as.numeric(memcached_stats $ep_tap_bg_fetched)
 # memcached_stats $ep_bg_max_load <- as.numeric(memcached_stats $ep_bg_max_load)
 # memcached_stats $ep_bg_load <- as.numeric(memcached_stats $ep_bg_load)
