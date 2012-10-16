@@ -20,7 +20,6 @@ if [ ${load_phase} -eq 1 ] ; then
 fi
 
 if [ -n "${hot_load_phase}" ] ; then
-    num_clients=1
     phase="reload"
 fi
 
