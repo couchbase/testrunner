@@ -1294,7 +1294,7 @@ class MonitorActiveTask(Task):
     def __init__(self, server, type, target_value, wait_progress=100, num_iterations=100, wait_task=True):
         Task.__init__(self, "monitor_active_task")
         self.server = server
-        self.type = type  # indexer or bucket_compaction
+        self.type = type # indexer or bucket_compaction
         self.target_key = ""
         if self.type == "indexer":
             self.target_key = "design_documents"
@@ -1577,10 +1577,7 @@ class ViewCompactionTask(Task):
                     self.log.info("compaction was completed, but fragmentation value {0} is more than before compaction {1}".
                                   format(fragmentation, self.precompacted_fragmentation))
                     # probably we already compacted, but no work needed to be done
-                    # returning False
-                    self.set_result(False)
-                else:
-                    self.set_result(True)
+                    self.set_result(self.with_rebalance)
                     self.state = FINISHED
             else:
                 #Sometimes the compacting is not started immediately
@@ -1856,7 +1853,7 @@ class ViewQueryVerificationTask(Task):
     def check(self, task_manager):
         err_infos = []
         rc_status = {"passed" : False,
-                     "errors" : err_infos}  # array of dicts with keys 'msg' and 'details'
+                     "errors" : err_infos} # array of dicts with keys 'msg' and 'details'
 
         # create verification id lists
         expected_ids = [row['id'] for row in self.expected_rows]
