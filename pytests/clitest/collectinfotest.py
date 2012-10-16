@@ -9,7 +9,9 @@ LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log",
                       "ns_server.couchdb.log", "ns_server.debug.log",
                       "ns_server.error.log", "ns_server.info.log",
                       "ns_server.views.log", "stats.log",
-                      "memcached.log"]
+                      "memcached.log", "ns_server.mapreduce_errors.log",
+                      "ns_server.stats.log", "ns_server.xdcr_errors.log",
+                      "ns_server.xdcr.log"]
 
 class collectinfoTests(CliBaseTest):
 
@@ -101,10 +103,25 @@ class collectinfoTests(CliBaseTest):
                     missing_buckets = True
                     self.log.error("%s stats are missed in stats.log" % (bucket.name))
 
-            if missing_logs is True:
+            command = "du -s cbcollect_info*/*"
+            output, error = self.shell.execute_command(command.format(command))
+            self.shell.log_command_output(output, error)
+            empty_logs = False
+            if len(error) > 0:
+                raise Exception("uable to list file size. Check du command output for help")
+            for output_line in output:
+                output_line = output_line.split()
+                file_size = int(output_line[0])
+                if file_size == 0:
+                    empty_logs = True
+                    self.log.error("%s is empty" % (output_line[1]))
+
+            if missing_logs:
                 raise Exception("Bad log file package generated. Missing logs")
-            if missing_buckets is True:
+            if missing_buckets:
                 raise Exception("Bad stats.log which miss some bucket information")
+            if empty_logs:
+                raise Exception("Collect empty log files")
         elif os == "windows":
             # try to figure out what command works for windows for verification
             pass
