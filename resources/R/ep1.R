@@ -2767,7 +2767,7 @@ if (nrow(indexer_stats) > 0) {
     p <- ggplot(indexer_stats, aes(row, indexing_throughput, color=buildinfo.version, label=indexing_throughput))
     p <- p + labs(x="----time (sec)--->", y="ops/sec")
     p <- p + geom_point()
-    p <- addopts(p, paste("Indexing throughput", ns_node, sep=" - "))
+    p <- addopts(p, "Indexing throughput")
     print(p)
     makeFootnote(footnote)
 }
