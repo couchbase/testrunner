@@ -64,6 +64,7 @@ class PerfDefaults:
     avg_value_size          =   2048     # average size of document body
     db_compaction           =   30       # db fragmentation percentage triggers compaction
     ep_compaction           =   50       # ep_engine side fragmentation percentage which triggers compaction
+    hot_load_get            =   0        # fire gets instead of sets during hot load phase
     hot_stack               =   0        # maintain a hot stack to queue up previously SETted keys
     hot_stack_size          =   0        # size of the hot stack. 0: compute from hot-ratio * num-items (caution: in memory)
     hot_stack_rotate        =   0        # rotate the stack upon eviction rather than pop the item. 1: enable, 0: disable

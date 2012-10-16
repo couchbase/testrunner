@@ -382,6 +382,12 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
                 cfg.get('max-creates', 0) > 0 and \
                 cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
             break
+
+        if cfg.get('exit-after-gets', 0) and\
+           cfg.get('max-gets', 0) > 0 and\
+           cfg.get('max-gets', 0) <= cur.get('cur-gets', 0):
+            break
+
         if ctl.get('shutdown_event') is not None:
             if ctl['shutdown_event'].is_set():
                 break
@@ -615,6 +621,9 @@ def next_cmd(cfg, cur, store):
 
             if do_hot and stack:
                 key_num = stack.pop()
+
+            if cfg.get('exit-after-gets', 0):
+                key_num = cur['cur-gets']
 
             if not key_num:
                 key_num = choose_key_num(cur.get('cur-items', 0),
