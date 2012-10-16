@@ -765,8 +765,8 @@ class RestConnection(object):
     #returns otpNode
     def add_node(self, user='', password='', remoteIp='', port='8091'):
         otpNode = None
-        log.info('adding remote node : {0} to this cluster @ : {1}'\
-        .format(remoteIp, self.ip))
+        log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
+        .format(remoteIp, port, self.ip, self.port))
         api = self.baseUrl + 'controller/addNode'
         params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
                                    'user': user,
