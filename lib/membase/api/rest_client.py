@@ -5,7 +5,13 @@ import httplib2
 import socket
 import time
 import logger
-from couchbase.document import DesignDocument, View
+
+try:
+    from couchbase.document import DesignDocument, View
+except ImportError:
+    from lib.couchbase.document import DesignDocument, View
+
+
 from memcached.helper.kvstore import KVStore
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
 from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
