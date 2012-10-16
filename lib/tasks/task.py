@@ -334,7 +334,10 @@ class StatsWaitTask(Task):
 
     def _get_connection(self, server):
         if not self.conns.has_key(server):
-            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+            try:
+                self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+            except EOFError:
+                self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
         return self.conns[server]
 
     def _compare(self, cmp_type, a, b):
