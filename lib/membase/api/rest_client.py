@@ -237,7 +237,7 @@ class RestConnection(object):
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
             json_parsed = json.loads(content)
-            if status in ['200', '201', '202']:
+            if status:
                 return json_parsed, True
             else:
                 print("nodes/self with status {0}: {1}".format(status, json_parsed))
