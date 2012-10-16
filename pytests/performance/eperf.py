@@ -764,8 +764,16 @@ class EPerfMaster(perf.PerfBase):
             # Initialize indexing
             for ddoc_name, d in ddocs.items():
                 for view_name, x in d["views"].items():
-                    self.rest.query_view(ddoc_name, view_name, bucket,
-                                         {"limit": 10})
+                    for attempt in range(10):
+                        try:
+                            self.rest.query_view(ddoc_name, view_name, bucket,
+                                                 {"limit": 10})
+                        except Exception as e:
+                            time.sleep(2)
+                        else:
+                            break
+                    else:
+                        raise e
 
             # Wait until there are no active indexing tasks
             if self.parami('wait_for_indexer', 1):
