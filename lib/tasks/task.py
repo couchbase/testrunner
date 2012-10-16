@@ -301,8 +301,8 @@ class StatsWaitTask(Task):
     def check(self, task_manager):
         stat_result = 0
         for server in self.servers:
-            client = self._get_connection(server)
             try:
+                client = self._get_connection(server)
                 stats = client.stats(self.param)
                 if not stats.has_key(self.stat):
                     self.state = FINISHED
