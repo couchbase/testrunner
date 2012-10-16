@@ -379,7 +379,8 @@ memcached_stats$row <- as.numeric(memcached_stats$row)
 memcached_stats$ep_diskqueue_drain <- as.numeric(memcached_stats$ep_diskqueue_drain)
 memcached_stats$uptime <- as.numeric(memcached_stats$uptime)
 
-# memcached_stats $ep_bg_wait_avg <- as.numeric(memcached_stats $ep_bg_wait_avg)
+memcached_stats$ep_bg_wait_avg <- as.numeric(memcached_stats$ep_bg_wait_avg) / 1000
+memcached_stats$ep_bg_load_avg <- as.numeric(memcached_stats$ep_bg_load_avg) / 1000
 # memcached_stats $ep_tap_bg_fetched <- as.numeric(memcached_stats $ep_tap_bg_fetched)
 # memcached_stats $ep_bg_max_load <- as.numeric(memcached_stats $ep_bg_max_load)
 # memcached_stats $ep_bg_load <- as.numeric(memcached_stats $ep_bg_load)
@@ -2174,6 +2175,32 @@ for(ip in levels(factor(system_stats$ip))) {
                         "among snapshots across time",
                         sep="\n"))
 
+}
+
+for(ip in levels(factor(memcached_stats$ip))) {
+
+    node_stats = memcached_stats[memcached_stats$ip == ip, ]
+    node_stats$uptime = node_stats$uptime - min(node_stats$uptime)
+
+    cat(paste("generating ep-engine: ep_bg_wait_avg - \n", ip))
+    p <- ggplot(node_stats, aes(uptime, ep_bg_wait_avg, color=buildinfo.version , label= prettySize(ep_bg_wait_avg))) + labs(x="----time (sec)--->", y="ep_bg_wait_avg")
+    p <- p + geom_point()
+    p <- addopts(p, paste("ep-engine : ep_bg_wait_avg - ", ip))
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef(paste("The average wait time (ms) for an item",
+                        "before it is serviced by the dispatcher",
+                        sep="\n"))
+
+    cat(paste("generating ep-engine: ep_bg_load_avg - \n", ip))
+    p <- ggplot(node_stats, aes(uptime, ep_bg_load_avg, color=buildinfo.version , label= prettySize(ep_bg_load_avg))) + labs(x="----time (sec)--->", y="ep_bg_load_avg")
+    p <- p + geom_point()
+    p <- addopts(p, paste("ep-engine : ep_bg_load_avg - ", ip))
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef(paste("The average wait time (ms) for an item",
+                        "loaded from the persistence layer",
+                        sep="\n"))
 }
 
 cat("generating iostat \n")
