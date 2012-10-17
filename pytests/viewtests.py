@@ -482,6 +482,14 @@ class ViewBaseTests(unittest.TestCase):
         self.fail("unable to get view_results for {0} after {1} tries".format(view, num_tries))
 
     @staticmethod
+    def is_index_triggered(self, rest, ddoc):
+        run, block = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
+        if run or block:
+            return True
+        else:
+            return False
+
+    @staticmethod
     def _get_indexer_task_pid(self, rest, ddoc):
         active_tasks = rest.active_tasks()
         if u'error' in active_tasks:
@@ -524,6 +532,19 @@ class ViewBaseTests(unittest.TestCase):
             old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
         if old_pid:
             ViewBaseTests._wait_for_task_pid(old_pid, end_time)
+
+    @staticmethod
+    def get_update_seq(self, rest, view):
+        _, stat = rest.set_view_info(view.bucket, view.name)
+        update_seq = 0
+        for value in stat['update_seqs'].itervalues():
+                    update_seq += value
+        return update_seq
+
+    @staticmethod
+    def get_updates_num(self, rest, view):
+        _, stat = rest.set_view_info(view.bucket, view.name)
+        return stat['stats']['full_updates']
 
     @staticmethod
     def _setup_cluster(self):

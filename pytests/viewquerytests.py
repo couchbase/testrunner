@@ -274,6 +274,61 @@ class ViewQueryTests(unittest.TestCase):
         while rebalance_thread.is_alive():
             self._query_all_views(data_set.views, verify_expected_keys=True)
 
+    def test_employee_dataset_min_changes_check(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Create views with updateMinChanges option
+            2. Loader threads starts
+            3. Check thread for each view in each node is started
+                check thread wait for update_seqs will be more than
+                    updateMinChanges optoin
+                then checks that index is started
+        '''
+        docs_per_day = self.input.param('docs-per-day', 200)
+        min_changes = self.input.param('min-changes', 1000)
+        options = {"updateMinChanges" : min_changes,
+                   "replicaUpdateMinChanges" : min_changes}
+        data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit,
+                                   ddoc_options=options)
+
+        load_thread = StoppableThread(target=data_set.load,
+               name="load_thread",
+               args=(self, data_set.views[0]))
+        try:
+            load_thread.start()
+
+            check_threads = []
+            for server in self.servers:
+                for view in data_set.views:
+                    t = StoppableThread(target=data_set.wait_min_changes,
+                           name="wait-{0}".format(view.name),
+                           args=(self, server, view, min_changes))
+                    check_threads.append(t)
+                    t.start()
+
+            while True:
+                if not check_threads:
+                    return
+                self.thread_stopped.wait(60)
+                if self.thread_crashed.is_set():
+                    for t in check_threads:
+                        t.stop()
+                    return
+                else:
+                    check_threads = [d for d in check_threads if d.is_alive()]
+                    self.thread_stopped.clear()
+        finally:
+            load_thread.join()
+
     def test_employee_dataset_alldocs_queries(self):
         '''
         Test uses employee data set:
@@ -2728,6 +2783,39 @@ class EmployeeDataSet:
                 if end_idx > -1:
                     query.expected_keys = query.expected_keys[end_idx + 1:]
                 query.expected_keys.reverse()
+
+    def wait_min_changes(self, tc, server, view, min_change, timeout=600):
+        try:
+            rest = tc._rconn(server)
+            st = time.time()
+            while (time.time() - st) < timeout:
+                try:
+                    update_num = ViewBaseTests.get_update_seq(self, rest, view)
+                    tc.log.info("Update seq for %s:%s - %s is %s" %(
+                                    server.ip, server.port,
+                                    view.name, update_num))
+                    if update_num >= min_change:
+                        tc.assertTrue(ViewBaseTests.is_index_triggered(self, rest, view.name) or\
+                                      ViewBaseTests.get_updates_num(self, rest, view) > 0,
+                                  "Index for %s in %s:%s is not triggered!" %(
+                                                view.name, server.ip, server.port))
+                        tc.log.info("Index for %s in %s:%s is triggered successfully" %(
+                                                view.name, server.ip, server.port))
+                        return
+                except Exception as ex:
+                    if ex.message.find('missing') != -1:
+                        time.sleep(5)
+                    else:
+                        raise ex
+        except Exception as ex:
+            view.results.addError(tc, sys.exc_info())
+            tc.log.error("At least one of checking min changes threads is crashed: {0}".format(ex))
+            tc.thread_crashed.set()
+            raise ex
+        finally:
+            if not tc.thread_stopped.is_set():
+                tc.thread_stopped.set()
+
 
 class SimpleDataSet:
     def __init__(self, rest, num_docs, limit = None, reduce_fn=None):
