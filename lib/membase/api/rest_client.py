@@ -171,7 +171,7 @@ class RestConnection(object):
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         for iteration in xrange(3):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
-            if not success and type(http_res) == str and\
+            if not success and type(http_res) == unicode and\
                http_res.find('Node is unknown to this cluster') > -1:
                 log.error("Error 'Node is unknown to this cluster' was gotten,\
                     5 seconds sleep before retry")
@@ -211,7 +211,7 @@ class RestConnection(object):
         #determine the real couchApiBase for cluster_run
         for iteration in xrange(3):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
-            if not success and type(http_res) == str and\
+            if not success and type(http_res) == unicode and\
                http_res.find('Node is unknown to this cluster') > -1:
                 log.error("Error 'Node is unknown to this cluster' was gotten,\
                     5 seconds sleep before retry")
