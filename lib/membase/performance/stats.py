@@ -446,12 +446,12 @@ class StatsCollector(object):
         except Exception as e:
             print "[capture_mb_snapshot] Exception: {0}".format(str(e))
             return False
+        finally:
+            stats["time"] = time.time()
+            stats["ip"] = node.ip
+            self._mb_stats["snapshots"].append(stats)
+            print stats
 
-        stats["time"] = time.time()
-        stats["ip"] = node.ip
-        self._mb_stats["snapshots"].append(stats)
-
-        print stats
         print "[capture_mb_snapshot] memcache stats snapshot captured"
         return True
 
