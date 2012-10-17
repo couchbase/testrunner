@@ -322,6 +322,29 @@ class ClusterOperationHelper(object):
             log.info(msg % (value, server.ip))
 
     @staticmethod
+    def set_erlang_schedulers(servers, value="16:16"):
+        """
+        Set num of erlang schedulers.
+        Also erase async option (+A)
+        """
+        ClusterOperationHelper.stop_cluster(servers)
+
+        log = logger.Logger.get_logger()
+        for server in servers:
+            sh = RemoteMachineShellConnection(server)
+            product = "membase"
+            if sh.is_couchbase_installed():
+                product = "couchbase"
+            command = "sed -i 's/A\+ 16/S %s/' /opt/%s/bin/%s-server"\
+                      % (value, product, product)
+            o, r = sh.execute_command(command)
+            sh.log_command_output(o, r)
+            log.info("modified erlang +A to %s for server %s"
+                     % (value, server.ip))
+
+        ClusterOperationHelper.start_cluster(servers)
+
+    @staticmethod
     def change_erlang_gc(servers, value=None):
         """Change the frequency of erlang_gc process
            export ERL_FULLSWEEP_AFTER=0 (most aggressive)

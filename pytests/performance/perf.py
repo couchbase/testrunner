@@ -58,6 +58,11 @@ class PerfBase(unittest.TestCase):
             for node in self.input.servers:
                 self.set_mc_threads(node, mc_threads)
 
+        erlang_schedulers = self.param("erlang_schedulers",
+                                       PerfDefaults.erlang_schedulers)
+        if erlang_schedulers:
+            ClusterOperationHelper.set_erlang_schedulers(self.input.servers,
+                                                         erlang_schedulers)
         master = self.input.servers[0]
 
         self.is_multi_node = False
