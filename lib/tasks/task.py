@@ -1581,7 +1581,9 @@ class ViewCompactionTask(Task):
                                   format(fragmentation, self.precompacted_fragmentation))
                     # probably we already compacted, but no work needed to be done
                     self.set_result(self.with_rebalance)
-                    self.state = FINISHED
+                else:
+                    self.set_result(True)
+                self.state = FINISHED
             else:
                 #Sometimes the compacting is not started immediately
                 time.sleep(5)
