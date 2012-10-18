@@ -1,6 +1,7 @@
 import re
 import time
 import testconstants
+import gc
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -45,6 +46,8 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def operations(self, multi_nodes=False):
         self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
+        self.buckets = []
+        gc.collect()
         if self.total_buckets > 0:
             self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
 
