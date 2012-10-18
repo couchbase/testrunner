@@ -238,7 +238,7 @@ class RebalanceBaseTest(unittest.TestCase):
                           DELETE_RATIO=0,
                           ACCESS_RATIO=0,
                           EXPIRY_RATIO=0,
-                          ttl=5):
+                          ttl=5, data_perc=1):
         # TODO: assert no value greater than 1
         # TODO: assert sum of mutation ratios not greater than 1
 
@@ -250,6 +250,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
             kv_store = bucket_data[bucket]['kv_store']
             current_keys = kv_store.valid_items()
+            current_keys = current_keys[: int(len(current_keys) * data_perc)]
 
             get_docs_count = int(len(current_keys) * ACCESS_RATIO)
             del_docs_count = int(len(current_keys) * DELETE_RATIO)
@@ -483,11 +484,19 @@ class IncrementalRebalanceInTests(unittest.TestCase):
             bucket_data, self.load_ratio,
             keys_count=self.keys_count)
 
+        #if data are too big we will operate only with 10% of data
+        #because parallel ops is too slow due to num_locks=1 is used in old kvs store
+        data_perc = 1
+        if self.keys_count >= 100000:
+            data_perc = 0.1
+            self.log.info("we will operate only with 10% of data size {0} items".format(self.keys_count))
+
+        #self.keys_count = self.keys_count / 10
         for server in self.servers[1:]:
             self.log.info("PARALLEL LOAD")
             RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
                 DELETE_RATIO=self.delete_ratio,
-                ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio)
+                ACCESS_RATIO=self.access_ratio, EXPIRY_RATIO=self.expiry_ratio, data_perc=data_perc)
 
             self.log.info("INCREMENTAL REBALANCE IN")
             # rebalance in a server
