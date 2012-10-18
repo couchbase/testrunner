@@ -20,7 +20,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.rest_settings = self.input.membase_settings
         self.rest = RestConnection(self.master)
         self.rest_helper = RestHelper(self.rest)
-        self.sleep_time = 60
+        self.sleep_time = 10
         self.data_size = self.input.param('data_size', 1024)
         self.op_types = self.input.param('op_types', 'bucket')
         self.item_flag = self.input.param('item_flag', 4042322160)
@@ -63,6 +63,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.cluster.rebalance(self.servers[:1], servers_in, [])
         if self.op_types == "data":
             self._load_data_all_buckets("create")
+            if multi_nodes:
+                self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+            else:
+                self._wait_for_stats_all_buckets([self.master])
 
     def _load_data_all_buckets(self, op_type='create', start=0):
         loaded = False

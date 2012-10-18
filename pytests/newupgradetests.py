@@ -18,13 +18,16 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
         self.operations()
         upgrade_versions = self.input.param('upgrade_version', '2.0.0-1856-rel')
         upgrade_versions = upgrade_versions.split(";")
-        self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
+        self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         time.sleep(self.sleep_time)
         for upgrade_version in upgrade_versions:
             remote = RemoteMachineShellConnection(self.master)
             self._upgrade(upgrade_version, self.master, remote)
-            remote.disconnect()
             time.sleep(self.expire_time+5)
+            for bucket in self.buckets:
+                remote.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+            time.sleep(30)
+            remote.disconnect()
             self.verfication()
 
 class MultiNodesUpgradeTests(NewUpgradeBaseTest):
@@ -41,7 +44,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.product = 'couchbase-server'
         self._install(self.servers)
         self.operations(multi_nodes=True)
-        upgrade_versions = self.input.param('upgrade_version', '2.0.0-1856-rel')
+        upgrade_versions = self.input.param('upgrade_version', '2.0.0-1863-rel')
         upgrade_versions = upgrade_versions.split(";")
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
         time.sleep(self.sleep_time)
