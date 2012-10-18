@@ -1483,6 +1483,7 @@ class MonitorViewFragmentationTask(Task):
                            "username" : rest.username,
                            "password" : rest.password}
             rest = RestConnection(server_info)
+            status = False
             try:
                 status, content = rest.set_view_info(bucket, design_doc_name)
             except Exception as e:
