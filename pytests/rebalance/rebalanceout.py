@@ -21,7 +21,7 @@ class RebalanceOutTests(RebalanceBaseTest):
 
     This test begins with all servers clustered together and  loads a user defined
     number of items into the cluster. It then remove nodes_out from the cluster at a time
-    and rebalances. During the rebalance we perform docs ops(add/remove/update/readd)
+    and rebalances. During the rebalance we perform docs ops(add/remove/update/read)
     in the cluster( operate with a half of items that were loaded before).
     Once the cluster has been rebalanced we wait for the disk queues to drain,
     and then verify that there has been no data loss.
@@ -217,7 +217,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
         #increase timeout for big data
-        timeout = max(self.wait_timeout * 5, self.wait_timeout * self.num_items / 100000)
+        timeout = max(self.wait_timeout * 5, self.wait_timeout * self.num_items / 25000)
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
@@ -259,7 +259,7 @@ class RebalanceOutTests(RebalanceBaseTest):
     and all servers clustered together. Next steps are: stop defined
     node(master_restart = False by default), wait 20 sec and start the stopped node.
     Without waiting for the node to start up completely, rebalance out servs_out servers.
-    Expect that rebalance is failed. Wait for warmup complted and strart
+    Expect that rebalance is failed. Wait for warmup completed and start
     rebalance with the same configuration.
     Once the cluster has been rebalanced we wait for the disk queues to drain,
     and then verify that there has been no data loss."""
@@ -297,7 +297,7 @@ class RebalanceOutTests(RebalanceBaseTest):
     view with default map view funcs(is_dev_ddoc = True by default).
     Then we disabled compaction for ddoc. While we don't reach expected fragmentation
     for ddoc we update docs and perform view queries. We rebalance in  nodes_in nodes
-    and start compation when fragmentation was reached fragmentation_value.
+    and start compaction when fragmentation was reached fragmentation_value.
     During the rebalancing we wait while compaction will be completed.
     After rebalancing and compaction we wait for the disk queues to drain,
     and then verify that there has been no data loss."""
@@ -330,7 +330,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                 self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
-            self.fail("impossible to reach compaction value after %s sec" % self.wait_timeout * 20)
+            self.fail("impossible to reach compaction value after %s sec" % (self.wait_timeout * 20))
         fragmentation_monitor.result()
 
         active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
