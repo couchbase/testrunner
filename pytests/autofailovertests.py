@@ -23,20 +23,20 @@ class AutoFailoverBaseTest(unittest.TestCase):
     def common_setup(input, testcase):
         log = logger.Logger.get_logger()
         log.info("==============  common_setup was started for test #{0} {1}=============="\
-                      .format(self.case_number, self._testMethodName))
+                      .format(testcase.case_number, testcase._testMethodName))
         servers = input.servers
         RemoteUtilHelper.common_basic_setup(servers)
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         log.info("==============  common_setup was finished for test #{0} {1} =============="\
-                      .format(self.case_number, self._testMethodName))
+                      .format(testcase.case_number, testcase._testMethodName))
 
     @staticmethod
     def common_tearDown(servers, testcase):
         log = logger.Logger.get_logger()
         log.info("==============  common_tearDown was started for test #{0} {1} =============="\
-                          .format(self.case_number, self._testMethodName))
+                          .format(testcase.case_number, testcase._testMethodName))
         RemoteUtilHelper.common_basic_setup(servers)
 
         log.info("10 seconds delay to wait for couchbase-server to start")
@@ -53,7 +53,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         log.info("==============  common_tearDown was finished for test #{0} {1} =============="\
-                          .format(self.case_number, self._testMethodName))
+                          .format(testcase.case_number, testcase._testMethodName))
 
     @staticmethod
     def wait_for_failover_or_assert(master, autofailover_count, timeout, testcase):
@@ -107,6 +107,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
 class AutoFailoverTests(unittest.TestCase):
     def setUp(self):
         self._input = TestInputSingleton.input
+        self.case_number = self._input.param("case_number", 0)
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
         AutoFailoverBaseTest.common_setup(self._input, self)
