@@ -455,7 +455,7 @@ class ViewBaseTests(unittest.TestCase):
             except Exception as ex:
                 if invalid_results and ex.message.find('view_undefined') != -1:
                         raise ex
-                if ex.message.find('view_undefined') != -1 or ex.message.find('missing') != -1 or \
+                if ex.message.find('view_undefined') != -1 or ex.message.find('not_found') != -1 or \
                  ex.message.find('unable to reach') != -1 or ex.message.find('timeout') != -1 or \
                  ex.message.find('socket error') != -1 or ex.message.find('econnrefused') != -1 or \
                  ex.message.find("doesn't exist") != -1:
