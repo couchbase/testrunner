@@ -371,12 +371,12 @@ class XPerfTests(EPerfClient):
 
     @PerfWrapper.xperf()
     def test_mixed_unidir(self):
-        "Mixed KV workload"
+        """Mixed KV workload"""
         super(XPerfTests, self).test_eperf_mixed()
 
     @PerfWrapper.xperf(bidir=True)
     def test_mixed_bidir(self):
-        "Mixed KV workload"
+        """Mixed KV workload"""
         super(XPerfTests, self).test_eperf_mixed()
 
 
