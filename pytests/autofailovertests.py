@@ -97,7 +97,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
         failover_count = 0
         # check for inactiveFailed
         for node in cluster_status['nodes']:
-            log.info("'clusterMembership' for node {0}:{1} is {2}".format(node.ip, node.port, node['clusterMembership']))
+            log.info("'clusterMembership' for node {0} is {1}".format(node["otpNode"], node['clusterMembership']))
             if node['clusterMembership'] == "inactiveFailed":
                 failover_count += 1
 
