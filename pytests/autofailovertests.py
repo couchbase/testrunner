@@ -110,11 +110,12 @@ class AutoFailoverTests(unittest.TestCase):
         self.case_number = self._input.param("case_number", 0)
         self._servers = self._input.servers
         self.log = logger.Logger().get_logger()
-        AutoFailoverBaseTest.common_setup(self._input, self)
-        self._cluster_setup()
         self.master = self._servers[0]
         self.rest = RestConnection(self.master)
         self.timeout = 60
+
+        AutoFailoverBaseTest.common_setup(self._input, self)
+        self._cluster_setup()
 
     def tearDown(self):
         AutoFailoverBaseTest.common_tearDown(self._servers, self)
