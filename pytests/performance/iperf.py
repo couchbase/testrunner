@@ -184,13 +184,17 @@ class PerfWrapper(object):
     def rebalance(test):
         @functools.wraps(test)
         def wrapper(self, *args, **kargs):
-            """Trigger cluster rebalance (in and out) when ~half of queries
-            reached the goal.
+            """Trigger cluster rebalance (in and out) when ~half of queries or
+            create operations reached the goal.
             """
             total_clients = self.parami('total_clients', 1)
             rebalance_after = self.parami('rebalance_after', 0) / total_clients
-            self.level_callbacks = [('cur-queries', rebalance_after,
-                                     self.latched_rebalance)]
+            if self.parami('fg_max_ops', 0):
+                self.level_callbacks = [('cur-queries', rebalance_after,
+                                        self.latched_rebalance)]
+            else:
+                self.level_callbacks = [('cur-creates', rebalance_after,
+                                        self.latched_rebalance)]
             return PerfWrapper.multiply(test)(self, *args, **kargs)
         return wrapper
 
