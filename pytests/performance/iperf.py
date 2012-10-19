@@ -425,3 +425,8 @@ class RebalanceTests(EVPerfClient):
     def test_view_rebalance_2(self):
         """3 design ddocs, 2-2-4 views"""
         super(RebalanceTests, self).test_vperf4()
+
+    @PerfWrapper.rebalance
+    def test_mixed_rebalance(self):
+        """Mixed read/write test w/o views"""
+        super(RebalanceTests, self).test_eperf_mixed()
