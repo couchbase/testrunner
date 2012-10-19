@@ -113,7 +113,7 @@ class AutoFailoverTests(unittest.TestCase):
         AutoFailoverBaseTest.common_setup(self._input, self)
         self._cluster_setup()
         self.master = self._servers[0]
-        self.rest = RestConnection(master)
+        self.rest = RestConnection(self.master)
         self.timeout = 60
 
     def tearDown(self):
@@ -340,13 +340,13 @@ class AutoFailoverTests(unittest.TestCase):
         bucket_name = "default"
         master = self._servers[0]
         credentials = self._input.membase_settings
-        rest = RestConnection(master)
+        rest = RestConnection(self.master)
         info = rest.get_nodes_self()
-        rest.init_cluster(username=master.rest_username,
-                          password=master.rest_password)
+        rest.init_cluster(username=self.master.rest_username,
+                          password=self.master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         rest.reset_autofailover()
-        ClusterOperationHelper.add_all_nodes_or_assert(master, self._servers, credentials, self)
+        ClusterOperationHelper.add_all_nodes_or_assert(self.master, self._servers, credentials, self)
         bucket_ram = info.memoryQuota * 2 / 3
 
         if num_buckets == 1:
@@ -354,24 +354,22 @@ class AutoFailoverTests(unittest.TestCase):
                                ramQuotaMB=bucket_ram,
                                replicaNumber=replicas,
                                proxyPort=info.moxi)
-            ready = BucketOperationHelper.wait_for_memcached(master, bucket_name)
+            ready = BucketOperationHelper.wait_for_memcached(self.master, bucket_name)
             nodes = rest.node_statuses()
             rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
             buckets = rest.get_buckets()
         else:
-            created = BucketOperationHelper.create_multiple_buckets(master, replicas, howmany=num_buckets)
+            created = BucketOperationHelper.create_multiple_buckets(self.master, replicas, howmany=num_buckets)
             self.assertTrue(created, "unable to create multiple buckets")
             buckets = rest.get_buckets()
             for bucket in buckets:
-                ready = BucketOperationHelper.wait_for_memcached(master, bucket.name)
+                ready = BucketOperationHelper.wait_for_memcached(self.master, bucket.name)
                 self.assertTrue(ready, msg="wait_for_memcached failed")
                 nodes = rest.node_statuses()
                 rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
 
-#        self.load_data(master, bucket_name, keys_count)
-
         for bucket in buckets:
-            inserted_keys_cnt = self.load_data(master, bucket.name, keys_count)
+            inserted_keys_cnt = self.load_data(self.master, bucket.name, keys_count)
             log.info('inserted {0} keys'.format(inserted_keys_cnt))
 
         msg = "rebalance failed after adding these nodes {0}".format(nodes)
