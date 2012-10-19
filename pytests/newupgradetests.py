@@ -18,7 +18,7 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def test_upgrade(self):
         self._install([self.master])
         self.operations()
-        upgrade_versions = self.input.param('upgrade_version', '2.0.0-1869-rel')
+        upgrade_versions = self.input.param('upgrade_version', '2.0.0-1870-rel')
         upgrade_versions = upgrade_versions.split(";")
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         time.sleep(self.sleep_time)
@@ -47,7 +47,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.initial_num_servers])
         self.operations(multi_nodes=True)
-        upgrade_versions = self.input.param('upgrade_version', '2.0.0-1869-rel')
+        upgrade_versions = self.input.param('upgrade_version', '2.0.0-1870-rel')
         upgrade_versions = upgrade_versions.split(";")
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
         time.sleep(self.sleep_time)
@@ -71,7 +71,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(multi_nodes=True)
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         time.sleep(self.sleep_time)
-        upgrade_version = self.input.param('upgrade_version', '2.0.0-1869-rel')
+        upgrade_version = self.input.param('upgrade_version', '2.0.0-1870-rel')
         self.initial_version = upgrade_version
         self.product = 'couchbase-server'
         self._install(self.servers[self.initial_num_servers:self.num_servers])
@@ -121,7 +121,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(multi_nodes=True)
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         time.sleep(self.sleep_time)
-        upgrade_version = self.input.param('upgrade_version', '2.0.0-1869-rel')
+        upgrade_version = self.input.param('upgrade_version', '2.0.0-1870-rel')
         self.initial_version = upgrade_version
         self.product = 'couchbase-server'
         self._install(self.servers[self.initial_num_servers:self.num_servers])
