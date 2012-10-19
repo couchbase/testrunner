@@ -55,11 +55,14 @@ class collectinfoTests(CliBaseTest):
         self.shell.delete_files("%s.zip" % (self.log_filename))
         self.shell.delete_files("cbcollect_info*") #This is the folder generated after unzip the log package
         output, error = self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
-        if len(error) > 0:
-            raise Exception("Command throw out error message. Please check the output of remote_util")
-        for output_line in output:
-            if output_line.find("ERROR") >= 0 or output_line.find("Error") >= 0:
+        info = self.shell.extract_remote_info()
+        type = info.type.lower()
+        if type != "windows":
+            if len(error) > 0:
                 raise Exception("Command throw out error message. Please check the output of remote_util")
+            for output_line in output:
+                if output_line.find("ERROR") >= 0 or output_line.find("Error") >= 0:
+                    raise Exception("Command throw out error message. Please check the output of remote_util")
         self.verify_results(self.log_filename)
 
     def verify_results(self, file):
