@@ -59,12 +59,12 @@ class NewUpgradeBaseTest(BaseTestCase):
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
         if multi_nodes:
-            servers_in = [self.servers[i+1] for i in range(self.num_servers-1)]
+            servers_in = [self.servers[i+1] for i in range(self.initial_num_servers-1)]
             self.cluster.rebalance(self.servers[:1], servers_in, [])
         if self.op_types == "data":
             self._load_data_all_buckets("create")
             if multi_nodes:
-                self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+                self._wait_for_stats_all_buckets(self.servers[:self.initial_num_servers])
             else:
                 self._wait_for_stats_all_buckets([self.master])
 
@@ -75,7 +75,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         while not loaded and count < 60:
             try :
                 self._load_all_buckets(self.master, gen_load, op_type, self.expire_time, 1,
-                                       self.item_flag, False, batch_size=20000, pause_secs=5, timeout_secs=180)
+                                       self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
                 loaded = True
             except MemcachedError as error:
                 if error.status == 134:
@@ -110,7 +110,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.rest.init_cluster_port(self.rest_settings.rest_username, self.rest_settings.rest_password)
         time.sleep(self.sleep_time)
 
-    def verfication(self, multi_nodes=False):
+    def verification(self, multi_nodes=False):
         for bucket in self.buckets:
             if self.rest_helper.bucket_exists(bucket.name):
                 continue
@@ -123,9 +123,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         if self.op_types == "data":
             if multi_nodes:
                 self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-                self._verify_all_buckets(self.master, 1, self.wait_timeout*50, None, False, 1)
+                self._verify_all_buckets(self.master, 1, self.wait_timeout*50, None, True, 1)
                 self._verify_stats_all_buckets(self.servers[:self.num_servers])
             else:
                 self._wait_for_stats_all_buckets([self.master])
-                self._verify_all_buckets(self.master, 1, self.wait_timeout*50, None, False, 1)
+                self._verify_all_buckets(self.master, 1, self.wait_timeout*50, None, True, 1)
                 self._verify_stats_all_buckets([self.master])
