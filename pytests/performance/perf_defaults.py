@@ -20,6 +20,7 @@ class PerfDefaults:
 
     # load phase
     items               =    22000000    # 22 million
+    alog_hot_load       =    0           # run access log before hot load phase
 
     # access phase
     # Read:Insert:Update:Delete Ratio = 20:15:60:5.

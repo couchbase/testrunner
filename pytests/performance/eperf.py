@@ -524,6 +524,8 @@ class EPerfMaster(perf.PerfBase):
 
         if self.parami("hot_load_phase", 0) == 1:
             num_items = self.parami("hot_init_items", PerfDefaults.items)
+            if self.parami("alog_hot_load", PerfDefaults.alog_hot_load):
+                self.build_alog()
         else:
             num_items = self.parami("items", PerfDefaults.items)
 
