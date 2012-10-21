@@ -300,7 +300,7 @@ def generate_pending_tasks(task_queue, template, bucket, create_count,
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
 
-def generate_set_tasks(template, count, bucket = "default", batch_size = 100):
+def generate_set_tasks(template, count, bucket = "default", batch_size = 1000):
 
 
     if batch_size > count:
