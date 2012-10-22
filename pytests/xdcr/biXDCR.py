@@ -276,7 +276,6 @@ class bidirectional(XDCRReplicationBaseTest):
                                                                                      self.src_nodes[i].port))
                     self.adding_back_a_node(self.src_master, self.src_nodes[i])
                     self._cluster_helper.rebalance(self.src_nodes, [], [])
-                    self.src_nodes.remove(self.src_nodes[i])
                 else:
                     self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                     len(self.src_nodes)))
@@ -290,7 +289,6 @@ class bidirectional(XDCRReplicationBaseTest):
                                                                                           self.dest_nodes[i].port))
                     self.adding_back_a_node(self.dest_master, self.dest_nodes[i])
                     self._cluster_helper.rebalance(self.dest_nodes, [], [])
-                    self.dest_nodes.remove(self.dest_nodes[i])
                 else:
                     self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                     len(self.dest_nodes)))
