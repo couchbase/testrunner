@@ -1025,13 +1025,25 @@ class ViewCreateTask(Task):
             if self.view:
                 if self.with_query:
                     query = {"stale" : "ok"}
-                    content = \
-                        self.rest.query_view(self.design_doc_name, self.view.name, self.bucket, query)
+                    if self.view.is_spatial:
+                        content = \
+                            self.rest.query_view(self.design_doc_name, self.view.name,
+                                                 self.bucket, query, type="spatial")
+                    else:
+                        content = \
+                            self.rest.query_view(self.design_doc_name, self.view.name,
+                                                 self.bucket, query)
                 else:
                      _, json_parsed, _ = self.rest._get_design_doc(self.bucket, self.design_doc_name)
-                     if self.view.name not in json_parsed["views"].keys():
-                         self.set_exception(Exception("design doc {O} doesn't contain view {1}".format(
-                            self.design_doc_name, self.view.name)))
+                     if self.view.is_spatial:
+                         if self.view.name not in json_parsed["spatial"].keys():
+                             self.set_exception(
+                                Exception("design doc {O} doesn't contain spatial view {1}".format(
+                                self.design_doc_name, self.view.name)))
+                     else:
+                         if self.view.name not in json_parsed["views"].keys():
+                             self.set_exception(Exception("design doc {O} doesn't contain view {1}".format(
+                                self.design_doc_name, self.view.name)))
                 self.log.info("view : {0} was created successfully in ddoc: {1}".format(self.view.name, self.design_doc_name))
             else:
                 #if we have reached here, it means design doc was successfully updated
