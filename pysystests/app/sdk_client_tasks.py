@@ -14,7 +14,7 @@ logger = get_task_logger(__name__)
 
 import json
 import eventlet
-from random import randrange
+from random import randint
 
 import testcfg as cfg
 
@@ -78,8 +78,10 @@ def _send_msg(message):
                     "cb_port" : cfg.COUCHBASE_PORT})
 
     try:
-        port = randrange(50008, 50011)
+        port = randint(50008, 50011)
         sdk_client = eventlet.connect((SDK_IP, port))
+        sdk_client.setblocking(False)
+        sdk_client.settimeout(5)
         sdk_client.sendall(json.dumps(message))
     except Exception as ex:
         logger.error(ex)

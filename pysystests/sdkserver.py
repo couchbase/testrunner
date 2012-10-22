@@ -4,32 +4,47 @@ import random
 import string
 import json
 import sys
+import time
 from couchbase.couchbaseclient import CouchbaseClient
 from multiprocessing import Process
 import testcfg as cfg
 pool = eventlet.GreenPool(1000000)
+processMap = {}
 
 
 
 class SysCouchClient(CouchbaseClient):
-    def __init__(self, url, bucket, cred):
+    def __init__(self, url, bucket, cred, accport):
         self.pending_get_msgs = 0
-        super(SysCouchClient, self).__init__(url, bucket, cred)
+        self.bucket = bucket
+        self.url = url
+        self.cred = cred
+        self.ready = True
+        self.accport = accport
+        try:
+            super(SysCouchClient, self).__init__(url, bucket, cred)
+            print "sdk_%s: connected to %s" % (accport, url)
+        except Exception as ex:
+            print "sdk_%s: unable to establish connection to %s, %s " %\
+                (accport, url, ex)
+            self.ready = False
 
     def incr_pending_get_msgs(self, val):
         self.pending_get_msgs =  \
             self.pending_get_msgs + val
 
 class CouchClientManager():
-    def __init__(self):
+    def __init__(self, accport):
         self.client_map = {}
+        self.accport = accport
 
     def add_bucket_client(self, bucket = "default"):
         ip = cfg.COUCHBASE_IP
         port = cfg.COUCHBASE_PORT
         url = "http://%s:%s/pools/default/"  % (ip, port)
-        client = SysCouchClient(url, bucket,"")
-        self.client_map[bucket] = client
+        client = SysCouchClient(url, bucket,"", self.accport)
+        if client.ready == True:
+            self.client_map[bucket] = client
 
     def get_bucket_client(self, bucket):
         if bucket not in self.client_map:
@@ -45,12 +60,18 @@ class CouchClientManager():
                 break
             else:
                 c = c + _recv
+        self._requestHandler(c)
+
+    def _requestHandler(self, c, retries = 0):
         try:
             data = json.loads(c)
             res = self.exec_request(data)
         except ValueError as ex:
             print ex
-
+            print "unable to decode json: %s" % c
+        except Exception as ex:
+            processMap[self.accport]["connected"] = False
+            bucket = str(data['bucket'])
 
     def exec_request(self, data):
         if data['command'] == 'set':
@@ -100,15 +121,13 @@ class CouchClientManager():
 
         client = self.get_bucket_client(bucket)
 
-        # noop every 1k keys
-        cnt = 0
         for key in keys:
             doc = {"args" : [key, ttl, flags, kv]}
             try:
                 self.do_setq(doc, client)
             except Exception as ex:
-                print ex
-            cnt = cnt + 1
+                raise Exception(ex)
+
         client.recv_bulk_responses()
 
         return True
@@ -180,16 +199,44 @@ def _random_string(length):
 
 
 
-def start_listener(port):
-    print "Python sdk starting on port %s" % port
-    server = eventlet.listen(('127.0.0.1', port))
-    client_mgr = CouchClientManager()
+def monitorSubprocesses():
+    # when any subprocess ends, attempt to restart
     while True:
+        for port in processMap:
+            if not processMap[port]['process'].is_alive():
+                restart_listener(port)
+        time.sleep(1)
+
+def restart_listener(port):
+    stop_listener(port)
+    start_listener(port)
+
+def stop_listener(port):
+    process = processMap[port]["process"]
+    try:
+        print "sdk_%s: exiting" % (port)
+        process.terminate()
+    except Exception as ex:
+        print "sdk_%s: error occured termination %s" % (port, ex)
+
+def start_listener(port):
+    p = Process(target=_run, args=(port,))
+    processMap[port] = {"process" : p,
+                        "connected" : True,
+                        "alt_nodes" : []}
+    # TODO: alt_nodes for orchestrator rebalance detection
+
+    print "sdk_%s: starting" % port
+    p.start()
+
+def _run(port):
+    server = eventlet.listen(('127.0.0.1', port))
+    client_mgr = CouchClientManager(port)
+    while processMap[port]["connected"]:
         new_sock, address = server.accept()
         pool.spawn_n(client_mgr.requestHandler, new_sock)
 
-
 if __name__ == '__main__':
     for port in xrange(50008, 50012):
-        p = Process(target=start_listener, args=(port,))
-        p.start()
+        start_listener(port)
+    monitorSubprocesses()
