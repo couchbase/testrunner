@@ -72,8 +72,8 @@ class AutoFailoverBaseTest(unittest.TestCase):
     @staticmethod
     def wait_for_no_failover_or_assert(master, autofailover_count, timeout, testcase):
         log = logger.Logger.get_logger()
-
-        time_max_end = time.time() + timeout + 60
+        time_start = time.time()
+        time_max_end = time_start + timeout + 60
         failover_count = 0
 
         while time.time() < time_max_end:
