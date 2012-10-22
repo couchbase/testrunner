@@ -337,6 +337,9 @@ tryCatch({
     ns_server_data $ep_num_ops_del_meta <- as.numeric(ns_server_data$ep_num_ops_del_meta)
     ns_server_data $replication_commit_time <- as.numeric(ns_server_data$replication_commit_time)
     ns_server_data $replication_work_time <- as.numeric(ns_server_data$replication_work_time)
+    ns_server_data $replication_data_replicated <- as.numeric(ns_server_data$replication_data_replicated)
+    ns_server_data $replication_active_vbreps <- as.numeric(ns_server_data$replication_active_vbreps)
+    ns_server_data $replication_waiting_vbreps <- as.numeric(ns_server_data$replication_waiting_vbreps)
 }, error=function(e) {
     print("Cannot find XDC stats")
 })
@@ -2028,7 +2031,7 @@ if (nrow(ns_server_data) > 0) {
                         "from curr_connections)",
                         sep="\n"))
 
-    if(!is.null(ns_server_data$replication_size_rep_queue)) {
+    if(!is.null(ns_server_data$replication_data_replicated)) {
         cat("generating replication_changes_left \n")
         p <- ggplot(ns_server_data, aes(row, replication_changes_left, color=buildinfo.version, label=replication_changes_left)) + labs(x="----time (sec)--->", y="items")
         p <- p + geom_point()
@@ -2121,6 +2124,36 @@ if (nrow(ns_server_data) > 0) {
         makeMetricDef(paste("Total time all vb replicators",
                             "spent waiting for commit",
                             "and checkpoint",
+                            sep="\n"))
+
+        cat("generating replication_data_replicated\n")
+        p <- ggplot(ns_server_data, aes(row, replication_data_replicated, color=buildinfo.version, label=replication_data_replicated)) + labs(x="----time (sec)--->", y="Bytes")
+        p <- p + geom_point()
+        p <- addopts(p, "XDCR data replicated")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Data in bytes replicated",
+                            "to remote cluster",
+                            sep="\n"))
+
+        cat("generating replication_active_vbreps\n")
+        p <- ggplot(ns_server_data, aes(row, replication_active_vbreps, color=buildinfo.version, label=replication_active_vbreps)) + labs(x="----time (sec)--->", y="")
+        p <- p + geom_point()
+        p <- addopts(p, "XDCR active vb reps")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of active",
+                            "vbucket replications",
+                            sep="\n"))
+
+        cat("generating replication_waiting_vbreps\n")
+        p <- ggplot(ns_server_data, aes(row, replication_waiting_vbreps, color=buildinfo.version, label=replication_waiting_vbreps)) + labs(x="----time (sec)--->", y="")
+        p <- p + geom_point()
+        p <- addopts(p, "XDCR waiting vb reps")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of waiting",
+                            "vbucket replications",
                             sep="\n"))
 
     }
