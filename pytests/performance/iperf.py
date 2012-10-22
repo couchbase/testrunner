@@ -195,7 +195,10 @@ class PerfWrapper(object):
             else:
                 self.level_callbacks = [('cur-creates', rebalance_after,
                                         self.latched_rebalance)]
-            return PerfWrapper.multiply(test)(self, *args, **kargs)
+            if isinstance(self, XPerfTests) and 'bi' in self.id():
+                return test(self, *args, **kargs)
+            else:
+                return PerfWrapper.multiply(test)(self, *args, **kargs)
         return wrapper
 
 
@@ -430,6 +433,7 @@ class RebalanceTests(EVPerfClient):
     def test_mixed_rebalance(self):
         """Mixed read/write test w/o views"""
         super(RebalanceTests, self).test_eperf_mixed()
+
 
 class XRebalanceTests(XPerfTests):
 
