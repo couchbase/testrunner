@@ -487,12 +487,13 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         #if data are too big we will operate only with 10% of data
         #because parallel ops is too slow due to num_locks=1 is used in old kvs store
         data_perc = 1
-        if self.keys_count >= 100000:
-            data_perc = 0.1
-            self.log.info("we will operate only with 10% of data size {0} items".format(self.keys_count))
 
         #self.keys_count = self.keys_count / 10
         for server in self.servers[1:]:
+            if self.keys_count >= 100000:
+                data_perc *= 0.1
+                self.log.info("we will operate only with 10% of data size {0} items".format(self.keys_count))
+
             self.log.info("PARALLEL LOAD")
             RebalanceBaseTest.tasks_for_buckets(rest, self.task_manager, bucket_data,
                 DELETE_RATIO=self.delete_ratio,
