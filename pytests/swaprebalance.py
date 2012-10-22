@@ -374,8 +374,9 @@ class SwapRebalanceBase(unittest.TestCase):
             BaseTestCase._wait_warmup_completed(self, [master], bucket, wait_time=600)
             time.sleep(5)
 
+            ejectedNodes = list(set(optNodesIds) & set([node.id for node in rest.node_statuses()]))
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
-                ejectedNodes=optNodesIds)
+                ejectedNodes=ejectedNodes)
 
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
