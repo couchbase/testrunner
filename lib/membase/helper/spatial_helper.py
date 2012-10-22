@@ -139,6 +139,65 @@ class SpatialHelper:
             expected_docs = docs_inserted[:int(params['limit'])]
         return expected_docs
 
+    def verify_matching_keys(self, expected, current):
+        missing_docs = []
+        extra_docs = []
+        for key in expected:
+            if not key['key'] in [doc['id'] for doc in current]:
+                missing_docs.append(key)
+        for key in current:
+            if not key['id'] in [doc['key'] for doc in expected]:
+                extra_docs.append(key)
+        if missing_docs or extra_docs:
+            self.testcase.fail("Extra docs: {0},\n Missing docs: {1}".format(
+                                   extra_docs, missing_docs))
+        self.log.info("Current keys match expected keys")
+
+    def query_view(self, rest, ddoc, view, bucket='default', extra_params={}, num_expected=None,
+                   verify_keys=[], num_tries=20):
+        start = time.time()
+        for i in xrange(num_tries):
+            try:
+                #full_set=true&connection_timeout=60000
+                params = {"connection_timeout": 60000}
+                if not "full_set" in params and view.dev_view:
+                    params["full_set"] = True
+                params.update(extra_params)
+
+                results = rest.self.rest.query_view(ddoc.name, view.name, bucket, params,
+                                                    type="spatial")
+                delta = time.time() - start
+                if results:
+                    # Keep on trying until we have at least the number
+                    # of expected rows
+                    if (num_expected is not None) and \
+                            (len(results["rows"]) < num_expected):
+                        continue
+                    if verify_keys:
+                        self.testcase.assertTrue(results['rows'] == verify_keys)
+                        pass
+                    self.log.info("spatial returned in {0} seconds"
+                                  .format(delta))
+                    self.log.info("was able to get spatial results after "
+                                  "trying {0} times".format((i + 1)))
+                    return results
+            except Exception as ex:
+                if ex.message.find('view_undefined') != -1 or ex.message.find('not_found') != -1 or \
+                 ex.message.find('unable to reach') != -1 or ex.message.find('timeout') != -1 or \
+                 ex.message.find('socket error') != -1 or ex.message.find('econnrefused') != -1 or \
+                 ex.message.find("doesn't exist") != -1:
+                    self.log.error("spatial view {1} not ready yet , try again "
+                                   "in 5 seconds... , error {0}".format(ex, view.name))
+                    time.sleep(5)
+                else:
+                    raise ex
+
+        self.log.info("num_expected: {0}".format(num_expected))
+        self.log.info("num results:  {0}".format(len(results["rows"])))
+        self.testcase.fail(
+            "unable to get spatial view for {0} after {1} tries"
+            .format(view_name, num_tries))
+
     # Returns the keys of the deleted documents
     # If you try to delete a document that doesn't exists, just skip it
     def delete_docs(self, num_of_docs, prefix):
