@@ -458,7 +458,7 @@ class ViewBaseTests(unittest.TestCase):
                 if ex.message.find('view_undefined') != -1 or ex.message.find('not_found') != -1 or \
                  ex.message.find('unable to reach') != -1 or ex.message.find('timeout') != -1 or \
                  ex.message.find('socket error') != -1 or ex.message.find('econnrefused') != -1 or \
-                 ex.message.find("doesn't exist") != -1:
+                 ex.message.find("doesn't exist") != -1 or ex.message.find(u'missing') != -1:
                     self.log.error(
                             "view_results not ready yet , try again in {1} seconds... , error {0}"
                             .format(ex, timeout))
