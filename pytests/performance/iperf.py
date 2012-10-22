@@ -430,3 +430,10 @@ class RebalanceTests(EVPerfClient):
     def test_mixed_rebalance(self):
         """Mixed read/write test w/o views"""
         super(RebalanceTests, self).test_eperf_mixed()
+
+class XRebalanceTests(XPerfTests):
+
+    @PerfWrapper.rebalance
+    def test_mixed_rebalance(self):
+        """Mixed read/write test w/o views"""
+        super(XRebalanceTests, self).test_mixed_bidir()
