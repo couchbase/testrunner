@@ -987,13 +987,19 @@ class ViewCreateTask(Task):
             ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
             #if view is to be updated
             if self.view:
-                ddoc.add_view(self.view)
+                if self.view.is_spatial:
+                    ddoc.add_spatial_view(self.view)
+                else:
+                    ddoc.add_view(self.view)
             self.ddoc_rev_no = self._parse_revision(meta['rev'])
 
         except ReadDocumentException:
             # creating first view in design doc
             if self.view:
-                ddoc = DesignDocument(self.design_doc_name, [self.view])
+                if self.view.is_spatial:
+                    ddoc = DesignDocument(self.design_doc_name, [], spatial_views=[self.view])
+                else:
+                    ddoc = DesignDocument(self.design_doc_name, [self.view])
             #create an empty design doc
             else:
                 ddoc = DesignDocument(self.design_doc_name, [])
