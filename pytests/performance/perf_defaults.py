@@ -18,6 +18,11 @@ class PerfDefaults:
     sched_delays        =    1
     erlang_schedulers   =    ""
 
+    # publish results to cbmonitor dashboard
+    cbm                 =    0
+    cbm_host            =    "dashboard.hq.couchbase.com"
+    cbm_port            =    80
+
     # load phase
     items               =    22000000    # 22 million
     alog_hot_load       =    0           # run access log before hot load phase

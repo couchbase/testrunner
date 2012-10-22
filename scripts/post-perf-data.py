@@ -9,6 +9,7 @@ from logger import Logger
 import json
 from bz2 import BZ2Compressor
 
+from cbmonitor.rest_client import CbmonitorClient
 
 log = Logger.get_logger()
 
@@ -51,6 +52,32 @@ def flatten(keys, json):
                     result["{0}.{1}".format(key, _k)] = json[key][_k]
     return result
 
+def post_to_cbm(input_json):
+    """Collect and post results to cbmonitor dashboard"""
+    if not input_json:
+        return
+
+    if not "cbm" in input_json["info"] or not input_json["info"]["cbm"]:
+        return
+
+    try:
+        name, phase = input_json["name"].split(".")
+    except ValueError:
+        print "invalid spec name %s" % input_json["name"]
+        return
+
+    if phase != "loop":
+        print "cbmonitor only cares about access phase for now"
+        return
+
+    rs = {}
+    if "reb_dur" in input_json["info"]:
+        rs[("(%s) Rebalance Time, s" % name)] = int(input_json["info"]["reb_dur"])
+
+    client = CbmonitorClient(input_json["info"]["cbm-host"],
+                             input_json["info"]["cbm-port"])
+    client.post_results(input_json["buildinfo"]["version"], rs)
+
 if __name__ == "__main__":
     parser = OptionParser()
     parser.add_option("-n", "--node", dest="node", default="http://127.0.0.1:5984",
@@ -68,6 +95,7 @@ if __name__ == "__main__":
         server = Server(options.node)
         db = server.get_or_create_db(options.database)
         input_json = json.loads(open(options.input).read())
+        post_to_cbm(input_json)
 
         log.info("loaded file : {0} into a json document".format(options.input))
 

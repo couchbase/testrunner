@@ -917,7 +917,10 @@ class PerfBase(unittest.TestCase):
                                              PerfDefaults.carbon_timeout),
                'carbon-cache-size': self.parami('carbon_cache_size',
                                                 PerfDefaults.carbon_cache_size),
-               'time': self.parami('time', 0)}
+               'time': self.parami('time', 0),
+               'cbm': self.parami('cbm', PerfDefaults.cbm),
+               'cbm-host': self.param('cbm_host', PerfDefaults.cbm_host),
+               'cbm-port': self.parami('cbm_port', PerfDefaults.cbm_port)}
 
         cfg_params = cfg.copy()
         cfg_params['test_time'] = time.time()
