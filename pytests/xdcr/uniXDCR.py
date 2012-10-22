@@ -464,6 +464,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self.set_environ_param(1)
 
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        time.sleep(self._timeout / 6)
         self._async_modify_data()
         time.sleep(self._timeout / 6)
         self._enable_firewall(self.dest_master)
