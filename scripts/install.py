@@ -588,7 +588,7 @@ class InstallerJob(object):
                        name="installer-thread-{0}".format(server.ip),
                        args=(_params,))
             init_t = Thread(target=installer_factory(params).initialize,
-                       name="installer-thread-{0}".format(server.ip),
+                       name="initializer-thread-{0}".format(server.ip),
                        args=(_params,))
             uninstall_threads.append(u_t)
             install_threads.append(i_t)
