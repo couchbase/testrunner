@@ -1853,7 +1853,7 @@ class QueryView:
                                 self.log.info("Keys in query results are equal to expected")
                             except Exception as e:
                                 if e.message.find('Current ids and expected are not equal') != -1 and \
-                                                not consisent_view:
+                                                not self.consisent_view:
                                     attempt += 1
                                     if attempt == attempts_num:
                                         raise Exception("After 14 attemps expected number of groups {0} is not reached. {1}".format(query.expected_num_groups, e))
