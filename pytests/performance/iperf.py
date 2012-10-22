@@ -195,7 +195,7 @@ class PerfWrapper(object):
             else:
                 self.level_callbacks = [('cur-creates', rebalance_after,
                                         self.latched_rebalance)]
-            if isinstance(self, XPerfTests) and 'bi' in self.id():
+            if 'XRebalanceTests' in self.id():
                 return test(self, *args, **kargs)
             else:
                 return PerfWrapper.multiply(test)(self, *args, **kargs)
