@@ -91,7 +91,7 @@ class SpatialHelper:
             geom = {"type": "Point", "coordinates":
                         [random.randrange(-180, 180),
                          random.randrange(-90, 90)]}
-            value = {"name": doc_name, "age": 1000, "geometry": geom}
+            value = {"name": doc_name, "age": random.randrange(1, 1000), "geometry": geom}
             value.update(extra_values)
             if not return_docs:
                 doc_names.append(doc_name)
@@ -121,6 +121,23 @@ class SpatialHelper:
         self.log.info("inserted {0} json documents".format(num_of_docs))
         return doc_names
 
+    def generate_matching_docs(self, docs_inserted, params, value=None):
+        expected_docs = []
+        if 'bbox' in params:
+            for doc in docs_inserted:
+                if doc['geometry']['coordinates'][0] < params['bbox'][2] and\
+                doc['geometry']['coordinates'][0] > params['bbox'][0] and\
+                doc['geometry']['coordinates'][1] < params['bbox'][3] and\
+                doc['geometry']['coordinates'][1] > params['bbox'][1]:
+                    if values:
+                        expected_docs.append({'key' : doc['name'], 'value' : doc[value]})
+                    else:
+                        expected_docs.append(doc)
+        if 'skip' in params:
+            expected_docs = docs_inserted[int(params['skip']):]
+        if 'limit' in params:
+            expected_docs = docs_inserted[:int(params['limit'])]
+        return expected_docs
 
     # Returns the keys of the deleted documents
     # If you try to delete a document that doesn't exists, just skip it

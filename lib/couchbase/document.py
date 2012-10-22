@@ -1,12 +1,13 @@
 import json
 
 class DesignDocument():
-    def __init__(self, name, views, rev=None, options=None):
+    def __init__(self, name, views, spatial_views=[], rev=None, options=None):
         self.id = '_design/{0}'.format(name)
         self.rev = rev
         self.views = views
         self.name = name
         self.options = options
+        self.spatial_views = spatial_views
 
     @classmethod
     def _init_from_json(ddoc_self, design_doc_name, json_object):
@@ -30,6 +31,18 @@ class DesignDocument():
         if i == len(self.views):
             self.views.append(view)
 
+    def add_spatial_view(self, view):
+        i = 0
+        for current_view in self.spatial_views:
+            # if view already exists it will be updated
+            if view.name == current_view.name:
+                self.spatial_views[i] = view
+                break
+            i += 1
+
+        if i == len(self.spatial_views):
+            self.spatial_views.append(view)
+
     def delete_view(self, view):
         view_deleted = False
         i = 0
@@ -48,6 +61,10 @@ class DesignDocument():
 
     def as_json(self):
         json_object = {'views': {}}
+        if self.spatial_views:
+            json_object['spatial'] = {}
+            for sp_view in self.spatial_views:
+                json_object['spatial'][sp_view.name] = sp_view.as_json()[sp_view.name]
         for view in self.views:
             json_object['views'][view.name] = view.as_json()[view.name]
         if self.options:
@@ -61,11 +78,12 @@ class DesignDocument():
         return json.dumps(self.as_json())
 
 class View():
-    def __init__(self, name, map_func, red_func=None, dev_view=True):
+    def __init__(self, name, map_func, red_func=None, dev_view=True, is_spatial=False):
         self.name = name
         self.map_func = map_func
         self.red_func = red_func
         self.dev_view = dev_view
+        self.is_spatial = is_spatial
 
     @classmethod
     def _init_from_json(view_self, json_object):
