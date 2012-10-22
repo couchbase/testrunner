@@ -33,13 +33,16 @@ class RebalanceOutTests(RebalanceBaseTest):
         rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
         # define which doc's ops will be performed during rebalancing
         # allows multiple of them but one by one
+        tasks = []
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
-                self._load_all_buckets(self.master, self.gen_update, "update", 0)
+                tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             if("create" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_create, "create", 0)
+                tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
             if("delete" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_delete, "delete", 0)
+                tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
+            for task in tasks:
+                task.result()
         rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
