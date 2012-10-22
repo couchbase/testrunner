@@ -69,25 +69,14 @@ class SwapRebalanceBase(unittest.TestCase):
     def reset(self):
         self.log.info("==============  SwapRebalanceBase cleanup was started for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
+        self.log.info("Stopping load in Teardown")
+        SwapRebalanceBase.stop_load(self.loaders)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
-            try:
-                ClusterOperationHelper.cleanup_cluster([server])
-            except Exception, e:
-            #it is not guaranteed that the ejected nodes will immediately single nodes
-                if str(e).find('controller/rebalance failed when invoked with parameters') > -1:
-                    self.log.info(e.message)
-                    self.log.info("Try again in 60 seconds")
-                    time.sleep(60)
-                    ClusterOperationHelper.cleanup_cluster([server])
-                else:
-                    raise e
-            time.sleep(10)
+            ClusterOperationHelper.cleanup_cluster([server])
             if server.data_path:
                 rest = RestConnection(server)
                 rest.set_data_path(data_path=server.data_path)
-        self.log.info("Stopping load in Teardown")
-        SwapRebalanceBase.stop_load(self.loaders)
         ClusterHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.log.info("==============  SwapRebalanceBase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
@@ -372,10 +361,12 @@ class SwapRebalanceBase(unittest.TestCase):
             killed = rest.diag_eval(command)
             self.log.info("killed {0}:{1}??  {2} ".format(master.ip, master.port, killed))
             BaseTestCase._wait_warmup_completed(self, [master], bucket, wait_time=600)
-            time.sleep(5)
-
-            ejectedNodes = list(set(optNodesIds) & set([node.id for node in rest.node_statuses()]))
-            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
+            self.log.info("sleep for 10 sec after warmup")
+            time.sleep(10)
+            knownNodes = rest.node_statuses();
+            self.log.info("nodes are still in cluster: {0}".format([(node.ip, node.port) for node in knownNodes]))
+            ejectedNodes = list(set(optNodesIds) & set([node.id for node in knownNodes]))
+            rest.rebalance(otpNodes=[node.id for node in knownNodes],
                 ejectedNodes=ejectedNodes)
 
         self.assertTrue(rest.monitorRebalance(),
