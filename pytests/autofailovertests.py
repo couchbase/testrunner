@@ -57,9 +57,9 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
     @staticmethod
     def wait_for_failover_or_assert(master, autofailover_count, timeout, testcase):
-        time_max_end = time.time() + timeout + 60
+        time_start = time.time()
+        time_max_end = time_start + timeout + 60
         failover_count = 0
-
         while time.time() < time_max_end:
             failover_count = AutoFailoverBaseTest.get_failover_count(master)
             if failover_count == autofailover_count:
@@ -173,7 +173,7 @@ class AutoFailoverTests(unittest.TestCase):
         # AUTOFAIL_TEST_6
         timeout = self.timeout
         server_fail = self._servers[1]
-        rest.update_autofailover_settings(True, timeout)
+        self.rest.update_autofailover_settings(True, timeout)
         time_start = time.time()
         self._stop_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
