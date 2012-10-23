@@ -177,8 +177,7 @@ class PerfBase(unittest.TestCase):
         print "[perf.setUp] Customizing setup"
 
         self.set_loglevel()
-        self.set_max_concurrent_reps_per_doc()
-        self.set_xdcr_doc_batch_size_kb()
+        self.customize_xdcr_settings()
         self.set_autocompaction()
 
     def set_loglevel(self):
@@ -194,26 +193,30 @@ class PerfBase(unittest.TestCase):
         rest.set_mc_threads(mc_threads)
         print "[perf.setUp] num of memcached threads = %s" % mc_threads
 
-    def set_xdcr_doc_batch_size_kb(self):
-        """Set custom XDCR_DOC_BATCH_SIZE_KB"""
-
-        xdcr_doc_batch_size_kb = self.param('xdcr_doc_batch_size_kb', None)
-        if xdcr_doc_batch_size_kb:
-            for server in self.input.servers:
-                rc = RemoteMachineShellConnection(server)
-                rc.set_environment_variable('XDCR_DOC_BATCH_SIZE_KB',
-                                            xdcr_doc_batch_size_kb)
-
-    def set_max_concurrent_reps_per_doc(self):
-        """Set custom MAX_CONCURRENT_REPS_PER_DOC"""
-
+    def customize_xdcr_settings(self):
+        """Set custom XDCR environment variables"""
         max_concurrent_reps_per_doc = self.param('max_concurrent_reps_per_doc',
                                                  None)
+        xdcr_doc_batch_size_kb = self.param('xdcr_doc_batch_size_kb', None)
+        xdcr_checkpoint_interval = self.param('xdcr_checkpoint_interval', None)
+
         if max_concurrent_reps_per_doc:
-            for server in self.input.servers:
-                rc = RemoteMachineShellConnection(server)
-                rc.set_environment_variable('MAX_CONCURRENT_REPS_PER_DOC',
-                                            max_concurrent_reps_per_doc)
+            env_var = 'MAX_CONCURRENT_REPS_PER_DOC'
+            value = max_concurrent_reps_per_doc
+        elif xdcr_doc_batch_size_kb:
+            env_var = 'XDCR_DOC_BATCH_SIZE_KB'
+            value = xdcr_doc_batch_size_kb
+        elif xdcr_checkpoint_interval:
+            env_var = 'XDCR_CHECKPOINT_INTERVAL'
+            value = xdcr_checkpoint_interval
+        else:
+            return
+
+        print 'Changing {0} to {1}'.format(env_var, value)
+
+        for server in self.input.servers:
+            rc = RemoteMachineShellConnection(server)
+            rc.set_environment_variable(env_var, value)
 
     def set_ep_compaction(self, comp_ratio):
         """Set up ep_engine side compaction ratio"""
