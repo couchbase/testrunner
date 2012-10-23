@@ -12,6 +12,7 @@ from membase.api.rest_client import RestConnection, Bucket
 from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 try:
     import logging
@@ -301,6 +302,23 @@ class BaseTestCase(unittest.TestCase):
 
         self.log.info("%s %s documents..." % (data_op, self.num_items))
         self._load_all_buckets(self.master, gen_load, data_op, 0)
+
+    def verify_cluster_stats(self, servers=None, master=None, max_verify=None):
+        if servers is None:
+            servers = self.servers
+        if master is None:
+            master = self.master
+        if max_verify is None:
+            max_verify = self.max_verify
+        self._wait_for_stats_all_buckets(self.servers)
+        self._verify_all_buckets(master, max_verify=max_verify)
+        self._verify_stats_all_buckets(self.servers)
+        #verify that curr_items_tot corresponds to sum of curr_items from all nodes
+        verified = True
+        for bucket in self.buckets:
+            verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
+        self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
+
 
     #returns true if warmup is completed in wait_time sec,
     #otherwise return false
