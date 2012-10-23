@@ -6,10 +6,67 @@ import uuid
 import logger
 import time
 
+from basetestcase import BaseTestCase
+from couchbase.document import DesignDocument, View
 from membase.api.rest_client import RestConnection
 from membase.helper.spatial_helper import SpatialHelper
 from membase.helper.failover_helper import FailoverHelper
 
+class SpatialViewsTests(BaseTestCase):
+
+    def setUp(self):
+        super(SpatialViewsTests, self).setUp()
+        self.skip_rebalance = self.input.param("skip_rebalance", False)
+        self.use_dev_views = self.input.param("use-dev-views", False)
+        self.default_map = "function (doc) {emit(doc.geometry, doc.age);}"
+        self.default_ddoc_name = self.input.param("default_ddoc_name", "test-ddoc")
+        self.default_view_name = self.input.param("default_view_name", "test-view")
+        self.bucket_name = "default"
+        if self.standard_buckets:
+            self.bucket_name = "standard_bucket0"
+        if self.sasl_buckets:
+            self.bucket_name = "bucket0"
+        self.helper = SpatialHelper(self, self.bucket_name)
+        if not self.skip_rebalance:
+            self.cluster.rebalance(self.servers[:], self.servers[1:], [])
+        #load some items to verify
+        self.docs = self.helper.insert_docs(self.num_items, 'spatial-doc',
+                                            wait_for_persistence=True,
+                                            return_docs=True)
+
+    def tearDown(self):
+        super(SpatialViewsTests, self).tearDown()
+
+    def test_add_spatial_views(self):
+        num_ddoc = self.input.param('num-ddoc', 1)
+        views_per_ddoc = self.input.param('views-per-ddoc', 1)
+        non_spatial_views_per_ddoc = self.input.param('non-spatial-views-per-ddoc', 0)
+        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, non_spatial_views_per_ddoc)
+        self.create_ddocs(ddocs)
+
+    def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
+        ddocs = []
+        for i in xrange(ddocs_num):
+            views = []
+            for k in xrange(views_per_ddoc):
+                views.append(View(self.default_view_name + str(k), self.default_map,
+                                  dev_view=self.use_dev_views, is_spatial=True))
+            non_spatial_views = []
+            if non_spatial_views_per_ddoc:
+                for k in xrange(non_spatial_views_per_ddoc):
+                    views.append(View(self.default_view_name + str(k), 'function (doc) { emit(null, doc);}',
+                                      dev_view=self.use_dev_views))
+            ddocs.append(DesignDocument(self.default_ddoc_name + str(i), non_spatial_views, spatial_views=views))
+        return ddocs
+
+    def create_ddocs(self, ddocs):
+        for ddoc in ddocs:
+            if not (ddoc.views or ddoc.spatial_views):
+                self.cluster.create_view(self.master, ddoc.name, [], bucket=self.bucket_name)
+            for view in ddoc.views:
+                self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+            for view in ddoc.spatial_views:
+                self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
 
 class SpatialViewTests(unittest.TestCase):
     def setUp(self):

@@ -30,6 +30,8 @@ class SpatialHelper:
         # It's a set, so indexes can be updated without problems
         self._indexes = set([])
 
+    def set_bucket(self, bucket):
+        self.bucket = bucket
 
     def setup_cluster(self, do_rebalance=True):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
