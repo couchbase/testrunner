@@ -3,7 +3,7 @@ import time
 import logger
 from membase.api.exception import StatsUnavailableException, \
     ServerAlreadyJoinedException, RebalanceFailedException
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from mc_bin_client import MemcachedClient, MemcachedError
@@ -118,7 +118,7 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
-    def wait_for_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
+    def wait_for_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds= -1, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
                                                                                 stat_value, master.ip))
         rest = RestConnection(master)
@@ -157,7 +157,7 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
-    def wait_for_mc_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
+    def wait_for_mc_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds= -1, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
                                                                                 stat_value, master.ip))
         # keep retrying until reaches the server
@@ -186,8 +186,8 @@ class RebalanceHelper():
 
     @staticmethod
     #bucket is a json object that contains name,port,password
-    def wait_for_stats_int_value(master, bucket, stat_key, stat_value, option="==",timeout_in_seconds=120, verbose=True):
-        log.info("waiting for bucket {0} stat : {1} to {2} {3} on {4}".format(bucket, stat_key,option, \
+    def wait_for_stats_int_value(master, bucket, stat_key, stat_value, option="==", timeout_in_seconds=120, verbose=True):
+        log.info("waiting for bucket {0} stat : {1} to {2} {3} on {4}".format(bucket, stat_key, option, \
                                                                                 stat_value, master.ip))
         start = time.time()
         verified = False
@@ -229,7 +229,7 @@ class RebalanceHelper():
                           timeout_in_seconds=timeout_in_seconds)
             if not verified:
                 log.info("bucket {0}: stat_key {1} for server {2} timed out in {3}".format(bucket, stat_key, \
-                                                                                           server.ip, time.time()-start_time))
+                                                                                           server.ip, time.time() - start_time))
                 break
 
         return verified
@@ -252,8 +252,9 @@ class RebalanceHelper():
             except StatsUnavailableException:
                 log.info("unable to retrieve stats for any node. returning true")
                 break
-        rest = RestConnection(master)
-        RebalanceHelper.print_taps_from_all_nodes(rest, bucket)
+        if not verified:
+            rest = RestConnection(master)
+            RebalanceHelper.print_taps_from_all_nodes(rest, bucket)
         return verified
 
     @staticmethod
@@ -301,6 +302,8 @@ class RebalanceHelper():
     def verify_items_count(master, bucket, num_attempt=3, timeout=2):
         #get the #of buckets from rest
         rest = RestConnection(master)
+        if isinstance(bucket, Bucket):
+            bucket = bucket.name
         bucket_info = rest.get_bucket(bucket, num_attempt, timeout)
         replica_factor = bucket_info.numReplicas
         vbucket_active_sum = 0
@@ -354,7 +357,7 @@ class RebalanceHelper():
         delta = abs(delta)
 
         if delta > 0:
-            if sum==0:
+            if sum == 0:
                 missing_percentage = 0
             else:
                 missing_percentage = delta * 1.0 / (sum * (replica_factor + 1))
@@ -401,13 +404,13 @@ class RebalanceHelper():
         nodes_on_same_ip = True
         firstIp = nodes[0].ip
         if len(nodes) == 1:
-            nodes_on_same_ip  = False
+            nodes_on_same_ip = False
         else:
             for node in nodes:
                 if node.ip != firstIp:
                     nodes_on_same_ip = False
                     break
-        nodeIps = ["{0}:{1}".format(node.ip,node.port) for node in nodes]
+        nodeIps = ["{0}:{1}".format(node.ip, node.port) for node in nodes]
         log.info("current nodes : {0}".format(nodeIps))
         toBeAdded = []
         master = servers[0]
@@ -416,11 +419,11 @@ class RebalanceHelper():
             shuffle(selection)
         for server in selection:
             if nodes_on_same_ip:
-                if not "{0}:{1}".format(firstIp,server.port) in nodeIps:
+                if not "{0}:{1}".format(firstIp, server.port) in nodeIps:
                     toBeAdded.append(server)
                     servers_rebalanced.append(server)
                     log.info("choosing {0}:{1}".format(server.ip, server.port))
-            elif not "{0}:{1}".format(server.ip,server.port) in nodeIps:
+            elif not "{0}:{1}".format(server.ip, server.port) in nodeIps:
                 toBeAdded.append(server)
                 servers_rebalanced.append(server)
                 log.info("choosing {0}:{1}".format(server.ip, server.port))
@@ -460,7 +463,7 @@ class RebalanceHelper():
                       % how_many)
             return False, []
 
-        ejections = servers[1:how_many+1]
+        ejections = servers[1:how_many + 1]
 
         log.info("rebalancing out %s" % ejections)
         RebalanceHelper.begin_rebalance_out(servers[0], ejections)
@@ -539,37 +542,37 @@ class RebalanceHelper():
         verify vBuckets' state and items count(for active/replica) in them related to vBucketMap for all nodes in cluster
         '''
         awareness = VBucketAwareMemcached(RestConnection(master), bucket)
-        vb_map=awareness.vBucketMap
-        vb_mapReplica=awareness.vBucketMapReplica
-        replica_num=len(vb_mapReplica[0])
+        vb_map = awareness.vBucketMap
+        vb_mapReplica = awareness.vBucketMapReplica
+        replica_num = len(vb_mapReplica[0])
 
         #get state and count items for all vbuckets for each node
-        node_stats=RebalanceHelper.get_vBuckets_info(master)
-        state=True
+        node_stats = RebalanceHelper.get_vBuckets_info(master)
+        state = True
         #iterate throught all vbuckets by their numbers
         for num in vb_map:
             #verify that active vbucket in memcached  is also active in stats("hash)
-            if(node_stats[vb_map[num]]["vb_"+ str(num)][0]!="active"):
-                log.info("vBucket {0} in {1} node has wrong state {3}".format("vb_"+ str(num), vb_map[num], node_stats[vb_map[num]]["vb_"+ str(num)]));
+            if(node_stats[vb_map[num]]["vb_" + str(num)][0] != "active"):
+                log.info("vBucket {0} in {1} node has wrong state {3}".format("vb_" + str(num), vb_map[num], node_stats[vb_map[num]]["vb_" + str(num)]));
                 state = False
             #number of active items for num vBucket
-            vb = node_stats[vb_map[num]]["vb_"+ str(num)][1]
-            active_vb=vb_map[num]
+            vb = node_stats[vb_map[num]]["vb_" + str(num)][1]
+            active_vb = vb_map[num]
             #list of nodes for wich num vBucket is replica
-            replica_vbs=vb_mapReplica[key]
-            sum_items_replica=0
+            replica_vbs = vb_mapReplica[key]
+            sum_items_replica = 0
             #sum of replica items for all nodes for num vBucket
             for i in range(replica_num):
-                if(node_stats[vb_mapReplica[num][i]]["vb_"+ str(num)][0]!="replica"):
-                    log.info("vBucket {0} in {1} node has wrong state {3}".format("vb_"+ str(num), vb_mapReplica[num], node_stats[vb_mapReplica[num]]["vb_"+ str(num)]));
+                if(node_stats[vb_mapReplica[num][i]]["vb_" + str(num)][0] != "replica"):
+                    log.info("vBucket {0} in {1} node has wrong state {3}".format("vb_" + str(num), vb_mapReplica[num], node_stats[vb_mapReplica[num]]["vb_" + str(num)]));
                     state = False
-                sum_items_replica+=int(node_stats[replica_vbs[i]]["vb_"+ str(num)][1])
+                sum_items_replica += int(node_stats[replica_vbs[i]]["vb_" + str(num)][1])
             #print information about the discrepancy of the number of replica and active items for num vBucket
-            if (int(vb)*len(vb_mapReplica[num])!=sum_items_replica):
-                log.info("sum of active items doesn't correspond to replica's vBucets in {0} vBucket:".format("vb_"+ str(num)))
-                log.info("items in active vBucket {0}:{1}".format(vb_map[num], node_stats[vb_map[num]]["vb_"+ str(num)]))
+            if (int(vb) * len(vb_mapReplica[num]) != sum_items_replica):
+                log.info("sum of active items doesn't correspond to replica's vBucets in {0} vBucket:".format("vb_" + str(num)))
+                log.info("items in active vBucket {0}:{1}".format(vb_map[num], node_stats[vb_map[num]]["vb_" + str(num)]))
                 for j in range(replica):
-                    log.info("items in replica vBucket {0}: {1}".format(vb_mapReplica[num][j], node_stats[vb_mapReplica[num][j]]["vb_"+ str(num)]))
+                    log.info("items in replica vBucket {0}: {1}".format(vb_mapReplica[num][j], node_stats[vb_mapReplica[num][j]]["vb_" + str(num)]))
                     log.info(node_stats[vb_mapReplica[num][0]])
                 state = False
 
@@ -589,9 +592,9 @@ class RebalanceHelper():
         rest = RestConnection(master)
         port = rest.get_nodes_self().memcached
         nodes = rest.node_statuses()
-        _nodes_stats= {}
+        _nodes_stats = {}
         for node in nodes:
-            stat={}
+            stat = {}
             buckets = []
             _server = {"ip": node.ip, "port": node.port, "username": master.rest_username,
                            "password": master.rest_password}
@@ -604,14 +607,14 @@ class RebalanceHelper():
                     log.error("There are not any buckets in {0}:{1} node".format(node.ip, node.port))
                 else:
                     log.error("Impossible to get vBucket's information for {0}:{1} node".format(node.ip, node.port))
-                    _nodes_stats[node.ip+":"+str(node.port)]
+                    _nodes_stats[node.ip + ":" + str(node.port)]
                 continue
             mc.close()
-            vb_names=[key[:key.index(":")] for key in stat_hash.keys()]
+            vb_names = [key[:key.index(":")] for key in stat_hash.keys()]
 
             for name in vb_names:
-                stat[name]=[stat_hash[name + ":state"], stat_hash[name+":counted"]]
-            _nodes_stats[node.ip+":"+str(port)] = stat
+                stat[name] = [stat_hash[name + ":state"], stat_hash[name + ":counted"]]
+            _nodes_stats[node.ip + ":" + str(port)] = stat
         log.info(_nodes_stats)
         return _nodes_stats
 
