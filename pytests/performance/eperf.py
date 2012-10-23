@@ -617,6 +617,9 @@ class EPerfMaster(perf.PerfBase):
                 time.sleep(start_delay * self.parami("prefix", 0))
             max_creates = self.parami("max_creates", max_creates) / num_clients
             self.is_multi_node = False
+            if self.param('bg_protocol', None) == 'memcached-binary':
+                proto_prefix = 'memcached-binary'
+                port = '11211'
             if host is None:
                 host = self.input.servers[0].ip
             if port is None:
