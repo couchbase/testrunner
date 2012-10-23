@@ -86,7 +86,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
         testcase.assertFalse(failover_count == autofailover_count, "{0} nodes failed over, didn't expect {1} in {2} seconds".
                              format(failover_count, autofailover_count, time.time() - time_start))
-        log.info("{0} nodes failed over as expected in {2} seconds".format(failover_count, time_end - time_start))
+        log.info("{0} nodes failed over as expected in {1} seconds".format(failover_count, time_end - time_start))
 
     @staticmethod
     def get_failover_count(master):
