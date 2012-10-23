@@ -44,6 +44,14 @@ class SpatialViewsTests(BaseTestCase):
         ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, non_spatial_views_per_ddoc)
         self.create_ddocs(ddocs)
 
+    def test_add_spatial_views_case_sensative(self):
+        ddoc = DesignDocument(self.default_ddoc_name, [], spatial_views=[
+                                  View(self.default_view_name, self.default_map,
+                                       dev_view=self.use_dev_views, is_spatial=True),
+                                  View(self.default_view_name.upper(), self.default_map,
+                                       dev_view=self.use_dev_views, is_spatial=True)])
+        self.create_ddocs([ddoc])
+
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
         for i in xrange(ddocs_num):
