@@ -22,9 +22,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
     rebalances that nodes out the cluster, and then rebalances them back
     in. During the rebalancing we update all of the items in the cluster. Once the
     node has been removed and added back we  wait for the disk queues to drain, and
-    then verify that there has been no data loss. We then remove and add back two
-    nodes at a time and so on until we have reached the point where we are adding
-    back and removing at least half of the nodes."""
+    then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
+    We then remove and add back two nodes at a time and so on until we have reached the point
+    where we are adding back and removing at least half of the nodes."""
     def incremental_rebalance_in_out_with_max_buckets_number(self):
         self.bucket_size = self.input.param("bucket_size", 100)
         bucket_num = self.quota / self.bucket_size
@@ -48,9 +48,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self._async_load_all_buckets(self.master, gen, "update", 0)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
-            self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:self.num_servers])
+            self.verify_cluster_stats(self.servers[:self.num_servers])
 
     """Rebalances nodes out and in of the cluster while doing mutations.
 
@@ -58,9 +56,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
     removes one node, rebalances that node out the cluster, and then rebalances it back
     in. During the rebalancing we update all of the items in the cluster. Once the
     node has been removed and added back we  wait for the disk queues to drain, and
-    then verify that there has been no data loss. We then remove and add back two
-    nodes at a time and so on until we have reached the point where we are adding
-    back and removing at least half of the nodes."""
+    then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
+    We then remove and add back two nodes at a time and so on until we have reached the point
+    where we are adding back and removing at least half of the nodes."""
     def incremental_rebalance_in_out_with_mutation(self):
         self.cluster.rebalance(self.servers[:self.num_servers],
                                self.servers[1:self.num_servers], [])
@@ -79,9 +77,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                    self.servers[i:self.num_servers], [])
             for task in tasks:
                 task.result(self.wait_timeout * 20)
-            self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:self.num_servers])
+            self.verify_cluster_stats(self.servers[:self.num_servers])
 
     """Start-stop rebalance in/out with adding/removing aditional after stopping rebalance.
 
@@ -90,8 +86,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
     is stopped when its progress reached 20%. After we add  extra_nodes_in and remove
     extra_nodes_out. Restart rebalance with new cluster configuration. Later rebalance
     will be stop/restart on progress 40/60/80%. After each iteration we wait for
-    the disk queues to drain, and then verify that there has been no data loss.
-    Once cluster was rebalanced the test is finished.
+    the disk queues to drain, and then verify that there has been no data loss,
+    sum(curr_items) match the curr_items_total. Once cluster was rebalanced the test is finished.
     The oder of add/remove nodes looks like:
     self.nodes_init|servs_in|extra_nodes_in|extra_nodes_out|servs_out"""
     def start_stop_rebalance_in_out(self):
@@ -125,9 +121,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.assertTrue(stopped, msg="unable to stop rebalance")
             time.sleep(1)
             if RestHelper(rest).is_cluster_rebalanced():
-                self._wait_for_stats_all_buckets(result_nodes)
-                self._verify_all_buckets(self.master, max_verify=self.max_verify)
-                self._verify_stats_all_buckets(result_nodes)
+                self.verify_cluster_stats(result_nodes)
                 self.log.info("rebalance was completed when tried to stop rebalance on {0}%".format(str(expected_progress)))
                 break
             else:
@@ -140,7 +134,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
     It then adds one node, rebalances that node into the cluster,
     and then rebalances it back out. During the rebalancing we update all  of
     the items in the cluster. Once the nodes have been removed and added back we
-    wait for the disk queues to drain, and then verify that there has been no data loss.
+    wait for the disk queues to drain, and then verify that there has been no data loss,
+    sum(curr_items) match the curr_items_total.
     We then add and remove back two nodes at a time and so on until we have reached
     the point where we are adding back and removing at least half of the nodes."""
     def incremental_rebalance_out_in_with_mutation(self):
@@ -160,10 +155,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                    [], self.servers[init_num_nodes:init_num_nodes + i + 1])
             for task in tasks:
                 task.result()
-            self._wait_for_stats_all_buckets(self.servers[:init_num_nodes])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:init_num_nodes])
-
+            self.verify_cluster_stats(self.servers[:init_num_nodes])
 
     """Rebalances nodes into and out of the cluster while doing mutations and
     deletions.
@@ -173,9 +165,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
     out. During the rebalancing we update half of the items in the cluster and delete
     the other half. Once the node has been removed and added back we recreate the
     deleted items, wait for the disk queues to drain, and then verify that there has
-    been no data loss. We then remove and add back two nodes at a time and so on
-    until we have reached the point where we are adding back and removing at least
-    half of the nodes."""
+    been no data loss, sum(curr_items) match the curr_items_total. We then remove and
+    add back two nodes at a time and so on until we have reached the point
+    where we are adding back and removing at least half of the nodes."""
     def incremental_rebalance_in_out_with_mutation_and_deletion(self):
         self.cluster.rebalance(self.servers[:self.num_servers],
                                self.servers[1:self.num_servers], [])
@@ -193,9 +185,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
             self._load_all_buckets(self.master, gen_delete, "create", 0)
-            self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:self.num_servers])
+            self.verify_cluster_stats(self.servers[:self.num_servers])
 
     """Rebalances nodes into and out of the cluster while doing mutations and
     expirations.
@@ -205,9 +195,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
     out. During the rebalancing we update half of the items in the cluster and expire
     the other half. Once the node has been removed and added back we recreate the
     expired items, wait for the disk queues to drain, and then verify that there has
-    been no data loss. We then remove and add back two nodes at a time and so on
-    until we have reached the point where we are adding back and removing at least
-    half of the nodes."""
+    been no data loss, sum(curr_items) match the curr_items_total.We then remove and
+    add back two nodes at a time and so on until we have reached the point
+    where we are adding back and removing at least half of the nodes."""
     def incremental_rebalance_in_out_with_mutation_and_expiration(self):
         self.cluster.rebalance(self.servers[:self.num_servers],
                                self.servers[1:self.num_servers], [])
@@ -225,6 +215,4 @@ class RebalanceInOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
             self._load_all_buckets(self.master, gen_expire, "create", 0)
-            self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:self.num_servers])
+            self.verify_cluster_stats(self.servers[:self.num_servers])

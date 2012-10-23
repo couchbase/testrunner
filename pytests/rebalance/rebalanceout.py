@@ -22,7 +22,7 @@ class RebalanceOutTests(RebalanceBaseTest):
     and rebalances. During the rebalance we perform docs ops(add/remove/update/read)
     in the cluster( operate with a half of items that were loaded before).
     Once the cluster has been rebalanced we wait for the disk queues to drain,
-    and then verify that there has been no data loss.
+    and then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced the test is finished."""
     def rebalance_out_with_ops(self):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
@@ -42,9 +42,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
         rebalance.result()
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
-        self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
 
     """Rebalances nodes from a cluster during getting random keys.
 
@@ -54,8 +52,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     and rebalance it. During rebalancing we get random keys from all nodes and verify
     that are different every time. Once the cluster has been rebalanced
     we again get random keys from all new nodes in the cluster,
-    than we wait for the disk queues to drain,
-    and then verify that there has been no data loss."""
+    than we wait for the disk queues to drain, and then verify that there has been no data loss,
+    sum(curr_items) match the curr_items_total."""
     def rebalance_out_get_random_key(self):
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
         # get random keys for new added nodes
@@ -96,10 +94,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             num_iter += 1
 
         rebalance.result()
-
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
-        self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
 
     """Rebalances nodes out of a cluster while doing docs' ops.
 
@@ -108,7 +103,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     cluster and rebalances. During the rebalance we update(all of the items in the cluster)/
     delete( num_items/(num_servers -1) in each iteration)/
     create(a half of initial items in each iteration). Once the cluster has been rebalanced
-    the test waits for the disk queues to drain and then verifies that there has been no data loss.
+    the test waits for the disk queues to drain and then verifies that there has been no data loss,
+    sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced out of the cluster the test finishes."""
     def incremental_rebalance_out_with_ops(self):
         for i in reversed(range(1, self.num_servers, 2)):
@@ -129,11 +125,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                     gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
                     self._load_all_buckets(self.master, gen_delete, "delete", 0)
             rebalance.result()
-            self._wait_for_stats_all_buckets(self.servers[:i])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:i])
-
-
+            self.verify_cluster_stats(self.servers[:i])
 
     """Rebalances nodes out of a cluster during view queries.
 
@@ -143,8 +135,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     It then removes nodes_out nodes at a time and rebalances that node from the cluster.
     During the rebalancing we perform view queries for all views and verify the expected number
     of docs for them. Perform the same view queries after cluster has been completed. Then we wait for
-    the disk queues to drain, and then verify that there has been no data loss.
-    Once successful view queries the test is finished."""
+    the disk queues to drain, and then verify that there has been no data loss,sum(curr_items) match
+    the curr_items_total. Once successful view queries the test is finished."""
     def rebalance_out_with_queries(self):
         num_views = self.input.param("num_views", 5)
         is_dev_ddoc = self.input.param("is_dev_ddoc", False)
@@ -197,9 +189,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         rebalance.result()
         for bucket in self.buckets:
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
-        self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
 
     """Rebalances nodes out of a cluster during view queries incrementally.
 
@@ -209,8 +199,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     rebalances that node into the cluster. During the rebalancing we perform view queries
     for all views and verify the expected number of docs for them.
     Perform the same view queries after cluster has been completed. Then we wait for
-    the disk queues to drain, and then verify that there has been no data loss.
-    Once all nodes have been rebalanced in the test is finished."""
+    the disk queues to drain, and then verify that there has been no data loss, sum(curr_items) match
+    the curr_items_total. Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_out_with_queries(self):
         num_views = self.input.param("num_views", 5)
         is_dev_ddoc = self.input.param("is_dev_ddoc", True)
@@ -250,9 +240,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             #verify view queries results after rebalancing
             rebalance.result()
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
-            self._wait_for_stats_all_buckets(self.servers[:i])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:i])
+            self.verify_cluster_stats(self.servers[:i])
 
     """Rebalances nodes into a cluster when one node is warming up.
 
@@ -261,9 +249,9 @@ class RebalanceOutTests(RebalanceBaseTest):
     node(master_restart = False by default), wait 20 sec and start the stopped node.
     Without waiting for the node to start up completely, rebalance out servs_out servers.
     Expect that rebalance is failed. Wait for warmup completed and start
-    rebalance with the same configuration.
-    Once the cluster has been rebalanced we wait for the disk queues to drain,
-    and then verify that there has been no data loss."""
+    rebalance with the same configuration. Once the cluster has been rebalanced
+    we wait for the disk queues to drain, and then verify that there has been no data loss,
+    sum(curr_items) match the curr_items_total."""
     def rebalance_out_with_warming_up(self):
         master_restart = self.input.param("master_restart", False)
         if master_restart:
@@ -287,9 +275,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             self.log.info("second attempt to rebalance")
             rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
             rebalance.result()
-        self._wait_for_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
-        self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:len(self.servers) - self.nodes_out])
+        self.verify_cluster_stats(self.servers[:len(self.servers) - self.nodes_out])
 
     """Rebalances nodes out of cluster  during ddoc compaction.
 
@@ -300,8 +286,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     for ddoc we update docs and perform view queries. We rebalance in  nodes_in nodes
     and start compaction when fragmentation was reached fragmentation_value.
     During the rebalancing we wait while compaction will be completed.
-    After rebalancing and compaction we wait for the disk queues to drain,
-    and then verify that there has been no data loss."""
+    After rebalancing and compaction we wait for the disk queues to drain, and then
+    verify that there has been no data loss, sum(curr_items) match the curr_items_total."""
     def rebalance_out_with_ddoc_compaction(self):
         num_views = self.input.param("num_views", 5)
         fragmentation_value = self.input.param("fragmentation_value", 80)
@@ -353,11 +339,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         result = compaction_task.result(self.wait_timeout * 10)
         self.assertTrue(result)
         rebalance.result()
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
-        self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
-
-
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
 
     """Rebalances nodes out of a cluster while doing mutations and deletions.
 
@@ -366,8 +348,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     cluster and rebalances. During the rebalance we update half of the items in the
     cluster and delete the other half. Once the cluster has been rebalanced the test
     recreates all of the deleted items, waits for the disk queues to drain, and then
-    verifies that there has been no data loss. Once all nodes have been rebalanced out
-    of the cluster the test finishes."""
+    verifies that there has been no data loss, sum(curr_items) match the curr_items_total.
+    Once all nodes have been rebalanced out of the cluster the test finishes."""
     def incremental_rebalance_out_with_mutation_and_deletion(self):
         gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
@@ -377,9 +359,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             self._load_all_buckets(self.master, gen_2, "delete", 0)
             rebalance.result()
             self._load_all_buckets(self.master, gen_2, "create", 0)
-            self._wait_for_stats_all_buckets(self.servers[:i])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:i])
+            self.verify_cluster_stats(self.servers[:i])
 
     """Rebalances nodes out of a cluster while doing mutations and expirations.
 
@@ -388,8 +368,8 @@ class RebalanceOutTests(RebalanceBaseTest):
     rebalances. During the rebalance we update all of the items in the cluster and set
     half of the items to expire in 5 seconds. Once the cluster has been rebalanced the
     test recreates all of the expired items, waits for the disk queues to drain, and then
-    verifies that there has been no data loss. Once all nodes have been rebalanced out of
-    the cluster the test finishes."""
+    verifies that there has been no data loss, sum(curr_items) match the curr_items_total.
+    Once all nodes have been rebalanced out of the cluster the test finishes."""
     def incremental_rebalance_out_with_mutation_and_expiration(self):
         gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
@@ -401,6 +381,4 @@ class RebalanceOutTests(RebalanceBaseTest):
             rebalance.result()
             time.sleep(5)
             self._load_all_buckets(self.master, gen_2, "create", 0)
-            self._wait_for_stats_all_buckets(self.servers[:i])
-            self._verify_all_buckets(self.master, max_verify=self.max_verify)
-            self._verify_stats_all_buckets(self.servers[:i])
+            self.verify_cluster_stats(self.servers[:i])
