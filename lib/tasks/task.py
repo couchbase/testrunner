@@ -398,7 +398,7 @@ class GenericLoadingTask(Thread, Task):
             if self.only_store_hash:
                 value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
-        except MemcachedError as error:
+        except Exception as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -429,7 +429,7 @@ class GenericLoadingTask(Thread, Task):
             if self.only_store_hash:
                  value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
-        except MemcachedError as error:
+        except Exception as error:
             self.state = FINISHED
             self.set_exception(error)
 
