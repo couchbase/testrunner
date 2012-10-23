@@ -136,18 +136,6 @@ class PerfWrapper(object):
         def decorator(test):
             @functools.wraps(test)
             def wrapper(self, *args, **kargs):
-                """Define remote cluster and start replication (only before
-                load phase).
-                """
-                if self.parami('load_phase', 0) and \
-                        not self.parami('hot_load_phase', 0):
-                    master = self.input.clusters[0][0]
-                    slave = self.input.clusters[1][0]
-                    try:
-                        self.start_replication(master, slave, bidir=bidir)
-                    except Exception, why:
-                        print why
-
                 # Execute performance test
                 region = XPerfTests.get_region()
                 if 'bi' in self.id():
@@ -157,12 +145,25 @@ class PerfWrapper(object):
                 if region == 'east':
                     self.input.servers = self.input.clusters[0]
                     self.input.test_params['bucket'] = self.get_buckets()[0]
-                    return PerfWrapper.multiply(test)(self, *args, **kargs)
+                    xdc_test = PerfWrapper.multiply(test)(self, *args, **kargs)
                 elif region == 'west':
                     self.input.servers = self.input.clusters[1]
                     self.input.test_params['bucket'] = \
                         self.get_buckets(reversed=True)[0]
-                    return PerfWrapper.multiply(test)(self, *args, **kargs)
+                    xdc_test = PerfWrapper.multiply(test)(self, *args, **kargs)
+
+                # Define remote cluster and start replication (only after load
+                # phase)
+                if self.parami('load_phase', 0) and \
+                        not self.parami('hot_load_phase', 0):
+                    master = self.input.clusters[0][0]
+                    slave = self.input.clusters[1][0]
+                    try:
+                        self.start_replication(master, slave, bidir=bidir)
+                        self.wait_for_xdc_replication()
+                    except Exception, why:
+                        print why
+                return xdc_test
             return wrapper
         return decorator
 
@@ -304,6 +305,15 @@ class XPerfTests(EPerfClient):
             return 'west'
         else:
             return 'east'
+
+    def wait_for_xdc_replication(self):
+        rest = RestConnection(self.input.servers[0])
+        bucket = self.param('bucket', 'default')
+        while True:  # we have to wait at least once
+            print "Waiting for XDC replication to finish"
+            time.sleep(15)
+            if not rest.get_xdc_queue_size(bucket):
+                break
 
     def get_samples(self, rest, server='explorer'):
         # TODO: fix hardcoded cluster names

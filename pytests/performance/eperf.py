@@ -457,13 +457,6 @@ class EPerfMaster(perf.PerfBase):
         if not self.is_master:
             self.setUpBase1()
 
-    def wait_for_xdc_replication(self):
-        rest = RestConnection(self.input.servers[0])
-        bucket = self.param('bucket', 'default')
-        while rest.get_xdc_queue_size(bucket) > 0:
-            print "Waiting for XDC replication to finish"
-            time.sleep(30)
-
     def _dashboard(phase):
         def _outer(function):
             def _inner(self, *args, **kargs):
@@ -564,9 +557,6 @@ class EPerfMaster(perf.PerfBase):
                       start_at=start_at,
                       is_eperf=True)
             self.restartProxy()
-
-            if self.parami('wait_for_xdc_replication', 0):
-                self.wait_for_xdc_replication()
 
     def load_phase_clients_start_at(self, num_items, num_clients):
         """
