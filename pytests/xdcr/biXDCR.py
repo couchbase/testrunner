@@ -2,6 +2,7 @@ from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from xdcrbasetests import XDCRReplicationBaseTest
 from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 from random import randrange
 
 import time
@@ -314,8 +315,14 @@ class bidirectional(XDCRReplicationBaseTest):
                 self._cluster_helper.failover(self.src_nodes, [self.src_master])
                 self._log.info(" Rebalance out Source Master Node {0}".format(self.src_master.ip))
                 self._cluster_helper.rebalance(self.src_nodes, [], [self.src_master])
+                prev_master = self.src_master
                 self.src_nodes.remove(self.src_master)
                 self.src_master = self.src_nodes[0]
+                rest = RestConnection(self.src_master)
+                master_id = rest.get_nodes_self().id
+                for bucket in self._buckets:
+                    if bucket.master_id == RestConnection(prev_master).get_nodes_self().id:
+                        bucket.master_id = master_id
             elif "source" in self._failover and len(self.src_nodes) <= 1:
                 self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                 len(self.src_nodes)))
@@ -325,8 +332,14 @@ class bidirectional(XDCRReplicationBaseTest):
                 self._cluster_helper.failover(self.dest_nodes, [self.dest_master])
                 self._log.info(" Rebalance out Destination Master Node {0}".format(self.dest_master.ip))
                 self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_master])
+                prev_master = self.dest_master
                 self.dest_nodes.remove(self.dest_master)
                 self.dest_master = self.dest_nodes[0]
+                rest = RestConnection(self.dest_master)
+                master_id = rest.get_nodes_self().id
+                for bucket in self._buckets:
+                    if bucket.master_id == RestConnection(prev_master).get_nodes_self().id:
+                        bucket.master_id = master_id
             elif "destination" in self._failover and len(self.dest_nodes) <= 1:
                 self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                 len(self.dest_nodes)))
