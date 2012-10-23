@@ -160,9 +160,9 @@ class PerfWrapper(object):
                     slave = self.input.clusters[1][0]
                     try:
                         self.start_replication(master, slave, bidir=bidir)
-                        self.wait_for_xdc_replication()
                     except Exception, why:
                         print why
+                    self.wait_for_xdc_replication()
                 return xdc_test
             return wrapper
         return decorator
