@@ -620,7 +620,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
             self._set_toplogy_star()
         else:
-            raise "Not supported cluster topology : %s", self._cluster_topolog_str
+            raise "Not supported cluster topology : %s", self._cluster_topology_str
 
 
     def _load_data(self):
