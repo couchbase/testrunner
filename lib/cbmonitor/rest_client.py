@@ -13,12 +13,9 @@ class CbmonitorClient(RestConnection):
         hostname: cbmonitor dashboard hostname/ip address
         port: cbmonitor dashboard port
         """
-        serverInfo = {'ip': hostname,
-                      'username': '',
-                      'password': '',
-                      'port': port}
+        self.username = ''
+        self.password = ''
         self.baseUrl = 'http://%s:%s/' % (hostname, port)
-        super(CbmonitorClient, self).__init__(serverInfo)
 
     def post_results(self, build, metrics):
         """Post litmus test result to cbmonitor dashboard
@@ -36,7 +33,6 @@ class CbmonitorClient(RestConnection):
 
         logging.info("posting metrics %s for build %s to cbmonitor"
                      % (metrics, build))
-        api = self.baseUrl + 'litmus/post/'
 
         for metric, value in metrics.iteritems():
             params = {'build': build,
