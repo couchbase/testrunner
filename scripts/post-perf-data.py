@@ -70,9 +70,15 @@ def post_to_cbm(input_json):
         print "cbmonitor only cares about access phase for now"
         return
 
+    if "cluster_name" in input_json["info"]:
+        cluster_name = input_json["info"]['cluster_name']
+    else:
+        cluster_name = "unknown"
+
     rs = {}
     if "reb_dur" in input_json["info"]:
-        rs[("(%s) Rebalance Time, s" % name)] = int(input_json["info"]["reb_dur"])
+        rs[("[%s:%s] Rebalance Time, s" % (cluster_name, name))] = \
+            int(input_json["info"]["reb_dur"])
 
     client = CbmonitorClient(input_json["info"]["cbm-host"],
                              input_json["info"]["cbm-port"])
