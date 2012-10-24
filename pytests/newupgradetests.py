@@ -113,7 +113,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.log.info("bucket info :- %s" % bucketinfo)
         if self.op_types == "data":
             self._wait_for_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
-            self._verify_all_buckets(self.master, 1, self.wait_timeout*50, None, True, 1)
+            self._verify_all_buckets(self.master, 1, self.wait_timeout*50, self.max_verify, True, 1)
             self._verify_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
 
     def online_upgrade_swap_rebalance(self):
