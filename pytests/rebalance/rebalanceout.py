@@ -349,7 +349,7 @@ class RebalanceOutTests(RebalanceBaseTest):
 
         servs_out = self.servers[-self.nodes_out:]
         rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
-        result = compaction_task.result()
+        result = compaction_task.result(self.wait_timeout * 5)
         self.assertTrue(result)
         rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
