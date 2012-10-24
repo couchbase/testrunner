@@ -183,8 +183,11 @@ class RestConnection(object):
         if not http_res or http_res["version"][0:2] == "1.":\
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
-            for iteration in xrange(10):
+            for iteration in xrange(5):
                 if "couchApiBase" not in http_res.keys():
+                    if self.is_cluster_mixed():
+                        self.capiBaseUrl = self.baseUrl + "/couchBase"
+                        return
                     time.sleep(0.1)
                     http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
                 else:
@@ -223,8 +226,11 @@ class RestConnection(object):
         if not http_res or http_res["version"][0:2] == "1.":\
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
-            for iteration in xrange(10):
+            for iteration in xrange(5):
                 if "couchApiBase" not in http_res.keys():
+                    if self.is_cluster_mixed():
+                        self.capiBaseUrl = self.baseUrl + "/couchBase"
+                        return
                     time.sleep(0.1)
                     http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
                 else:
@@ -233,6 +239,15 @@ class RestConnection(object):
             raise Exception("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
 
+    def is_cluster_mixed(self):
+            http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
+            if http_res == u'unknown pool':
+                return False
+            versions = list(set([node["version"][:1] for node in http_res["nodes"]]))
+            if '1' in versions and '2' in versions:
+                 return True
+            return False
+
     def init_http_request(self, api):
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
@@ -240,10 +255,10 @@ class RestConnection(object):
             if status:
                 return json_parsed, True
             else:
-                print("nodes/self with status {0}: {1}".format(status, json_parsed))
+                print("{0} with status {1}: {2}".format(api, status, json_parsed))
                 return json_parsed, False
         except ValueError:
-            print("nodes/self: {1}".format(content))
+            print("{0}: {1}".format(api, content))
             return content, False
 
     def active_tasks(self):
