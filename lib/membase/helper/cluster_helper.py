@@ -209,7 +209,7 @@ class ClusterOperationHelper(object):
                 removed.rest_username = servers[0].rest_username
                 rest = RestConnection(removed)
                 start = time.time()
-                while time.time() - start < 10:
+                while time.time() - start < 30:
                     if len(rest.get_pools_info()["pools"]) == 0:
                         success_cleaned.append(removed)
                         break
