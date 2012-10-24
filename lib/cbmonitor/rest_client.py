@@ -35,14 +35,15 @@ class CbmonitorClient(RestConnection):
                      % (metrics, build))
         api = self.baseUrl + 'litmus/post/'
 
-        for metric, value in metrics.iteritems():
-            params = {'build': build,
-                      'metric': metric,
-                      'value': value}
-            try:
-                self._http_request(api, 'POST', urllib.urlencode(params),
-                                   timeout=30)
-            except ServerUnavailableException:
-                logging.error("cbmonitor server %s is not available"
-                              % self.baseUrl)
-                return
+        params = [('build', build)]
+        params += reduce(lambda x, y: x + y,
+                         map(lambda (k, v): [('metric', k), ('value', v)],
+                         metrics.iteritems()))
+
+        try:
+            self._http_request(api, 'POST', urllib.urlencode(params),
+                               timeout=30)
+        except ServerUnavailableException:
+            logging.error("cbmonitor server %s is not available"
+                          % self.baseUrl)
+            return
