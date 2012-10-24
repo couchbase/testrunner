@@ -33,6 +33,7 @@ class CbmonitorClient(RestConnection):
 
         logging.info("posting metrics %s for build %s to cbmonitor"
                      % (metrics, build))
+        api = self.baseUrl + 'litmus/post/'
 
         for metric, value in metrics.iteritems():
             params = {'build': build,
