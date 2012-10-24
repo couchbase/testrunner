@@ -20,19 +20,32 @@ class BaseConfig(object):
         self.CELERY_DEFAULT_ROUTING_KEY = 'default'
         self.CB_CLUSTER_TAG = cfg.CB_CLUSTER_TAG
         self.CELERY_DEFAULT_QUEUE =  cfg.CB_CLUSTER_TAG
-        self.CELERYBEAT_SCHEDULE = {}
+        self.CELERYBEAT_SCHEDULE = {
+            'systest_manager': {
+                'task': 'app.systest_manager.systestManager',
+                'schedule': timedelta(seconds=3),
+                'args' : ('systest_manager_'+cfg.CB_CLUSTER_TAG,)
+            },
+        }
+
+
+        default_ex = Exchange(self.CELERY_DEFAULT_EXCHANGE,
+                              routing_key = self.CB_CLUSTER_TAG,
+                              auto_delete = True,
+                              durable = True)
 
         self.CELERY_QUEUES = (
 
             # queue for default routing
-            Queue(self.CB_CLUSTER_TAG,
-                  Exchange(self.CELERY_DEFAULT_EXCHANGE,
-                           routing_key = self.CB_CLUSTER_TAG,
-                           auto_delete = True,
-                           durable = True), auto_delete = True),
+            Queue(self.CB_CLUSTER_TAG, default_ex, auto_delete = True),
+
+            # queue for system test-case execution
+            self.make_queue('systest_mgr_consumer', 'test.mgr', default_ex),
         )
 
-        self.CELERY_ROUTES = ()
+        self.CELERY_ROUTES = (
+            {'app.systest_manager.systestManager'  : self.route_args('systest_mgr_consumer','test.mgr') },
+        )
 
         for type_ in types:
             if type_ == "kv" or type_ == "all":

@@ -56,7 +56,6 @@ def workloadConsumer(workloadQueue = "workload_default", templateQueue = "worklo
             workloadMsg = rabbitHelper.getJsonMsg(workloadQueue)
             try:
                 workload = Workload(workloadMsg)
-                logger.error(workloadMsg)
                 # launch kvworkload
                 sysTestRunner.delay(workload)
             except KeyError:
@@ -111,7 +110,6 @@ def sysTestRunner(workload):
             if workload.preconditions is None:
                 prevWorkload.active = False
 
-    
     runTask = run.apply_async(args=[workload, prevWorkload], expires = workload.expires)
 
 
@@ -158,6 +156,9 @@ def run(workload, prevWorkload = None):
 
     rabbitHelper = run.rabbitHelper
 
+    # print out workload params
+    logger.error(workload.params)
+
     workload.active = True
 
     bucket = str(workload.bucket)
@@ -185,7 +186,6 @@ def run(workload, prevWorkload = None):
                 update_count = int(ops_sec *  workload.update_perc/100)
                 get_count = int(ops_sec *  workload.get_perc/100)
                 del_count = int(ops_sec *  workload.del_perc/100)
-
                 consume_queue =  workload.consume_queue
 
                 generate_pending_tasks.delay(task_queue, template, bucket, create_count,
@@ -203,7 +203,9 @@ def run(workload, prevWorkload = None):
 def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, signal = None):
     if sender == run:
         workload = args[0]
-        prevWorkload = args[1]
+        prevWorkload = None
+        if len(args) > 1 and isinstance(args[1], Workload):
+            prevWorkload = args[1]
 
         if workload.preconditions is not None:
 
@@ -239,7 +241,7 @@ def taskScheduler():
     tasks = []
 
     for workload in workloads:
-        if workload.active:    
+        if workload.active:
             task_queue = workload.task_queue
             # dequeue subtasks
             if rabbitHelper.qsize(task_queue) > 0:
@@ -344,11 +346,13 @@ def generate_get_tasks(count, docs_queue, bucket="default"):
             break
 
         keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
+        keys_retrieved = keys_retrieved + len(keys)
 
         if len(keys) > 0:
+            if keys_retrieved > count:
+                end_idx = keys_retrieved - count
+                keys = keys[:-end_idx]
             tasks.append(client.mget.s(keys, bucket))
-            keys_retrieved = keys_retrieved + len(keys)
-
 
     return tasks
 
@@ -369,10 +373,13 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default"):
             break
 
         keys = rabbitHelper.getJsonMsg(docs_queue, requeue = True)
+        keys_updated = keys_updated + len(keys)
 
         if len(keys) > 0:
+            if keys_updated > count:
+                end_idx = keys_updated - count
+                keys = keys[:-end_idx]
             tasks.append(client.mset.s(keys, template.__dict__, bucket, True))
-            keys_updated = keys_updated + len(keys)
 
     return tasks 
 
@@ -394,10 +401,13 @@ def generate_delete_tasks(count, docs_queue, bucket = "default"):
             break
 
         keys = rabbitHelper.getJsonMsg(docs_queue)
+        keys_deleted = keys_deleted + len(keys)
 
         if len(keys) > 0:
+            if keys_deleted > count:
+                end_idx = keys_deleted - count
+                keys = keys[:-end_idx]
             tasks.append(client.mdelete.s(keys, bucket))
-            keys_deleted = keys_deleted + len(keys)
 
 
     return tasks
@@ -426,6 +436,22 @@ class Workload(object):
         if self.cc_queues != None:
             if self.consume_queue == None:
                 self.consume_queue = self.cc_queues[0]
+
+    @staticmethod
+    def defaultSpec():
+        return {'update_perc': 0,
+                'postconditions': None,
+                'del_perc': 0,
+                'create_perc': 0,
+                'expires': None,
+                'bucket': 'default',
+                'ops_per_sec': 0,
+                'consume_queue': None,
+                'preconditions': None,
+                'template': 'default',
+                'cc_queues': None,
+                'get_perc': 0,
+                'wait': None}
 
     def __setattr__(self, name, value):
         super(Workload, self).__setattr__(name, value)

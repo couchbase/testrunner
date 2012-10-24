@@ -8,7 +8,7 @@ import logging
 import testcfg as cfg
 
 
-celery = Celery(include=['app.sdk_client_tasks','app.rest_client_tasks','app.workload_manager','app.stats','app.admin_manager','app.query'])
+celery = Celery(include=['app.sdk_client_tasks','app.rest_client_tasks','app.workload_manager','app.stats','app.admin_manager','app.query','app.systest_manager'])
 config = None
 
 

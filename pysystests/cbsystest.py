@@ -33,6 +33,9 @@ def add_template_parser(parent):
 #TODO    parser.add_argument("--blobs",   nargs='+', help="data strings for non-json docs")
     parser.set_defaults(handler=import_template)
 
+#TODO    parser.add_argument("--blobs",   nargs='+', help="data strings for non-json docs")
+    parser.set_defaults(handler=import_template)
+
 
 def add_workload_parser(parent):
     parser = parent.add_parser("workload")
@@ -87,7 +90,12 @@ def add_query_parser(parent):
 
 def add_test_parser(parent):
     parser = parent.add_parser("test")
-    parser.add_argument("workloads", help="rebalance")
+
+    add_broker_arg(parser)
+    parser.add_argument("--fromfile", required = True, help="local file with test config to import")
+    #TODO: allow test to be cached and referenced by name
+
+    parser.set_defaults(handler=run_systemtest)
 
 def setup_run_parser():
     run_parser = subparser.add_parser('run')
@@ -114,7 +122,7 @@ def conv_to_secs(list_):
     return list_[0]*60*60 + list_[1]*60 + list_[2]
 
 def run_workload(args):
- 
+
     workload = {}
 
     if args.name != None:
@@ -123,17 +131,17 @@ def run_workload(args):
         pass
 
     if args.wait is not None:
-        args.wait = conv_to_secs(args.wait) 
+        args.wait = conv_to_secs(args.wait)
 
     if args.expires is not None:
         args.expires = conv_to_secs(args.expires)
 
     workload = { "bucket"      : args.bucket,
                  "ops_per_sec" : args.ops,
-                 "create_perc" : args.create, 
-                 "update_perc" : args.update, 
-                 "get_perc"    : args.get, 
-                 "del_perc"    : args.delete, 
+                 "create_perc" : args.create,
+                 "update_perc" : args.update,
+                 "get_perc"    : args.get,
+                 "del_perc"    : args.delete,
                  "cc_queues"   : args.cc_queues,
                  "consume_queue" : args.consume_queue,
                  "postconditions" : args.postcondition,
@@ -154,7 +162,7 @@ def import_template(args):
     if args.type == "json":
         json_val = {}
         for kv in args.kvpairs:
-            pair = '{%s}' % kv 
+            pair = '{%s}' % kv
             try:
                 pair = json.loads(pair)
                 json_val.update(pair)
@@ -219,6 +227,20 @@ def perform_query_tasks(args):
     rabbitHelper = RabbitHelper(args.broker)
     rabbitHelper.putMsg('query_'+cluster, json.dumps(queryMsg))
 
+def run_systemtest(args):
+
+    rabbitHelper = RabbitHelper(args.broker)
+    cluster = args.cluster
+
+    if args.fromfile is not None:
+
+        # load json config
+        json_data = open(args.fromfile)
+        test = json.load(json_data)
+
+        # upload test
+        rabbitHelper.putMsg('systest_manager_'+cluster, json.dumps(test))
+
 
 ### setup main arg parsers
 setup_run_parser()
@@ -232,4 +254,4 @@ args = parser.parse_args()
 if args.subparsers == "run" or\
     args.subparsers == "import":
     args.handler(args)
-    
+
