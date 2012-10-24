@@ -22,7 +22,7 @@ if [ -z ${erlang_threads} ]; then
 fi
 
 if [ ${skip_install} != "1" ]; then
-   python scripts/install.py -i ${ini_file} -p product=${product},version=${version_number},vbuckets=1024,parallel=True,disable_consistency=1,use_domain_names=1,erlang_threads=${erlang_threads}$toy
+   python scripts/install.py -i ${ini_file} -p product=${product},version=${version_number},vbuckets=1024,parallel=True,use_domain_names=1,erlang_threads=${erlang_threads}$toy
 else
    echo "No Setup"
 fi
@@ -36,7 +36,7 @@ if [ -z ${mem_quota} ] ; then
 fi
 
 if [ ${skip_run} != "1" ]; then
-   python pytests/performance/do_cluster.py -i ${ini_file} -c ${test_conf} -p load_phase=0,index_phase=0,access_phase=0,num_nodes=${1},mem_quota=${mem_quota},max_concurrent_reps_per_doc=${max_concurrent_reps_per_doc},xdcr_doc_batch_size_kb=${xdcr_doc_batch_size_kb} setUp
+   python pytests/performance/do_cluster.py -i ${ini_file} -c ${test_conf} -p load_phase=0,index_phase=0,access_phase=0,num_nodes=${1},mem_quota=${mem_quota} setUp
 else
    echo "No Cluster setup run"
 fi
