@@ -20,6 +20,7 @@ class FailoverBaseTest(unittest.TestCase):
     @staticmethod
     def common_setup(input, testcase):
         servers = input.servers
+        log = logger.Logger.get_logger()
         log.info("==============  common_setup was started for test #{0} {1}=============="\
                       .format(testcase.case_number, testcase._testMethodName))
         RemoteUtilHelper.common_basic_setup(servers)
@@ -32,10 +33,10 @@ class FailoverBaseTest(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(servers, testcase):
+        log = logger.Logger.get_logger()
         log.info("==============  common_tearDown was started for test #{0} {1} =============="\
                           .format(testcase.case_number, testcase._testMethodName))
         RemoteUtilHelper.common_basic_setup(servers)
-        log = logger.Logger.get_logger()
         log.info("10 seconds delay to wait for membase-server to start")
         time.sleep(10)
 
