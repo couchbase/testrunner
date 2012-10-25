@@ -5,12 +5,14 @@ import unittest
 import uuid
 import logger
 import time
+import string
 
 from basetestcase import BaseTestCase
 from couchbase.document import DesignDocument, View
 from membase.api.rest_client import RestConnection
 from membase.helper.spatial_helper import SpatialHelper
 from membase.helper.failover_helper import FailoverHelper
+
 
 class SpatialViewsTests(BaseTestCase):
 
@@ -51,6 +53,25 @@ class SpatialViewsTests(BaseTestCase):
                                   View(self.default_view_name.upper(), self.default_map,
                                        dev_view=self.use_dev_views, is_spatial=True)])
         self.create_ddocs([ddoc])
+
+    def test_add_single_spatial_view(self):
+        name_lenght = self.input.param('name_lenght', None)
+        view_name = self.input.param('view_name', self.default_view_name)
+        if name_lenght:
+            view_name = ''.join(random.choice(string.lowercase) for x in xrange(name_lenght))
+        not_compilable = self.input.param('not_compilable', False)
+        error = self.input.param('error', None)
+        map_fn = (self.default_map, 'function (doc) {emit(doc.geometry, doc.age);')[not_compilable]
+
+        ddoc = DesignDocument(self.default_ddoc_name, [], spatial_views=[
+                                  View(view_name, map_fn,
+                                  dev_view=self.use_dev_views, is_spatial=True)])
+        try:
+            self.create_ddocs([ddoc])
+        except Exception as ex:
+            if error and ex.message.find(error) != -1:
+                self.log.info("Error caught as expected %s" % error)
+            self.fail("Unexpected error appeared during run %s" % ex)
 
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
