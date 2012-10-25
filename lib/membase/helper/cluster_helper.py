@@ -195,7 +195,6 @@ class ClusterOperationHelper(object):
         helper.is_ns_server_running(timeout_in_seconds=testconstants.NS_SERVER_TIMEOUT)
         nodes = rest.node_statuses()
         master_id = rest.get_nodes_self().id
-        master_port = rest.get_nodes_self().port
         if len(nodes) > 1:
             log.info("rebalancing all nodes in order to remove nodes")
             rest.log_client_error("Starting rebalance from test, ejected nodes %s" % \
@@ -204,7 +203,7 @@ class ClusterOperationHelper(object):
                                           ejectedNodes=[node.id for node in nodes if node.id != master_id],
                                           wait_for_rebalance=wait_for_rebalance)
             success_cleaned = []
-            for removed in [node for node in nodes if (node.id != master_id and node.port != master_port)]:
+            for removed in [node for node in nodes if (node.id != master_id)]:
                 removed.rest_password = servers[0].rest_password
                 removed.rest_username = servers[0].rest_username
                 rest = RestConnection(removed)
@@ -218,14 +217,15 @@ class ClusterOperationHelper(object):
                 if time.time() - start > 10:
                     log.error("'pools' on node {0}:{1} - {2}".format(
                            removed.ip, removed.port, rest.get_pools_info()["pools"]))
-            for node in set([node for node in nodes if (node.id != master_id and node.port != master_port)]) - set(success_cleaned):
+            for node in set([node for node in nodes if (node.id != master_id)]) - set(success_cleaned):
                 log.error("node {0}:{1} was not cleaned after removing from cluster".format(
                            removed.ip, removed.port))
-            if len(set([node for node in nodes if (node.id != master_id and node.port != master_port)])\
+            if len(set([node for node in nodes if (node.id != master_id)])\
                     - set(success_cleaned)) != 0:
                 raise Exception("not all ejected nodes were cleaned successfully")
 
-            log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], removed))
+            log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], \
+                    [(node.id, node.port) for node in nodes if (node.id != master_id)]))
 
     @staticmethod
     def flushctl_start(servers, username=None, password=None):
