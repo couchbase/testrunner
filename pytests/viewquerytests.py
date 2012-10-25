@@ -1977,6 +1977,10 @@ class QueryView:
                                     self.results.addFailure(tc,(type(ex), ex.message, sys.exc_info()[2]))
                                     tc.thread_crashed.set()
                                     return
+                            else:
+                               self.log.error("Error {0} appeared during query run".format(ex))
+                               self.results.addError(tc, (Exception, "{0}: {1}".format(ex, ex.message), sys.exc_info()[2]))
+                               tc.thread_crashed.set()
                     if query.error:
                         self.log.error("No error raised for negative case. Expected error '{0}'".format(query.error))
                         self.results.addFailure(tc, (Exception, "No error raised for negative case", sys.exc_info()[2]))
