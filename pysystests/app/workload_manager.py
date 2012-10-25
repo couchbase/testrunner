@@ -203,9 +203,29 @@ def run(workload, prevWorkload = None):
 
     return workload
 
+# function triggered before any task is handled
 def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, signal = None):
+
+
     if sender == run:
         workload = args[0]
+        bucket = str(workload.bucket)
+        stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
+                                   bucket = bucket,
+                                   username = cfg.COUCHBASE_USER,
+                                   password = cfg.COUCHBASE_PWD)
+
+        # convert item count postcondition's to curr_item conditions
+        if workload.postconditions:
+
+            stat, cmp_type, value = \
+                stat_checker.parse_condition(workload.postconditions)
+
+            if stat == 'count':
+                curr_items = stat_checker.get_curr_items()
+                value = int(value) + int(curr_items)
+                workload.postconditions = "curr_items >= %s" % value
+
         prevWorkload = None
         if len(args) > 1 and isinstance(args[1], Workload):
             prevWorkload = args[1]
@@ -213,14 +233,10 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
         if workload.preconditions is not None:
 
             # block tasks against bucket until pre-conditions met
-            bucket = str(workload.bucket)
             bs = BucketStatus.from_cache(bucket)
             bs.block(bucket)
 
-            stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
-                                       bucket = bucket,
-                                       username = cfg.COUCHBASE_USER,
-                                       password = cfg.COUCHBASE_PWD)
+
             while not stat_checker.check(workload.preconditions):
                 time.sleep(1)
 
@@ -460,7 +476,7 @@ class Workload(object):
         super(Workload, self).__setattr__(name, value)
 
         # cache when active key mutated
-        if name == 'active':
+        if name == 'active' or name == 'postconditions':
             ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, self)
 
     @staticmethod

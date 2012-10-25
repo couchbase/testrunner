@@ -10,7 +10,7 @@
                     "desc" :  "load 10k items at 1k ops",
                     "workload" : {"bucket" : "default",
                                   "template" : "default",
-                                  "spec" : "s:100,ops:1000",
+                                  "spec" : "s:100,ccq:loadph1keys,ops:1000",
                                   "conditions" : "post:curr_items>10000"},
                     "query" : null,
                     "admin" : null},
@@ -22,6 +22,16 @@
                                   "template" : "default",
                                   "spec" : "s:100,ops:20000",
                                   "conditions" : "post:disk_write_queue>1000000"},
+                    "query" : null,
+                    "admin" : null},
+                "2" :
+                {
+                    "name" : "access till 5k",
+                    "desc" : "Access Mode until 50k new items created",
+                    "workload" : {"bucket" : "default",
+                                  "template" : "default",
+                                  "spec" : "g:70,s:30,coq:loadph1keys,ops:20000",
+                                  "conditions" : "post:count = 50000"},
                     "query" : null,
                     "admin" : null}
         }

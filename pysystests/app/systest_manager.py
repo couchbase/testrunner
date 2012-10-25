@@ -193,6 +193,8 @@ def createWorkload(workload):
             workloadSpec['del_perc'] = int(val)
         if key == 'ccq':
             workloadSpec['cc_queues'] = [str(val)]
+        if key == 'coq':
+            workloadSpec['consume_queue'] = str(val)
         if key == 't':
             workloadSpec['template'] = str(val)
         if key == 'ops':
@@ -200,4 +202,3 @@ def createWorkload(workload):
 
     workloadRunnable = Workload(workloadSpec)
     return workloadRunnable
-
