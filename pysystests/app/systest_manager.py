@@ -107,7 +107,7 @@ def launchSystest(testMsg):
 
 def runPhase(name, phase):
 
-    workload = workloadId = cluster = query = queryIds = None
+    workload = workloadIds = cluster = query = queryIds = None
     docTemplate = "default"
     rebalance_required = False
 
@@ -140,19 +140,39 @@ def runPhase(name, phase):
         rebalance_required = clusterMsg['rebalance_required']
 
     if workload is not None:
-        workloadRunnable = createWorkload(workload)
-        workloadId = workloadRunnable.id
-        logger.error("Starting workload %s" % workloadId)
-        sysTestRunner.delay(workloadRunnable)
+        workloadIds = activateWorkloads(workload)
 
     if query is not None:
         queryIds = activateQueries(query)
 
     # monitor phase
-    monitorPhase(runTime, workloadId, rebalance_required, queryIds)
+    monitorPhase(runTime, workloadIds, rebalance_required, queryIds)
 
     # phase complete: #TODO stat report
     time.sleep(5)
+
+def activateWorkloads(workload):
+
+    workloadIds = []
+
+    if isinstance(workload, list):
+        # multi bucket workload support
+        for workloadDefn in workload:
+            workloadId = _activateWorkloads(workloadDefn)
+            workloadIds.append(workloadId)
+            time.sleep(2)
+    else:
+        workloadId = _activateWorkloads(workload)
+        workloadIds.append(workloadId)
+
+    return workloadIds
+
+def _activateWorkloads(workloadDefn):
+    workloadRunnable = createWorkload(workloadDefn)
+    sysTestRunner.delay(workloadRunnable)
+    workloadId = workloadRunnable.id
+    logger.error("Started workload %s" % workloadId)
+    return workloadId
 
 def activateQueries(query):
 
@@ -217,7 +237,7 @@ def parseClusterReq(cluster):
     clusterMsg['rebalance_required'] = rebalance_required
     return clusterMsg
 
-def monitorPhase(runTime, workloadId, rebalancing = False, queryIds = None):
+def monitorPhase(runTime, workloadIds, rebalancing = False, queryIds = None):
 
     # monitor rebalance
     # monitor pre/post conditions lala
@@ -232,8 +252,12 @@ def monitorPhase(runTime, workloadId, rebalancing = False, queryIds = None):
             if rebalancing:
                 monitorRebalance()
                 rebalancing = False
-            elif workloadId is not None:
-                running = getWorkloadStatus(workloadId)
+            elif workloadIds is not None:
+                for workloadId in workloadIds:
+                    running = getWorkloadStatus(workloadId)
+                    if running == True:
+                        # there is still a workload active
+                        continue
             else:
                 running = False
 
@@ -303,6 +327,8 @@ def createWorkload(workload):
         key,val = op.split(':')
         if key == 's':
             workloadSpec['create_perc'] = int(val)
+        if key == 'b':
+            workloadSpec['bucket'] = str(val)
         if key == 'g':
             workloadSpec['get_perc'] = int(val)
         if key == 'u':

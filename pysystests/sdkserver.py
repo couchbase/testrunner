@@ -23,10 +23,10 @@ class SysCouchClient(CouchbaseClient):
         self.accport = accport
         try:
             super(SysCouchClient, self).__init__(url, bucket, cred)
-            print "sdk_%s: connected to %s" % (accport, url)
+            print "sdk_%s: connected to %s%s" % (accport, url, bucket)
         except Exception as ex:
-            print "sdk_%s: unable to establish connection to %s, %s " %\
-                (accport, url, ex)
+            print "sdk_%s: unable to establish connection to %s%s, %s " %\
+                (accport, url, bucket, ex)
             self.ready = False
 
     def incr_pending_get_msgs(self, val):
@@ -237,6 +237,6 @@ def _run(port):
         pool.spawn_n(client_mgr.requestHandler, new_sock)
 
 if __name__ == '__main__':
-    for port in xrange(50008, 50012):
+    for port in xrange(50008, 50010):
         start_listener(port)
     monitorSubprocesses()
