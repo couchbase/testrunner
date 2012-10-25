@@ -197,6 +197,8 @@ class PerfWrapper(object):
                 self.level_callbacks = [('cur-creates', rebalance_after,
                                         self.latched_rebalance)]
             if 'XRebalanceTests' in self.id():
+                if XPerfTests.get_region() == 'east':
+                    self.level_callbacks = []  # rebalance only one cluster
                 return test(self, *args, **kargs)
             else:
                 return PerfWrapper.multiply(test)(self, *args, **kargs)
