@@ -1,4 +1,3 @@
-
 {
     "name" : "conditons",
     "desc" : "basic test that uses conditions in each phase",
@@ -11,9 +10,8 @@
                     "workload" : {"bucket" : "default",
                                   "template" : "default",
                                   "spec" : "s:100,ccq:loadph1keys,ops:1000",
-                                  "conditions" : "post:curr_items>10000"},
-                    "query" : null,
-                    "admin" : null},
+                                  "conditions" : "post:curr_items>10000"}
+                    },
                 "1" :
                 {
                     "name" : "write queue 1M",
@@ -21,9 +19,8 @@
                     "workload" : {"bucket" : "default",
                                   "template" : "default",
                                   "spec" : "s:100,ops:20000",
-                                  "conditions" : "post:disk_write_queue>1000000"},
-                    "query" : null,
-                    "admin" : null},
+                                  "conditions" : "post:disk_write_queue>1000000"}
+                    },
                 "2" :
                 {
                     "name" : "access till 5k",
@@ -31,8 +28,7 @@
                     "workload" : {"bucket" : "default",
                                   "template" : "default",
                                   "spec" : "g:70,s:30,coq:loadph1keys,ops:20000",
-                                  "conditions" : "post:count = 50000"},
-                    "query" : null,
-                    "admin" : null}
+                                  "conditions" : "post:count = 50000"}
+                    }
         }
 }

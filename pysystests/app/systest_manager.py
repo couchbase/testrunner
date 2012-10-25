@@ -100,8 +100,6 @@ def runPhase(name, phase):
     logger.error('\n')
     logger.error("Running Phase: %s (%s)" % (name, desc))
 
-    logger.error(phase)
-
     if cluster is not None:
 
         clusterMsg = parseClusterReq(cluster)
@@ -220,7 +218,6 @@ def createWorkload(workload):
     else:
         # simple spec
         params = workload.split(",")
-        logger.error(params)
 
 
 
