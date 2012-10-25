@@ -122,12 +122,11 @@ class CacheHelper():
         return ObjCacher().allinstances(CacheHelper.QUERYCACHEKEY)
 
     @staticmethod
-    def active_query():
-        active = None
+    def active_queries():
+        active = []
         for query in CacheHelper.queries():
             if query.active:
-                active = query
-                break
+                active.append(query)
         return active
 
     @staticmethod

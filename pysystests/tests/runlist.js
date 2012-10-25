@@ -1,3 +1,3 @@
 {
-    "runlist" : ["simple", "conditions", "rebalance"]
+    "runlist" : ["simple", "conditions", "rebalance","query"]
 }

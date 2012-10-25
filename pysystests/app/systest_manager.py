@@ -7,6 +7,7 @@ from celery.task.control import revoke
 import testcfg as cfg
 from rabbit_helper import PersistedMQ
 from app.workload_manager import Workload, sysTestRunner
+from app.query import QueryWorkload
 from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance
 
 from celery.utils.log import get_task_logger
@@ -106,7 +107,7 @@ def launchSystest(testMsg):
 
 def runPhase(name, phase):
 
-    workload = workloadId = cluster = query = None
+    workload = workloadId = cluster = query = queryIds = None
     docTemplate = "default"
     rebalance_required = False
 
@@ -145,14 +146,55 @@ def runPhase(name, phase):
         sysTestRunner.delay(workloadRunnable)
 
     if query is not None:
-        # send query
-        pass
+        queryIds = activateQueries(query)
 
     # monitor phase
-    monitorPhase(runTime, workloadId, rebalance_required)
+    monitorPhase(runTime, workloadId, rebalance_required, queryIds)
 
     # phase complete: #TODO stat report
     time.sleep(5)
+
+def activateQueries(query):
+
+    queryIds = []
+
+    if isinstance(query, list):
+        # multi-query support
+        for paramStr in query:
+            params = parseQueryStr(paramStr)
+            qid =_activateQueries(params)
+            queryIds.append(qid)
+    else:
+        params = parseQueryStr(query)
+        qid = _activateQueries(params)
+        queryIds.append(qid)
+
+    return queryIds
+
+def _activateQueries(params):
+    queryRunnable = QueryWorkload(params)
+    logger.error("Starting queries: %s" % params)
+    queryRunnable.active = True
+    return queryRunnable.id
+
+def parseQueryStr(query):
+
+    params = {"bucket" : "default"}
+
+    for op in query.split(','):
+        key, val = op.split(':')
+        if key == "qps":
+            params['queries_per_sec'] = int(val)
+        if key == 'ddoc':
+            params['ddoc'] = str(val)
+        if key == 'view':
+            params['view'] = str(val)
+        if key == 'bucket':
+            params['bucket'] = str(val)
+        if key == 'password':
+            params['password'] = str(val)
+
+    return params
 
 def parseClusterReq(cluster):
 
@@ -175,7 +217,7 @@ def parseClusterReq(cluster):
     clusterMsg['rebalance_required'] = rebalance_required
     return clusterMsg
 
-def monitorPhase(runTime, workloadId, rebalancing = False):
+def monitorPhase(runTime, workloadId, rebalancing = False, queryIds = None):
 
     # monitor rebalance
     # monitor pre/post conditions lala
@@ -198,6 +240,10 @@ def monitorPhase(runTime, workloadId, rebalancing = False):
         else:
             time.sleep(2)
 
+    if queryIds != None:
+        # stop queries
+        for qid in queryIds:
+            QueryWorkload.from_cache(qid).active = False
 
 def getWorkloadStatus(workloadId):
 

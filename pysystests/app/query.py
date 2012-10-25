@@ -24,8 +24,13 @@ def queryConsumer(queryQueue = "query_default"):
     rabbitHelper = queryConsumer.rabbitHelper
     queryQueueSize = rabbitHelper.qsize(queryQueue)
 
-    # retreive currently active query workload
-    active_query = CacheHelper.active_query()
+    # for cli retreive currently active query workload
+    # since multi-query is not supported here
+    active_query = None
+    all_queries = CacheHelper.active_queries()
+    if len(all_queries) > 0:
+        active_query = all_queries[0]
+
     if queryQueueSize> 0:
 
         # setup new query workload from queued message
@@ -52,10 +57,9 @@ Looks for active query workloads in the cache and runs them
 @celery.task
 def queryRunner():
 
-    # retreive currently active query workload
-    query = CacheHelper.active_query()
-
-    if query is not None:
+    # retreive all active query workloads
+    queries = CacheHelper.active_queries()
+    for query in queries:
 
         count = int(query.qps)
         params = {"stale" : "update_after"}
@@ -73,8 +77,8 @@ class QueryWorkload(object):
         self.qps = params["queries_per_sec"]
         self.ddoc = params["ddoc"]
         self.view = params["view"]
-        self.bucket = params["bucket"]
-        self.password = params["password"]
+        self.bucket = params.get("bucket")
+        self.password = params.get("password")
         self.task_queue = "%s_%s" % (self.bucket, self.id)
 
     def __setattr__(self, name, value):
