@@ -7,6 +7,7 @@ from celery.task.control import revoke
 import testcfg as cfg
 from rabbit_helper import PersistedMQ
 from app.workload_manager import Workload, sysTestRunner
+from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance
 
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
@@ -68,13 +69,15 @@ def launchSystest(testMsg):
         launchSystest(testMsg)
 
     logger.error('\n')
-    logger.error('###### Test Complete  ######')
+    logger.error('###### Test Complete!  ######')
     # TODO, some kind of pass/fail and/or stat info
 
 def runPhase(name, phase):
 
-    workload = admin = query = None
+    workload = workloadId = cluster = query = None
     docTemplate = "default"
+    rebalance_required = False
+
     name = "<phase name>"
     desc = "<phase description>"
 
@@ -85,8 +88,8 @@ def runPhase(name, phase):
         name = phase['name']
     if 'desc' in phase:
         desc = phase['desc']
-    if 'admin' in phase:
-        admin = phase['admin']
+    if 'cluster' in phase:
+        cluster = phase['cluster']
     if 'workload' in phase:
         workload = phase['workload']
     if 'query' in phase:
@@ -97,13 +100,18 @@ def runPhase(name, phase):
     logger.error('\n')
     logger.error("Running Phase: %s (%s)" % (name, desc))
 
-    if admin is not None:
-        # send admin msg
-        pass
+    logger.error(phase)
+
+    if cluster is not None:
+
+        clusterMsg = parseClusterReq(cluster)
+        perform_admin_tasks(clusterMsg)
+        rebalance_required = clusterMsg['rebalance_required']
 
     if workload is not None:
         workloadRunnable = createWorkload(workload)
-        logger.error("Starting workload %s" % workloadRunnable.id)
+        workloadId = workloadRunnable.id
+        logger.error("Starting workload %s" % workloadId)
         sysTestRunner.delay(workloadRunnable)
 
     if query is not None:
@@ -111,45 +119,80 @@ def runPhase(name, phase):
         pass
 
     # monitor phase
-    monitorPhase(runTime, workloadRunnable.id)
+    monitorPhase(runTime, workloadId, rebalance_required)
 
     # phase complete: #TODO stat report
     time.sleep(5)
 
-def monitorPhase(runTime, workloadId):
+def parseClusterReq(cluster):
+
+    clusterMsg = {'failover': '',
+                  'hard_restart': '',
+                  'rebalance_out': '',
+                  'only_failover': False,
+                  'soft_restart': '',
+                  'rebalance_in': ''}
+
+
+    rebalance_required = True
+
+    if 'add' in cluster:
+        clusterMsg['rebalance_in'] = cluster['add']
+
+    if 'rm' in cluster:
+        clusterMsg['rebalance_out'] = cluster['rm']
+
+    clusterMsg['rebalance_required'] = rebalance_required
+    return clusterMsg
+
+def monitorPhase(runTime, workloadId, rebalancing = False):
 
     # monitor rebalance
     # monitor pre/post conditions lala
 
+    running = True
     end_time = time.time() + int(runTime)
 
-    while True:
+    while running:
 
         if time.time() > end_time:
 
-           # kill any running tasks that do not have conditions
-            if workloadId is not None:
-                workload = Workload.from_cache(workloadId)
-
-                if workload is not None:
-                    if workload.postconditions is not None:
-                        # see if workload condition handler has stopped load
-                        if workload.active == False:
-                            logger.error("Postconditions met %s" % workload.postconditions)
-                            logger.error("Stopping workload %s" % workloadId)
-                            break
-                    else:
-                        logger.error("Runtime conditions met: %s's" % runTime)
-                        logger.error("Stopping workload %s" % workloadId)
-                        workload.active = False
-                        break
-                else:
-                    logger.error("Unable to fetch workload...cache down?")
-                    break
+            if rebalancing:
+                monitorRebalance()
+                rebalancing = False
+            elif workloadId is not None:
+                running = getWorkloadStatus(workloadId)
+            else:
+                running = False
 
         else:
             time.sleep(2)
 
+
+def getWorkloadStatus(workloadId):
+
+        running = True
+
+        workload = Workload.from_cache(workloadId)
+
+        # stop running tasks that do not have conditions
+        if workload is not None:
+            if workload.postconditions is not None:
+
+                # see if workload condition handler has stopped load
+                if workload.active == False:
+                    logger.error("Postconditions met %s" % workload.postconditions)
+                    logger.error("Stopping workload %s" % workloadId)
+                    running = False
+            else:
+                logger.error("Stopping workload %s" % workloadId)
+                workload.active = False
+                running = False
+        else:
+            logger.error("Unable to fetch workload...cache down?")
+            running = False
+
+        return running
 
 def createWorkload(workload):
 

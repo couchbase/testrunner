@@ -81,6 +81,11 @@ def perform_admin_tasks(adminMsg):
         logger.error(toBeEjectedNodes)
         rest.rebalance(otpNodes=allNodes, ejectedNodes=toBeEjectedNodes)
 
+def monitorRebalance():
+    rest = create_rest()
+    rest.monitorRebalance()
+
+
 @celery.task
 def perform_xdcr_tasks(xdcrMsg):
     logger.error(xdcrMsg)
@@ -118,8 +123,10 @@ def add_nodes(rest, servers=''):
 def remove_nodes(rest, servers=''):
     toBeEjectedNodes = []
     for server in servers.split():
+        ip, port = parse_server_arg(server)
         for node in rest.node_statuses():
-            if "%s" % node.ip == "%s" % server:
+            if "%s" % node.ip == "%s" % ip and\
+                "%s" % node.port == "%s" % port:
                 logger.error("Removing node %s" % node.id)
                 toBeEjectedNodes.append(node.id)
 
