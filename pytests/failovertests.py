@@ -20,14 +20,20 @@ class FailoverBaseTest(unittest.TestCase):
     @staticmethod
     def common_setup(input, testcase):
         servers = input.servers
+        log.info("==============  common_setup was started for test #{0} {1}=============="\
+                      .format(testcase.case_number, testcase._testMethodName))
         RemoteUtilHelper.common_basic_setup(servers)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         for server in servers:
             ClusterOperationHelper.cleanup_cluster([server])
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
+        log.info("==============  common_setup was finished for test #{0} {1} =============="\
+                      .format(testcase.case_number, testcase._testMethodName))
 
     @staticmethod
     def common_tearDown(servers, testcase):
+        log.info("==============  common_tearDown was started for test #{0} {1} =============="\
+                          .format(testcase.case_number, testcase._testMethodName))
         RemoteUtilHelper.common_basic_setup(servers)
         log = logger.Logger.get_logger()
         log.info("10 seconds delay to wait for membase-server to start")
@@ -36,6 +42,8 @@ class FailoverBaseTest(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
         ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
+        log.info("==============  common_tearDown was finished for test #{0} {1} =============="\
+                          .format(testcase.case_number, testcase._testMethodName))
 
     @staticmethod
     def replication_verification(master, bucket, replica, inserted_count, test):
@@ -116,6 +124,7 @@ class FailoverTests(unittest.TestCase):
     def setUp(self):
         self._input = TestInputSingleton.input
         self.bidirectional = self._input.param("bidirectional", False)
+        self.case_number = self._input.param("case_number", 0)
         self._servers = self._input.servers
         self._failed_nodes = []
         self.log = logger.Logger().get_logger()
