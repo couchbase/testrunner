@@ -92,8 +92,10 @@ def add_test_parser(parent):
     parser = parent.add_parser("test")
 
     add_broker_arg(parser)
-    parser.add_argument("--fromfile", required = True, help="local file with test config to import")
-    #TODO: allow test to be cached and referenced by name
+    parser.add_argument("--name", help="name of remote test or runlist to start, found in <pysystests>/tests/<name>.js directory")
+    parser.add_argument("--fromfile",  help="launch a test from local file configuration")
+    parser.add_argument("--filesuffix", default="js", help="suffix appened to file when using 'name' arg", metavar = 'js')
+
 
     parser.set_defaults(handler=run_systemtest)
 
@@ -232,15 +234,19 @@ def run_systemtest(args):
     rabbitHelper = RabbitHelper(args.broker)
     cluster = args.cluster
 
+    test = {'suffix' : args.filesuffix}
+
     if args.fromfile is not None:
 
         # load json config
         json_data = open(args.fromfile)
-        test = json.load(json_data)
+        msg = json.load(json_data)
 
-        # upload test
-        rabbitHelper.putMsg('systest_manager_'+cluster, json.dumps(test))
+    elif args.name is not None:
+        msg = { "localtestname" : args.name }
 
+    test.update(msg)
+    rabbitHelper.putMsg('systest_manager_'+cluster, json.dumps(test))
 
 ### setup main arg parsers
 setup_run_parser()

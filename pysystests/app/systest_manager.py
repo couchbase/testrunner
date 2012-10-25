@@ -26,8 +26,29 @@ def systestManager(testQueue = "systest_manager_default"):
 
         if testQueueSize > 0:
             testMsg = rabbitHelper.getJsonMsg(testQueue)
+            suffix = testMsg['suffix']
+
             try:
-                launchSystest(testMsg)
+                if "localtestname" in testMsg:
+                    # read test from local worker filesystem
+                    testMsg = loadTestFromFile(testMsg["localtestname"], suffix)
+
+                    if "runlist" in testMsg:
+
+                        # handle runlist
+                        for test in testMsg['runlist']:
+                            testMsg = loadTestFromFile(test, suffix)
+                            testMsg['loop'] = False
+                            launchSystest(testMsg)
+
+                    elif testMsg is not None:
+
+                        # run local standalone
+                        launchSystest(testMsg)
+                else:
+                    # run remote standalone
+                    launchSystest(testMsg)
+
             except KeyError:
                 logger.info("Ignoring malformated msg: %s" % testMsg)
 
@@ -37,6 +58,17 @@ def systestManager(testQueue = "systest_manager_default"):
     except Exception as ex:
         logger.error(ex)
 
+def loadTestFromFile(name, suffix="js"):
+    testMsg = None
+
+    try:
+        fname = "tests/%s.%s" % (name,suffix)
+        json_data = open(fname)
+        testMsg = json.load(json_data)
+    except Exception as ex:
+        logger.error("Error loading test %s: %s" % (fname, ex))
+
+    return testMsg
 
 def launchSystest(testMsg):
 

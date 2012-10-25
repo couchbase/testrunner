@@ -1,0 +1,3 @@
+{
+    "runlist" : ["simple", "conditions", "rebalance"]
+}

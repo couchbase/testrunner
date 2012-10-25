@@ -1,6 +1,6 @@
 {
     "name" : "simple",
-    "desc" : "kv swap rebalance test",
+    "desc" : "very simple key-value test",
     "loop" : false,
     "phases" : {
                 "0" :
