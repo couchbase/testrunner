@@ -6,7 +6,7 @@ import datetime
 from celery.task.control import revoke
 import testcfg as cfg
 from rabbit_helper import PersistedMQ
-from app.workload_manager import Workload, run
+from app.workload_manager import Workload, sysTestRunner
 
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
@@ -75,9 +75,11 @@ def runPhase(name, phase):
 
     workload = admin = query = None
     docTemplate = "default"
-    runTime = 10
     name = "<phase name>"
     desc = "<phase description>"
+
+    # default time a workload is run without any conditions in seconds
+    runTime = 10
 
     if 'name' in phase:
         name = phase['name']
@@ -102,7 +104,7 @@ def runPhase(name, phase):
     if workload is not None:
         workloadRunnable = createWorkload(workload)
         logger.error("Starting workload %s" % workloadRunnable.id)
-        run.delay(workloadRunnable)
+        sysTestRunner.delay(workloadRunnable)
 
     if query is not None:
         # send query
@@ -124,20 +126,60 @@ def monitorPhase(runTime, workloadId):
     while True:
 
         if time.time() > end_time:
-           # kill any running tasks
+
+           # kill any running tasks that do not have conditions
             if workloadId is not None:
-                logger.error("Stopping workload %s" % workloadId)
                 workload = Workload.from_cache(workloadId)
-                workload.active = False
-                break
+
+                if workload is not None:
+                    if workload.postconditions is not None:
+                        # see if workload condition handler has stopped load
+                        if workload.active == False:
+                            logger.error("Postconditions met %s" % workload.postconditions)
+                            logger.error("Stopping workload %s" % workloadId)
+                            break
+                    else:
+                        logger.error("Runtime conditions met: %s's" % runTime)
+                        logger.error("Stopping workload %s" % workloadId)
+                        workload.active = False
+                        break
+                else:
+                    logger.error("Unable to fetch workload...cache down?")
+                    break
+
         else:
             time.sleep(2)
 
 
-def createWorkload(workload_str):
+def createWorkload(workload):
 
-    params = workload_str.split(",")
+    params = None
     workloadSpec = Workload.defaultSpec()
+
+    if isinstance(workload, dict):
+        params = workload['spec'].split(",")
+
+        # parse ex args
+        if 'bucket' in workload:
+            workloadSpec['bucket'] = str(workload['bucket'])
+
+        if 'template' in workload:
+            workloadSpec['template'] = str(workload['template'])
+
+        if 'conditions' in workload:
+            for condition in workload['conditions'].split(','):
+                stage, equality = condition.split(':')
+                if stage == "pre":
+                    workloadSpec['preconditions'] = equality
+                if stage == "post":
+                    workloadSpec['postconditions'] = equality
+
+    else:
+        # simple spec
+        params = workload.split(",")
+        logger.error(params)
+
+
 
     for op in params:
         key,val = op.split(':')
@@ -149,13 +191,13 @@ def createWorkload(workload_str):
             workloadSpec['update_perc'] = int(val)
         if key == 'd':
             workloadSpec['del_perc'] = int(val)
-        if key == 'cc':
-            workloadSpec['cc_queues'] = [val]
+        if key == 'ccq':
+            workloadSpec['cc_queues'] = [str(val)]
         if key == 't':
             workloadSpec['template'] = str(val)
         if key == 'ops':
             workloadSpec['ops_per_sec'] = int(val)
 
-    workload = Workload(workloadSpec)
-    return workload
+    workloadRunnable = Workload(workloadSpec)
+    return workloadRunnable
 

@@ -122,7 +122,10 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
         # cleanup workload after handled by test runner
         if isinstance(retval, Workload):
             workload = retval
-            rabbitHelper.purge(workload.task_queue)
+            try:
+                rabbitHelper.purge(workload.task_queue)
+            except:
+                pass # queue already deleted
         else:
             logger.error(retval)
 
