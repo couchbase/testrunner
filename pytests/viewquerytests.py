@@ -1815,7 +1815,7 @@ class QueryView:
         try:
             rest = tc._rconn(tc.server)
 
-            if not len(self.queries) > 0 :
+            if not len(self.queries) > 0:
                 self.log.info("No queries to run for this view")
                 return
 
@@ -1907,7 +1907,8 @@ class QueryView:
                                 QueryHelper.verify_query_ids_full(rest, query, results)
                                 self.log.info("Keys in query results are equal to expected")
                             except Exception as e:
-                                if e.message.find('Current ids and expected are not equal') != -1 and \
+                                self.log.info("Keys in query results are not equal to expected. View {0}".format(view_name))
+                                if str(e).find('Current ids and expected are not equal') != -1 and \
                                                 not self.consisent_view:
                                     attempt += 1
                                     if attempt == attempts_num:
@@ -1953,7 +1954,7 @@ class QueryView:
                             tc.assertEquals(len(failures), 0, msg)
 
                     except:
-                        self.log.error("Query failed: see test result logs for details")
+                        self.log.error("Query failed: see test result logs for details. View {0}".format(view_name))
                         self.results.addFailure(tc, sys.exc_info())
                         tc.log.error("Query data thread is crashed: %s" % sys.exc_info()[2])
                         tc.thread_crashed.set()
