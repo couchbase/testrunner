@@ -3,8 +3,11 @@ Default static values for performance module.
 Access by calling PerfDefaults.*
 DO NOT overwrite.
 """
+from collections import namedtuple
 
 class PerfDefaults:
+
+    REB_MODE = namedtuple('REB_MODE', 'IN, OUT, SWAP')(0, 1, 2)
 
     # general
     batch               =    50
@@ -58,7 +61,7 @@ class PerfDefaults:
     reb_max_retries     =    0           # num of retries if rebalance fails
     reb_cons_view       =    -1          # consistent view for rebalance task, 1: enable, 0: disable
     reb_no_fg           =    0           # rebalance without foreground load. 1: enable, 0: disable
-    reb_out             =    0           # rebalance out, 1: rebalance nodes out, 0: rebalance nodes in
+    reb_mode            =    REB_MODE.IN # rebalance mode
 
     # control
     avg_value_size          =   2048     # average size of document body

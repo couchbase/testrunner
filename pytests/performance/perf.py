@@ -766,7 +766,7 @@ class PerfBase(unittest.TestCase):
     @staticmethod
     def delayed_rebalance_worker(servers, num_nodes, delay_seconds, sc,
                                  max_retries=PerfDefaults.reb_max_retries,
-                                 reb_out=False):
+                                 reb_mode=PerfDefaults.REB_MODE.IN):
         time.sleep(delay_seconds)
         gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
         print "[delayed_rebalance_worker] rebalance started: %s" % gmt_now
@@ -778,8 +778,10 @@ class PerfBase(unittest.TestCase):
         retries = 0
         while not status and retries <= max_retries:
             start_time = time.time()
-            if reb_out:
+            if reb_mode == PerfDefaults.REB_MODE.OUT:
                 status, nodes = RebalanceHelper.rebalance_out(servers, num_nodes)
+            elif reb_mode == PerfDefaults.REB_MODE.SWAP:
+                status, nodes = RebalanceHelper.rebalance_swap(servers, num_nodes)
             else:
                 status, nodes = RebalanceHelper.rebalance_in(servers,
                                         num_nodes - 1, do_check=(not retries))
@@ -793,15 +795,15 @@ class PerfBase(unittest.TestCase):
 
     def delayed_rebalance(self, num_nodes, delay_seconds=10,
                           max_retries=PerfDefaults.reb_max_retries,
-                          reb_out=False, sync=False):
+                          reb_mode=0, sync=False):
         print "delayed_rebalance"
         if sync:
             PerfBase.delayed_rebalance_worker(self.input.servers,
-                    num_nodes, delay_seconds, self.sc, max_retries, reb_out)
+                    num_nodes, delay_seconds, self.sc, max_retries, reb_mode)
         else:
             t = threading.Thread(target=PerfBase.delayed_rebalance_worker,
                                  args=(self.input.servers, num_nodes,
-                                 delay_seconds, self.sc, max_retries, reb_out))
+                                 delay_seconds, self.sc, max_retries, reb_mode))
             t.daemon = True
             t.start()
 
