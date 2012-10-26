@@ -2,7 +2,9 @@ from random import shuffle
 import time
 import logger
 from membase.api.exception import StatsUnavailableException, \
-    ServerAlreadyJoinedException, RebalanceFailedException
+    ServerAlreadyJoinedException, RebalanceFailedException, \
+    FailoverFailedException, InvalidArgumentException, ServerSelfJoinException, \
+    AddNodeException
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
@@ -475,6 +477,56 @@ class RebalanceHelper():
         except RebalanceFailedException, e:
             log.error("failed to rebalance %s servers out: %s" % (how_many, e))
             return False, ejections
+
+    @staticmethod
+    def rebalance_swap(servers, how_many, monitor=True):
+        if how_many < 1:
+            log.error("failed to swap rebalance %s servers - invalid count"
+                      % how_many)
+            return False, []
+
+        rest = RestConnection(servers[0])
+        cur_nodes = rest.node_statuses()
+        cur_ips = map(lambda node: node.ip, cur_nodes)
+        cur_ids = map(lambda node: node.id, cur_nodes)
+        free_servers = filter(lambda server: server.ip not in cur_ips, servers)
+
+        if len(cur_ids) <= how_many or len(free_servers) < how_many:
+            log.error("failed to swap rebalance %s servers - not enough servers"
+                      % how_many)
+            return False, []
+
+        ejections = cur_ids[-how_many:]
+        additions = free_servers[:how_many]
+
+        log.info("swap rebalance: cur: %s, eject: %s, add: %s"
+                 % (cur_ids, ejections, additions))
+
+        try:
+            map(lambda server: rest.add_node(servers[0].rest_username,
+                                             servers[0].rest_password,
+                                             server.ip, server.port), additions)
+        except (ServerAlreadyJoinedException,
+                ServerSelfJoinException, AddNodeException), e:
+            log.error("failed to swap rebalance - addition failed %s: %s"
+                      % (additions, e))
+            return False, []
+
+        cur_ids = map(lambda node: node.id, rest.node_statuses())
+        try:
+            rest.rebalance(otpNodes=cur_ids, ejectedNodes=ejections)
+        except InvalidArgumentException, e:
+            log.error("failed to swap rebalance - rebalance failed :%s" % e)
+            return False, []
+
+        if not monitor:
+            return True, ejections + additions
+
+        try:
+            return rest.monitorRebalance(), ejections + additions
+        except RebalanceFailedException, e:
+            log.error("failed to swap rebalance %s servers: %s" % (how_many, e))
+            return False, ejections + additions
 
     @staticmethod
     def begin_rebalance_in(master, servers, timeout=5):
