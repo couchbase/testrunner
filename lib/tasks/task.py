@@ -413,13 +413,21 @@ class GenericLoadingTask(Thread, Task):
                 self.set_exception(error)
 
     def _unlocked_update(self, partition, key):
-        o, c, value = self.client.get(key)
-        if value is None:
-            return
         try:
+            o, c, value = self.client.get(key)
+            if value is None:
+                return
+
             value_json = json.loads(value)
             value_json['mutated'] += 1
             value = json.dumps(value_json)
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                #there is no such item, we do not know what value to set
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
         except ValueError:
             index = random.choice(range(len(value)))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
