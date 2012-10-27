@@ -40,6 +40,8 @@ def workloadConsumer(workloadQueue = "workload_default", templateQueue = "worklo
             templateMsg = rabbitHelper.getJsonMsg(templateQueue)
             try:
                 template = Template(templateMsg)
+                if 'rcq' in templateMsg:
+                    rabbitHelper.putMsg(templateMsg['rcq'], "Stored Template: "+template.name)
             except KeyError:
                 logger.info("Ignoring malformated msg: %s" % templateMsg)
 
@@ -58,6 +60,8 @@ def workloadConsumer(workloadQueue = "workload_default", templateQueue = "worklo
                 workload = Workload(workloadMsg)
                 # launch kvworkload
                 sysTestRunner.delay(workload)
+                if 'rcq' in workloadMsg:
+                    rabbitHelper.putMsg(workloadMsg['rcq'], "Started workload id: "+workload.id)
             except KeyError:
                 logger.info("Ignoring malformated msg: %s" % workloadMsg)
 

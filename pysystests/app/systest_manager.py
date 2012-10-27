@@ -29,6 +29,10 @@ def systestManager(testQueue = "systest_manager_default"):
             testMsg = rabbitHelper.getJsonMsg(testQueue)
             suffix = testMsg['suffix']
 
+            if 'rcq' in testMsg:
+                rabbitHelper.putMsg(testMsg['rcq'], "Starting test: %s" % (testMsg))
+
+
             try:
                 if "localtestname" in testMsg:
                     # read test from local worker filesystem

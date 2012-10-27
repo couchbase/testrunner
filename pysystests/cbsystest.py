@@ -1,7 +1,8 @@
 import argparse
 import json
 from rabbit_helper import RabbitHelper
-
+import uuid
+import time
 
 parser = argparse.ArgumentParser(description='CB System Test Tool')
 subparser = parser.add_subparsers(dest="subparsers")
@@ -123,6 +124,22 @@ def setup_list_parser():
 def conv_to_secs(list_):
     return list_[0]*60*60 + list_[1]*60 + list_[2]
 
+def getResponseQueue(handler):
+    rc_queue = "rc_"+str(uuid.uuid4())[:7]
+    handler.declare(rc_queue)
+    return rc_queue
+
+def receiveResponse(handle, rc_queue, tries = 5):
+    while tries > 0:
+        rc = handle.getMsg(rc_queue)
+        if rc is not None:
+            print rc
+            handle.purge(rc_queue)
+            return
+        tries = tries - 1
+        time.sleep(1)
+    print "no response received from broker"
+
 def run_workload(args):
 
     workload = {}
@@ -154,7 +171,9 @@ def run_workload(args):
     cluster = args.cluster
 
     rabbitHelper = RabbitHelper(args.broker)
+    workload['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("workload_"+cluster, json.dumps(workload))
+    receiveResponse(rabbitHelper, workload['rcq'])
 
 
 def import_template(args):
@@ -185,7 +204,9 @@ def import_template(args):
     cluster = args.cluster
 
     rabbitHelper = RabbitHelper(args.broker)
+    template['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("workload_template_"+cluster, json.dumps(template))
+    receiveResponse(rabbitHelper, template['rcq'])
 
 def perform_admin_tasks(args):
 
@@ -199,9 +220,10 @@ def perform_admin_tasks(args):
     cluster = args.cluster
 
     #TODO: Validate the user inputs, before passing to rabbit
-    print actions
     rabbitHelper = RabbitHelper(args.broker)
+    actions['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("admin_"+cluster, json.dumps(actions))
+    receiveResponse(rabbitHelper, actions['rcq'])
 
 def perform_xdcr_tasks(args):
 
@@ -216,7 +238,9 @@ def perform_xdcr_tasks(args):
     #TODO: Validate the user inputs, before passing to rabbit
     print xdcrMsg
     rabbitHelper = RabbitHelper(args.broker)
+    xdcrMsg['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("xdcr_"+cluster, json.dumps(xdcrMsg))
+    receiveResponse(rabbitHelper, xdcrMsg['rcq'])
 
 def perform_query_tasks(args):
     queryMsg = {'queries_per_sec' : args.queries_per_sec,
@@ -227,7 +251,9 @@ def perform_query_tasks(args):
     cluster = args.cluster
 
     rabbitHelper = RabbitHelper(args.broker)
+    queryMsg['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg('query_'+cluster, json.dumps(queryMsg))
+    receiveResponse(rabbitHelper, queryMsg['rcq'])
 
 def run_systemtest(args):
 
@@ -246,7 +272,10 @@ def run_systemtest(args):
         msg = { "localtestname" : args.name }
 
     test.update(msg)
+    test['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg('systest_manager_'+cluster, json.dumps(test))
+    receiveResponse(rabbitHelper, test['rcq'])
+
 
 ### setup main arg parsers
 setup_run_parser()

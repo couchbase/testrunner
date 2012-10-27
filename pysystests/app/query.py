@@ -47,6 +47,11 @@ def queryConsumer(queryQueue = "query_default"):
             # activate new query workload
             # to be detected in queryRunner task
             queryWorkload.active = True
+
+            if 'rcq' in queryMsg:
+                rabbitHelper.putMsg(queryMsg['rcq'], "Started Querying: %s/%s" % \
+                    (queryWorkload.ddoc, queryWorkload.view))
+
         except KeyError:
             logger.info("Invalid query workload message: %s" % queryMsg)
 

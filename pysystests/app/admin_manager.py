@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from app.celery import celery
 import testcfg as cfg
 from rabbit_helper import PersistedMQ
-
+import string
 from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn
 
 from celery.utils.log import get_task_logger
@@ -17,8 +17,13 @@ def adminConsumer(adminQueue = "admin_default"):
         adminQueueSize = rabbitHelper.qsize(adminQueue)
         if adminQueueSize > 0:
             adminMsg = rabbitHelper.getJsonMsg(adminQueue)
-            logger.error(adminMsg)
             perform_admin_tasks.apply_async(args=[adminMsg])
+
+            if 'rcq' in adminMsg:
+                # filter out unspecified ops in return value
+                msg = [(k,str(adminMsg[k])) for k in adminMsg.keys() if str(adminMsg[k]) is not '' and\
+                    string.find(str(adminMsg[k]), 'rc_') < 0]
+                rabbitHelper.putMsg(adminMsg['rcq'], "Started admin task: %s" % msg)
 
     except Exception as ex:
         logger.error(ex)
@@ -34,6 +39,8 @@ def xdcrConsumer(xdcrQueue = "xdcr_default"):
             xdcrMsg = rabbitHelper.getJsonMsg(xdcrQueue)
             logger.error(xdcrMsg)
             perform_xdcr_tasks.apply_async(args=[xdcrMsg])
+            if 'rcq' in xdcrMsg:
+                rabbitHelper.putMsg(xdcrMsg['rcq'], "Started xdcr task: %s" % xdcrMsg)
 
     except Exception as ex:
         logger.error(ex)
