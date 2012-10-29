@@ -69,6 +69,7 @@ class FailoverBaseTest(unittest.TestCase):
     @staticmethod
     def tearDown(self):
         try:
+            self._cluster_helper.shutdown()
             log = logger.Logger.get_logger()
             log.info("==============  tearDown was started for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
@@ -115,9 +116,8 @@ class FailoverBaseTest(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(), msg=msg)
 
     def _create_buckets_(self):
-        cluster = Cluster()
         if self.default_bucket:
-            cluster.create_default_bucket(self.master, self.bucket_size, self._num_replicas)
+            self._cluster_helper.create_default_bucket(self.master, self.bucket_size, self._num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self._num_replicas, bucket_size=self.bucket_size))
 
