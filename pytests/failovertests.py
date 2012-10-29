@@ -30,7 +30,7 @@ class FailoverBaseTest(unittest.TestCase):
         self.bidirectional = self._input.param("bidirectional", False)
         self.case_number = self._input.param("case_number", 0)
         self._value_size = self._input.param("value_size", 256)
-        self.wait_timeout = self.input.param("wait_timeout", 60)
+        self.wait_timeout = self._input.param("wait_timeout", 60)
         self._servers = self._input.servers
         self.master = self._servers[0]
         self._failed_nodes = []
