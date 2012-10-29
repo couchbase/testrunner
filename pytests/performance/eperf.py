@@ -619,7 +619,10 @@ class EPerfMaster(perf.PerfBase):
             self.is_multi_node = False
             if self.param('reb_protocol', None) == 'memcached-binary':
                 proto_prefix = 'memcached-binary'
-                port = '11211'
+                if self.input.servers[0].port == 8091:
+                    port = '11211'
+                else:
+                    port = '12001'
             if host is None:
                 host = self.input.servers[0].ip
             if port is None:
@@ -1686,8 +1689,11 @@ class EVPerfClient(EPerfClient):
                 bg_protocol = protocol
             elif bg_protocol == 'memcached-binary':
                 self.bg_stores = [mcsoda.StoreMemcachedBinary()]
-                bg_host_port = host_port.split(':')[0] + ':11211'
                 bg_protocol = 'memcached-binary'
+                if self.input.servers[0].port == 8091:
+                    bg_host_port = host_port.split(':')[0] + ':11211'
+                else:
+                    bg_host_port = host_port.split(':')[0] + ':12001'
 
             self.bg_thread = threading.Thread(target=mcsoda.run,
                                               args=(self.bg_thread_cfg,
