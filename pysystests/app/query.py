@@ -72,7 +72,8 @@ def queryRunner():
                           query.ddoc,
                           query.view,
                           params,
-                          query.bucket)
+                          query.bucket,
+                          query.password)
 
 
 class QueryWorkload(object):

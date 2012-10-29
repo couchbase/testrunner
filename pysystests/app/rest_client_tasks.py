@@ -5,6 +5,7 @@ rest tasks
 
 """
 from __future__ import absolute_import
+import base64
 import sys
 sys.path=["../lib"] + sys.path
 from membase.api.rest_client import RestConnection
@@ -24,7 +25,7 @@ SDK_PORT = 50008
 
 
 @celery.task
-def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", type_ = "view", batch_size = 100):
+def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", password = "", type_ = "view", batch_size = 100):
 
     pool = eventlet.GreenPool(batch_size)
     capiUrl = "http://%s:%s/couchBase/" % (cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT)
@@ -36,8 +37,15 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
         pass
 
 def send_query(url):
+
+    authorization = base64.encodestring('%s:%s' % (cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD))
+
+    headers = {'Content-Type': 'application/json',
+               'Authorization': 'Basic %s' % authorization,
+               'Accept': '*/*'}
     try:
-        urllib2.urlopen(url)
+        req = urllib2.Request(url, headers = headers)
+        urllib2.urlopen(req)
     except urllib2.URLError:
         pass
 

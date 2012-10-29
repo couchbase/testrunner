@@ -186,7 +186,9 @@ def run(workload, prevWorkload = None):
                     template.cc_queues = workload.cc_queues
 
                 # read  workload settings
-                bucket = workload.bucket
+                bucketInfo = {"bucket" : workload.bucket,
+                              "password" : workload.password}
+
                 ops_sec = workload.ops_per_sec
 
                 create_count = int(ops_sec *  workload.create_perc/100)
@@ -195,7 +197,7 @@ def run(workload, prevWorkload = None):
                 del_count = int(ops_sec *  workload.del_perc/100)
                 consume_queue =  workload.consume_queue
 
-                generate_pending_tasks.delay(task_queue, template, bucket, create_count,
+                generate_pending_tasks.delay(task_queue, template, bucketInfo, create_count,
                                               update_count, get_count, del_count, consume_queue)
                 inflight = inflight + 1
 
@@ -303,16 +305,19 @@ def postcondition_handler():
 
 
 @celery.task(base = PersistedMQ, ignore_result = True)
-def generate_pending_tasks(task_queue, template, bucket, create_count,
+def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
                            update_count, get_count, del_count,
                            consume_queue):
 
     rabbitHelper = generate_delete_tasks.rabbitHelper
+    bucket = bucketInfo['bucket']
+    password = bucketInfo['password']
+
     create_tasks , update_tasks , get_tasks , del_tasks = ([],[],[],[])
     if create_count > 0:
-        create_tasks = generate_set_tasks(template, create_count, bucket)
+        create_tasks = generate_set_tasks(template, create_count, bucket, password = password)
     if update_count > 0:
-        update_tasks = generate_update_tasks(template, update_count, consume_queue, bucket)
+        update_tasks = generate_update_tasks(template, update_count, consume_queue, bucket, password = password)
     if get_count > 0:
         get_tasks = generate_get_tasks(get_count, consume_queue, bucket)
     if del_count > 0:
@@ -325,7 +330,7 @@ def generate_pending_tasks(task_queue, template, bucket, create_count,
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
 
-def generate_set_tasks(template, count, bucket = "default", batch_size = 1000):
+def generate_set_tasks(template, count, bucket = "default", password = "", batch_size = 1000):
 
 
     if batch_size > count:
@@ -348,7 +353,7 @@ def generate_set_tasks(template, count, bucket = "default", batch_size = 1000):
             batch_counter = batch_counter + 1
             i = i + 1
 
-        tasks.append(client.mset.s(key_batch, template.__dict__, bucket, False))
+        tasks.append(client.mset.s(key_batch, template.__dict__, bucket, False, password))
         batch_counter = 0
 
     return tasks
@@ -381,7 +386,7 @@ def generate_get_tasks(count, docs_queue, bucket="default"):
 
     
 @celery.task(base = PersistedMQ)
-def generate_update_tasks(template, count, docs_queue, bucket = "default"):
+def generate_update_tasks(template, count, docs_queue, bucket = "default", password = ""):
 
     rabbitHelper = generate_update_tasks.rabbitHelper
     val = json.dumps(template.kv)
@@ -402,7 +407,7 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default"):
             if keys_updated > count:
                 end_idx = keys_updated - count
                 keys = keys[:-end_idx]
-            tasks.append(client.mset.s(keys, template.__dict__, bucket, True))
+            tasks.append(client.mset.s(keys, template.__dict__, bucket, True, password = ""))
 
     return tasks 
 
@@ -440,6 +445,7 @@ class Workload(object):
         self.id = "workload_"+str(uuid.uuid4())[:7]
         self.params = params        
         self.bucket = str(params["bucket"])
+        self.password = str(params["password"])
         self.task_queue = "%s_%s" % (self.bucket, self.id)
         self.template = params["template"]
         self.ops_per_sec = params["ops_per_sec"]
@@ -468,6 +474,7 @@ class Workload(object):
                 'create_perc': 0,
                 'expires': None,
                 'bucket': 'default',
+                'password': '',
                 'ops_per_sec': 0,
                 'consume_queue': None,
                 'preconditions': None,

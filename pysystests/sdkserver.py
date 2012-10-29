@@ -38,17 +38,17 @@ class CouchClientManager():
         self.client_map = {}
         self.accport = accport
 
-    def add_bucket_client(self, bucket = "default"):
+    def add_bucket_client(self, bucket = "default", password = ""):
         ip = cfg.COUCHBASE_IP
         port = cfg.COUCHBASE_PORT
         url = "http://%s:%s/pools/default/"  % (ip, port)
-        client = SysCouchClient(url, bucket,"", self.accport)
+        client = SysCouchClient(url, bucket, password, self.accport)
         if client.ready == True:
             self.client_map[bucket] = client
 
-    def get_bucket_client(self, bucket):
+    def get_bucket_client(self, bucket, password = ""):
         if bucket not in self.client_map:
-            self.add_bucket_client(bucket)
+            self.add_bucket_client(bucket, password)
 
         return self.client_map[bucket]
 
@@ -101,7 +101,6 @@ class CouchClientManager():
 
     def do_mset(self, data):
 
-        bucket = data["bucket"]
         keys = data['args']
         template = data['template']
         kv = template['kv']
@@ -119,7 +118,7 @@ class CouchClientManager():
                 padding = _random_string(size - kv_size)
                 kv.update({"padding" : padding})
 
-        client = self.get_bucket_client(bucket)
+        client = self.client_from_req(data)
 
         for key in keys:
             doc = {"args" : [key, ttl, flags, kv]}
@@ -148,19 +147,18 @@ class CouchClientManager():
 
     def do_set(self, data):
         key, exp, flags, value = self._get_set_args(data)
-        client = self.get_bucket_client(data["bucket"])
+        client = self.client_from_req(data)
         return client.set(key,exp, flags, value)
 
     def do_get(self, data):
         key = str(data['args'][0])
-        client = self.get_bucket_client(data["bucket"])
+        client = self.client_from_req(data)
         client.get(key)
         return key
 
-
     def do_mget(self, data):
         keys = data['args']
-        client = self.get_bucket_client(data["bucket"])
+        client = self.client_from_req(data)
         for key in keys:
             key = str(key)
             client.getq(key)
@@ -179,19 +177,27 @@ class CouchClientManager():
     def do_delete(self, data):
 
         key = str(data['args'][0])
-        client = self.get_bucket_client(data["bucket"])
+        client = self.client_from_req(data)
         res = client.delete(key)
         return res
 
     def do_mdelete(self, data):
         keys = data['args']
         results = []
-        client = self.get_bucket_client(data["bucket"])
+        client = self.client_from_req(data)
         for key in keys:
             key = str(key)
             client.deleteq(key)
 
         return True
+
+
+    def client_from_req(self, data, password = ""):
+        bucket = str(data["bucket"])
+        if "password" in data:
+            password = str(data["password"])
+        client = self.get_bucket_client(bucket, password)
+        return client
 
 
 def _random_string(length):

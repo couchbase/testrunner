@@ -333,6 +333,8 @@ def createWorkload(workload):
             workloadSpec['create_perc'] = int(val)
         if key == 'b':
             workloadSpec['bucket'] = str(val)
+        if key == 'pwd':
+            workloadSpec['password'] = str(val)
         if key == 'g':
             workloadSpec['get_perc'] = int(val)
         if key == 'u':

@@ -44,6 +44,7 @@ def add_workload_parser(parent):
     add_broker_arg(parser)
     parser.add_argument("--name",    help="predefind workload", default="default")
     parser.add_argument("--bucket",  help="bucket", default="default")
+    parser.add_argument("--password", help="password", default="")
     parser.add_argument("--ops",     help="ops per sec", default=0, type=int)
     parser.add_argument("--create",  help="percentage of creates 0-100", default=0, type=int)
     parser.add_argument("--update",  help="percentage of updates 0-100", default=0, type=int)
@@ -156,6 +157,7 @@ def run_workload(args):
         args.expires = conv_to_secs(args.expires)
 
     workload = { "bucket"      : args.bucket,
+                 "password"    : args.password,
                  "ops_per_sec" : args.ops,
                  "create_perc" : args.create,
                  "update_perc" : args.update,

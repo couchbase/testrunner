@@ -26,50 +26,56 @@ SDK_PORT2 = 50009
 
 
 @celery.task
-def mset(keys, template, bucket = "default", isupdate = False):
+def mset(keys, template, bucket = "default", isupdate = False, password = ""):
     message = {"command" : "mset",
                "args" : keys,
                "template" : template,
-               "bucket" : bucket}
+               "bucket" : bucket,
+               "password" : password}
     rc = _send_msg(message)
     #TODO: return failed keys
     return keys
 
 @celery.task
-def mget(keys, bucket = "default"):
+def mget(keys, bucket = "default", password = ""):
     message = {"command" : "mget",
                "bucket" : bucket,
+               "password" : password,
                "args" : keys}
     return  _send_msg(message)
 
 @celery.task
-def set(key, value, bucket = "default"):
+def set(key, value, bucket = "default", password = ""):
     message = {"command" : "set",
                "bucket" : bucket,
+               "password" : password,
                "args" : [key, 0, 0, value]}
     return  _send_msg(message)
 
 @celery.task
-def get(key, bucket = "default"):
+def get(key, bucket = "default", password = ""):
 
     message = {"command" : "get",
                "bucket" : bucket,
+               "password" : password,
                "args" : [key]}
     return  _send_msg(message)
 
 
 @celery.task
-def delete(key, bucket = "default"):
+def delete(key, bucket = "default", password = ""):
     message = {"command" : "delete",
                "bucket" : bucket,
+               "password" : password,
                "args" : [key]}
     return  _send_msg(message)
 
 @celery.task
 
-def mdelete(keys, bucket = "default"):
+def mdelete(keys, bucket = "default", password = ""):
     message = {"command" : "mdelete",
                "bucket" : bucket,
+               "password" : password,
                "args" : keys}
     return  _send_msg(message)
 
