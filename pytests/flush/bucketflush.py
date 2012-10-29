@@ -3,6 +3,8 @@ import time
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
+from threading import Thread
+from memcached.helper.data_helper import MemcachedClientHelper
 
 class BucketFlushTests(BaseTestCase):
 
@@ -11,7 +13,10 @@ class BucketFlushTests(BaseTestCase):
         self.nodes_in = self.input.param("nodes_in", 0)
         self.value_size = self.input.param("value_size", 256)
         self.data_op = self.input.param("data_op", "create")
+        self.use_ascii = self.input.param("use_ascii", "False")
         self.gen_create = BlobGenerator('bucketflush', 'bucketflush-', self.value_size, end=self.num_items)
+
+        self.default_test_setup()
 
     def tearDown(self):
         super(BucketFlushTests, self).tearDown()
@@ -38,8 +43,6 @@ class BucketFlushTests(BaseTestCase):
         Works with multiple nodes/buckets."""
     def bucketflush(self):
 
-        self.default_test_setup()
-
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket)
 
@@ -48,8 +51,6 @@ class BucketFlushTests(BaseTestCase):
 
     """Test case for empty bucket. Work with multiple nodes/buckets."""
     def bucketflush_empty(self):
-
-        self.default_test_setup()
 
         self._load_all_buckets(self.master, self.gen_create, "delete", 0)
         self.persist_and_verify()
@@ -63,8 +64,6 @@ class BucketFlushTests(BaseTestCase):
     """Test case to check client behavior with bucket flush while loading/updating/deleting data"""
     def bucketflush_with_data_ops(self):
 
-        self.default_test_setup()
-
         with self.assertRaises(MemcachedError) as exp:
             tasks = self._async_load_all_buckets(self.master, self.gen_create, self.data_op, 0)
 
@@ -76,3 +75,36 @@ class BucketFlushTests(BaseTestCase):
         memcached_exception = exp.exception
         self.assertEqual(memcached_exception.status, 134, msg="Unexpected Exception - {0}".format(memcached_exception))
         self.log.info("Expected Exception Caught - {0}".format(memcached_exception))
+
+    """Test case to check client behavior with bucket flush while loading/updating/deleting data via Moxi client(ascii,non-ascii)"""
+    def bucketflush_with_data_ops_moxi(self):
+
+        thread = Thread(target=self.data_ops_with_moxi, args=(self.master, self.data_op, self.buckets, self.num_items, self.use_ascii))
+        thread.start()
+
+        for bucket in self.buckets:
+            self.cluster.bucket_flush(self.master, bucket)
+
+        thread.join()
+
+    def data_ops_with_moxi(self, server, data_op, buckets, items, use_ascii):
+
+        for bucket in buckets:
+            try:
+                client = MemcachedClientHelper.proxy_client(server, bucket.name, force_ascii=use_ascii)
+            except Exception as ex:
+                self.log.error("unable to create memcached client due to {0}..".format(ex))
+
+        with self.assertRaises(MemcachedError) as exp:
+            for itr in xrange(items):
+                key = 'bucketflush' + str(itr)
+                value = 'bucketflush-' + str(itr)
+                if data_op in ["create", "update"]:
+                    client.set(key, 0, 0, value)
+                elif data_op == "delete":
+                    client.delete(key)
+
+        memcached_exception = exp.exception
+        self.assertEqual(memcached_exception.status, 134, msg="Unexpected Exception - {0}".format(memcached_exception))
+        self.log.info("Expected Exception Caught - {0}".format(memcached_exception))
+

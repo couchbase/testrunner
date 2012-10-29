@@ -319,8 +319,8 @@ class MemcachedClientHelper(object):
             vBuckets = rest.get_vbuckets(bucket)
             if ascii:
                 log = logger.Logger.get_logger()
-                log.info("creating ascii client {0}:{1} {2}".format(server.ip, bucket_info.port, bucket))
-                client = MemcachedAsciiClient(server.ip, bucket_info.port, timeout=timeout)
+                log.info("creating ascii client {0}:{1} {2}".format(server.ip, node.moxi, bucket))
+                client = MemcachedAsciiClient(server.ip, node.moxi, timeout=timeout)
             else:
                 log = logger.Logger.get_logger()
                 if isinstance(server, dict):
