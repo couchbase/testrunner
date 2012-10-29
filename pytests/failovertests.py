@@ -293,7 +293,7 @@ class FailoverTests(FailoverBaseTest):
 
         log.info("Begin VERIFICATION ...")
         self._verify_stats_all_buckets(_servers_)
-        self._verify_all_buckets(self.master, batch_size=10000, timeout=self.wait_timeout * 4)
+        self._verify_all_buckets(self.master)
 
 
     def stop_server(self, node):
