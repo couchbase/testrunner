@@ -43,7 +43,8 @@ class PerfBase(unittest.TestCase):
         self.set_up_rest(master)
 
     def setUpBase1(self):
-        if self.parami('num_buckets', 1) > 1:
+        if max(self.parami('num_buckets', 1),
+               self.parami('xdcr_num_buckets', 1)) > 1:
             bucket = 'bucket-0'
         else:
             bucket = self.param('bucket', 'default')
@@ -147,7 +148,8 @@ class PerfBase(unittest.TestCase):
     def get_bucket_conf(self):
         """ retrieve bucket configurations"""
 
-        num_buckets = self.parami('num_buckets', 1)
+        num_buckets = max(self.parami('num_buckets', 1),
+                          self.parami('xdcr_num_buckets', 1))
         self.buckets = self._get_bucket_names(num_buckets)
 
     def set_up_buckets(self):
@@ -159,7 +161,8 @@ class PerfBase(unittest.TestCase):
 
         for bucket in self.buckets:
             bucket_ram_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
-            bucket_ram_quota = bucket_ram_quota / self.parami('num_buckets', 1)
+            bucket_ram_quota /= max(self.parami('num_buckets', 1),
+                                    self.parami('xdcr_num_buckets', 1))
             replicas = self.parami('replicas', getattr(self, 'replicas', 1))
 
             self.rest.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram_quota,
