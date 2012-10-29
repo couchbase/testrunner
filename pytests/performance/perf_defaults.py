@@ -45,13 +45,6 @@ class PerfDefaults:
     cb_stats_exc        =    "/opt/couchbase/bin/cbstats"
     cb_stats_freq       =    1200        # collect cbstats every 20 minutes
 
-    # carbon stats
-    carbon              =    0           # save realtime stats to carbon server, 1: enabled, 0: disabled
-    carbon_server       =    "127.0.0.1" # ip/hostname of carbon server
-    carbon_port         =    2003        # port number of carbon server
-    carbon_timeout      =    5           # socket timeout value if carbon server is not responsive
-    carbon_cache_size   =    10          # number of stats msgs queue up before flushing to carbon server
-
     # cbtop
     cbtop_itv           =    20          # stats polling interval (seconds)
     cbtop_dbhost        =    "127.0.0.1" # host where seriesly database is located
