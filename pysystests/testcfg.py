@@ -11,8 +11,8 @@ SSH_USER = "root"
 SSH_PASSWORD = "password"
 WORKERS = ['127.0.0.1']
 # valid configs ["kv","query","admin","stats"] or ["all"]
-WORKER_CONFIGS = ["all"]
-CB_CLUSTER_TAG = "plum"
+WORKER_CONFIGS = ["kv"]
+CB_CLUSTER_TAG = "default"
 ATOP_LOG_FILE = "/tmp/atop-node.log"
 LOGDIR="logs"  # relative to current dir
 

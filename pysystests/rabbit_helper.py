@@ -24,7 +24,7 @@ class RabbitHelper(object):
         if mq_server == None:
             mq_server = cfg.RABBITMQ_IP
 
-        self.connection = Connection(host= mq_server, userid="guest", password="guest", virtual_host="/")
+        self.connection = Connection(host= mq_server, userid="guest", password="guest", virtual_host=cfg.CB_CLUSTER_TAG)
 
 
     def declare(self, queue, durable = True):

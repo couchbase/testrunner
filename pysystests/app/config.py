@@ -9,7 +9,7 @@ import testcfg as cfg
 class BaseConfig(object):
     def __init__(self, types):
 
-        self.BROKER_URL = 'librabbitmq://'+cfg.RABBITMQ_IP
+        self.BROKER_URL = 'librabbitmq://'+cfg.RABBITMQ_IP+'/'+cfg.CB_CLUSTER_TAG
         self.CELERY_ACKS_LATE = True
         self.CELERYD_PREFETCH_MULTIPLIER = 1
         self.CELERY_TASK_SERIALIZER = 'pickle'
