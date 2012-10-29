@@ -264,7 +264,7 @@ class XPerfTests(EPerfClient):
             master_rest_conn.start_replication(replication_type, bucket,
                                                remote_reference)
 
-        if self.parami('num_buckets', 1) > 1 and suffix == 'A':
+        if self.parami('xdcr_num_buckets', 1) > 1 and suffix == 'A':
             self.start_replication(slave, master, replication_type, buckets,
                                    suffix='B')
 
@@ -275,11 +275,11 @@ class XPerfTests(EPerfClient):
     def get_buckets(self, reversed=False):
         """Return list of buckets to be replicated"""
 
-        num_buckets = self.parami('num_buckets', 1)
-        if num_buckets > 1:
+        xdcr_num_buckets = self.parami('xdcr_num_buckets', 1)
+        if xdcr_num_buckets > 1:
             num_replicated_buckets = self.parami('num_replicated_buckets',
-                                                 num_buckets)
-            buckets = ['bucket-{0}'.format(i) for i in range(num_buckets)]
+                                                 xdcr_num_buckets)
+            buckets = ['bucket-{0}'.format(i) for i in range(xdcr_num_buckets)]
             if not reversed:
                 return buckets[:num_replicated_buckets]
             else:
