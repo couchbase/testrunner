@@ -1904,7 +1904,10 @@ class QueryView:
                             else:
                                 result_count_stats[num_keys] += 1
                         if num_keys != expected_num_docs:
-                            ViewBaseTests._wait_for_indexer_ddoc(tc, rest, view_name)
+                            if num_keys > expected_num_docs:
+                                break
+                            else:
+                                ViewBaseTests._wait_for_indexer_ddoc(tc, rest, view_name)
 
                         if num_keys == expected_num_docs and verify_expected_keys and not self.reduce_fn:
                             try:
