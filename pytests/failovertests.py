@@ -82,7 +82,6 @@ class FailoverBaseTest(unittest.TestCase):
                 shell.log_command_output(o, r)
                 o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j ACCEPT")
                 shell.log_command_output(o, r)
-                shell.log_command_output(o, r)
                 o, r = shell.execute_command("/etc/init.d/couchbase-server start")
                 shell.log_command_output(o, r)
             BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
@@ -91,7 +90,8 @@ class FailoverBaseTest(unittest.TestCase):
             log.info("==============  tearDown was finished for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
         finally:
-            sys.exit(0)
+            if shell is not None:
+                shell.disconnect()
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None):
         quota = 0
@@ -239,7 +239,7 @@ class FailoverTests(FailoverBaseTest):
         _servers_ = self._servers
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
-        
+
         final_replication_state = RestHelper(rest).wait_for_replication(900)
         msg = "replication state after waiting for up to 15 minutes : {0}"
         self.log.info(msg.format(final_replication_state))
