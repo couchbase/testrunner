@@ -30,6 +30,7 @@ class FailoverBaseTest(unittest.TestCase):
         self.bidirectional = self._input.param("bidirectional", False)
         self.case_number = self._input.param("case_number", 0)
         self._value_size = self._input.param("value_size", 256)
+        self.wait_timeout = self.input.param("wait_timeout", 60)
         self._servers = self._input.servers
         self.master = self._servers[0]
         self._failed_nodes = []
@@ -292,7 +293,7 @@ class FailoverTests(FailoverBaseTest):
 
         log.info("Begin VERIFICATION ...")
         self._verify_stats_all_buckets(_servers_)
-        self._verify_all_buckets(self.master, batch_size=10000)
+        self._verify_all_buckets(self.master, batch_size=10000, timeout=self.wait_timeout * 4)
 
 
     def stop_server(self, node):
