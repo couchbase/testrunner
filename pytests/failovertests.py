@@ -84,14 +84,14 @@ class FailoverBaseTest(unittest.TestCase):
                 shell.log_command_output(o, r)
                 o, r = shell.execute_command("/etc/init.d/couchbase-server start")
                 shell.log_command_output(o, r)
+                shell.disconnect()
             BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
             ClusterOperationHelper.cleanup_cluster(self._servers)
             ClusterHelper.wait_for_ns_servers_or_assert(self._servers, self)
             log.info("==============  tearDown was finished for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
         finally:
-            if shell is not None:
-                shell.disconnect()
+            pass
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None):
         quota = 0
