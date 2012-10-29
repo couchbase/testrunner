@@ -363,6 +363,7 @@ class SwapRebalanceBase(unittest.TestCase):
             BaseTestCase._wait_warmup_completed(self, [master], bucket, wait_time=600)
             self.log.info("sleep for 10 sec after warmup")
             time.sleep(10)
+            self.log.info("rebalance progress status:{0}".format(rest._rebalance_progress_status()))
             knownNodes = rest.node_statuses();
             self.log.info("nodes are still in cluster: {0}".format([(node.ip, node.port) for node in knownNodes]))
             ejectedNodes = list(set(optNodesIds) & set([node.id for node in knownNodes]))
