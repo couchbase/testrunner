@@ -50,10 +50,11 @@ class ViewBaseTests(unittest.TestCase):
             mem_quota = 256
         rest.init_cluster(master.rest_username, master.rest_password)
         rest.init_cluster_memoryQuota(master.rest_username, master.rest_password, memoryQuota=mem_quota)
-        if self.num_buckets == 1:
-            ViewBaseTests._create_default_bucket(self, replica=self.replica)
-        else:
-            ViewBaseTests._create_multiple_buckets(self, replica=self.replica)
+        if str(self.__class__).find('viewquerytests.ViewQueryTests') == -1:
+            if self.num_buckets == 1:
+                ViewBaseTests._create_default_bucket(self, replica=self.replica)
+            else:
+                ViewBaseTests._create_multiple_buckets(self, replica=self.replica)
         ViewBaseTests._log_start(self)
         db_compaction = self.input.param("db_compaction", 30)
         view_compaction = self.input.param("view_compaction", 30)

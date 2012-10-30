@@ -59,6 +59,10 @@ class ViewQueryTests(unittest.TestCase):
             self.cluster = Cluster()
             if not self.skip_rebalance:
                 self.cluster.rebalance(self.servers[:], self.servers[1:], [])
+            if self.num_buckets == 1:
+                ViewBaseTests._create_default_bucket(self, replica=self.replica)
+            else:
+                ViewBaseTests._create_multiple_buckets(self, replica=self.replica)
         except Exception as ex:
             skip_setup_failed = True
             try:
