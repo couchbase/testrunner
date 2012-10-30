@@ -1188,6 +1188,9 @@ class ViewQueryTask(Task):
                 self.state = FINISHED
                 self.set_result(True)
             else:
+                if len(content['rows']) > self.expected_rows:
+                    raise QueryViewException(self.view_name, "expected number of rows: '{0}' is greater than expected {1}"
+                                             .format(self.expected_rows, len(content['rows'])))
                 if "stale" in self.query:
                     if self.query["stale"].lower() == "false":
                         self.state = FINISHED
