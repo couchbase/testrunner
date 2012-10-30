@@ -89,7 +89,7 @@ class PerfDefaults:
     obs_max_backoff         =   1        # max backoff time for observe commands, in seconds
     obs_persist_count       =   1        # num of persisted copies to verify for observe commands
     obs_repl_count          =   1        # num of replica copies to verify for observe commands
-    parallel_compaction     =   "true"   # process Database and View compaction in parallel. "true": enabled, "false": disabled
+    parallel_compaction     =   "false"  # process Database and View compaction in parallel. "true": enabled, "false": disabled
     start_delay             =   0        # delay (seconds) to start access phase
     tear_down               =   1        # 1: enabled, 0: disabled
     tear_down_proxy         =   1        # (prerequsite: tear_down = 1) tear down proxy,  1: enabled, 0: disabled
