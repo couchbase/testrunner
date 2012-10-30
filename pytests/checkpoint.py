@@ -14,10 +14,10 @@ from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 import testconstants
 
-ACTIVE="active"
-REPLICA1="replica1"
-REPLICA2="replica2"
-REPLICA3="replica3"
+ACTIVE = "active"
+REPLICA1 = "replica1"
+REPLICA2 = "replica2"
+REPLICA3 = "replica3"
 
 class CheckpointTests(BaseTestCase):
 
@@ -26,13 +26,16 @@ class CheckpointTests(BaseTestCase):
         self.checkpoint_size = self.input.param("checkpoint_size", 5000)
         self.value_size = self.input.param("value_size", 256)
         self.timeout = self.input.param("timeout", 60)
-        servers_in = [self.servers[i+1] for i in range(self.num_servers-1)]
+        servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
         self.cluster.rebalance(self.servers[:1], servers_in, [])
         self.bucket = self.buckets[0]
         self.master = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, ACTIVE)
-        self.replica1 = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, REPLICA1)
-        self.replica2 = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, REPLICA2)
-        self.replica3 = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, REPLICA3)
+        if self.num_servers > 1:
+            self.replica1 = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, REPLICA1)
+        if self.num_servers > 2:
+            self.replica2 = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, REPLICA2)
+        if self.num_servers > 3:
+            self.replica3 = self._get_server_by_state(self.servers[:self.num_servers], self.bucket, REPLICA3)
 
     def tearDown(self):
         super(CheckpointTests, self).tearDown()
@@ -66,8 +69,8 @@ class CheckpointTests(BaseTestCase):
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         chk_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key)
-        self.log.info("Sleeping for {0} seconds)".format(self.timeout+5))
-        time.sleep(self.timeout+5)
+        self.log.info("Sleeping for {0} seconds)".format(self.timeout + 5))
+        time.sleep(self.timeout + 5)
         self._verify_checkpoint_id(param, stat_key, chk_stats)
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
@@ -166,7 +169,7 @@ class CheckpointTests(BaseTestCase):
 
         param = 'checkpoint'
         stat_key = 'vb_0:num_open_checkpoint_items'
-        stat_key_id= 'vb_0:open_checkpoint_id'
+        stat_key_id = 'vb_0:open_checkpoint_id'
 
         self._set_checkpoint_size(self.servers[:self.num_servers], self.bucket, self.checkpoint_size)
         self._stop_replication(self.replica1, self.bucket)
@@ -330,7 +333,7 @@ class CheckpointTests(BaseTestCase):
             except TimeoutError:
                 self.fail("New checkpoint not created")
 
-        time.sleep(timeout/10)
+        time.sleep(timeout / 10)
         # verify Master and all replicas are in sync with checkpoint ids
         m_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key)
         chk_pnt = int(m_stats[m_stats.keys()[0]])
@@ -419,5 +422,3 @@ class CheckpointTests(BaseTestCase):
             if addr == server.ip:
                 return server
         return None
-
-
