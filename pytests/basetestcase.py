@@ -40,6 +40,9 @@ class BaseTestCase(unittest.TestCase):
         self.sasl_buckets = self.input.param("sasl_buckets", 0)
         self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets
         self.num_servers = self.input.param("servers", len(self.servers))
+        #initial number of items in the cluster
+        self.nodes_init = self.input.param("nodes_init", 1)
+
         self.num_replicas = self.input.param("replicas", 1)
         self.num_items = self.input.param("items", 1000)
         self.dgm_run = self.input.param("dgm_run", False)
@@ -53,6 +56,11 @@ class BaseTestCase(unittest.TestCase):
         if not self.input.param("skip_cleanup", True) or self.case_number == 1:
             self.tearDown()
             self.cluster = Cluster()
+        if str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1:
+            #rebalance all nodes into the cluster before each test
+            self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
+        elif self.nodes_init > 1:
+            self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
         self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
         if self.dgm_run:
             self.quota = 256

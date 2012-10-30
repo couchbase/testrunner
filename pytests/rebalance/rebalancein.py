@@ -26,14 +26,10 @@ class RebalanceInTests(RebalanceBaseTest):
     and then verify that there has been no data loss.
     Once all nodes have been rebalanced in the test is finished."""
     def rebalance_in_with_ops(self):
-        nodes_init = self.input.param("nodes_init", 1)
-        if nodes_init > 1:
-            servs_init = self.servers[:nodes_init]
-            self.cluster.rebalance(self.servers[:1], servs_init[1:], [])
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
-        servs_in = [self.servers[i + nodes_init] for i in range(self.nodes_in)]
-        rebalance = self.cluster.async_rebalance(self.servers[:nodes_init], servs_in, [])
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
         if(self.doc_ops is not None):
             tasks = []
             # define which doc's ops will be performed during rebalancing
@@ -47,9 +43,9 @@ class RebalanceInTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
         rebalance.result()
-        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init])
 
 
     def rebalance_in_with_ops_batch(self):
@@ -74,7 +70,7 @@ class RebalanceInTests(RebalanceBaseTest):
     """Rebalances nodes into a cluster during getting random keys.
 
     This test begins by loading a given number of items into the node.
-    Then it creates cluster with nodes_init nodes. Then we
+    Then it creates cluster with self.nodes_init nodes. Then we
     send requests to all nodes in the cluster to get random key values.
     Next step is add nodes_in nodes into cluster and rebalance it. During rebalancing
     we get random keys from all nodes and verify that are different every time.
@@ -82,14 +78,10 @@ class RebalanceInTests(RebalanceBaseTest):
     in the cluster, than we wait for the disk queues to drain,
     and then verify that there has been no data loss."""
     def rebalance_in_get_random_key(self):
-        nodes_init = self.input.param("nodes_init", 1)
-        servs_in = self.servers[nodes_init:nodes_init + self.nodes_in]
-        servs_init = self.servers[:nodes_init]
-        if nodes_init > 1:
-            self.cluster.rebalance(self.servers[:1], servs_init[1:], [])
+        servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
         time.sleep(5)
-        rest_cons = [RestConnection(self.servers[i]) for i in xrange(nodes_init)]
+        rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.nodes_init)]
         result = []
         num_iter = 0
         # get random keys for each node during rebalancing
@@ -115,7 +107,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         rebalance.result()
         # get random keys for new added nodes
-        rest_cons = [RestConnection(self.servers[i]) for i in xrange(nodes_init + self.nodes_in)]
+        rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.nodes_init + self.nodes_in)]
         list_threads = []
         for rest in rest_cons:
               t = Thread(target=rest.get_random_key,
@@ -125,9 +117,9 @@ class RebalanceInTests(RebalanceBaseTest):
               t.start()
         [t.join() for t in list_threads]
 
-        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init])
 
     """Rebalances nodes into a cluster while doing mutations.
 
@@ -281,7 +273,7 @@ class RebalanceInTests(RebalanceBaseTest):
     """Rebalances nodes into a cluster when one node is warming up.
 
     This test begins by loading a given number of items into the node.
-    Then it creates cluster with nodes_init nodes. Next steps are:
+    Then it creates cluster with self.nodes_init nodes. Next steps are:
     stop the latest node in servs_init list( if list size equals 1, master node/
     cluster will be stopped), wait 20 sec and start the stopped node. Without waiting for
     the node to start up completely, rebalance in servs_in servers. Expect that
@@ -289,11 +281,8 @@ class RebalanceInTests(RebalanceBaseTest):
     configuration. Once the cluster has been rebalanced we wait for the disk queues
     to drain, and then verify that there has been no data loss."""
     def rebalance_in_with_warming_up(self):
-        nodes_init = self.input.param("nodes_init", 1)
-        servs_in = self.servers[nodes_init:nodes_init + self.nodes_in]
-        servs_init = self.servers[:nodes_init]
-        if nodes_init > 1:
-            self.cluster.rebalance(self.servers[:1], servs_init[1:], [])
+        servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        servs_init = self.servers[:self.nodes_init]
         warmup_node = servs_init[-1]
         shell = RemoteMachineShellConnection(warmup_node)
         shell.stop_couchbase()
@@ -311,9 +300,9 @@ class RebalanceInTests(RebalanceBaseTest):
             self.log.info("second attempt to rebalance")
             rebalance = self.cluster.async_rebalance(servs_init + servs_in, [], [])
             rebalance.result()
-        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init])
         self._verify_all_buckets(self.master, max_verify=self.max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.nodes_in + nodes_init])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init])
 
     """Rebalances nodes into a cluster during ddoc compaction.
 

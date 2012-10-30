@@ -93,19 +93,16 @@ class RebalanceInOutTests(RebalanceBaseTest):
     the disk queues to drain, and then verify that there has been no data loss.
     Once cluster was rebalanced the test is finished.
     The oder of add/remove nodes looks like:
-    nodes_init|servs_in|extra_nodes_in|extra_nodes_out|servs_out"""
+    self.nodes_init|servs_in|extra_nodes_in|extra_nodes_out|servs_out"""
     def start_stop_rebalance_in_out(self):
-        #initial number of items in the cluster
-        nodes_init = self.input.param("nodes_init", 1)
         extra_nodes_in = self.input.param("extra_nodes_in", 0)
         extra_nodes_out = self.input.param("extra_nodes_out", 0)
-        servs_init = self.servers[:nodes_init]
-        servs_in = [self.servers[i + nodes_init] for i in range(self.nodes_in)]
-        servs_out = [self.servers[nodes_init - i - 1] for i in range(self.nodes_out)]
-        extra_servs_in = [self.servers[i + nodes_init + self.nodes_in] for i in range(extra_nodes_in)]
-        extra_servs_out = [self.servers[nodes_init - i - 1 - self.nodes_out] for i in range(extra_nodes_out)]
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        extra_servs_in = [self.servers[i + self.nodes_init + self.nodes_in] for i in range(extra_nodes_in)]
+        extra_servs_out = [self.servers[self.nodes_init - i - 1 - self.nodes_out] for i in range(extra_nodes_out)]
         rest = RestConnection(self.master)
-        self.cluster.rebalance(self.servers[:1], servs_init[1:], [])
         self._wait_for_stats_all_buckets(servs_init)
         self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
         self.log.info("adding nodes {0} to cluster".format(servs_in))
@@ -115,9 +112,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
         #the latest iteration will be with i=5, for this case rebalance should be completed, that also is verified and tracked
         for i in range(1, 6):
             if i == 1:
-                rebalance = self.cluster.async_rebalance(servs_init[:nodes_init], servs_in, servs_out)
+                rebalance = self.cluster.async_rebalance(servs_init[:self.nodes_init], servs_in, servs_out)
             else:
-                self.cluster.async_rebalance(servs_init[:nodes_init] + servs_in, add_in_once, servs_out + extra_servs_out)
+                self.cluster.async_rebalance(servs_init[:self.nodes_init] + servs_in, add_in_once, servs_out + extra_servs_out)
                 add_in_once = []
                 result_nodes = set(servs_init + servs_in + extra_servs_in) - set(servs_out + extra_servs_out)
             time.sleep(5)

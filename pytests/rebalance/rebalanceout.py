@@ -11,8 +11,6 @@ class RebalanceOutTests(RebalanceBaseTest):
 
     def setUp(self):
         super(RebalanceOutTests, self).setUp()
-        #rebalance all nodes into the cluster before each test
-        self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
 
     def tearDown(self):
         super(RebalanceOutTests, self).tearDown()
