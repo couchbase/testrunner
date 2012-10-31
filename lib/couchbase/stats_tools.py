@@ -22,4 +22,5 @@ class StatsCommon():
             client = MemcachedClientHelper.direct_client(server, bucket)
             stats = client.stats(stat_param)
             result[server] = stats[stat]
+            client.close()
         return result
