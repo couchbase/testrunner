@@ -451,6 +451,9 @@ if (nrow(iostats)) {
     iostats$time <- as.numeric(iostats$time)
     iostats$read <- as.numeric(iostats$read)
     iostats$write <- as.numeric(iostats$write)
+    iostats$util <- as.numeric(iostats$util)
+    iostats$iowait <- as.numeric(iostats$iowait)
+    iostats$cpu <- 100 - as.numeric(iostats$idle)
 }
 
 # Get Latency-get
@@ -2268,6 +2271,31 @@ for(ip in levels(factor(iostats$ip))) {
     print(p)
     makeFootnote(footnote)
     makeMetricDef("Disk write across all hard drives (kB/s)")
+
+    p <- ggplot(stats, aes(time, util, color=buildinfo.version, label= stats)) + labs(x="----time (sec)--->", y="iostat - Disk %util")
+    p <- p + geom_line()
+    p <- addopts(p, paste("Average %util : ", ip))
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef(paste("Average disk utilization percentage ",
+                        " across all hard drives (kB/s)", sep="\n"))
+
+    p <- ggplot(stats, aes(time, iowait, color=buildinfo.version, label= stats)) + labs(x="----time (sec)--->", y="iostat - %iowait")
+    p <- p + geom_line()
+    p <- addopts(p, paste("Average %iowait : ", ip))
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef(paste("Average cpu percentage waiting for ",
+                        "outstanding IO", sep="\n"))
+
+    p <- ggplot(stats, aes(time, cpu, color=buildinfo.version, label= stats)) + labs(x="----time (sec)--->", y="iostat - %cpu")
+    p <- p + geom_line()
+    p <- addopts(p, paste("Average %cpu : ", ip))
+    print(p)
+    makeFootnote(footnote)
+    makeMetricDef(paste("Average cpu percentage measured from ",
+                        "iostat excluding %idle", sep="\n"))
+
 }
 
 cat("generating data disk size\n")
