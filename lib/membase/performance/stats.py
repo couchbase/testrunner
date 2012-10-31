@@ -70,7 +70,7 @@ class StatsCollector(object):
                                      args=(nodes, pnames, frequency, self._verbosity))
             sysstats_thread.start()
             iostats_thread = Thread(target=self.iostats,
-                                    args=(nodes, 5, self._verbosity))
+                                    args=(nodes, 10, self._verbosity))
             iostats_thread.start()
             ns_server_stats_thread = Thread(target=self.ns_server_stats,
                                             args=([nodes[0]], bucket, 60, self._verbosity))
@@ -357,14 +357,30 @@ class StatsCollector(object):
 
     def _extract_io_info(self, shell):
         """
-        Extract kB_read and kB_wrtn from iostat
+        Extract info from iostat
+
+        Output:
+
+        [kB_read, kB_wrtn, %util, %iowait, %idle]
+
+        Rough Benchmarks:
+        My local box (WIFI LAN - VM), took ~1.2 sec for this routine
         """
         CMD = "iostat -dk | grep 'sd. ' | " \
               "awk '{read+=$5; write+=$6} END { print read, write }'"
-
         out, err = shell.execute_command(CMD)
+        results = out[0]
 
-        return out[0].split(' ')
+        CMD = "iostat -dkx | grep 'sd. ' | "\
+              "awk '{util+=$12} END { print util/NR }'"
+        out, err = shell.execute_command(CMD)
+        results = "%s %s" % (results, out[0])
+
+        CMD = "iostat 1 2 -c | awk 'NR == 7 { print $4, $6 }'"
+        out, err = shell.execute_command(CMD)
+        results = "%s %s" % (results, out[0])
+
+        return results.split(' ')
 
     def system_stats(self, nodes, pnames, frequency, verbosity=False):
         shells = []
@@ -419,12 +435,19 @@ class StatsCollector(object):
             time.sleep(frequency)
             print "collecting io_stats"
             for shell in shells:
-                kB_read, kB_wrtn = self._extract_io_info(shell)
+                try:
+                    kB_read, kB_wrtn, util, iowait, idle = \
+                        self._extract_io_info(shell)
+                except (ValueError, TypeError):
+                    continue
                 if kB_read and kB_wrtn:
                     self._task["iostats"].append({"time": time.time(),
                                                  "ip": shell.ip,
                                                  "read": kB_read,
-                                                 "write": kB_wrtn})
+                                                 "write": kB_wrtn,
+                                                 "util": util,
+                                                 "iowait": iowait,
+                                                 "idle": idle})
         print "finished capturing io stats"
 
     def couchdb_stats(nodes):
