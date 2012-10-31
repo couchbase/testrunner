@@ -317,7 +317,7 @@ class StatsWaitTask(Task):
                 self.set_exception(ex)
 
         if not self._compare(self.comparison, str(stat_result), self.value):
-            self.log.info("Not Ready: %s %s %s %s expected on %s" % (self.stat, stat_result,
+            self.log.warn("Not Ready: %s %s %s %s expected on %s" % (self.stat, stat_result,
                       self.comparison, self.value, self._stringify_servers()))
             task_manager.schedule(self, 5)
             return
@@ -330,7 +330,7 @@ class StatsWaitTask(Task):
         self.set_result(True)
 
     def _stringify_servers(self):
-        return ''.join([`server.ip` for server in self.servers])
+        return ''.join([`server.ip + ":" + server.port` for server in self.servers])
 
     def _get_connection(self, server):
         if not self.conns.has_key(server):
@@ -339,7 +339,7 @@ class StatsWaitTask(Task):
                     self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
                     return self.conns[server]
                 except EOFError:
-                    self.log.info("failed to create direct client, retry in 1 sec")
+                    self.log.error("failed to create direct client, retry in 1 sec")
                     time.sleep(1)
             self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
         return self.conns[server]
