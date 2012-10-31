@@ -1831,7 +1831,8 @@ class QueryView:
 
             for query in self.queries:
                 params = query.params
-                attempts_num = query.attempt_num or 15
+                attempts_num = tc.input.param('attempt-num', 15)
+                attempts_num = query.attempt_num or attempts_num
                 num_tries = None
                 if attempts_num < 15:
                     num_tries = attempts_num
