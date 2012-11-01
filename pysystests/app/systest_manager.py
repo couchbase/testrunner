@@ -341,6 +341,10 @@ def createWorkload(workload):
             workloadSpec['update_perc'] = int(val)
         if key == 'd':
             workloadSpec['del_perc'] = int(val)
+        if key == 'e':
+            workloadSpec['exp_perc'] = int(val)
+        if key == 'ttl':
+            workloadSpec['ttl'] = int(val)
         if key == 'ccq':
             workloadSpec['cc_queues'] = [str(val)]
         if key == 'coq':

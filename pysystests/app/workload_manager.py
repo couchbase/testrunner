@@ -114,7 +114,7 @@ def sysTestRunner(workload):
             if workload.preconditions is None:
                 prevWorkload.active = False
 
-    runTask = run.apply_async(args=[workload, prevWorkload], expires = workload.expires)
+    runTask = run.apply_async(args=[workload, prevWorkload])
 
 
 @celery.task(base = PersistedMQ)
@@ -195,10 +195,13 @@ def run(workload, prevWorkload = None):
                 update_count = int(ops_sec *  workload.update_perc/100)
                 get_count = int(ops_sec *  workload.get_perc/100)
                 del_count = int(ops_sec *  workload.del_perc/100)
+                exp_count = int(ops_sec *  workload.exp_perc/100)
                 consume_queue =  workload.consume_queue
 
+                ttl = workload.ttl
                 generate_pending_tasks.delay(task_queue, template, bucketInfo, create_count,
-                                              update_count, get_count, del_count, consume_queue)
+                                              update_count, get_count, del_count, exp_count,
+                                              consume_queue, ttl)
                 inflight = inflight + 1
 
         else:
@@ -307,7 +310,7 @@ def postcondition_handler():
 @celery.task(base = PersistedMQ, ignore_result = True)
 def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
                            update_count, get_count, del_count,
-                           consume_queue):
+                           exp_count, consume_queue, ttl = 0):
 
     rabbitHelper = generate_delete_tasks.rabbitHelper
     bucket = bucketInfo['bucket']
@@ -315,6 +318,7 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
 
     create_tasks , update_tasks , get_tasks , del_tasks = ([],[],[],[])
     if create_count > 0:
+        template.ttl = 0 # override template level ttl
         create_tasks = generate_set_tasks(template, create_count, bucket, password = password)
     if update_count > 0:
         update_tasks = generate_update_tasks(template, update_count, consume_queue, bucket, password = password)
@@ -322,6 +326,12 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
         get_tasks = generate_get_tasks(get_count, consume_queue, bucket)
     if del_count > 0:
         del_tasks = generate_delete_tasks(del_count, consume_queue, bucket)
+    if exp_count > 0:
+        # set ttl from workload level ttl
+        # otherwise template level ttl will be used
+        if ttl > 0:
+            template.ttl = ttl
+        create_tasks = generate_set_tasks(template, exp_count, bucket, password = password)
 
     pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks 
     pending_tasks = json.dumps(pending_tasks)
@@ -453,13 +463,14 @@ class Workload(object):
         self.update_perc = int(params["update_perc"])
         self.del_perc = int(params["del_perc"])
         self.get_perc = int(params["get_perc"])
+        self.exp_perc = params["exp_perc"]
         self.preconditions = params["preconditions"]
         self.postconditions = params["postconditions"]
         self.active = False 
         self.consume_queue = params["consume_queue"] 
         self.cc_queues = params["cc_queues"]
         self.wait = params["wait"]
-        self.expires = params["expires"]
+        self.ttl = int(params["ttl"])
 
         # consume from cc_queue by default if not specified
         if self.cc_queues != None:
@@ -472,7 +483,8 @@ class Workload(object):
                 'postconditions': None,
                 'del_perc': 0,
                 'create_perc': 0,
-                'expires': None,
+                'exp_perc': 0,
+                'ttl': 15,
                 'bucket': 'default',
                 'password': '',
                 'ops_per_sec': 0,

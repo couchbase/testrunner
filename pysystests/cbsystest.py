@@ -13,7 +13,8 @@ def add_modifier_args(parser):
     parser.add_argument("--precondition", help="required stat or cluster state required before running workload")
     parser.add_argument("--postcondition",help="required stat or cluster state required to complete workload")
     parser.add_argument("--wait",  nargs=3,  help="time to wait before starting workload: <hour> <min> <sec>", metavar = ('HOUR','MIN','SEC'), type=int)
-    parser.add_argument("--expires",nargs=3,  help="time to wait before terminating workload: <hour> <min> <sec>", metavar = ('HOUR','MIN','SEC'), type=int)
+#depreciated
+#parser.add_argument("--expires",nargs=3,  help="time to wait before terminating workload: <hour> <min> <sec>", metavar = ('HOUR','MIN','SEC'), type=int)
 
 def add_broker_arg(parser):
     parser.add_argument("--broker", help="ip address of broker used to consume options")
@@ -49,6 +50,8 @@ def add_workload_parser(parent):
     parser.add_argument("--create",  help="percentage of creates 0-100", default=0, type=int)
     parser.add_argument("--update",  help="percentage of updates 0-100", default=0, type=int)
     parser.add_argument("--get",     help="percentage of gets 0-100", default=0, type=int)
+    parser.add_argument("--expire",  help="percentage of expirations 0-100", default=0, type=int)
+    parser.add_argument("--ttl",      default=15, help="document expires time to use when expirations set")
     parser.add_argument("--delete",  help="percentage of deletes 0-100", default=0, type=int)
     parser.add_argument("--template",help="predefined template to use", default="default")
     add_modifier_args(parser)
@@ -153,9 +156,6 @@ def run_workload(args):
     if args.wait is not None:
         args.wait = conv_to_secs(args.wait)
 
-    if args.expires is not None:
-        args.expires = conv_to_secs(args.expires)
-
     workload = { "bucket"      : args.bucket,
                  "password"    : args.password,
                  "ops_per_sec" : args.ops,
@@ -163,12 +163,13 @@ def run_workload(args):
                  "update_perc" : args.update,
                  "get_perc"    : args.get,
                  "del_perc"    : args.delete,
+                 "exp_perc"    : args.expire,
+                 "ttl"         : args.ttl,
                  "cc_queues"   : args.cc_queues,
                  "consume_queue" : args.consume_queue,
                  "postconditions" : args.postcondition,
                  "preconditions" : args.precondition,
                  "wait"  : args.wait,
-                 "expires"  : args.expires,
                  "template"  : args.template}
     cluster = args.cluster
 
