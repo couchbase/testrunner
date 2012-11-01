@@ -477,14 +477,16 @@ class RebalanceTests(EVPerfClient):
         # Disable stats
         self.input.test_params['stats'] = 0
 
-        # Setup view compaction
+        # View compaction setup
         rc = RestConnection(self.input.servers[0])
         vt = 30 if self.parami('view_compaction', 1) else 100
         rc.set_auto_compaction(dbFragmentThresholdPercentage=30,
                                viewFragmntThresholdPercentage=vt)
 
-        # Optionally disable consistent view
-        if not self.parami('consistent_view', 1):
+        # Consistent view setup
+        if self.parami('consistent_view', 1):
+            rc.set_reb_cons_view(disable=False)
+        else:
             rc.set_reb_cons_view(disable=True)
 
         # Load phase
