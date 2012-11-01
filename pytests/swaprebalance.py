@@ -364,7 +364,7 @@ class SwapRebalanceBase(unittest.TestCase):
             try:
                 pid = StatsCommon.get_stats([master], bucket, "", "pid")[master]
             except EOFError as e:
-                self.log.error("{O}.Retry in 2 sec".format(e))
+                self.log.error("{0}.Retry in 2 sec".format(e))
                 time.sleep(2)
                 pid = StatsCommon.get_stats([master], bucket, "", "pid")[master]
             command = "os:cmd(\"kill -9 {0} \")".format(pid)
