@@ -71,6 +71,12 @@ class SwapRebalanceBase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
         self.log.info("Stopping load in Teardown")
         SwapRebalanceBase.stop_load(self.loaders)
+        for server in self.servers:
+            rest = RestConnection(server)
+            if rest._rebalance_progress_status() == 'running':
+                self.log.warning("rebalancing is still running, test should be verified")
+                stopped = rest.stop_rebalance()
+                self.assertTrue(stopped, msg="unable to stop rebalance")
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
