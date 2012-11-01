@@ -513,7 +513,8 @@ class RebalanceTests(EVPerfClient):
                     rc.query_view(design_doc_name=ddoc_name,
                                   view_name=view_name,
                                   bucket=self.params('bucket', 'default'),
-                                  query={'stale': 'false'}, timeout=14400)
+                                  query={'stale': 'false', 'limit': 100},
+                                  timeout=14400)
                     t1 = time.time()
                     self.log.info(
                         "Time taken to perform query: {0} sec".format(t1 - t0))
