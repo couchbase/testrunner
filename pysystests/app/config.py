@@ -130,7 +130,7 @@ class BaseConfig(object):
 
         self.CELERY_ROUTES = self.CELERY_ROUTES +\
         (
-            {'app.sdk_client_tasks.delete': self.route_args('delete','kv.delete') },
+            {'app.sdk_client_tasks.mdelete': self.route_args('delete','kv.delete') },
             {'app.sdk_client_tasks.mset'   : self.route_args('set','kv.set') },
             {'app.sdk_client_tasks.mget'  : self.route_args('get','kv.get') },
             {'app.workload_manager.workloadConsumer' : self.route_args('kv_tasks','kv_tasks.consumer') },
