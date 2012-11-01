@@ -459,6 +459,7 @@ class RebalanceHelper():
     def rebalance_out(servers, how_many, monitor=True):
         rest = RestConnection(servers[0])
         cur_ips = map(lambda node: node.ip, rest.node_statuses())
+        servers = filter(lambda server: server.ip in cur_ips, servers) or servers
         if len(cur_ips) <= how_many or how_many < 1:
             log.error("failed to rebalance %s servers out: not enough servers"
                       % how_many)
