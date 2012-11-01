@@ -484,7 +484,7 @@ class RebalanceTests(EVPerfClient):
                                viewFragmntThresholdPercentage=vt)
 
         # Optionally disable consistent view
-        if not self.parami('consisten_view', 1):
+        if not self.parami('consistent_view', 1):
             rc.set_reb_cons_view(disable=True)
 
         # Load phase
