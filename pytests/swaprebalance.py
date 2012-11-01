@@ -361,7 +361,12 @@ class SwapRebalanceBase(unittest.TestCase):
             self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(expected_progress))
             RestHelper(rest).rebalance_reached(expected_progress)
             bucket = rest.get_buckets()[0].name
-            pid = StatsCommon.get_stats([master], bucket, "", "pid")[master]
+            try:
+                pid = StatsCommon.get_stats([master], bucket, "", "pid")[master]
+            except EOFError as e:
+                self.log.error("{O}.Retry in 2 sec".format(e))
+                time.sleep(2)
+                pid = StatsCommon.get_stats([master], bucket, "", "pid")[master]
             command = "os:cmd(\"kill -9 {0} \")".format(pid)
             self.log.info(command)
             killed = rest.diag_eval(command)
