@@ -16,6 +16,7 @@ from memcached.helper.data_helper import KVStoreAwareSmartClient, VBucketAwareMe
 from couchbase.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
+from couchbase.stats_tools import StatsCommon
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                         GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, ServerUnavailableException, BucketFlushFailed
 
@@ -124,12 +125,14 @@ class BucketCreateTask(Task):
             self.state = CHECKING
             task_manager.schedule(self)
         except BucketCreationException as e:
+            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
             self.state = FINISHED
             self.set_exception(e)
         #catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.info("Unexpected Exception Caught")
+            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
             self.set_exception(e)
 
     def check(self, task_manager):
@@ -160,6 +163,7 @@ class BucketDeleteTask(Task):
                 self.state = CHECKING
                 task_manager.schedule(self)
             else:
+                self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
                 self.state = FINISHED
                 self.set_result(False)
         #catch and set all unexpected exceptions
@@ -167,6 +171,7 @@ class BucketDeleteTask(Task):
         except Exception as e:
             self.state = FINISHED
             self.log.info("Unexpected Exception Caught")
+            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
             self.set_exception(e)
 
 
@@ -182,6 +187,7 @@ class BucketDeleteTask(Task):
         except Exception as e:
             self.state = FINISHED
             self.log.info("Unexpected Exception Caught")
+            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
             self.set_exception(e)
 
 class RebalanceTask(Task):

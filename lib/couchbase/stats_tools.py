@@ -4,7 +4,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 class StatsCommon():
 
     @staticmethod
-    def get_stats(servers, bucket, stat_param, stat):
+    def get_stats(servers, bucket, stat_param, stat=None):
         """Gets stats for a specific key from a list of servers
 
         Parameters:
@@ -21,6 +21,9 @@ class StatsCommon():
         for server in servers:
             client = MemcachedClientHelper.direct_client(server, bucket)
             stats = client.stats(stat_param)
-            result[server] = stats[stat]
+            if stat:
+                result[server] = stats[stat]
+            else:
+                result[server] = stats
             client.close()
         return result

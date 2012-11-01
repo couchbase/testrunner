@@ -14,6 +14,7 @@ from mc_bin_client import MemcachedClient
 from threading import Thread
 import Queue
 from collections import defaultdict
+from couchbase.stats_tools import StatsCommon
 
 class BucketOperationHelper():
 
@@ -136,7 +137,9 @@ class BucketOperationHelper():
                 log.info('deleted bucket : {0} from {1}'.format(bucket.name, serverInfo.ip))
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
                 if test_case:
-                    test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200), msg=msg)
+                    if not BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200):
+                        self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
+                        test_case.fail(msg)
 
     @staticmethod
     def delete_bucket_or_assert(serverInfo, bucket='default', test_case=None):
@@ -149,7 +152,9 @@ class BucketOperationHelper():
             log.info('deleted bucket : {0} from {1}'.format(bucket, serverInfo.ip))
         msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket)
         if test_case:
-            test_case.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200), msg=msg)
+            if not BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200):
+                self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
+                test_case.fail(msg)
 
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
     # BUCKET DELETION IS A SYNC CALL W.R.T MEMCACHED
