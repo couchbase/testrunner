@@ -81,7 +81,8 @@ class AwsIni:
         else:
             print "ssh_key:{0}".format(self.options.ssh_key)
         print "port:8091"
-        print "data_path:/mnt/ebs"
+        print "data_path:/data"
+        print "index_path:/data2"
 
     def _print_clusters(self):
         for cluster_id in range(self.options.clusters):
