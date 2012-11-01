@@ -8,8 +8,10 @@ from collections import defaultdict
 
 from lib.membase.api import httplib2
 from lib.membase.api.rest_client import RestConnection
+from lib.membase.helper.rebalance_helper import RebalanceHelper
 
-from pytests.performance.eperf import EPerfClient, EVPerfClient
+from pytests.performance.eperf import EPerfClient, EVPerfClient, ViewGen
+from pytests.performance.perf_defaults import PerfDefaults
 
 
 class PerfWrapper(object):
@@ -445,6 +447,74 @@ class RebalanceTests(EVPerfClient):
     def test_mixed_rebalance(self):
         """Mixed read/write test w/o views"""
         super(RebalanceTests, self).test_eperf_mixed()
+
+    def test_view_rebalance(self):
+        """Alk's specification.
+
+        Cluster setup:
+        -- 4 nodes
+        -- 1 bucket
+        -- 8GB total RAM
+        -- 5GB bucket quota
+        -- no data replica
+        -- no index replica
+        -- no view compaction
+
+        All phases are enabled by default.
+        Load phase:
+        -- 10M items x 2KB average values size
+        -- no expiration
+        Index phase:
+        -- 1 design ddoc, 1 view
+        Access phase:
+        -- no front-end workload
+        -- rebalance out, from 4 to 3 nodes
+        -- stale=false query after rebalance
+        """
+        # Legacy
+        self.spec(self.__str__().split(" ")[0])
+
+        # Disable stats
+        self.input.test_params['stats'] = 0
+
+        # Setup view compaction
+        rc = RestConnection(self.input.servers[0])
+        vt = 30 if self.parami('view_compaction', 1) else 100
+        rc.set_auto_compaction(dbFragmentThresholdPercentage=30,
+                               viewFragmntThresholdPercentage=vt)
+
+        # Optionally disable consistent view
+        if not self.parami('consisten_view', 1):
+            rc.set_reb_cons_view(disable=True)
+
+        # Load phase
+        if self.parami('load_phase', 1):
+            num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
+            self.load_phase(num_nodes)
+
+        view_gen = ViewGen()
+        ddocs = view_gen.generate_ddocs([1])
+
+
+        # Index phase
+        if self.parami('index_phase', 1):
+            self.index_phase(ddocs)
+
+        # Access phase
+        if self.parami('access_phase', 1):
+            RebalanceHelper.rebalance_out(servers=self.input.servers,
+                                          how_many=1, monitor=True)
+
+            for ddoc_name, ddoc in ddocs.iteritems():
+                for view_name in ddoc['views'].iterkeys():
+                    t0 = time.time()
+                    rc.query_view(design_doc_name=ddoc_name,
+                                  view_name=view_name,
+                                  bucket=self.params('bucket', 'default'),
+                                  query={'stale': 'false'}, timeout=14400)
+                    t1 = time.time()
+                    self.log.info(
+                        "Time taken to perform query: {0} sec".format(t1 - t0))
 
 
 class XRebalanceTests(XPerfTests):
