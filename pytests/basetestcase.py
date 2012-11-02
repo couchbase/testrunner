@@ -79,23 +79,27 @@ class BaseTestCase(unittest.TestCase):
         self._log_start(self)
 
     def tearDown(self):
-        if not self.input.param("skip_cleanup", False):
             try:
-                self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
+                if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
+                    and TestInputSingleton.input.param("stop-on-failure", False))\
+                        or self.input.param("skip_cleanup", False):
+                    self.log.warn("CLEANUP WAS SKIPPED")
+                else:
+                    self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
-                rest = RestConnection(self.master)
-                alerts = rest.get_alerts()
-                if alerts is not None and len(alerts) != 0:
-                    self.log.warn("Alerts were found: {0}".format(alerts))
-                if rest._rebalance_progress_status() == 'running':
-                    self.log.warning("rebalancing is still running, test should be verified")
-                    stopped = rest.stop_rebalance()
-                    self.assertTrue(stopped, msg="unable to stop rebalance")
-                BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-                ClusterOperationHelper.cleanup_cluster(self.servers)
-                time.sleep(10)
-                ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-                self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
+                    rest = RestConnection(self.master)
+                    alerts = rest.get_alerts()
+                    if alerts is not None and len(alerts) != 0:
+                        self.log.warn("Alerts were found: {0}".format(alerts))
+                    if rest._rebalance_progress_status() == 'running':
+                        self.log.warning("rebalancing is still running, test should be verified")
+                        stopped = rest.stop_rebalance()
+                        self.assertTrue(stopped, msg="unable to stop rebalance")
+                    BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+                    ClusterOperationHelper.cleanup_cluster(self.servers)
+                    time.sleep(10)
+                    ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+                    self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             finally:
                 #stop all existing task manager threads
