@@ -11,6 +11,7 @@ from memcached.helper.data_helper import LoadWithMcsoda
 from couchbase.stats_tools import StatsCommon
 from threading import Thread
 from basetestcase import BaseTestCase
+from memcached.helper.data_helper import MemcachedClientHelper
 
 class SwapRebalanceBase(unittest.TestCase):
 
@@ -361,12 +362,18 @@ class SwapRebalanceBase(unittest.TestCase):
             self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(expected_progress))
             RestHelper(rest).rebalance_reached(expected_progress)
             bucket = rest.get_buckets()[0].name
-            try:
-                pid = StatsCommon.get_stats([master], bucket, "", "pid")[master]
-            except EOFError as e:
-                self.log.error("{0}.Retry in 2 sec".format(e))
-                time.sleep(2)
-                pid = StatsCommon.get_stats([master], bucket, "", "pid")[master]
+            pid = None
+            for i in xrange(10):
+                try:
+                    _mc = MemcachedClientHelper.direct_client(master, bucket)
+                    pid = _mc.stats()["pid"]
+                    break
+                except EOFError as e:
+                    self.log.error("{0}.Retry in 2 sec".format(e))
+                    time.sleep(1)
+
+            if pid is None:
+                self.fail("impossible to get a PID")
             command = "os:cmd(\"kill -9 {0} \")".format(pid)
             self.log.info(command)
             killed = rest.diag_eval(command)
