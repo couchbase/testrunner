@@ -125,14 +125,12 @@ class BucketCreateTask(Task):
             self.state = CHECKING
             task_manager.schedule(self)
         except BucketCreationException as e:
-            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
             self.state = FINISHED
             self.set_exception(e)
         #catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.info("Unexpected Exception Caught")
-            self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
             self.set_exception(e)
 
     def check(self, task_manager):
