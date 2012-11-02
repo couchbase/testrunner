@@ -224,7 +224,7 @@ class BaseConfig(object):
         {
             'cluster_resource_monitor': {
                 'task': 'app.stats.resource_monitor',
-                'schedule': timedelta(seconds=120), # every 2 minutes
+                'schedule': timedelta(seconds=30), # every 30s 
             },
           # 'sync_time': {
           #     'task': 'app.stats.sync_time',
@@ -236,7 +236,7 @@ class BaseConfig(object):
           # },
             'generate_node_stats_report': { # every 2 minutes print out report from collected stats
                 'task': 'app.stats.generate_node_stats_report',
-                'schedule': timedelta(seconds=360),
+                'schedule': timedelta(seconds=120),
             },
         })
 
