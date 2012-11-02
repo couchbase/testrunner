@@ -34,25 +34,30 @@ class cbcollectRunner(object):
 
     def run(self):
         remote_client = RemoteMachineShellConnection(self.server)
-        now = datetime.now()
-        day = now.day
-        month = now.month
-        year = now.year
-        file_name = "%s-%s%s%s-diag.zip" % (self.server.ip, month, day, year)
-        print "Collecting logs from %s\n" % (self.server.ip)
-        output, error = remote_client.execute_cbcollect_info(file_name)
-        print "\n".join(output)
-        print "\n".join(error)
-
-        user_path = "/home/"
-        if self.server.ssh_username == "root":
-            user_path = "/"
-        if not remote_client.file_exists("%s%s" % (user_path, self.server.ssh_username), file_name):
-            raise Exception("%s doesn't exists on server" % (file_name))
-        if remote_client.get_file("%s%s" % (user_path, self.server.ssh_username), file_name, "%s/%s" % (self.path, file_name)):
-            print "Downloading zipped logs from %s" % (self.server.ip)
+        info = remote_client.extract_remote_info()
+        if info.type.lower() == 'windows':
+            #TODO add implementation for windows
+            print "NO implementation cbcollectRunner on windows"
         else:
-            raise Exception("Fail to download zipped logs from %s" % (self.server.ip))
+            now = datetime.now()
+            day = now.day
+            month = now.month
+            year = now.year
+            file_name = "%s-%s%s%s-diag.zip" % (self.server.ip, month, day, year)
+            print "Collecting logs from %s\n" % (self.server.ip)
+            output, error = remote_client.execute_cbcollect_info(file_name)
+            print "\n".join(output)
+            print "\n".join(error)
+
+            user_path = "/home/"
+            if self.server.ssh_username == "root":
+                user_path = "/"
+            if not remote_client.file_exists("%s%s" % (user_path, self.server.ssh_username), file_name):
+                raise Exception("%s doesn't exists on server" % (file_name))
+            if remote_client.get_file("%s%s" % (user_path, self.server.ssh_username), file_name, "%s/%s" % (self.path, file_name)):
+                print "Downloading zipped logs from %s" % (self.server.ip)
+            else:
+                raise Exception("Fail to download zipped logs from %s" % (self.server.ip))
         remote_client.disconnect()
 
 if __name__ == "__main__":
@@ -70,7 +75,7 @@ if __name__ == "__main__":
     except getopt.GetoptError, error:
         usage("ERROR: " + str(error))
 
-    file_path=input.param("path", ".")
+    file_path = input.param("path", ".")
 
     remotes = []
     for server in input.servers:
