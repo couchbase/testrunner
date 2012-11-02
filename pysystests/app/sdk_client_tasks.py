@@ -91,4 +91,4 @@ def _send_msg(message):
         sdk_client.sendall(json.dumps(message))
     except Exception as ex:
         logger.error(ex)
-        logger.error("message suppressed: %s" % message)
+        logger.error("message suppressed: %s" % message["command"])
