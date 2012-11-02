@@ -23,9 +23,9 @@ class SysCouchClient(CouchbaseClient):
         self.accport = accport
         try:
             super(SysCouchClient, self).__init__(url, bucket, cred)
-            print "sdk_%s: connected to %s%s" % (accport, url, bucket)
+            print "sdk_%s: connected to %s => %s" % (accport, url, bucket)
         except Exception as ex:
-            print "sdk_%s: unable to establish connection to %s%s, %s " %\
+            print "sdk_%s: unable to establish connection to %s => %s, %s " %\
                 (accport, url, bucket, ex)
             self.ready = False
 
@@ -41,7 +41,7 @@ class CouchClientManager():
     def add_bucket_client(self, bucket = "default", password = ""):
         ip = cfg.COUCHBASE_IP
         port = cfg.COUCHBASE_PORT
-        url = "http://%s:%s/pools/default/"  % (ip, port)
+        url = "http://%s:%s/pools/default"  % (ip, port)
         client = SysCouchClient(url, bucket, password, self.accport)
         if client.ready == True:
             self.client_map[bucket] = client
@@ -65,13 +65,14 @@ class CouchClientManager():
     def _requestHandler(self, c, retries = 0):
         try:
             data = json.loads(c)
+            self.client_from_req(data)
             res = self.exec_request(data)
         except ValueError as ex:
             print ex
             print "unable to decode json: %s" % c
         except Exception as ex:
             processMap[self.accport]["connected"] = False
-            bucket = str(data['bucket'])
+            print "Error: %s" % ex
 
     def exec_request(self, data):
         if data['command'] == 'set':
@@ -100,6 +101,7 @@ class CouchClientManager():
 
 
     def do_mset(self, data):
+
 
         keys = data['args']
         template = data['template']
@@ -243,6 +245,6 @@ def _run(port):
         pool.spawn_n(client_mgr.requestHandler, new_sock)
 
 if __name__ == '__main__':
-    for port in xrange(50008, 50010):
+    for port in xrange(50008, 50012):
         start_listener(port)
     monitorSubprocesses()

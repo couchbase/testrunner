@@ -84,7 +84,7 @@ def _send_msg(message):
                     "cb_port" : cfg.COUCHBASE_PORT})
 
     try:
-        port = randint(50008, 50009)
+        port = randint(50008, 50011)
         sdk_client = eventlet.connect((SDK_IP, port))
         sdk_client.setblocking(False)
         sdk_client.settimeout(5)
