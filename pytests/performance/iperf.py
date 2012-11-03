@@ -489,14 +489,19 @@ class RebalanceTests(EVPerfClient):
         else:
             rc.set_reb_cons_view(disable=True)
 
+        # Customize number of design docs
+        view_gen = ViewGen()
+        if self.parami('ddocs', 1) == 1:
+            ddocs = view_gen.generate_ddocs([1])
+        elif self.parami('ddocs', 1) == 8:
+            ddocs = view_gen.generate_ddocs([1, 1, 1, 1, 1, 1, 1, 1])
+        else:
+            self.log.error('Only 1 or 8 ddocs supported.')
+
         # Load phase
         if self.parami('load_phase', 1):
             num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
             self.load_phase(num_nodes)
-
-        view_gen = ViewGen()
-        ddocs = view_gen.generate_ddocs([1])
-
 
         # Index phase
         if self.parami('index_phase', 1):
@@ -506,18 +511,16 @@ class RebalanceTests(EVPerfClient):
         if self.parami('access_phase', 1):
             RebalanceHelper.rebalance_out(servers=self.input.servers,
                                           how_many=1, monitor=True)
-
+            t0 = time.time()
             for ddoc_name, ddoc in ddocs.iteritems():
                 for view_name in ddoc['views'].iterkeys():
-                    t0 = time.time()
                     rc.query_view(design_doc_name=ddoc_name,
                                   view_name=view_name,
                                   bucket=self.params('bucket', 'default'),
                                   query={'stale': 'false', 'limit': 100},
                                   timeout=14400)
-                    t1 = time.time()
-                    self.log.info(
-                        "Time taken to perform query: {0} sec".format(t1 - t0))
+            t1 = time.time()
+            self.log.info('Time taken to build index: {0} sec'.format(t1 - t0))
 
 
 class XRebalanceTests(XPerfTests):
