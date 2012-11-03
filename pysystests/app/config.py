@@ -226,17 +226,17 @@ class BaseConfig(object):
                 'task': 'app.stats.resource_monitor',
                 'schedule': timedelta(seconds=120), # every 2 minutes
             },
-            'sync_time': {
-                'task': 'app.stats.sync_time',
-                'schedule': timedelta(seconds=10800),
-            },
-            'atop_log_rollover': { # Execute every three hours
-                'task': 'app.stats.atop_log_rollover',
-                'schedule': timedelta(seconds=10800),
-            },
+          # 'sync_time': {
+          #     'task': 'app.stats.sync_time',
+          #     'schedule': timedelta(seconds=10800),
+          # },
+          # 'atop_log_rollover': { # Execute every three hours
+          #     'task': 'app.stats.atop_log_rollover',
+          #     'schedule': timedelta(seconds=10800),
+          # },
             'generate_node_stats_report': { # every 2 minutes print out report from collected stats
                 'task': 'app.stats.generate_node_stats_report',
-                'schedule': timedelta(seconds=300),
+                'schedule': timedelta(seconds=360),
             },
         })
 

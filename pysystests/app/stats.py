@@ -41,6 +41,11 @@ def resource_monitor():
         # get stats from node
         sample = get_atop_sample(node.ip)
 
+        # update collection with cbstats
+        sample.update(get_cbstat_sample(node.ip))
+
+        # update collection with cbstats
+        sample.update(get_du_sample(node.ip))
 
         # update node state object
         update_node_stats(node_stats, sample)
@@ -124,6 +129,36 @@ def start_atop(ip):
 def atop_proc_sig():
     return "atop -a -w %s 3" % cfg.ATOP_LOG_FILE
 
+def get_du_sample(ip):
+    sample = {}
+    cmd = "df -h | grep data | awk '{ print $2 }'"
+    rc = exec_cmd(ip,cmd)
+    if rc:
+        sample.update({"disk_used" : rc[0][0]})
+
+    return sample
+
+def get_cbstat_sample(ip):
+    sample = {}
+    curr_items = cbstat_curr_items(ip)
+    dwq = cbstat_disk_write_queue(ip)
+    ep_bg = cbstat_ep_bg_fetched(ip)
+    ep_bg_wait = cbstat_ep_bg_wait(ip)
+
+    if curr_items:
+        sample.update({"curr_items" : curr_items[1]})
+
+    if dwq >= 0:
+        sample.update({"disk_wq" : dwq})
+
+    if ep_bg:
+        sample.update({"bg_fetched" : ep_bg[1]})
+
+    if ep_bg_wait:
+        sample.update({"bg_fetch_wait" : ep_bg_wait[1]})
+
+    return sample
+
 def get_atop_sample(ip):
 
     sample = {"ip" : ip}
@@ -186,6 +221,45 @@ def _atop_exec(ip, cmd, flags = ""):
         res = rc[0][0].split()
     return res
 
+def cbstat_curr_items(ip):
+
+    cmd = "grep curr_items: | head -1"
+    return _cbtop_exec(ip, cmd)
+
+def cbstat_disk_write_queue(ip):
+
+    cmd = "grep ep_queue_size: | head -1"
+    qsize = _cbtop_exec(ip, cmd)
+    if qsize:
+        cmd = "grep ep_flusher_todo: | head -1"
+        fl_todo = _cbtop_exec(ip, cmd)
+        if fl_todo:
+            return int(qsize[1]) + int(fl_todo[1])
+
+    return -1
+
+def cbstat_ep_bg_fetched(ip):
+    cmd = "grep ep_bg_fetched: | head -1"
+    return  _cbtop_exec(ip, cmd)
+
+def cbstat_ep_bg_wait(ip):
+    cmd = "grep ep_bg_wait: | head -1"
+    return  _cbtop_exec(ip, cmd)
+
+# by default get stats from direct mc port
+def _cbtop_exec(ip, cmd, port = 11210):
+
+    res = None
+    prefix = "/opt/couchbase/bin/cbstats localhost:%d all" % port
+    cmd = prefix + "|" + cmd
+
+    rc  = exec_cmd(ip, cmd)
+
+    # parse result based on what is expected from atop commands
+    if len(rc[0]) > 0:
+        res = rc[0][0].split()
+    return res
+
 def exec_cmd(ip, cmd, os = "linux"):
     shell, node = create_ssh_conn(server_ip=ip, os=os)
     shell.use_sudo  = False
@@ -215,15 +289,15 @@ class StatChecker(object):
             logger.error(ex)
             return valid
 
-        value = datatype(value) 
+        value = datatype(value)
         stats = self.rest.get_bucket_stats(self.bucket)
-       
+
         if len(stats) > 0:
             try:
                 curr_value = stats[stat]
             except:
                 logger.error('Invalid Stat Key: %s' % stat)
-            
+
                 # invalid stat key
                 return valid
 
@@ -234,7 +308,7 @@ class StatChecker(object):
                 (cmp_type == StatChecker.LESS_THAN and curr_value < value) or\
                 (cmp_type == StatChecker.GREATER_THAN and curr_value > value):
                 valid = True
-   
+
         return valid
 
     def nodes(self):
@@ -242,7 +316,7 @@ class StatChecker(object):
 
     def parse_condition(self, condition):
         m = re.match(r"(\w+)(\W+)(\w+)", condition)
-        try: 
+        try:
            return [str(str_.strip()) for str_ in m.groups()]
         except AttributeError:
             logger.error("Invalid condition syntax: %s" % condition)
@@ -267,6 +341,7 @@ class NodeStats(object):
         str_ = str_ + "Runtime: %20s \n" % interval
         for key in self.results:
             str_ = str_ + "%10s: " % (key)
+            str_ = str_ + "current: %10s" % (self.samples[key][-1])
             for k, v  in self.results[key].items():
                 str_ = str_ + "%10s: %10s"  % (k,v)
             str_ = str_ + "\n"
