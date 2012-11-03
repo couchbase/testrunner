@@ -328,6 +328,7 @@ class NodeStats(object):
         self.samples = {}
         self.results = {}
         self.start_time = time.time()
+        self.phase = "n/a"
 
     def get_run_interval(self):
         curr_time = time.time()
@@ -339,6 +340,8 @@ class NodeStats(object):
 
         str_ = "\n"
         str_ = str_ + "Runtime: %20s \n" % interval
+        str_ = str_ + "Phase: %20s \n" % self.phase
+
         for key in self.results:
             str_ = str_ + "%10s: " % (key)
             str_ = str_ + "current: %10s" % (self.samples[key][-1])

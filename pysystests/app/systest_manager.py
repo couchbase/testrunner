@@ -5,6 +5,8 @@ import time
 import datetime
 from celery.task.control import revoke
 import testcfg as cfg
+from cache import ObjCacher, CacheHelper
+from cache import ObjCacher, CacheHelper
 from rabbit_helper import PersistedMQ
 from app.workload_manager import Workload, sysTestRunner
 from app.query import QueryWorkload
@@ -109,6 +111,13 @@ def launchSystest(testMsg):
     logger.error('###### Test Complete!  ######')
     # TODO, some kind of pass/fail and/or stat info
 
+def setPhaseForStats(phase_name):
+
+    allnodestats = CacheHelper.allnodestats()
+    if len(allnodestats) > 0:
+        for node_stats in allnodestats:
+            node_stats.phase = phase_name
+
 def runPhase(name, phase):
 
     workload = workloadIds = cluster = query = queryIds = None
@@ -136,6 +145,9 @@ def runPhase(name, phase):
 
     logger.error('\n')
     logger.error("Running Phase: %s (%s)" % (name, desc))
+
+    # update stat objects with new phase
+    setPhaseForStats(name)
 
     if cluster is not None:
 
