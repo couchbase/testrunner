@@ -62,7 +62,11 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
-        if not self.skip_cleanup:
+        if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
+                    and TestInputSingleton.input.param("stop-on-failure", False))\
+                        or self.skip_cleanup:
+                    self.log.warn("CLEANUP WAS SKIPPED")
+        else:
             SwapRebalanceBase.reset(self)
             SwapRebalanceBase._log_finish(self)
 
