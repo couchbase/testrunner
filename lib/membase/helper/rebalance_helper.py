@@ -352,10 +352,14 @@ class RebalanceHelper():
         log.info(msg.format(sum, replica_factor + 1, (sum * (replica_factor + 1))))
         master_stats = rest.get_bucket_stats(bucket)
         if "curr_items_tot" in master_stats:
-            log.info('master_stats : {0}'.format(master_stats["curr_items_tot"]))
+            log.info('curr_items_tot from master: {0}'.format(master_stats["curr_items_tot"]))
         else:
            self.fail("bucket {O} stats doesnt contain 'curr_items_tot':".format(bucket))
-        delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
+        if replica_factor >= len(nodes):
+            log.warn("the number of nodes is less than replica requires")
+            delta = sum * (len(nodes)) - master_stats["curr_items_tot"]
+        else:
+            delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
         delta = abs(delta)
 
         if delta > 0:
