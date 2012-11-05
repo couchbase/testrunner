@@ -166,6 +166,9 @@ def run(workload, prevWorkload = None):
     # print out workload params
     logger.error(workload.params)
 
+    if workload.miss_perc > 0:
+        setupCacheMissQueues(workload)
+
     workload.active = True
 
     bucket = str(workload.bucket)
@@ -199,9 +202,12 @@ def run(workload, prevWorkload = None):
                 consume_queue =  workload.consume_queue
 
                 ttl = workload.ttl
+                miss_queue = workload.miss_queue
+                miss_perc = workload.miss_perc
+
                 generate_pending_tasks.delay(task_queue, template, bucketInfo, create_count,
                                               update_count, get_count, del_count, exp_count,
-                                              consume_queue, ttl)
+                                              consume_queue, ttl, miss_perc, miss_queue)
                 inflight = inflight + 1
 
         else:
@@ -211,6 +217,43 @@ def run(workload, prevWorkload = None):
         workload = Workload.from_cache(workload.id)
 
     return workload
+
+def setupCacheMissQueues(workload):
+    """ assuming misses will come from keys in
+        consume_queue or cc_queue.
+        so make location where keys were going
+        to be read the miss queue and set
+        consume queue to location where new keys are
+        being generated.
+
+        Only required that at least a cc_queue
+        with miss items is provided"""
+
+    # make another cc_queue to put only hot items
+    new_cc_queue = None
+    if workload.cc_queues is None:
+
+        new_cc_queue = workload.id + "__hot__"
+        workload.cc_queues = [new_cc_queue]
+
+        # purge new cc_queue if it exists
+        try:
+            rabbitHelper.purge(new_cc_queue)
+        except:
+            pass # queue already deleted
+    else:
+        new_cc_queue = workload.cc_queues[0]
+
+
+    # move old consume queue to miss queue
+    if workload.consume_queue is not None:
+        workload.miss_queue = workload.consume_queue
+
+    # make new cc_queue the consume queue
+    workload.consume_queue = new_cc_queue
+
+    # save changes
+    ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, workload)
 
 # function triggered before any task is handled
 def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, signal = None):
@@ -310,7 +353,8 @@ def postcondition_handler():
 @celery.task(base = PersistedMQ, ignore_result = True)
 def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
                            update_count, get_count, del_count,
-                           exp_count, consume_queue, ttl = 0):
+                           exp_count, consume_queue, ttl = 0,
+                           miss_perc = 0, miss_queue = None):
 
     rabbitHelper = generate_delete_tasks.rabbitHelper
     bucket = bucketInfo['bucket']
@@ -320,12 +364,25 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
     if create_count > 0:
         template.ttl = 0 # override template level ttl
         create_tasks = generate_set_tasks(template, create_count, bucket, password = password)
+
     if update_count > 0:
+
         update_tasks = generate_update_tasks(template, update_count, consume_queue, bucket, password = password)
+
     if get_count > 0:
-        get_tasks = generate_get_tasks(get_count, consume_queue, bucket)
+
+        if miss_queue is not None:
+            # generate miss tasks
+            miss_count = int(miss_perc/float(100) * get_count)
+            get_tasks = generate_get_tasks(miss_count, miss_queue, bucket, password = password)
+            get_count = get_count - miss_count
+
+        get_tasks = get_tasks + generate_get_tasks(get_count, consume_queue, bucket, password = password)
+
     if del_count > 0:
-        del_tasks = generate_delete_tasks(del_count, consume_queue, bucket)
+
+        del_tasks = generate_delete_tasks(del_count, consume_queue, bucket, password = password)
+
     if exp_count > 0:
         # set ttl from workload level ttl
         # otherwise template level ttl will be used
@@ -369,7 +426,7 @@ def generate_set_tasks(template, count, bucket = "default", password = "", batch
     return tasks
 
 @celery.task(base = PersistedMQ)
-def generate_get_tasks(count, docs_queue, bucket="default"):
+def generate_get_tasks(count, docs_queue, bucket="default", password = ""):
 
     rabbitHelper = generate_get_tasks.rabbitHelper
 
@@ -390,7 +447,7 @@ def generate_get_tasks(count, docs_queue, bucket="default"):
             if keys_retrieved > count:
                 end_idx = keys_retrieved - count
                 keys = keys[:-end_idx]
-            tasks.append(client.mget.s(keys, bucket))
+            tasks.append(client.mget.s(keys, bucket, password))
 
     return tasks
 
@@ -423,7 +480,7 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default", passw
 
 
 @celery.task(base = PersistedMQ)
-def generate_delete_tasks(count, docs_queue, bucket = "default"):
+def generate_delete_tasks(count, docs_queue, bucket = "default", password = ""):
 
 
     rabbitHelper = generate_delete_tasks.rabbitHelper
@@ -445,7 +502,7 @@ def generate_delete_tasks(count, docs_queue, bucket = "default"):
             if keys_deleted > count:
                 end_idx = keys_deleted - count
                 keys = keys[:-end_idx]
-            tasks.append(client.mdelete.s(keys, bucket))
+            tasks.append(client.mdelete.s(keys, bucket, password))
 
 
     return tasks
@@ -464,11 +521,13 @@ class Workload(object):
         self.del_perc = int(params["del_perc"])
         self.get_perc = int(params["get_perc"])
         self.exp_perc = params["exp_perc"]
+        self.miss_perc = params["miss_perc"]
         self.preconditions = params["preconditions"]
         self.postconditions = params["postconditions"]
         self.active = False 
         self.consume_queue = params["consume_queue"] 
         self.cc_queues = params["cc_queues"]
+        self.miss_queue = None # internal use only
         self.wait = params["wait"]
         self.ttl = int(params["ttl"])
 
@@ -484,6 +543,7 @@ class Workload(object):
                 'del_perc': 0,
                 'create_perc': 0,
                 'exp_perc': 0,
+                'miss_perc': 0,
                 'ttl': 15,
                 'bucket': 'default',
                 'password': '',
@@ -492,6 +552,7 @@ class Workload(object):
                 'preconditions': None,
                 'template': 'default',
                 'cc_queues': None,
+                'miss_queue': None,
                 'get_perc': 0,
                 'wait': None}
 

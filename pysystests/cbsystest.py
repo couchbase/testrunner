@@ -50,6 +50,7 @@ def add_workload_parser(parent):
     parser.add_argument("--create",  help="percentage of creates 0-100", default=0, type=int)
     parser.add_argument("--update",  help="percentage of updates 0-100", default=0, type=int)
     parser.add_argument("--get",     help="percentage of gets 0-100", default=0, type=int)
+    parser.add_argument("--miss",    help="percentage of misses 0-100", default=0, type=int)
     parser.add_argument("--expire",  help="percentage of expirations 0-100", default=0, type=int)
     parser.add_argument("--ttl",      default=15, help="document expires time to use when expirations set")
     parser.add_argument("--delete",  help="percentage of deletes 0-100", default=0, type=int)
@@ -165,6 +166,7 @@ def run_workload(args):
                  "get_perc"    : args.get,
                  "del_perc"    : args.delete,
                  "exp_perc"    : args.expire,
+                 "miss_perc"   : args.miss,
                  "ttl"         : args.ttl,
                  "cc_queues"   : args.cc_queues,
                  "consume_queue" : args.consume_queue,
