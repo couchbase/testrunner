@@ -280,6 +280,10 @@ class StatChecker(object):
         self.bucket = bucket
         self.rest = create_rest(self.ip, self.port, self.username, self.password)
 
+    def get_curr_items(self):
+        stats = self.rest.get_bucket_stats(self.bucket)
+        return stats['curr_items']
+
     def check(self, condition, datatype = int):
 
         valid = False
