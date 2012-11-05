@@ -524,9 +524,14 @@ class RebalanceTests(EVPerfClient):
             self.log.info('Time taken to build index: {0} sec'.format(t1 - t0))
 
 
-class XRebalanceTests(XPerfTests):
+class XRebalanceTests(XVPerfTests):
 
     @PerfWrapper.rebalance
     def test_mixed_bidir_rebalance(self):
         """Mixed read/write test w/o views"""
         super(XRebalanceTests, self).test_mixed_bidir()
+
+    @PerfWrapper.rebalance
+    def test_vperf_3d_unidir_rebalance(self):
+        """Mixed read/write test with views"""
+        super(XRebalanceTests, self).test_vperf_3d_unidir()
