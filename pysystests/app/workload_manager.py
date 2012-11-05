@@ -388,7 +388,8 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
         # otherwise template level ttl will be used
         if ttl > 0:
             template.ttl = ttl
-        create_tasks = generate_set_tasks(template, exp_count, bucket, password = password)
+        create_tasks = create_tasks + \
+            generate_set_tasks(template, exp_count, bucket, password = password)
 
     pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks 
     pending_tasks = json.dumps(pending_tasks)
