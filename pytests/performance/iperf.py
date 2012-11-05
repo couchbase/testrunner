@@ -512,13 +512,14 @@ class RebalanceTests(EVPerfClient):
             RebalanceHelper.rebalance_out(servers=self.input.servers,
                                           how_many=1, monitor=True)
             t0 = time.time()
+            query = {'stale': 'false', 'limit': 100,
+                     'connection_timeout': 14400000}
             for ddoc_name, ddoc in ddocs.iteritems():
                 for view_name in ddoc['views'].iterkeys():
                     rc.query_view(design_doc_name=ddoc_name,
                                   view_name=view_name,
                                   bucket=self.params('bucket', 'default'),
-                                  query={'stale': 'false', 'limit': 100},
-                                  timeout=14400)
+                                  query=query, timeout=14400)
             t1 = time.time()
             self.log.info('Time taken to build index: {0} sec'.format(t1 - t0))
 
