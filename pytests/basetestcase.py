@@ -232,7 +232,7 @@ class BaseTestCase(unittest.TestCase):
         exp - The expiration for the items if updated or created (int)
         kv_store - The index of the bucket's kv_store to use. (int)
     """
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
+    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
@@ -265,7 +265,7 @@ class BaseTestCase(unittest.TestCase):
         server - A server in the cluster. (TestInputServer)
         kv_store - The kv store index to check. (int)
     """
-    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1000):
         tasks = []
         for bucket in self.buckets:
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
@@ -305,7 +305,7 @@ class BaseTestCase(unittest.TestCase):
         ref_view.name = (prefix, ref_view.name)[prefix is None]
         return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
 
-    def _load_doc_data_all_buckets(self, data_op="create"):
+    def _load_doc_data_all_buckets(self, data_op="create", batch_size=1000):
         #initialize the template for document generator
         age = range(5)
         first = ['james', 'sharon']
@@ -313,7 +313,7 @@ class BaseTestCase(unittest.TestCase):
         gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
 
         self.log.info("%s %s documents..." % (data_op, self.num_items))
-        self._load_all_buckets(self.master, gen_load, data_op, 0)
+        self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size)
 
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None):
         if servers is None:

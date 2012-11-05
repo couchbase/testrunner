@@ -505,7 +505,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
 
     def next(self):
         key_value = self.batch_generator.next_batch()
-        self.log.info("Batch loading documents #: {0}".format(len(key_value)))
+        self.log.info("Batch {0} documents #: {1}".format(self.op_type, len(key_value)))
         partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
         if self.op_type == 'create':
             self._create_batch(partition_keys_dic, key_value)
