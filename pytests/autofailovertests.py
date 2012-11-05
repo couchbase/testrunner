@@ -217,7 +217,7 @@ class AutoFailoverTests(unittest.TestCase):
         self.log.info("stopping the second server")
         time_start = time.time()
         self._stop_couchbase(server_fail2)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 2, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
         time_end = time.time()
         msg = "{0} != {1}".format(time_end - time_start, timeout)
         self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
