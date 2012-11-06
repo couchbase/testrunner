@@ -255,8 +255,18 @@ class FailoverTests(FailoverBaseTest):
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
             elif failover_reason == "firewall":
                 RemoteUtilHelper.enable_firewall(self._servers, node, bidirectional=self.bidirectional)
-                self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
-                                    msg="node status is not unhealthy even after waiting for 5 minutes")
+                status = RestHelper(rest).wait_for_node_status(node, "unhealthy", 300)
+                if status:
+                    log.info("node {0}:{1} is 'unhealthy' as expected".format(node.ip, node.port))
+                else:
+                    #verify iptables on the node if something wrong
+                    for server in self._servers:
+                        if server.ip == node.ip:
+                            shell = RemoteMachineShellConnection(server)
+                            o, r = shell.execute_command("/sbin/iptables --list")
+                            shell.log_command_output(o, r)
+                            shell.disconnect()
+                    self.assertTrue(status, msg="node status is not unhealthy even after waiting for 5 minutes")
 
             failed_over = rest.fail_over(node.id)
             if not failed_over:
