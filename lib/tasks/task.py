@@ -7,6 +7,7 @@ import json
 import re
 import math
 import crc32
+from httplib import IncompleteRead
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
 from membase.api.rest_client import RestConnection, Bucket
@@ -262,11 +263,14 @@ class RebalanceTask(Task):
                 rest = RestConnection(removed)
                 start = time.time()
                 while time.time() - start < 10:
-                    if len(rest.get_pools_info()["pools"]) == 0:
-                        success_cleaned.append(removed)
-                        break
-                    else:
-                        time.sleep(0.1)
+                    try:
+                        if len(rest.get_pools_info()["pools"]) == 0:
+                            success_cleaned.append(removed)
+                            break
+                        else:
+                            time.sleep(0.1)
+                    except IncompleteRead as e:
+                        self.log.error(e)
             result = True
             for node in set(self.to_remove) - set(success_cleaned):
                 self.log.error("node {0}:{1} was not cleaned after removing from cluster".format(
