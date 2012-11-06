@@ -340,6 +340,8 @@ tryCatch({
     ns_server_data $replication_data_replicated <- as.numeric(ns_server_data$replication_data_replicated)
     ns_server_data $replication_active_vbreps <- as.numeric(ns_server_data$replication_active_vbreps)
     ns_server_data $replication_waiting_vbreps <- as.numeric(ns_server_data$replication_waiting_vbreps)
+    ns_server_data $replication_num_checkpoints <- as.numeric(ns_server_data$replication_num_checkpoints)
+    ns_server_data $replication_num_failedckpts <- as.numeric(ns_server_data$replication_num_failedckpts)
 }, error=function(e) {
     print("Cannot find XDC stats")
 })
@@ -1546,11 +1548,11 @@ if(!is.null(ns_server_data$xdc_ops)) {
         fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$xdc_ops!=0, ]
         d <- mean(fi$xdc_ops)
         if(build == baseline){
-            row <-c ("baseline", "XDC ops/sec", as.numeric(d))
+            row <-c ("baseline", "Avg. XDCR ops/sec", as.numeric(d))
             combined <- rbind(combined, row)
         }
         else{
-            row <-c (build, "XDC ops/sec", as.numeric(d))
+            row <-c (build, "Avg. XDCR ops/sec", as.numeric(d))
             combined <- rbind(combined, row)
         }
     }
@@ -1561,11 +1563,11 @@ if(!is.null(ns_server_data$replication_changes_left)) {
         fi <-ns_server_data[ns_server_data$buildinfo.version==build & ns_server_data$replication_changes_left!=0, ]
         d <- mean(fi$replication_changes_left)
         if(build == baseline){
-            row <-c ("baseline", "XDC queue", as.numeric(d))
+            row <-c ("baseline", "Avg. XDCR docs to replicate", as.numeric(d))
             combined <- rbind(combined, row)
         }
         else{
-            row <-c (build, "XDC queue", as.numeric(d))
+            row <-c (build, "Avg. XDCR docs to replicate", as.numeric(d))
             combined <- rbind(combined, row)
         }
     }
@@ -2034,7 +2036,7 @@ if (nrow(ns_server_data) > 0) {
                         "from curr_connections)",
                         sep="\n"))
 
-    if(!is.null(ns_server_data$replication_data_replicated)) {
+if(!is.null(ns_server_data$replication_num_failedckpts)) {
         cat("generating replication_changes_left \n")
         p <- ggplot(ns_server_data, aes(row, replication_changes_left, color=buildinfo.version, label=replication_changes_left)) + labs(x="----time (sec)--->", y="items")
         p <- p + geom_point()
@@ -2111,7 +2113,7 @@ if (nrow(ns_server_data) > 0) {
         cat("generating replication_work_time \n")
         p <- ggplot(ns_server_data, aes(row, replication_work_time, color=buildinfo.version, label=replication_work_time)) + labs(x="----time (sec)--->", y="secs")
         p <- p + geom_point()
-        p <- addopts(p,"XDCR secs working")
+        p <- addopts(p,"XDCR secs in replicating")
         print(p)
         makeFootnote(footnote)
         makeMetricDef(paste("Total time all vb replicators",
@@ -2121,7 +2123,7 @@ if (nrow(ns_server_data) > 0) {
         cat("generating replication_commit_time \n")
         p <- ggplot(ns_server_data, aes(row, replication_commit_time, color=buildinfo.version, label=replication_commit_time)) + labs(x="----time (sec)--->", y="secs")
         p <- p + geom_point()
-        p <- addopts(p,"XDCR secs committing")
+        p <- addopts(p,"XDCR secs in checkpointing")
         print(p)
         makeFootnote(footnote)
         makeMetricDef(paste("Total time all vb replicators",
@@ -2159,7 +2161,26 @@ if (nrow(ns_server_data) > 0) {
                             "vbucket replications",
                             sep="\n"))
 
-    }
+        cat("generating replication_num_checkpoints\n")
+        p <- ggplot(ns_server_data, aes(row, replication_num_checkpoints, color=buildinfo.version, label=replication_num_checkpoints)) + labs(x="----time (sec)--->", y="")
+        p <- p + geom_point()
+        p <- addopts(p, "XDCR checkpoints issued")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of checkpoints all vb replicators",
+                            "have issued successfully in current replication",
+                            sep="\n"))
+
+        cat("generating replication_num_failedckpts\n")
+        p <- ggplot(ns_server_data, aes(row, replication_num_failedckpts, color=buildinfo.version, label=replication_num_failedckpts)) + labs(x="----time (sec)--->", y="")
+        p <- p + geom_point()
+        p <- addopts(p, "XDCR checkpoints failed")
+        print(p)
+        makeFootnote(footnote)
+        makeMetricDef(paste("Number of checkpoints all vb replicators",
+                            "have failed to issue in current replication",
+                            sep="\n"))
+
 }
 
 cat("generating cpu_util \n")
