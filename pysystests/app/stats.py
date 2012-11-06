@@ -131,7 +131,7 @@ def atop_proc_sig():
 
 def get_du_sample(ip):
     sample = {}
-    cmd = "df -h | grep data | awk '{ print $2 }'"
+    cmd = "df | grep data | awk '{ print $2 }'"
     rc = exec_cmd(ip,cmd)
     if rc:
         sample.update({"disk_used" : rc[0][0]})
