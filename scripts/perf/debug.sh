@@ -5,5 +5,5 @@ if [ "x$1" != "x" ] ; then
     btrc -n ${hostname}:8091
 
     echo "Collecting server info..."
-    python scripts/collect_server_info.py -i $1
+    python scripts/collect_server_info.py -i $1 > /dev/null
 fi
