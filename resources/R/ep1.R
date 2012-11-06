@@ -1701,7 +1701,7 @@ if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
 
 testdf <- data.frame(MB,CB)
 
-row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)", "Avg. CPU rate (%)", "Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Latency-query (99.9th) (ms)", "Avg. QPS", "Avg. XDC ops/sec", "Avg. XDC queue", "Rebalance Time (sec)", "Testrunner Version")
+row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)", "Avg. CPU rate (%)", "Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Latency-query (99.9th) (ms)", "Avg. QPS", "Avg. XDC ops/sec", "Avg. XDC docs to replicate", "Rebalance Time (sec)", "Testrunner Version")
 
 if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
 	row_names <- c(row_names, c("Warmup Time - flush (sec)", "Warmup Time - no flush (sec)"))
