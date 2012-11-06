@@ -92,11 +92,13 @@ def update_node_stats(node_stats, sample):
 
             if key not in node_stats.samples:
                 node_stats.samples[key] = []
+            try:
+                val = float(re.sub(r'[^\d.]+', '', sample[key]))
+                node_stats.samples[key].append(val)
+                ObjCacher().store(CacheHelper.NODESTATSCACHEKEY, node_stats)
+            except Exception as ex:
+                logger.error("Error saving data for (%s,%s): %s" % (key,sample[key],ex))
 
-            val = float(re.sub(r'[^\d.]+', '', sample[key]))
-            node_stats.samples[key].append(val)
-
-    ObjCacher().store(CacheHelper.NODESTATSCACHEKEY, node_stats)
 
 def check_atop_proc(ip):
     running = False
@@ -234,7 +236,8 @@ def cbstat_disk_write_queue(ip):
         cmd = "grep ep_flusher_todo: | head -1"
         fl_todo = _cbtop_exec(ip, cmd)
         if fl_todo:
-            return int(qsize[1]) + int(fl_todo[1])
+            sum_ = int(qsize[1]) + int(fl_todo[1])
+            return str(sum_)
 
     return -1
 
@@ -418,9 +421,10 @@ def calculate_node_stat_results(node_stats):
                 nn_perctile = (data[idx - 1] + data[idx-2])/2.0
             else:
                 nn_perctile = data[idx - 1]
-        mean = sum(data) / float(len(data))
 
-        node_stats.results[k] = {"mean" : "%.2f" % mean,
-                                 "max"  : max(data),
-                                 "99th" : "%.2f" % nn_perctile,
-                                 "samples" : len(data)}
+            mean = sum(data) / float(len(data))
+
+            node_stats.results[k] = {"mean" : "%.2f" % mean,
+                                     "max"  : max(data),
+                                     "99th" : "%.2f" % nn_perctile,
+                                     "samples" : len(data)}
