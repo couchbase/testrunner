@@ -164,9 +164,11 @@ class PerfBase(unittest.TestCase):
             bucket_ram_quota /= max(self.parami('num_buckets', 1),
                                     self.parami('xdcr_num_buckets', 1))
             replicas = self.parami('replicas', getattr(self, 'replicas', 1))
+            index_replicas = self.parami('index_replicas', 1)
 
             self.rest.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram_quota,
-                                    replicaNumber=replicas, authType='sasl')
+                                    replicaNumber=replicas, authType='sasl',
+                                    replica_index=index_replicas)
 
             status = self.rest_helper.vbucket_map_ready(bucket, 60)
             self.assertTrue(status, msg='vbucket_map not ready .. timed out')
