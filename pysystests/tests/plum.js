@@ -19,8 +19,8 @@
                     "name" : "reb_out_4",
                     "desc" :  "remove 4 nodes, lower ops, and move to access mode",
                     "cluster" :  {"rm" : "10.3.2.104 10.3.2.105 10.3.2.106 10.3.2.107" },
-                    "workload" : ["s:10,u:60,g:20,d:5,e:5,ttl:30,coq:defaultph1keyes,ops:5000",
-                                  "b:saslbucket,pwd:password,s:10,u:60,g:20,d:5,e:5,ttl:30,coq:saslph1keys,ops:5000"]
+                    "workload" : ["s:10,u:60,g:20,d:5,e:5,ttl:30,ccq:defaultph2keyes,ops:5000",
+                                  "b:saslbucket,pwd:password,s:10,u:60,g:20,d:5,e:5,ttl:30,coq:saslph2keys,ops:5000"]
                 },
 
                 "2" :
@@ -40,8 +40,8 @@
                 {
                     "name" : "swap_reb_cache_miss",
                     "desc" :  "remove 4 nodes and add nodes, while in access mode from set1",
-                    "workload" : ["s:10,u:60,g:20,d:5,e:5,ttl:30,coq:defaultph1keyes,ops:4000",
-                                  "b:saslbucket,pwd:password,s:10,u:60,g:20,d:5,e:5,ttl:30,coq:saslph1keys,ops:4000"],
+                    "workload" : ["s:10,u:60,g:20,d:5,e:5,m:1,ttl:30,coq:defaultph1keyes,ops:4000",
+                                  "b:saslbucket,pwd:password,s:10,u:60,g:20,d:5,e:5,m:1,ttl:30,coq:saslph1keys,ops:4000"],
                     "cluster" :  {"rm" : "10.3.2.108 10.3.2.109 10.3.2.110 10.3.2.111",
                                   "add" : "10.3.2.104 10.3.2.105 10.3.2.106 10.3.2.107" }
                 },
@@ -50,8 +50,8 @@
                 {
                     "name" : "add_back",
                     "desc" :  "add_back 4 nodes from swap, while in access mode from set2",
-                    "workload" : ["s:10,u:60,g:20,d:5,e:5,ttl:30,coq:defaultph2keyes,ops:4000",
-                                  "b:saslbucket,pwd:password,s:10,u:60,g:20,d:5,e:5,ttl:30,coq:saslph2keys,ops:4000"],
+                    "workload" : ["s:10,u:60,g:20,d:5,e:5,m:1,ttl:30,coq:defaultph2keyes,ops:4000",
+                                  "b:saslbucket,pwd:password,s:10,u:60,g:20,d:5,e:5,m:1,ttl:30,coq:saslph2keys,ops:4000"],
                     "cluster" :  {"add" : "10.3.2.108 10.3.2.109 10.3.2.110 10.3.2.111"}
                 }
         }
