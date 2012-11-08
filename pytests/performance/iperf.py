@@ -499,6 +499,10 @@ class RebalanceTests(EVPerfClient):
         cmd = 'ns_config:set(index_pausing_disabled, {0}).'.format(ipd)
         rc.diag_eval(cmd)
 
+        # rebalance_index_waiting_disabled setup
+        riwd = str(bool(self.parami('rebalance_index_waiting_disabled', 0))).lower()
+        cmd = 'ns_config:set(rebalance_index_waiting_disabled, {0}).'.format(riwd)
+        rc.diag_eval(cmd)
 
         # Customize number of design docs
         view_gen = ViewGen()
