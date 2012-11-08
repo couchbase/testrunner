@@ -1,3 +1,4 @@
+import sys
 import json
 import time
 import socket
@@ -511,7 +512,7 @@ class RebalanceTests(EVPerfClient):
         elif self.parami('ddocs', 1) == 8:
             ddocs = view_gen.generate_ddocs([1, 1, 1, 1, 1, 1, 1, 1])
         else:
-            self.log.error('Only 1 or 8 ddocs supported.')
+            sys.exit('Only 1 or 8 ddocs supported.')
 
         # Load phase
         if self.parami('load_phase', 1):
