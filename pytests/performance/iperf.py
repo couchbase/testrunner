@@ -194,12 +194,12 @@ class PerfWrapper(object):
             rebalance_after = self.parami('rebalance_after', 0) / total_clients
             if self.parami('fg_max_ops', 0):
                 self.level_callbacks = [('cur-queries', rebalance_after,
-                                        self.latched_rebalance)]
+                                         self.latched_rebalance)]
             else:
                 self.level_callbacks = [('cur-creates', rebalance_after,
-                                        self.latched_rebalance)]
+                                         self.latched_rebalance)]
             if 'XRebalanceTests' in self.id():
-                if XPerfTests.get_region() == 'east':
+                if XPerfTests.get_region() == 'west':
                     self.level_callbacks = []  # rebalance only one cluster
                 return test(self, *args, **kargs)
             else:
