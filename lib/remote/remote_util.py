@@ -110,23 +110,34 @@ class RemoteMachineShellConnection:
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         msg = 'connecting to {0} with username : {1} password : {2} ssh_key: {3}'
         log.info(msg.format(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password, serverInfo.ssh_key))
-        try:
-            if serverInfo.ssh_key == '':
-                self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
-                                         password=serverInfo.ssh_password)
-            else:
-                self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
-                                         key_filename=serverInfo.ssh_key)
+        # added attempts for connection because of PID check failed. RNG must be re-initialized after fork() error
+        #That's a paramiko bug
+        max_attempts_connect = 2
+        attempt = 0
+        while (True):
+            try:
+                if serverInfo.ssh_key == '':
+                    self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
+                                             password=serverInfo.ssh_password)
+                else:
+                    self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
+                                             key_filename=serverInfo.ssh_key)
 
-        except paramiko.AuthenticationException:
-            log.info("Authentication failed")
-            exit(1)
-        except paramiko.BadHostKeyException:
-            log.info("Invalid Host key")
-            exit(1)
-        except Exception as e:
-            log.info("Can't establish SSH session: {0}".format(e.message))
-            exit(1)
+            except paramiko.AuthenticationException:
+                log.info("Authentication failed")
+                exit(1)
+            except paramiko.BadHostKeyException:
+                log.info("Invalid Host key")
+                exit(1)
+            except Exception as e:
+                if (str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
+                    attempt != max_attempts_connect):
+                    log.error("Can't establish SSH session: {0}. Will try again in 1 sec".format(e.message))
+                    attempt += 1
+                    time.sleep(1)
+                else:
+                    log.info("Can't establish SSH session: {0}".format(e.message))
+                    exit(1)
         log.info("Connected")
 
     def get_running_processes(self):
