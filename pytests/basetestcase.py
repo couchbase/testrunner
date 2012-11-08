@@ -313,7 +313,7 @@ class BaseTestCase(unittest.TestCase):
         gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
 
         self.log.info("%s %s documents..." % (data_op, self.num_items))
-        self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size)
+        self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size=batch_size)
 
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None):
         if servers is None:
