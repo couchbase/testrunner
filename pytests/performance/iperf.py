@@ -494,6 +494,12 @@ class RebalanceTests(EVPerfClient):
         cmd = 'ns_config:set(rebalance_moves_per_node, {0}).'.format(rmps)
         rc.diag_eval(cmd)
 
+        # index_pausing_disabled setup
+        ipd = str(bool(self.parami('index_pausing_disabled', 0))).lower()
+        cmd = 'ns_config:set(index_pausing_disabled, {0}).'.format(ipd)
+        rc.diag_eval(cmd)
+
+
         # Customize number of design docs
         view_gen = ViewGen()
         if self.parami('ddocs', 1) == 1:
