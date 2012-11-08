@@ -11,7 +11,7 @@ from memcached.helper.data_helper import LoadWithMcsoda
 from couchbase.stats_tools import StatsCommon
 from threading import Thread
 from basetestcase import BaseTestCase
-from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 class SwapRebalanceBase(unittest.TestCase):
 
@@ -34,7 +34,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Initialize test params
         self.replica = self.input.param("replica", 1)
-        self.keys_count = self.input.param("keys-count", 100000)
+        self.keys_count = self.input.param("keys-count", 1000)
         self.load_ratio = self.input.param("load-ratio", 1)
         self.ratio_expiry = self.input.param("ratio-expiry", 0.03)
         self.ratio_deletes = self.input.param("ratio-deletes", 0.13)
@@ -367,24 +367,32 @@ class SwapRebalanceBase(unittest.TestCase):
             RestHelper(rest).rebalance_reached(expected_progress)
             bucket = rest.get_buckets()[0].name
             pid = None
-            for i in xrange(10):
-                try:
-                    _mc = MemcachedClientHelper.direct_client(master, bucket)
-                    pid = _mc.stats()["pid"]
-                    break
-                except EOFError as e:
-                    self.log.error("{0}.Retry in 2 sec".format(e))
-                    time.sleep(1)
-
+            if self.swap_orchestrator:
+                # get PID via remote connection if master is a new node
+                shell = RemoteMachineShellConnection(master)
+                o, _ = shell.execute_command("ps -eo comm,pid | awk '$1 == \"memcached\" { print $2 }'")
+                pid = o[0]
+                shell.disconnect()
+            else:
+                for i in xrange(2):
+                    try:
+                        _mc = MemcachedClientHelper.direct_client(master, bucket)
+                        pid = _mc.stats()["pid"]
+                        break
+                    except EOFError as e:
+                        self.log.error("{0}.Retry in 2 sec".format(e))
+                        time.sleep(1)
             if pid is None:
                 self.fail("impossible to get a PID")
             command = "os:cmd(\"kill -9 {0} \")".format(pid)
             self.log.info(command)
             killed = rest.diag_eval(command)
             self.log.info("killed {0}:{1}??  {2} ".format(master.ip, master.port, killed))
-            BaseTestCase._wait_warmup_completed(self, [master], bucket, wait_time=600)
-            self.log.info("sleep for 10 sec after warmup")
+            self.log.info("sleep for 10 sec after kill memcached")
             time.sleep(10)
+            # we can't get stats for new node when rebalance falls
+            if not self.swap_orchestrator:
+                BaseTestCase._wait_warmup_completed(self, [master], bucket, wait_time=600)
             i = 0
             #we expect that rebalance will be failed
             while rest._rebalance_progress_status() == "running" and i < 60:
