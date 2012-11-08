@@ -122,7 +122,7 @@ class RemoteMachineShellConnection:
                 else:
                     self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
                                              key_filename=serverInfo.ssh_key)
-
+                break
             except paramiko.AuthenticationException:
                 log.info("Authentication failed")
                 exit(1)
