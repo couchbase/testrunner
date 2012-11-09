@@ -998,7 +998,7 @@ class VBucketAwareMemcached(object):
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(server_keys)) as executor:
             for server_str , keys in server_keys.items() :
                 mc = self.memcacheds[server_str]
-                tasks.append(executor.submit(self._getMulti_from_mc , mc, keys, pause_sec, timeout_sec, self._getMulti_from_mc))
+                tasks.append(executor.submit(self._getMulti_from_mc , mc, keys, pause_sec, timeout_sec, self._getMulti_parallel))
             keys_vals = self._reduce_getMulti_values(tasks, pause_sec, timeout_sec)
             if len(keys_lst) != len(keys_vals):
                 raise ValueError("Not able to get values for following keys - {0}".format(set(keys_lst).difference(keys_vals.keys())))
