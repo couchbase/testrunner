@@ -7,6 +7,6 @@ if [ "x$1" != "x" ] ; then
     echo "Collecting server info..."
     python scripts/collect_server_info.py -i $1 > /dev/null
 
-    echo "Collecting stop stats..."
+    echo "Collecting atop stats..."
     python -m scripts.perf.grab_atops -i $1
 fi
