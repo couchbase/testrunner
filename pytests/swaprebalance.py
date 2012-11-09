@@ -34,7 +34,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Initialize test params
         self.replica = self.input.param("replica", 1)
-        self.keys_count = self.input.param("keys-count", 1000)
+        self.keys_count = self.input.param("keys-count", 100000)
         self.load_ratio = self.input.param("load-ratio", 1)
         self.ratio_expiry = self.input.param("ratio-expiry", 0.03)
         self.ratio_deletes = self.input.param("ratio-deletes", 0.13)
