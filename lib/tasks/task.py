@@ -1628,22 +1628,25 @@ class ViewCompactionTask(Task):
                 self.state = FINISHED
             else:
                 #Sometimes the compacting is not started immediately
-                time.sleep(5)
-                if self._is_compacting():
-                    task_manager.schedule(self, 2)
-                else:
-                    new_compaction_revision, fragmentation = self._get_compaction_details()
-                    self.log.info("stats compaction: ({0},{1})".
-                          format(new_compaction_revision, fragmentation))
-                    #case of rebalance when with concurrent updates it's possible that
-                    #compaction value has not changed significantly
-                    if new_compaction_revision > self.compaction_revision and self.with_rebalance:
-                        self.log.warn("the compaction revision was increased,\
-                             but the actual fragmentation value has not changed significantly")
-                        self.set_result(True)
-                        self.state = FINISHED
+                for i in xrange(10):
+                    time.sleep(5)
+                    if self._is_compacting():
+                        task_manager.schedule(self, 2)
                     else:
-                        self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
+                        new_compaction_revision, fragmentation = self._get_compaction_details()
+                        self.log.info("stats compaction: ({0},{1})".
+                          format(new_compaction_revision, fragmentation))
+                        #case of rebalance when with concurrent updates it's possible that
+                        #compaction value has not changed significantly
+                        if new_compaction_revision > self.compaction_revision and self.with_rebalance:
+                            self.log.warn("the compaction revision was increased,\
+                             but the actual fragmentation value has not changed significantly")
+                            self.set_result(True)
+                            self.state = FINISHED
+                            return
+                        else:
+                            continue
+                self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
 
         except (SetViewInfoNotFound) as ex:
             self.state = FINISHED
