@@ -12,6 +12,7 @@ from couchbase.stats_tools import StatsCommon
 from threading import Thread
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
+from memcached.helper.data_helper import MemcachedClientHelper
 
 class SwapRebalanceBase(unittest.TestCase):
 
