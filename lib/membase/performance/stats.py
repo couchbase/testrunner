@@ -61,6 +61,7 @@ class StatsCollector(object):
         info = rest.get_nodes_self()
         self.data_path = info.storage[0].get_data_path()
         self.client_id = str(client_id)
+        self.nodes = nodes
 
         if collect_server_stats:
             mbstats_thread = Thread(target=self.membase_stats,
@@ -99,7 +100,11 @@ class StatsCollector(object):
             self.build_stats(nodes)
             self.machine_stats(nodes)
 
+            # Start atop
+            self.start_atop()
+
     def stop(self):
+        self.stop_atop()
         self._task["state"] = "stopped"
         for t in self._task["threads"]:
             t.join()
@@ -656,6 +661,21 @@ class StatsCollector(object):
 
     def _aborted(self):
         return self._task["state"] == "stopped"
+
+    def start_atop(self):
+        """Start atop collector"""
+        for node in self.nodes:
+            shell = RemoteMachineShellConnection(node)
+            cmd = "rm -fr /tmp/*.atop; atop -w /tmp/{0}.atop -a 15 &"\
+                .format(node.ip)
+            shell.execute_command(cmd)
+
+    def stop_atop(self,):
+        """Stop atop collector"""
+        for node in self.nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command("killall atop")
+
 
 # Invokes optional callback when registered levels have been reached
 # during stats sample()'ing.
