@@ -16,11 +16,12 @@ class DesignDocument():
         views_json = json_object['views']
         for view in views_json.items():
             ddoc_self.views.append(View._init_from_json(view))
-        spatial_json = json_object['spatial']
-        for view in spatial_json.items():
-            sp_view = View._init_from_json(view)
-            sp_view.is_spatial = True
-            ddoc_self.spatial_views.append(sp_view)
+        if 'spatial' in json_object:
+            spatial_json = json_object['spatial']
+            for view in spatial_json.items():
+                sp_view = View._init_from_json(view)
+                sp_view.is_spatial = True
+                ddoc_self.spatial_views.append(sp_view)
 
         return ddoc_self
 
