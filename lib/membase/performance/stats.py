@@ -666,8 +666,9 @@ class StatsCollector(object):
         """Start atop collector"""
         for node in self.nodes:
             shell = RemoteMachineShellConnection(node)
-            cmd = "rm -fr /tmp/*.atop; atop -w /tmp/{0}.atop -a 15 &"\
-                .format(node.ip)
+            cmd = "killall atop; rm -fr /tmp/*.atop;" + \
+                "atop -w /tmp/{0}.atop -a 15".format(node.ip) + \
+                " > /dev/null 2> /dev.null < /dev/null &"
             shell.execute_command(cmd)
 
     def stop_atop(self,):
