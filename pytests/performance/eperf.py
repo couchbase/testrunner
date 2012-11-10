@@ -1740,7 +1740,9 @@ class EVPerfClient(EPerfClient):
         if self.bg_thread_ctl:
             self.bg_thread_ctl['run_ok'] = False
             while self.bg_thread.is_alive():
-                time.sleep(1)
+                self.log.info('Waiting for background thread {0}.'\
+                              .format(self.parami("prefix", 0)))
+                time.sleep(5)
 
         # Send histograms to dashboard
         if self.input.dashboard and why == "loop":

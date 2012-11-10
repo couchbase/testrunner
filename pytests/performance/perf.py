@@ -1010,6 +1010,11 @@ class PerfBase(unittest.TestCase):
                 not self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
             self.end_stats(sc, ops, self.spec_reference + ".loop")
 
+        self.log.info(
+            'Finished access phase for worker: {0}:{1}.'\
+            .format(self.params("why", "main"), self.parami("prefix", 0))
+        )
+
         return ops, start_time, end_time
 
     def wait_until_drained(self):
