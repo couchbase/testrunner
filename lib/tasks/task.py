@@ -432,7 +432,7 @@ class GenericLoadingTask(Thread, Task):
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
                 #there is no such item, we do not know what value to set
-                pass
+                return
             else:
                 self.state = FINISHED
                 self.set_exception(error)
