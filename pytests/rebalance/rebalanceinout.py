@@ -217,3 +217,23 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 task.result()
             self._load_all_buckets(self.master, gen_expire, "create", 0)
             self.verify_cluster_stats(self.servers[:self.num_servers])
+
+    """Rebalance in/out at once.
+
+    This test begins by loading a given number of items into the cluster. It then
+    add  servs_in nodes and remove  servs_out nodes and start rebalance.
+    Once cluster was rebalanced the test is finished.
+    Available parameters by default are:
+    nodes_init=1, nodes_in=1, nodes_out=1"""
+    def rebalance_in_out_at_once(self):
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        rest = RestConnection(self.master)
+        self._wait_for_stats_all_buckets(servs_init)
+        self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+        self.log.info("adding nodes {0} to cluster".format(servs_in))
+        self.log.info("removing nodes {0} from cluster".format(servs_out))
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
+        self.cluster.rebalance(servs_init[:self.nodes_init], servs_in, servs_out)
+        self.verify_cluster_stats(result_nodes)
