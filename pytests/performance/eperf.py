@@ -1,8 +1,3 @@
-"""
-Executive performance dashboard tests.
-"""
-
-# general imports
 import time
 import json
 import os
@@ -14,11 +9,17 @@ import signal
 from multiprocessing import Process
 from functools import wraps
 
-# membase imports
-from membase.helper.cluster_helper import ClusterOperationHelper
-from membase.performance.stats import CallbackStatsCollector
-from membase.api.rest_client import RestConnection
-from remote.remote_util import RemoteMachineShellConnection
+from TestInput import TestInputSingleton
+from lib.membase.helper.cluster_helper import ClusterOperationHelper
+from lib.membase.performance.stats import CallbackStatsCollector
+from lib.membase.api.rest_client import RestConnection
+from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.perf_engines import mcsoda
+from lib.cbkarma.rest_client import CbKarmaClient
+from scripts.perf.rel_cri_stats import CBStatsCollector
+
+from pytests.performance import perf
+from pytests.performance.perf_defaults import PerfDefaults
 
 # cbtop imports
 try:
@@ -26,7 +27,6 @@ try:
 except ImportError:
     print "unable to import cbtop: see http://pypi.python.org/pypi/cbtop"
     cbtop_run = None
-
 try:
     from seriesly import Seriesly
     import seriesly.exceptions
@@ -34,14 +34,6 @@ except ImportError:
     print "unable to import seriesly: see http://pypi.python.org/pypi/seriesly"
     Seriesly = None
 
-# testrunner imports
-from TestInput import TestInputSingleton
-from perf_defaults import PerfDefaults
-from performance import perf
-from perf_engines.cbsoda import StoreCouchbase
-from perf_engines import mcsoda
-from scripts.perf.rel_cri_stats import CBStatsCollector
-from cbkarma.rest_client import CbKarmaClient
 
 class EventType:
     START = "start"

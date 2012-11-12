@@ -1,25 +1,22 @@
 import unittest
-import logger
 import time
 import threading
 import os
-import testconstants
 import subprocess
 
-# membase imports
-from membase.api.rest_client import RestConnection, RestHelper
-from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
-from membase.helper.rebalance_helper import RebalanceHelper
-from membase.performance.stats import StatsCollector
-from remote.remote_util import RemoteMachineShellConnection
-from perf_engines.cbsoda import StoreCouchbase
-
-# testrunner imports
 from TestInput import TestInputSingleton
-from perf_defaults import PerfDefaults
-from perf_engines import mcsoda
-import testconstants
+from lib import logger
+from lib import testconstants
+from lib.membase.api.rest_client import RestConnection, RestHelper
+from lib.membase.helper.bucket_helper import BucketOperationHelper
+from lib.membase.helper.cluster_helper import ClusterOperationHelper
+from lib.membase.helper.rebalance_helper import RebalanceHelper
+from lib.membase.performance.stats import StatsCollector
+from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.perf_engines.cbsoda import StoreCouchbase
+
+from pytests.performance.perf_defaults import PerfDefaults
+from lib.perf_engines import mcsoda
 
 
 class PerfBase(unittest.TestCase):
