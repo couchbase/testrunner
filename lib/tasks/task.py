@@ -501,11 +501,14 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
         self.timeout = timeout_secs
 
     def has_next(self):
-        return self.batch_generator.has_next()
+        has = self.batch_generator.has_next()
+        if math.fmod(self.batch_generator._doc_gen.itr, 50000) == 0.0 or not has:
+            self.log.info("Batch {0} documents done #: {1}".\
+                          format(self.op_type, self.batch_generator._doc_gen.itr))
+        return has
 
     def next(self):
         key_value = self.batch_generator.next_batch()
-        self.log.info("Batch {0} documents #: {1}".format(self.op_type, len(key_value)))
         partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
         if self.op_type == 'create':
             self._create_batch(partition_keys_dic, key_value)
@@ -784,9 +787,12 @@ class BatchedValidateDataTask(GenericLoadingTask):
         self.batch_size = batch_size
 
     def has_next(self):
+        has = False
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.itr < self.max_verify:
-            return True
-        return False
+            has = True
+        if math.fmod(self.itr, 10000) == 0.0 or not has:
+                self.log.info("{0} items were verified".format(self.itr))
+        return has
 
     def next(self):
         if self.itr < self.num_valid_keys:
