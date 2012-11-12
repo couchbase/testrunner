@@ -125,6 +125,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 self.log.info("rebalance was completed when tried to stop rebalance on {0}%".format(str(expected_progress)))
                 break
             else:
+                self.log.info("rebalance is still required")
                 self._wait_for_stats_all_buckets(servs_init)
                 self._verify_all_buckets(self.master, max_verify=self.max_verify)
 
