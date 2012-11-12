@@ -436,6 +436,7 @@ class GenericLoadingTask(Thread, Task):
             else:
                 self.state = FINISHED
                 self.set_exception(error)
+                return
         except ValueError:
             index = random.choice(range(len(value)))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
