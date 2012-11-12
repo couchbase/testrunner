@@ -12,25 +12,28 @@ from lib.mc_bin_client import MemcachedError
 
 
 RETRIES = 10
-# The histo dict is returned by add_timing_sample().
-# The percentiles must be sorted, ascending, like [0.90, 0.99].
+
+
 def histo_percentile(histo, percentiles):
-   v_sum = 0
-   bins = histo.keys()
-   bins.sort()
-   for bin in bins:
-      v_sum += histo[bin]
-   v_sum = float(v_sum)
-   v_cur = 0 # Running total.
-   rv = []
-   for bin in bins:
-      if not percentiles:
-         return rv
-      v_cur += histo[bin]
-      while percentiles and (v_cur / v_sum) >= percentiles[0]:
-         rv.append((percentiles[0], bin))
-         percentiles.pop(0)
-   return rv
+    """The histo dict is returned by add_timing_sample(). The percentiles must
+    be sorted, ascending, like [0.90, 0.99]."""
+    v_sum = 0
+    bins = histo.keys()
+    bins.sort()
+    for bin in bins:
+        v_sum += histo[bin]
+    v_sum = float(v_sum)
+    v_cur = 0 # Running total.
+    rv = []
+    for bin in bins:
+        if not percentiles:
+            return rv
+    v_cur += histo[bin]
+    while percentiles and (v_cur / v_sum) >= percentiles[0]:
+        rv.append((percentiles[0], bin))
+        percentiles.pop(0)
+    return rv
+
 
 class StatsCollector(object):
     _task = {}
@@ -247,7 +250,6 @@ class StatsCollector(object):
             paths.append(view_path)
         else:
             paths.append(self.data_path + '/{0}-data'.format(bucket))
-
 
         d = {"snapshots": []}
         start_time = str(self._task["time"])
@@ -592,10 +594,10 @@ class StatsCollector(object):
                 d[node]["system_snapshots"].append(data_json)
 
         for node in nodes:
-           for snapshot in d[node]["snapshots"]:
-               self._task["ns_server_stats"].append(snapshot)
-           for snapshot in d[node]["system_snapshots"]:
-               self._task["ns_server_stats_system"].append(snapshot)
+            for snapshot in d[node]["snapshots"]:
+                self._task["ns_server_stats"].append(snapshot)
+            for snapshot in d[node]["system_snapshots"]:
+                self._task["ns_server_stats_system"].append(snapshot)
 
         print " finished ns_server_stats"
 
@@ -692,6 +694,7 @@ class CallbackStatsCollector(StatsCollector):
                 callback(cur)
 
         return super(CallbackStatsCollector, self).sample(cur)
+
 
 class StatUtil(object):
 
