@@ -1,17 +1,15 @@
 import json
-import os
 import re
 from threading import Thread
 import time
-from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
-import testconstants
 import gzip
-import urllib
 from collections import defaultdict
 
-from mc_bin_client import MemcachedError
+from lib.membase.api.rest_client import RestConnection
+from lib.memcached.helper.data_helper import MemcachedClientHelper
+from lib.remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
+from lib.mc_bin_client import MemcachedError
+
 
 RETRIES = 10
 # The histo dict is returned by add_timing_sample().
