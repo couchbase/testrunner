@@ -20,6 +20,8 @@ class PerfDefaults:
     mc_threads          =    4
     sched_delays        =    1
     erlang_schedulers   =    ""
+    mem_high_wat        =    75          # percentage
+    mem_low_wat         =    60          # percentage
 
     # publish results to cbmonitor dashboard
     cbm                 =    0

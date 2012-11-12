@@ -12,7 +12,7 @@ from functools import wraps
 from TestInput import TestInputSingleton
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.membase.performance.stats import CallbackStatsCollector
-from lib.membase.api.rest_client import RestConnection
+from lib.membase.api.rest_client import RestConnection, Bucket
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.perf_engines import mcsoda
 from lib.cbkarma.rest_client import CbKarmaClient
@@ -366,6 +366,19 @@ class EPerfMaster(perf.PerfBase):
         mvs.append(avg * 5)
         return mvs
 
+    def set_ep_param(self, type, param, value):
+        """
+        Set ep-engine specific param, using cbepctl
+
+        type: paramter type, e.g: flush_param, tap_param, etc
+        """
+        bucket = Bucket(name=self.buckets[0], authType="sasl", saslPassword="")
+        for server in self.input.servers:
+            shell = RemoteMachineShellConnection(server)
+            shell.execute_cbepctl(bucket,
+                                  "", "set %s" % type, param, value)
+            shell.disconnect()
+
     def set_nru_freq(self, freq):
         """Set up NRU access scanner running frequency"""
         for server in self.input.servers:
@@ -411,6 +424,16 @@ class EPerfMaster(perf.PerfBase):
             print "access scanner will be executed on %s in %d minutes, " \
                   "at %d UTC, curr_time is %s" \
                    % (server.ip, min_left, tm_hour, gmt_now)
+
+    def set_ep_mem_wat(self, percent, high=True):
+        """Set ep engine high/low water marks for all nodes"""
+        n_bytes = self.parami("mem_quota", PerfDefaults.mem_quota) *\
+                  percent/100 * 1024 * 1024
+        print "[set_ep_mem_wat] mem_%s_wat = %s percent, %s bytes"\
+              % ("high" if high else "low", percent, n_bytes)
+        self.set_ep_param("flush_param",
+                          "mem_%s_wat" % ("high" if high else "low"),
+                          n_bytes)
 
     def set_reb_cons_view(self, node, disable=False):
         """Set up consistent view for rebalance task"""
@@ -517,6 +540,14 @@ class EPerfMaster(perf.PerfBase):
         # Cluster nodes if master
         if self.is_master:
             self.rebalance_nodes(num_nodes)
+
+        if self.is_leader:
+            mem_high_wat = self.parami('mem_high_wat', PerfDefaults.mem_high_wat)
+            mem_low_wat = self.parami('mem_low_wat', PerfDefaults.mem_low_wat)
+            if mem_high_wat != PerfDefaults.mem_high_wat:
+                self.set_ep_mem_wat(mem_high_wat)
+            if mem_low_wat != PerfDefaults.mem_low_wat:
+                self.set_ep_mem_wat(mem_low_wat, high=False)
 
         if self.parami("load_phase", 1) > 0:
             print "Loading"
