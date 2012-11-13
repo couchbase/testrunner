@@ -135,12 +135,18 @@ class BucketOperationHelper():
             for bucket in buckets:
                 status = rest.delete_bucket(bucket.name)
                 if not status:
-                    log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
+                    try:
+                        log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
+                    except:
+                        log.error("Unable to get timings for bucket")
                 log.info('deleted bucket : {0} from {1}'.format(bucket.name, serverInfo.ip))
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
                 if test_case:
                     if not BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200):
-                        log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
+                        try:
+                            log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
+                        except:
+                            log.error("Unable to get timings for bucket")
                         test_case.fail(msg)
 
     @staticmethod
@@ -152,12 +158,18 @@ class BucketOperationHelper():
         if RestHelper(rest).bucket_exists(bucket):
             status = rest.delete_bucket(bucket)
             if not status:
-                log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
+                try:
+                    log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
+                except:
+                    log.error("Unable to get timings for bucket")
             log.info('deleted bucket : {0} from {1}'.format(bucket, serverInfo.ip))
         msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket)
         if test_case:
             if not BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200):
-                log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
+                 try:
+                    log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
+                except:
+                    log.error("Unable to get timings for bucket")
                 test_case.fail(msg)
 
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
