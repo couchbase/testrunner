@@ -1446,9 +1446,6 @@ class EPerfMaster(perf.PerfBase):
                           host=host,
                           ddoc=view_gen.DDOC_NAMES[0])
 
-        if self.parami("debug_phase", 0):
-            self.debug_phase(ddocs)
-
     def test_vperf6(self):
         """Only queries on pseudo primary index"""
 
