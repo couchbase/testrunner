@@ -1442,15 +1442,19 @@ class RestConnection(object):
         cmd = 'ns_config:set(ensure_full_commit_enabled, {0}).'.format(value)
         return self.diag_eval(cmd)
 
-    def set_reb_cons_view(self, disable=None):
-        #do not change if None
-        if disable is None:
-            log.info("default consistent_view value will be used on server")
-            return
+    def set_reb_cons_view(self, disable):
         """Enable/disable consistent view for rebalance tasks"""
         cmd = 'ns_config:set(index_aware_rebalance_disabled, %s).'\
                 % str(disable).lower()
         log.info('Enabling/disabling consistent-views during rebalance: {0}'.format(cmd))
+        return self.diag_eval(cmd)
+
+    def set_reb_index_waiting(self, disable):
+        """Enable/disable index waiting phase"""
+        cmd = 'ns_config:set(rebalance_index_waiting_disabled, %s).'\
+              % str(disable).lower()
+        log.info('%s index_waiting during rebalance'
+                 % ("Disabling" if disable else "Enabling"))
         return self.diag_eval(cmd)
 
     def set_mc_threads(self, mc_threads=4):

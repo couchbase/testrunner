@@ -441,6 +441,12 @@ class EPerfMaster(perf.PerfBase):
         rest.set_reb_cons_view(disable=disable)
         print "[set_reb_cons_view] disable consistent view = %s" % disable
 
+    def set_reb_index_waiting(self, node, disable=False):
+        """Set up index waiting for rebalance task"""
+        rest = RestConnection(node)
+        rest.set_reb_index_waiting(disable=disable)
+        print "[set_reb_index_waiting] disable index waiting = %s" % disable
+
     def start_measure_sched_delay(self, file="sched-delay"):
         for server in self.input.servers:
             shell = RemoteMachineShellConnection(server)
@@ -1008,6 +1014,11 @@ class EPerfMaster(perf.PerfBase):
         if reb_cons_view != PerfDefaults.reb_cons_view:
             self.set_reb_cons_view(self.input.servers[0],
                                    disable=(reb_cons_view == 0))
+
+        reb_index_waiting = self.parami("reb_index_waiting", PerfDefaults.reb_index_waiting)
+        if reb_index_waiting != PerfDefaults.reb_index_waiting:
+            self.set_reb_index_waiting(self.input.servers[0],
+                                       disable=(reb_index_waiting == 0))
 
         if self.parami("access_phase", 1) == 1:
             if self.parami("cb_stats", PerfDefaults.cb_stats) == 1:
