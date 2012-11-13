@@ -358,7 +358,7 @@ ns_server_data <- result_tmp
 ns_server_data$row = ns_server_data $row/1000
 
 cat("generating memcached stats ")
-warmup_stats <- data.frame()
+#warmup_stats <- data.frame()
 memcached_stats <- data.frame()
 for(index in 1:nrow(builds_list)) {
        tryCatch({
@@ -368,18 +368,18 @@ for(index in 1:nrow(builds_list)) {
 				for(index in 1:length(doc_json)) {
 					unlisted <- plyr::ldply(doc_json[index], unlist)
 					memcached_stats <- rbind.fill(memcached_stats, unlisted)
-                    if(unlisted$ep_warmup_thread == "complete") {
-                        unlisted <- unlisted[c('row', 'ep_warmup_thread', 'ip', 'ep_warmup_time', 'buildinfo.version')]
-                        warmup_stats <- rbind.fill(warmup_stats, unlisted)
-					}
+                    #if(unlisted$ep_warmup_thread == "complete") {
+                    #    unlisted <- unlisted[c('row', 'ep_warmup_thread', 'ip', 'ep_warmup_time', 'buildinfo.version')]
+                    #    warmup_stats <- rbind.fill(warmup_stats, unlisted)
+					#}
 				}
        },error=function(e) {
                 print("Error getting system stats from memcached")
        })
 }
 
-warmup_stats$row <- as.numeric(warmup_stats$row)
-warmup_stats$ep_warmup_time <- as.numeric(memcached_stats$ep_warmup_time)
+#warmup_stats$row <- as.numeric(warmup_stats$row)
+#warmup_stats$ep_warmup_time <- as.numeric(memcached_stats$ep_warmup_time)
 memcached_stats$row <- as.numeric(memcached_stats$row)
 memcached_stats$ep_diskqueue_drain <- as.numeric(memcached_stats$ep_diskqueue_drain)
 memcached_stats$uptime <- as.numeric(memcached_stats$uptime)
@@ -1601,33 +1601,33 @@ for(build in levels(builds)) {
     }
 }
 
-for(build in levels(builds)) {
-    fi <- warmup_stats[warmup_stats$buildinfo.version == build, ]
-	d <- fi$ep_warmup_time[1] / 1000000
+#for(build in levels(builds)) {
+#    fi <- warmup_stats[warmup_stats$buildinfo.version == build, ]
+#	d <- fi$ep_warmup_time[1] / 1000000
+#
+#    if(build == baseline){
+#		row <-c ("baseline", "warmup time (with os flush)", as.numeric(d))
+#		combined <- rbind(combined, row)
+#	}
+#	else{
+#		row <-c (build, "warmup time (with os flush)", as.numeric(d))
+#		combined <- rbind(combined, row)
+#	}
+#}
 
-    if(build == baseline){
-		row <-c ("baseline", "warmup time (with os flush)", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-	else{
-		row <-c (build, "warmup time (with os flush)", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-}
-
-for(build in levels(builds)) {
-    fi <- warmup_stats[warmup_stats$buildinfo.version == build, ]
-	d <- fi$ep_warmup_time[2] / 1000000
-
-    if(build == baseline){
-		row <-c ("baseline", "warmup time (no os flush)", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-	else{
-		row <-c (build, "warmup time (no os flush)", as.numeric(d))
-		combined <- rbind(combined, row)
-	}
-}
+#for(build in levels(builds)) {
+#    fi <- warmup_stats[warmup_stats$buildinfo.version == build, ]
+#	d <- fi$ep_warmup_time[2] / 1000000
+#
+#    if(build == baseline){
+#		row <-c ("baseline", "warmup time (no os flush)", as.numeric(d))
+#		combined <- rbind(combined, row)
+#	}
+#	else{
+#		row <-c (build, "warmup time (no os flush)", as.numeric(d))
+#		combined <- rbind(combined, row)
+#	}
+#}
 
 # TODO rewrite (benchmark table)
 p <- combined[2:nrow(combined), ]
@@ -1663,10 +1663,10 @@ MB <- append(MB,as.numeric(sprintf("%.2f",MB1[22])))
 MB <- append(MB,as.numeric(sprintf("%.2f",MB1[23])))
 MB <- append(MB,combined[combined[,'system'] == 'baseline',]$value[25])
 
-if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[26])))
-    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[27])))
-}
+#if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
+#    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[26])))
+#    MB <- append(MB,as.numeric(sprintf("%.2f",MB1[27])))
+#}
 
 CB <- c()
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[1]/3600)))
@@ -1694,18 +1694,18 @@ CB <- append(CB,as.numeric(sprintf("%.2f",CB1[22])))
 CB <- append(CB,as.numeric(sprintf("%.2f",CB1[23])))
 CB <- append(CB,combined[combined[,'system'] != 'baseline',]$value[25])
 
-if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[26])))
-    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[27])))
-}
+#if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
+#    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[26])))
+#    CB <- append(CB,as.numeric(sprintf("%.2f",CB1[27])))
+#}
 
 testdf <- data.frame(MB,CB)
 
 row_names <- c("Runtime (in hr)","Avg. Drain Rate","Peak Disk (GB)","Peak Memory (GB)", "Avg. OPS", "Avg. mem memcached (GB)", "Avg. mem beam.smp (MB)", "Avg. CPU rate (%)", "Latency-get (90th) (ms)", "Latency-get (95th) (ms)","Latency-get (99th) (ms)","Latency-set (90th) (ms)","Latency-set (95th) (ms)","Latency-set (99th) (ms)","Latency-query (80th) (ms)","Latency-query (90th) (ms)","Latency-query (95th) (ms)","Latency-query (99th) (ms)", "Latency-query (99.9th) (ms)", "Avg. QPS", "Avg. XDC ops/sec", "Avg. XDC docs to replicate", "Rebalance Time (sec)", "Testrunner Version")
 
-if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
-	row_names <- c(row_names, c("Warmup Time - flush (sec)", "Warmup Time - no flush (sec)"))
-}
+#if ("warmup" %in% unlist(strsplit(test_name, '\\.'))) {
+#	row_names <- c(row_names, c("Warmup Time - flush (sec)", "Warmup Time - no flush (sec)"))
+#}
 
 rownames(testdf) <- row_names
 plot.new()
