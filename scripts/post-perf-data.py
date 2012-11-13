@@ -1,7 +1,6 @@
 import collections
 from optparse import OptionParser
 import json
-from bz2 import BZ2Compressor
 
 from couchdbkit import Server
 
@@ -9,22 +8,6 @@ from lib.logger import Logger
 from lib.cbmonitor.rest_client import CbmonitorClient
 
 log = Logger.get_logger()
-
-
-def compress(data):
-    try:
-        bc = BZ2Compressor()
-        bc.compress(lg)
-        attachment = bc.flush()
-        return attachment
-    except Exception as ex:
-        log.error("unable to bzip data", ex)
-
-
-def sortedDictValues1(adict):
-    items = adict.items()
-    items.sort()
-    return [value for key, value in items]
 
 
 def convert(data):
@@ -48,6 +31,7 @@ def flatten(keys, json):
                 if not isinstance(json[key][_k], dict):
                     result["{0}.{1}".format(key, _k)] = json[key][_k]
     return result
+
 
 def post_to_cbm(input_json):
     """Collect and post results to cbmonitor dashboard"""
@@ -139,8 +123,6 @@ if __name__ == "__main__":
                                 _new_sample[sample] = samples[sample][i]
                         _new_sample.update(z)
                         _new_sample.update({"row": index})
-#                        _new_sample = sortedDictValues1(_new_sample)
-#                        print _new_sample
                         attachments["ns_server_data"].append(_new_sample)
                         index += 1
             del input_json["ns_server_data"]
