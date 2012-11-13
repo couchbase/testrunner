@@ -916,8 +916,10 @@ class VBucketAwareMemcached(object):
                 mc = self.memcacheds[server_str]
                 tasks.append(executor.submit(self._setMulti_rec, mc, exp, flags, keyval, pause_sec, timeout_sec, self._setMulti_parallel))
             errors = []
+            now = time.time()
             for future in concurrent.futures.as_completed(tasks, timeout_sec):
                 if future.exception() is not None:
+                    self.log("exception in {0} sec".format(time.time() - now))
                     raise future.exception()
                 errors.extend(future.result())
 
@@ -1027,8 +1029,10 @@ class VBucketAwareMemcached(object):
     def _reduce_getMulti_values(self, tasks, pause, timeout):
         keys_vals = {}
         import concurrent.futures
+        now = time.time()
         for future in concurrent.futures.as_completed(tasks, timeout):
             if future.exception() is not None:
+                self.log("exception in {0} sec".format(time.time() - now))
                 raise future.exception()
             keys_vals.update(future.result())
         return keys_vals
