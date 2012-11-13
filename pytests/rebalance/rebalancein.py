@@ -338,9 +338,11 @@ class RebalanceInTests(RebalanceBaseTest):
 
         fragmentation_monitor.result()
 
-        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
-        result = active_task.result()
-        self.assertTrue(result)
+        for i in xrange(3):
+            active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
+            result = active_task.result()
+            self.assertTrue(result)
+            time.sleep(2)
 
 
         expected_rows = None
