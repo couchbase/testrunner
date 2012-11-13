@@ -38,7 +38,9 @@ class cbcollectRunner(object):
         day = now.day
         month = now.month
         year = now.year
-        file_name = "%s-%s%s%s-diag.zip" % (self.server.ip, month, day, year)
+        hour = now.timetuple().tm_hour
+        min = now.timetuple().tm_min
+        file_name = "%s-%s%s%s-%s%s-diag.zip" % (self.server.ip, month, day, year, hour, min)
         print "Collecting logs from %s\n" % (self.server.ip)
         output, error = remote_client.execute_cbcollect_info(file_name)
         print "\n".join(output)
