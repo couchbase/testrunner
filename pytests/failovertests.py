@@ -302,6 +302,7 @@ class FailoverTests(FailoverBaseTest):
                          self._cleanup_nodes.append(server)
 
         log.info("Begin VERIFICATION ...")
+        self._wait_for_stats_all_buckets(_servers_)
         self._verify_stats_all_buckets(_servers_)
         self._verify_all_buckets(self.master)
 
