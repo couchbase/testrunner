@@ -135,12 +135,12 @@ class BucketOperationHelper():
             for bucket in buckets:
                 status = rest.delete_bucket(bucket.name)
                 if not status:
-                    self.log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
+                    log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
                 log.info('deleted bucket : {0} from {1}'.format(bucket.name, serverInfo.ip))
                 msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket.name)
                 if test_case:
                     if not BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200):
-                        self.log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
+                        log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
                         test_case.fail(msg)
 
     @staticmethod
@@ -152,12 +152,12 @@ class BucketOperationHelper():
         if RestHelper(rest).bucket_exists(bucket):
             status = rest.delete_bucket(bucket)
             if not status:
-                self.log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
+                log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
             log.info('deleted bucket : {0} from {1}'.format(bucket, serverInfo.ip))
         msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket)
         if test_case:
             if not BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200):
-                self.log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
+                log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
                 test_case.fail(msg)
 
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
