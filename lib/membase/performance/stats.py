@@ -4,6 +4,8 @@ from threading import Thread
 import time
 import gzip
 from collections import defaultdict
+import logging
+import logging.config
 
 from lib.membase.api.rest_client import RestConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
@@ -12,6 +14,9 @@ from lib.mc_bin_client import MemcachedError
 
 
 RETRIES = 10
+
+logging.config.fileConfig('mcsoda.logging.conf')
+log = logging.getLogger()
 
 
 def histo_percentile(histo, percentiles):
@@ -209,16 +214,16 @@ class StatsCollector(object):
         self._task["bucket_size"] = []
         d = []
         while not self._aborted():
-            print "Collecting bucket size stats"
+            log.info("Collecting bucket size stats")
             status, db_size = rest.get_database_disk_size(bucket)
             if status:
                 d.append(db_size)
             else:
-                print "Enable to read bucket stats"
+                log.warn("Enable to read bucket stats")
             time.sleep(frequency)
 
         self._task["bucket_size"] = d
-        print "finished bucket size stats"
+        log.info("Finished bucket size stats")
 
     def get_data_file_size(self, nodes, frequency, bucket):
         shells = []
@@ -257,7 +262,7 @@ class StatsCollector(object):
                     d["snapshots"].append(value.copy())
                 i += 1
         self._task["data_size_stats"] = d["snapshots"]
-        print " finished data_size_stats"
+        log.info("Finished data_size_stats")
 
     #ops stats
     #{'tot-sets': 899999, 'tot-gets': 1, 'tot-items': 899999, 'tot-creates': 899999}
@@ -327,8 +332,7 @@ class StatsCollector(object):
         self._task["machinestats"] = machine_stats
 
     def reb_stats(self, start, dur):
-        print "[reb_stats] recording reb start = {0}, reb duration = {1}"\
-            .format(start, dur)
+        log.info("Recording reb start = {0}, reb duration = {1}".format(start, dur))
         self._reb_stats["reb_start"] = start
         self._reb_stats["reb_dur"] = dur
 
@@ -404,7 +408,7 @@ class StatsCollector(object):
                         d["snapshots"].append(value)
                 i += 1
         self._task["systemstats"] = d["snapshots"]
-        print " finished system_stats"
+        log.info("Finished system_stats")
 
     def iostats(self, nodes, frequency, verbosity=False):
 
@@ -419,11 +423,11 @@ class StatsCollector(object):
 
         self._task["iostats"] = []
 
-        print "started capturing io stats"
+        log.info("Started capturing io stats")
 
         while not self._aborted():
             time.sleep(frequency)
-            print "collecting io_stats"
+            log.info("Collecting io_stats")
             for shell in shells:
                 try:
                     kB_read, kB_wrtn, util, iowait, idle = \
@@ -438,7 +442,7 @@ class StatsCollector(object):
                                                  "util": util,
                                                  "iowait": iowait,
                                                  "idle": idle})
-        print "finished capturing io stats"
+        log.info("Finished capturing io stats")
 
     def couchdb_stats(nodes):
         pass
@@ -447,8 +451,7 @@ class StatsCollector(object):
         """
         Capture membase stats snapshot manually
         """
-        print "[capture_mb_snapshot] capturing memcache stats snapshot for {0}"\
-            .format(node.ip)
+        log.info("Capturing memcache stats snapshot for {0}".format(node.ip))
         stats = {}
 
         try:
@@ -457,7 +460,7 @@ class StatsCollector(object):
             stats = mc.stats()
             stats.update(mc.stats("warmup"))
         except Exception as e:
-            print "[capture_mb_snapshot] Exception: {0}".format(str(e))
+            log.error("Exception: {0}".format(str(e)))
             return False
         finally:
             stats["time"] = time.time()
@@ -465,7 +468,7 @@ class StatsCollector(object):
             self._mb_stats["snapshots"].append(stats)
             print stats
 
-        print "[capture_mb_snapshot] memcache stats snapshot captured"
+        log.info("Memcache stats snapshot captured")
         return True
 
     def membase_stats(self, nodes, bucket, frequency, verbose=False):
@@ -486,7 +489,7 @@ class StatsCollector(object):
 
         while not self._aborted():
             time_left = frequency
-            print "Collecting membase stats"
+            log.info("Collecting membase stats")
             timings = None
             # at minimum we want to check for aborted every minute
             while not self._aborted() and time_left > 0:
@@ -504,8 +507,7 @@ class StatsCollector(object):
                             mem_stats = mc.stats('memory')
                         stats.update(mem_stats)
                     except Exception as e:
-                        print "[memebase_stats] Exception: {0}, retries = {1}"\
-                            .format(str(e), retries)
+                        log.error("{0}, retries = {1}".format(str(e), retries))
                         time.sleep(2)
                         mc.reconnect()
                         retries += 1
@@ -544,14 +546,14 @@ class StatsCollector(object):
                 dispatcher['ip'] = ip
                 self._task["dispatcher"].append(dispatcher)
 
-        if timings:
-            # TODO dump timings for all servers
-            print "Dumping disk timing stats: {0}".format(time.strftime('%X %x %Z'))
+        if timings:  # TODO: dump timings for all servers
+            timestamp = time.strftime('%X %x %Z')
+            log.info("Dumping disk timing stats: {0}".format(timestamp))
             for key, value in sorted(timings.iteritems()):
                 if key.startswith("disk"):
                     print "{0:50s}:     {1}".format(key, value)
 
-        print " finished membase_stats"
+        log.info("Finished membase_stats")
 
     def ns_server_stats(self, nodes, bucket, frequency, verbose=False):
 
@@ -564,7 +566,7 @@ class StatsCollector(object):
 
         while not self._aborted():
             time.sleep(frequency)
-            print "Collecting ns_server_stats"
+            log.info("Collecting ns_server_stats")
             for node in nodes:
                 rest = RestConnection(node)
                 data_json = rest.fetch_bucket_stats(bucket=bucket, zoom='minute')
@@ -584,7 +586,7 @@ class StatsCollector(object):
             for snapshot in d[node]["system_snapshots"]:
                 self._task["ns_server_stats_system"].append(snapshot)
 
-        print " finished ns_server_stats"
+        log.info("Finished ns_server_stats")
 
     def collect_indexing_stats(self, nodes, bucket, ddoc, frequency):
         """Collect view indexing stats"""
@@ -592,7 +594,7 @@ class StatsCollector(object):
 
         while not self._aborted():
             time.sleep(frequency)
-            print "Collecting view indexing stats"
+            log.info("Collecting view indexing stats")
             for node in nodes:
                 rest = RestConnection(node)
                 data = rest.set_view_info(bucket, ddoc)
@@ -608,7 +610,7 @@ class StatsCollector(object):
                                                     'indexing_time': avg_time,
                                                     'timestamp': time.time()})
 
-        print "Finished collecting view indexing stats"
+        log.info("Finished collecting view indexing stats")
 
     def measure_indexing_throughput(self, nodes):
         self._task['indexer_info'] = list()
