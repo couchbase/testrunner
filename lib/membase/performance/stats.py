@@ -448,9 +448,7 @@ class StatsCollector(object):
         pass
 
     def capture_mb_snapshot(self, node):
-        """
-        Capture membase stats snapshot manually
-        """
+        """Capture membase stats snapshot manually"""
         log.info("Capturing memcache stats snapshot for {0}".format(node.ip))
         stats = {}
 
@@ -483,7 +481,7 @@ class StatsCollector(object):
         self._task["timings"] = []
         self._task["dispatcher"] = []
         d = {}
-        #        "pname":"x","pid":"y","snapshots":[{"time":time,"value":value}]
+        # "pname": "x", "pid": "y","snapshots": [{"time": time,"value": value}]
         for mc in mcs:
             d[mc.host] = {"snapshots": [], "timings": [], "dispatcher": []}
 
@@ -665,10 +663,10 @@ class StatsCollector(object):
             shell.execute_command("killall atop")
 
 
-# Invokes optional callback when registered levels have been reached
-# during stats sample()'ing.
-#
 class CallbackStatsCollector(StatsCollector):
+
+    """Invokes optional callback when registered levels have been reached
+    during stats sample()'ing."""
 
     def __init__(self, verbosity):
         # Tuples of level_name, level, callback.
