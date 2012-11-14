@@ -582,9 +582,8 @@ class PerfBase(unittest.TestCase):
         return result.rstrip()[:7]
 
     def start_stats(self, stats_spec, servers=None,
-                    process_names=['memcached', 'beam.smp', 'couchjs'],
-                    test_params=None, client_id='',
-                    collect_server_stats=True, ddoc=None):
+                    process_names=('memcached', 'beam.smp'), test_params=None,
+                    client_id='', collect_server_stats=True, ddoc=None):
         if self.parami('stats', 1) == 0:
             return None
 
