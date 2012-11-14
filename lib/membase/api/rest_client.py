@@ -1453,16 +1453,15 @@ class RestConnection(object):
             param = json_parsed[param]
             return param
 
-    def set_reb_cons_view(self, disable=None):
-        #do not change if None
-        if disable is None:
-            log.info("default consistent_view value will be used on server")
-            return
+    def set_reb_cons_view(self, disable):
         """Enable/disable consistent view for rebalance tasks"""
-        cmd = 'ns_config:set(index_aware_rebalance_disabled, %s).'\
-                % str(disable).lower()
-        log.info('Enabling/disabling consistent-views during rebalance: {0}'.format(cmd))
-        return self.diag_eval(cmd)
+        api = self.baseUrl + "internalSettings"
+        params = {"indexAwareRebalanceDisabled": str(disable).lower()}
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('Consistent-views during rebalance was set as indexAwareRebalanceDisabled={0}'\
+                 .format(str(disable).lower()))
+        return status
 
     def set_reb_index_waiting(self, disable):
         """Enable/disable rebalance index waiting"""
