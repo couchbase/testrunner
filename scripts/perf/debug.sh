@@ -1,6 +1,6 @@
 if [ "x$1" != "x" ] ; then
     echo "Collecting btree stats..."
-    easy_install btrc > /dev/null
+    easy_install -U btrc > /dev/null
     hostname=`awk -F: '/\[servers\]/ { getline; print $0 }' $1 | cut -c 3-`
     btrc -n ${hostname}:8091
 
