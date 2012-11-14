@@ -28,10 +28,10 @@ def histo_percentile(histo, percentiles):
     for bin in bins:
         if not percentiles:
             return rv
-    v_cur += histo[bin]
-    while percentiles and (v_cur / v_sum) >= percentiles[0]:
-        rv.append((percentiles[0], bin))
-        percentiles.pop(0)
+        v_cur += histo[bin]
+        while percentiles and (v_cur / v_sum) >= percentiles[0]:
+            rv.append((percentiles[0], bin))
+            percentiles.pop(0)
     return rv
 
 
