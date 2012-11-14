@@ -38,7 +38,7 @@ def histo_percentile(histo, percentiles):
 class StatsCollector(object):
     _task = {}
     _verbosity = True
-    _mb_stats = {"snapshots": []}   # manually captured memcached stats
+    _mb_stats = {"snapshots": []}  # manually captured memcached stats
     _reb_stats = {}
 
     def __init__(self, verbosity):
@@ -46,18 +46,13 @@ class StatsCollector(object):
         self.is_leader = False
         self.active_mergers = 0
 
-    #this function starts collecting stats from all nodes with the given
-    #frequency
     def start(self, nodes, bucket, pnames, name, frequency, client_id='',
               collect_server_stats=True, ddoc=None):
-        self._task = {"state": "running", "threads": []}
-        self._task["name"] = name
-        self._task["time"] = time.time()
-        self._task["ops"] = []
-        self._task["totalops"] = []
-        self._task["ops-temp"] = []
-        self._task["latency"] = {}
-        self._task["data_size_stats"] = []
+        """This function starts collecting stats from all nodes with the given
+        frequency"""
+        self._task = {"state": "running", "threads": [], "name": name,
+                      "time": time.time(), "ops": [], "totalops": [],
+                      "ops-temp": [], "latency": {}, "data_size_stats": []}
         rest = RestConnection(nodes[0])
         info = rest.get_nodes_self()
         self.data_path = info.storage[0].get_data_path()
@@ -81,12 +76,9 @@ class StatsCollector(object):
             bucket_size_thead = Thread(target=self.get_bucket_size,
                                        args=(bucket, rest, frequency))
             bucket_size_thead.start()
-#            data_size_thread = Thread(target=self.get_data_file_size,
-#                                    args=(nodes, 60, bucket))
-#            data_size_thread.start()
-            self._task["threads"] = [sysstats_thread, ns_server_stats_thread, bucket_size_thead,
-                                     mbstats_thread]
-                                     #data_size_thread ]
+
+            self._task["threads"] = [sysstats_thread, ns_server_stats_thread,
+                                     bucket_size_thead, mbstats_thread]
             if ddoc is not None:
                 view_stats_thread = Thread(target=self.collect_indexing_stats,
                                            args=(nodes, bucket, ddoc, frequency))
