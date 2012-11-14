@@ -350,9 +350,8 @@ class EPerfMaster(perf.PerfBase):
                 final_json['ops'] = self._merge_query_ops(final_json['ops'],
                                                           dict['ops'])
 
-        file = gzip.open("{0}.{1}.json.gz".format('final', type), 'wb')
-        file.write("{0}".format(json.dumps(final_json)))
-        file.close()
+        with open("{0}.{1}.json".format('final', type), 'w') as file:
+            file.write(json.dumps(final_json))
 
     def min_value_size(self, avg=2048):
         # Returns an array of different value sizes so that

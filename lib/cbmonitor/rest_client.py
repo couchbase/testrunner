@@ -1,8 +1,11 @@
+import sys
 import urllib
 import logging
 
+sys.path.append('lib')
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.api.exception import ServerUnavailableException
+
 
 class CbmonitorClient(RestConnection):
     """Cbmonitor rest client"""
