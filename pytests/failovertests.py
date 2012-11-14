@@ -176,6 +176,19 @@ class FailoverBaseTest(unittest.TestCase):
         for task in tasks:
             task.result()
 
+    def _wait_for_replication(self, servers, timeout=600):
+        tasks = []
+        for server in servers:
+            for bucket in self.buckets:
+                for server_repl in list(set(servers) - set([server])):
+                    tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, 'tap',
+                                   'eq_tapq:replication_ns_1@' + server_repl.ip + ':idle', '==', 'true'))
+                    tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, 'tap',
+                                   'eq_tapq:replication_ns_1@' + server_repl.ip + ':backfill_completed', '==', 'true'))
+        for task in tasks:
+            task.result(timeout)
+
+
     def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1):
         tasks = []
         for bucket in self.buckets:
@@ -241,9 +254,7 @@ class FailoverTests(FailoverBaseTest):
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
 
-        final_replication_state = RestHelper(rest).wait_for_replication(900)
-        msg = "replication state after waiting for up to 15 minutes : {0}"
-        self.log.info(msg.format(final_replication_state))
+        self._wait_for_replication(self._servers, timeout=600)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=replica)
         for node in chosen:
             #let's do op
@@ -303,6 +314,7 @@ class FailoverTests(FailoverBaseTest):
 
         log.info("Begin VERIFICATION ...")
         self._wait_for_stats_all_buckets(_servers_)
+        self._wait_for_replication(self._servers, timeout=600)
         self._verify_stats_all_buckets(_servers_)
         self._verify_all_buckets(self.master)
 
