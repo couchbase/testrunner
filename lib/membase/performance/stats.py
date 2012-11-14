@@ -111,10 +111,8 @@ class StatsCollector(object):
 
     def export(self, name, test_params):
         for latency in self._task["latency"].keys():
-
             # save the last histogram snapshot
             histos = self._task["latency"].get(latency, [])
-
             if histos:
                 key = latency + "-histogram"
                 self._task["latency"][key] = histos[-1].copy()
@@ -142,77 +140,70 @@ class StatsCollector(object):
 
         test_params.update(self._reb_stats)
 
-        obj = {"buildinfo": self._task.get("buildstats", {}),
-               "machineinfo": self._task.get("machinestats", {}),
-               "membasestats": self._task.get("membasestats", []),
-               "systemstats": self._task.get("systemstats", []),
-               "iostats": self._task.get("iostats", []),
-               "name": name,
-               "totalops": self._task["totalops"],
-               "ops": self._task["ops"],
-               "time": self._task["time"],
-               "info": test_params,
-               "ns_server_data": self._task.get("ns_server_stats", []),
-               "ns_server_data_system": self._task.get("ns_server_stats_system", []),
-               "view_info": self._task.get("view_info", []),
-               "indexer_info": self._task.get("indexer_info", []),
-               "timings": self._task.get("timings", []),
-               "dispatcher": self._task.get("dispatcher", []),
-               "bucket-size": self._task.get("bucket_size", []),
-               "data-size": self._task.get("data_size_stats", []),
-               "latency-set-histogram": self._task["latency"].get("latency-set-histogram", []),
-               "latency-set": self._task["latency"].get('percentile-latency-set', []),
-               "latency-set-recent": self._task["latency"].get('percentile-latency-set-recent', []),
-               "latency-get-histogram": self._task["latency"].get("latency-get-histogram", []),
-               "latency-get": self._task["latency"].get('percentile-latency-get', []),
-               "latency-get-recent": self._task["latency"].get('percentile-latency-get-recent', []),
-               "latency-delete": self._task["latency"].get('percentile-latency-delete', []),
-               "latency-delete-recent": self._task["latency"].get('percentile-latency-delete-recent', []),
-               "latency-query-histogram": self._task["latency"].get("latency-query-histogram", []),
-               "latency-query": self._task["latency"].get('percentile-latency-query', []),
-               "latency-query-recent": self._task["latency"].get('percentile-latency-query-recent', []),
-               "latency-obs-persist-server-histogram": self._task["latency"].get("latency-obs-persist-server-histogram", []),
-               "latency-obs-persist-server": self._task["latency"].get('percentile-latency-obs-persist-server-server', []),
-               "latency-obs-persist-server-recent": self._task["latency"].get('percentile-latency-obs-persist-server-recent', []),
-               "latency-obs-persist-client-histogram": self._task["latency"].get("latency-obs-persist-client-histogram", []),
-               "latency-obs-persist-client": self._task["latency"].get('percentile-latency-obs-persist-client', []),
-               "latency-obs-persist-client-recent": self._task["latency"].get('percentile-latency-obs-persist-client-recent', []),
-               "latency-obs-repl-client-histogram": self._task["latency"].get("latency-obs-repl-client-histogram", []),
-               "latency-obs-repl-client": self._task["latency"].get('percentile-latency-obs-repl-client', []),
-               "latency-obs-repl-client-recent": self._task["latency"].get('percentile-latency-obs-repl-client-recent', []),
-               "latency-woq-obs-histogram": self._task["latency"].get("latency-woq-obs-histogram", []),
-               "latency-woq-obs": self._task["latency"].get('percentile-latency-woq-obs', []),
-               "latency-woq-obs-recent": self._task["latency"].get('percentile-latency-woq-obs-recent', []),
-               "latency-woq-query-histogram": self._task["latency"].get("latency-woq-query-histogram", []),
-               "latency-woq-query": self._task["latency"].get('percentile-latency-woq-query', []),
-               "latency-woq-query-recent": self._task["latency"].get('percentile-latency-woq-query-recent', []),
-               "latency-woq-histogram": self._task["latency"].get("latency-woq-histogram", []),
-               "latency-woq": self._task["latency"].get('percentile-latency-woq', []),
-               "latency-woq-recent": self._task["latency"].get('percentile-latency-woq-recent', []),
-               "latency-cor-histogram": self._task["latency"].get("latency-cor-histogram", []),
-               "latency-cor": self._task["latency"].get('percentile-latency-cor', []),
-               "latency-cor-recent": self._task["latency"].get('percentile-latency-cor-recent', [])
-               }
+        obj = {
+            "buildinfo": self._task.get("buildstats", {}),
+            "machineinfo": self._task.get("machinestats", {}),
+            "membasestats": self._task.get("membasestats", []),
+            "systemstats": self._task.get("systemstats", []),
+            "iostats": self._task.get("iostats", []),
+            "name": name,
+            "totalops": self._task["totalops"],
+            "ops": self._task["ops"],
+            "time": self._task["time"],
+            "info": test_params,
+            "ns_server_data": self._task.get("ns_server_stats", []),
+            "ns_server_data_system": self._task.get("ns_server_stats_system", []),
+            "view_info": self._task.get("view_info", []),
+            "indexer_info": self._task.get("indexer_info", []),
+            "timings": self._task.get("timings", []),
+            "dispatcher": self._task.get("dispatcher", []),
+            "bucket-size": self._task.get("bucket_size", []),
+            "data-size": self._task.get("data_size_stats", []),
+            "latency-set-histogram": self._task["latency"].get("latency-set-histogram", []),
+            "latency-set": self._task["latency"].get('percentile-latency-set', []),
+            "latency-set-recent": self._task["latency"].get('percentile-latency-set-recent', []),
+            "latency-get-histogram": self._task["latency"].get("latency-get-histogram", []),
+            "latency-get": self._task["latency"].get('percentile-latency-get', []),
+            "latency-get-recent": self._task["latency"].get('percentile-latency-get-recent', []),
+            "latency-delete": self._task["latency"].get('percentile-latency-delete', []),
+            "latency-delete-recent": self._task["latency"].get('percentile-latency-delete-recent', []),
+            "latency-query-histogram": self._task["latency"].get("latency-query-histogram", []),
+            "latency-query": self._task["latency"].get('percentile-latency-query', []),
+            "latency-query-recent": self._task["latency"].get('percentile-latency-query-recent', []),
+            "latency-obs-persist-server-histogram": self._task["latency"].get("latency-obs-persist-server-histogram", []),
+            "latency-obs-persist-server": self._task["latency"].get('percentile-latency-obs-persist-server-server', []),
+            "latency-obs-persist-server-recent": self._task["latency"].get('percentile-latency-obs-persist-server-recent', []),
+            "latency-obs-persist-client-histogram": self._task["latency"].get("latency-obs-persist-client-histogram", []),
+            "latency-obs-persist-client": self._task["latency"].get('percentile-latency-obs-persist-client', []),
+            "latency-obs-persist-client-recent": self._task["latency"].get('percentile-latency-obs-persist-client-recent', []),
+            "latency-obs-repl-client-histogram": self._task["latency"].get("latency-obs-repl-client-histogram", []),
+            "latency-obs-repl-client": self._task["latency"].get('percentile-latency-obs-repl-client', []),
+            "latency-obs-repl-client-recent": self._task["latency"].get('percentile-latency-obs-repl-client-recent', []),
+            "latency-woq-obs-histogram": self._task["latency"].get("latency-woq-obs-histogram", []),
+            "latency-woq-obs": self._task["latency"].get('percentile-latency-woq-obs', []),
+            "latency-woq-obs-recent": self._task["latency"].get('percentile-latency-woq-obs-recent', []),
+            "latency-woq-query-histogram": self._task["latency"].get("latency-woq-query-histogram", []),
+            "latency-woq-query": self._task["latency"].get('percentile-latency-woq-query', []),
+            "latency-woq-query-recent": self._task["latency"].get('percentile-latency-woq-query-recent', []),
+            "latency-woq-histogram": self._task["latency"].get("latency-woq-histogram", []),
+            "latency-woq": self._task["latency"].get('percentile-latency-woq', []),
+            "latency-woq-recent": self._task["latency"].get('percentile-latency-woq-recent', []),
+            "latency-cor-histogram": self._task["latency"].get("latency-cor-histogram", []),
+            "latency-cor": self._task["latency"].get('percentile-latency-cor', []),
+            "latency-cor-recent": self._task["latency"].get('percentile-latency-cor-recent', [])}
 
         if self.client_id:
-            patterns = ['reload$', 'load$', 'warmup$', 'index$']
-            phases = ['.reload', '.load', '.warmup', '.index']
-
+            patterns = ('reload$', 'load$', 'warmup$', 'index$')
+            phases = ('.reload', '.load', '.warmup', '.index')
             name_picker = lambda (pattern, phase): re.search(pattern, self._task["name"])
             try:
                 phase = filter(name_picker, zip(patterns, phases))[0][1]
             except IndexError:
                 phase = '.loop'
+            name = str(self.client_id) + phase
 
-            filename = str(self.client_id) + phase
-
-            file = gzip.open("{0}.json.gz".format(filename), 'wb')
-            file.write("{0}".format(json.dumps(obj)))
-            file.close()
-        else:
-            file = gzip.open("{0}.json.gz".format(name), 'wb')
-            file.write("{0}".format(json.dumps(obj)))
-            file.close()
+        with gzip.open("{0}.json.gz".format(name), 'wb') as file:
+            file.write(json.dumps(obj))
 
     def get_bucket_size(self, bucket, rest, frequency):
         self._task["bucket_size"] = []
