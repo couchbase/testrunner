@@ -1,14 +1,13 @@
 import collections
 import sys
-
-sys.path.append('.')
-sys.path.append('lib')
-from optparse import OptionParser
-from couchdbkit import Server
-from logger import Logger
 import json
+from optparse import OptionParser
 
-from cbmonitor.rest_client import CbmonitorClient
+from couchdbkit import Server
+
+sys.path.append('lib')
+from lib.logger import Logger
+from lib.cbmonitor.rest_client import CbmonitorClient
 
 log = Logger.get_logger()
 

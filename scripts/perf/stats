@@ -26,7 +26,7 @@ FILES=final.*.json
 for f in $FILES
 do
 echo "posting $f to couchdb"
-python scripts/post-perf-data.py -n http://10.5.2.41:5984 -d eperf -i $f
+python -m scripts.post-perf-data -n http://10.5.2.41:5984 -d eperf -i $f
 done
 rm -rf final.*.json
 rm -rf *.gz
