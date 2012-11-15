@@ -153,6 +153,12 @@ class Rebalance(XDCRReplicationBaseTest):
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
                 self.verify_results(verify_src=True)
 
+        for node in self._floating_servers_set:
+            if node in self.src_nodes:
+                self.src_nodes.remove(node)
+            if node in self.dest_nodes:
+                self.dest_nodes.remove(node)
+
     """Loading only at source cluster. Async Rebalance-Out Master node at Source/Destination while
 Create/Update/Delete are performed in parallel based on doc-ops specified by the user.
 Verifying whether XDCR replication is successful on subsequent destination clusters. """
@@ -195,6 +201,12 @@ Verifying whether XDCR replication is successful on subsequent destination clust
         elif self._replication_direction_str in "bidirection":
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
             self.verify_results(verify_src=True)
+
+        for node in self._floating_servers_set:
+            if node in self.src_nodes:
+                self.src_nodes.remove(node)
+            if node in self.dest_nodes:
+                self.dest_nodes.remove(node)
 
         """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
         Swap Rebalance-Out Non-master node at Source/Destination while
