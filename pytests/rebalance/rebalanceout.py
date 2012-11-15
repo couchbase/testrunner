@@ -220,9 +220,11 @@ class RebalanceOutTests(RebalanceBaseTest):
             # run queries to create indexes
             self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
 
-        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
-        result = active_task.result()
-        self.assertTrue(result)
+        for i in xrange(3):
+            active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
+            result = active_task.result()
+            self.assertTrue(result)
+            time.sleep(2)
 
         expected_rows = None
         if self.max_verify:
