@@ -76,6 +76,8 @@ class Rebalance(XDCRReplicationBaseTest):
                 self.src_nodes.extend([add_node])
 
             if "destination" in self._rebalance:
+                if "source" in self._rebalance:
+                    add_node = self._floating_servers_set[num_rebalance]
                 tasks.extend(self._async_rebalance(self.dest_nodes, [add_node], []))
                 self._log.info(" Starting rebalance-in node{0} at Destination cluster {1}".format(add_node.ip,
                     self.dest_master.ip))
@@ -98,6 +100,13 @@ class Rebalance(XDCRReplicationBaseTest):
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
                 self.verify_results(verify_src=True)
+
+        for node in self._floating_servers_set:
+            if node in self.src_nodes:
+                self.src_nodes.remove(node)
+            if node in self.dest_nodes:
+                self.dest_nodes.remove(node)
+
 
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
      Async Rebalance-Out Non-master node at Source/Destination while
@@ -239,6 +248,12 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
             self.verify_results(verify_src=True)
 
+        for node in self._floating_servers_set:
+            if node in self.src_nodes:
+                self.src_nodes.remove(node)
+            if node in self.dest_nodes:
+                self.dest_nodes.remove(node)
+
             """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
              Swap Rebalance-Out Master node at Source/Destination while
     Create/Update/Delete are performed in parallel based on doc-ops specified by the user.
@@ -263,6 +278,8 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.src_nodes.remove(self.src_master)
                 self.src_master = self.src_nodes[0]
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
+                if "source" in self._rebalance:
+                    add_node = self._floating_servers_set[num_rebalance]
                 remove_node = self.dest_master
                 tasks.extend(self._async_rebalance(self.dest_nodes, [add_node], [remove_node]))
                 self._log.info(
@@ -287,6 +304,12 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
                 self.verify_results(verify_src=True)
+
+        for node in self._floating_servers_set:
+            if node in self.src_nodes:
+                self.src_nodes.remove(node)
+            if node in self.dest_nodes:
+                self.dest_nodes.remove(node)
 
     """Replication with compaction ddocs and view queries on both clusters.Loading only
         at source cluster, swap rebalancing at source/destination as specified by the user.
@@ -357,6 +380,12 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
                 self.verify_results(verify_src=True)
+
+        for node in self._floating_servers_set:
+            if node in self.src_nodes:
+                self.src_nodes.remove(node)
+            if node in self.dest_nodes:
+                self.dest_nodes.remove(node)
 
     def swap_rebalance_replication_with_view_queries_and_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
@@ -455,3 +484,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.verify_results()
             elif self._replication_direction_str in "bidirection":
                 self.verify_results(verify_src=True)
+
+        for node in self._floating_servers_set:
+            if node in self.src_nodes:
+                self.src_nodes.remove(node)
+            if node in self.dest_nodes:
+                self.dest_nodes.remove(node)
