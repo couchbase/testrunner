@@ -74,6 +74,21 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
+    def wait_for_replication(servers, cluster_helper, timeout=600):
+        tasks = []
+        rest = RestConnection(servers[0])
+        buckets = rest.get_buckets()
+        for server in servers:
+            for bucket in buckets:
+                for server_repl in list(set(servers) - set([server])):
+                    tasks.append(cluster_helper.async_wait_for_stats([server], bucket, 'tap',
+                                   'eq_tapq:replication_ns_1@' + server_repl.ip + ':idle', '==', 'true'))
+                    tasks.append(cluster_helper.async_wait_for_stats([server], bucket, 'tap',
+                                   'eq_tapq:replication_ns_1@' + server_repl.ip + ':backfill_completed', '==', 'true'))
+        for task in tasks:
+            task.result(timeout)
+
+    @staticmethod
     #bucket is a json object that contains name,port,password
     def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
@@ -292,7 +307,7 @@ class RebalanceHelper():
     @staticmethod
     def log_interesting_taps(node, tap_stats, logger):
         interesting_stats = ['ack_log_size', 'ack_seqno', 'ack_window_full', 'has_item', 'has_queued_item',
-                             'idle', 'paused', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno',
+                             'idle', 'paused', 'backfill_completed', 'pending_backfill', 'pending_disk_backfill', 'recv_ack_seqno',
                              'ep_num_new_']
         for name in tap_stats:
             for interesting_stat in interesting_stats:

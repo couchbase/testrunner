@@ -3,6 +3,7 @@ import datetime
 import unittest
 from TestInput import TestInputSingleton
 import logger
+from couchbase.cluster import Cluster
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
@@ -32,7 +33,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.log.info("==============  SwapRebalanceBase setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
         SwapRebalanceBase.reset(self)
-
+        self.cluster_helper = Cluster()
         # Initialize test params
         self.replica = self.input.param("replica", 1)
         self.keys_count = self.input.param("keys-count", 100000)
@@ -63,13 +64,16 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(self):
+        self.cluster_helper.shutdown()
         if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
                     and TestInputSingleton.input.param("stop-on-failure", False))\
                         or self.skip_cleanup:
                     self.log.warn("CLEANUP WAS SKIPPED")
+
         else:
             SwapRebalanceBase.reset(self)
             SwapRebalanceBase._log_finish(self)
+
 
     @staticmethod
     def reset(self):
@@ -140,7 +144,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
     # Used for items verification active vs. replica
     @staticmethod
-    def items_verification(master, test):
+    def items_verification(test, master):
         rest = RestConnection(master)
         #Verify items count across all node
         timeout = 600
@@ -205,6 +209,23 @@ class SwapRebalanceBase(unittest.TestCase):
             SwapRebalanceBase._create_multiple_buckets(self, replica=self.replica)
 
     @staticmethod
+    def verification_phase(test, master):
+        # Stop loaders
+        SwapRebalanceBase.stop_load(test.loaders)
+        test.log.info("DONE DATA ACCESS PHASE")
+
+        test.log.info("VERIFICATION PHASE")
+        rest = RestConnection(master)
+        servers_in_cluster = []
+        nodes = rest.get_nodes()
+        for server in test.servers:
+            for node in nodes:
+                if node.ip == server.ip:
+                    servers_in_cluster.append(server)
+        RebalanceHelper.wait_for_replication(servers_in_cluster, test.cluster_helper)
+        SwapRebalanceBase.items_verification(test, master)
+
+    @staticmethod
     def _common_test_body_swap_rebalance(self, do_stop_start=False):
         master = self.servers[0]
         rest = RestConnection(master)
@@ -220,10 +241,10 @@ class SwapRebalanceBase(unittest.TestCase):
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
 
         self.log.info("DATA LOAD PHASE")
-        loaders = SwapRebalanceBase.start_load_phase(self, master)
+        self.loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        SwapRebalanceBase.stop_load(self.loaders, do_stop=False)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
@@ -256,7 +277,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         if self.do_access:
             self.log.info("DATA ACCESS PHASE")
-            loaders = SwapRebalanceBase.start_access_phase(self, master)
+            self.loaders = SwapRebalanceBase.start_access_phase(self, master)
 
         self.log.info("SWAP REBALANCE PHASE")
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
@@ -292,17 +313,8 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
 
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
+        SwapRebalanceBase.verification_phase(self, master)
 
-        self.log.info("DONE DATA ACCESS PHASE")
-        #for bucket in rest.get_buckets():
-        #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
-        #        bucket.name, self)
-            #RebalanceHelper.wait_for_persistence(master, bucket.name)
-
-        self.log.info("VERIFICATION PHASE")
-        SwapRebalanceBase.items_verification(master, self)
 
     @staticmethod
     def _common_test_body_failed_swap_rebalance(self):
@@ -320,10 +332,10 @@ class SwapRebalanceBase(unittest.TestCase):
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
 
         self.log.info("DATA LOAD PHASE")
-        loaders = SwapRebalanceBase.start_load_phase(self, master)
+        self.loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        SwapRebalanceBase.stop_load(self.loaders, do_stop=False)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
@@ -355,7 +367,7 @@ class SwapRebalanceBase(unittest.TestCase):
             master = new_swap_servers[0]
 
         self.log.info("DATA ACCESS PHASE")
-        loaders = SwapRebalanceBase.start_access_phase(self, master)
+        self.loaders = SwapRebalanceBase.start_access_phase(self, master)
 
         self.log.info("SWAP REBALANCE PHASE")
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
@@ -410,17 +422,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
 
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
-
-        self.log.info("DONE DATA ACCESS PHASE")
-        #for bucket in rest.get_buckets():
-        #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
-        #        bucket.name, self)
-        #    RebalanceHelper.wait_for_persistence(master, bucket.name)
-
-        self.log.info("VERIFICATION PHASE")
-        SwapRebalanceBase.items_verification(master, self)
+        SwapRebalanceBase.verification_phase(self, master)
 
     @staticmethod
     def _add_back_failed_node(self, do_node_cleanup=False):
@@ -436,10 +438,10 @@ class SwapRebalanceBase(unittest.TestCase):
         RebalanceHelper.rebalance_in(self.servers, len(self.servers) - 1)
 
         self.log.info("DATA LOAD PHASE")
-        loaders = SwapRebalanceBase.start_load_phase(self, master)
+        self.loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        SwapRebalanceBase.stop_load(self.loaders, do_stop=False)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
@@ -467,7 +469,7 @@ class SwapRebalanceBase(unittest.TestCase):
             master = not_failed_over[-1]
 
         self.log.info("DATA ACCESS PHASE")
-        loaders = SwapRebalanceBase.start_access_phase(self, master)
+        self.loaders = SwapRebalanceBase.start_access_phase(self, master)
 
         #Failover selected nodes
         for node in optNodesIds:
@@ -511,17 +513,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(add_back_servers))
 
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
-
-        self.log.info("DONE DATA ACCESS PHASE")
-        #for bucket in rest.get_buckets():
-        #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
-        #        bucket.name, self)
-        #    RebalanceHelper.wait_for_persistence(master, bucket.name)
-
-        self.log.info("VERIFICATION PHASE")
-        SwapRebalanceBase.items_verification(master, self)
+        SwapRebalanceBase.verification_phase(self, master)
 
     @staticmethod
     def _failover_swap_rebalance(self):
@@ -539,10 +531,10 @@ class SwapRebalanceBase(unittest.TestCase):
         RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
 
         self.log.info("DATA LOAD PHASE")
-        loaders = SwapRebalanceBase.start_load_phase(self, master)
+        self.loaders = SwapRebalanceBase.start_load_phase(self, master)
 
         # Wait till load phase is over
-        SwapRebalanceBase.stop_load(loaders, do_stop=False)
+        SwapRebalanceBase.stop_load(self.loaders, do_stop=False)
         self.log.info("DONE LOAD PHASE")
 
         # Start the swap rebalance
@@ -572,7 +564,7 @@ class SwapRebalanceBase(unittest.TestCase):
             master = new_swap_servers[0]
 
         self.log.info("DATA ACCESS PHASE")
-        loaders = SwapRebalanceBase.start_access_phase(self, master)
+        self.loaders = SwapRebalanceBase.start_access_phase(self, master)
 
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], \
             ejectedNodes=optNodesIds)
@@ -580,17 +572,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(new_swap_servers))
 
-        # Stop loaders
-        SwapRebalanceBase.stop_load(loaders)
-
-        self.log.info("DONE DATA ACCESS PHASE")
-        #for bucket in rest.get_buckets():
-        #    SwapRebalanceBase.verify_data(new_swap_servers[0], bucket_data[bucket.name].get('inserted_keys'),\
-        #        bucket.name, self)
-        #    RebalanceHelper.wait_for_persistence(master, bucket.name)
-
-        self.log.info("VERIFICATION PHASE")
-        SwapRebalanceBase.items_verification(master, self)
+        SwapRebalanceBase.verification_phase(self, master)
 
 class SwapRebalanceBasicTests(unittest.TestCase):
 
