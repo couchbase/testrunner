@@ -708,6 +708,7 @@ class ValidateDataTask(GenericLoadingTask):
         if max_verify is not None:
             self.max_verify = min(max_verify, self.max_verify)
         self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
+        self.start_time = time.time()
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and\
@@ -715,6 +716,9 @@ class ValidateDataTask(GenericLoadingTask):
             if not self.itr % 50000:
                 self.log.info("{0} items were verified".format(self.itr))
             return True
+        self.log.info("{0} items were verified in {1} sec.the average number of ops\
+            - {2} per second ".format(self.itr, time.time() - self.start_time,
+                self.itr / (time.time() - self.start_time)).rstrip())
         return False
 
     def next(self):
@@ -786,13 +790,18 @@ class BatchedValidateDataTask(GenericLoadingTask):
             self.max_verify = min(max_verify, self.max_verify)
         self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
         self.batch_size = batch_size
+        self.start_time = time.time()
 
     def has_next(self):
         has = False
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.itr < self.max_verify:
             has = True
-        if math.fmod(self.itr, 10000) == 0.0 or not has:
+        if math.fmod(self.itr, 10000) == 0.0:
                 self.log.info("{0} items were verified".format(self.itr))
+        if not has:
+            self.log.info("{0} items were verified in {1} sec.the average number of ops\
+                - {2} per second".format(self.itr, time.time() - self.start_time,
+                self.itr / (time.time() - self.start_time)).rstrip())
         return has
 
     def next(self):
