@@ -252,6 +252,10 @@ class XDCRBaseTest(unittest.TestCase):
             BucketOperationHelper.delete_all_buckets_or_assert(nodes, self)
             ClusterOperationHelper.cleanup_cluster(nodes)
             ClusterOperationHelper.wait_for_ns_servers_or_assert(nodes, self)
+        if self._floating_servers_set is not None:
+            BucketOperationHelper.delete_all_buckets_or_assert(self._floating_servers_set, self)
+            ClusterOperationHelper.cleanup_cluster(self._floating_servers_set)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(self._floating_servers_set, self)
 
     def _cleanup_broken_setup(self):
         try:
