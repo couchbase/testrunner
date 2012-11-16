@@ -108,7 +108,9 @@ class StatsCollector(object):
         self.stop_atop()
         self._task["state"] = "stopped"
         for t in self._task["threads"]:
-            t.join()
+            t.join(120)
+            if t.is_alive():
+                print "Failed to join {0} thread".format(t.name)
 
         self._task["time"] = time.time() - self._task["time"]
 
