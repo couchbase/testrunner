@@ -77,9 +77,8 @@ class StatsCollector(object):
             ns_server_stats_thread = Thread(target=self.ns_server_stats,
                                             args=(nodes, bucket, 60, self._verbosity))
             ns_server_stats_thread.start()
-            rest = RestConnection(nodes[0])
             bucket_size_thead = Thread(target=self.get_bucket_size,
-                                       args=(bucket, rest, frequency))
+                                       args=(bucket, nodes, frequency))
             bucket_size_thead.start()
 
             self._task["threads"] = [sysstats_thread, ns_server_stats_thread,
@@ -210,19 +209,32 @@ class StatsCollector(object):
         with gzip.open("{0}.json.gz".format(name), 'wb') as file:
             file.write(json.dumps(obj))
 
-    def get_bucket_size(self, bucket, rest, frequency):
+    def get_bucket_size(self, bucket, nodes, frequency):
         self._task["bucket_size"] = []
-        d = []
+        retries = 0
+        nodes_iterator = (node for node in nodes)
+        node = nodes_iterator.next()
+        rest = RestConnection(node)
         while not self._aborted():
-            log.info("Collecting bucket size stats")
-            status, db_size = rest.get_database_disk_size(bucket)
-            if status:
-                d.append(db_size)
-            else:
-                log.warn("Enable to read bucket stats")
             time.sleep(frequency)
+            log.info("Collecting bucket size stats")
+            try:
+                status, db_size = rest.get_database_disk_size(bucket)
+                if status:
+                    self._task["bucket_size"].append(db_size)
+            except IndexError, e:
+                retries += 1
+                log.error("Unable to get bucket size {0}: {1}".format(bucket, e))
+                log.warning("Retries: {0} of {1}".format(retries, RETRIES))
+                if retries == RETRIES:
+                    try:
+                        node = nodes_iterator.next()
+                        rest = RestConnection(node)
+                        retries = 0
+                    except StopIteration:
+                        log.error("No nodes available: stop collecting bucket_size")
+                        return
 
-        self._task["bucket_size"] = d
         log.info("Finished bucket size stats")
 
     def get_data_file_size(self, nodes, frequency, bucket):
