@@ -513,10 +513,14 @@ class StatsCollector(object):
                 stats["time"] = time.time()
                 stats["ip"] = mc.host
                 d[mc.host]["snapshots"].append(stats)
-                timings = mc.stats('timings')
-                d[mc.host]["timings"].append(timings)
-                dispatcher = mc.stats('dispatcher')
-                d[mc.host]["dispatcher"].append(dispatcher)
+                try:
+                    timings = mc.stats('timings')
+                    d[mc.host]["timings"].append(timings)
+                    dispatcher = mc.stats('dispatcher')
+                    d[mc.host]["dispatcher"].append(dispatcher)
+                except EOFError, e:
+                    log.error("Unable to get timings/dispatcher stats {0}: {1}"\
+                              .format(mc.host, e))
 
         start_time = str(self._task["time"])
         for mc in mcs:
