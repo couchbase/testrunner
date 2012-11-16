@@ -41,9 +41,6 @@ class StoppableThread(Thread):
         return self._stop.isSet()
 
 class ViewQueryTests(unittest.TestCase):
-    skip_setup_failed  = False
-
-    @unittest.skipIf(skip_setup_failed, "setup was failed")
     def setUp(self):
         try:
             ViewBaseTests.common_setUp(self)
@@ -64,11 +61,8 @@ class ViewQueryTests(unittest.TestCase):
             else:
                 ViewBaseTests._create_multiple_buckets(self, replica=self.replica)
         except Exception as ex:
-            skip_setup_failed = True
-            try:
-                self.tearDown()
-            except:
-                pass
+            self.input.test_params["stop-on-failure"] = True
+            self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
             self.fail(ex)
 
     def tearDown(self):

@@ -20,9 +20,7 @@ from membase.helper.rebalance_helper import RebalanceHelper
 
 
 class ViewMergingTests(BaseTestCase):
-    skip_setup_failed  = False
 
-    @unittest.skipIf(skip_setup_failed, "setup was failed")
     def setUp(self):
         try:
             if 'first_case' not in TestInputSingleton.input.test_params:
@@ -45,7 +43,8 @@ class ViewMergingTests(BaseTestCase):
             if 'first_case' in TestInputSingleton.input.test_params:
                  self.create_ddocs()
         except Exception as ex:
-            skip_setup_failed = True
+            self.input.test_params["stop-on-failure"] = True
+            self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
             self.fail(ex)
 
     def tearDown(self):

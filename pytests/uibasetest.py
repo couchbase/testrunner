@@ -22,7 +22,6 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 
 
 class BaseUITestCase(unittest.TestCase):
-    skip_setup_failed  = False
     # selenium thread
 
     def _start_selenium(self):
@@ -70,7 +69,6 @@ class BaseUITestCase(unittest.TestCase):
                 return True
         return False
 
-    @unittest.skipIf(skip_setup_failed, "setup was failed")
     def setUp(self):
         try:
             self.log = logger.Logger.get_logger()
@@ -109,7 +107,8 @@ class BaseUITestCase(unittest.TestCase):
                                                     self.servers[0].port))
             self.driver.maximize_window()
         except Exception as ex:
-            skip_setup_failed = True
+            self.input.test_params["stop-on-failure"] = True
+            self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
             self.fail(ex)
 
     @staticmethod
