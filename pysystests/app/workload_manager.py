@@ -214,7 +214,14 @@ def run(workload, prevWorkload = None):
             inflight = rabbitHelper.qsize(task_queue)
             time.sleep(1)
 
+        _backup_workload = workload
+
         workload = Workload.from_cache(workload.id)
+
+        # when cache returns None use previous workload object
+        if workload is None:
+            workload = _backup_workload
+
 
     return workload
 

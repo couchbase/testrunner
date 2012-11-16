@@ -1,4 +1,5 @@
 import json
+import time
 import pylibmc
 import hashlib
 from celery.utils.log import get_task_logger
@@ -36,7 +37,7 @@ class Cache(object):
                     data.append(val)
         return data 
 
-    def retrieve(self, key):
+    def retrieve(self, key, retry_count = 5):
         data = None
 
         try:
@@ -45,6 +46,13 @@ class Cache(object):
             self.logger.info("fail attempt to retrieve key %s" % ex)
         except (ValueError, SyntaxError) as ex:
             pass # non json
+        except Exception as ex:
+            if retry_count > 0:
+                self.logger.error("error occured in mc protocol fetching %s: %s" % (key,ex))
+                self.logger.error("retry attempt: %s" % retry_count)
+                time.sleep(2)
+                cnt = retry_count - 1
+                self.retrieve(key, cnt)
 
         return data
 
