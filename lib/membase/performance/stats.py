@@ -75,7 +75,7 @@ class StatsCollector(object):
                                     args=(nodes, 10, self._verbosity))
             iostats_thread.start()
             ns_server_stats_thread = Thread(target=self.ns_server_stats,
-                                            args=([nodes[0]], bucket, 60, self._verbosity))
+                                            args=(nodes, bucket, 60, self._verbosity))
             ns_server_stats_thread.start()
             rest = RestConnection(nodes[0])
             bucket_size_thead = Thread(target=self.get_bucket_size,
@@ -553,36 +553,39 @@ class StatsCollector(object):
 
         log.info("Finished membase_stats")
 
-    def ns_server_stats(self, nodes, bucket, frequency, verbose=False):
-
+    def ns_server_stats(self, nodes, bucket, frequency):
         self._task["ns_server_stats"] = []
         self._task["ns_server_stats_system"] = []
-        d = {}
-        for node in nodes:
-            d[node] = {"snapshots": [], "system_snapshots": []}
+        nodes_iterator = (node for node in nodes)
+        node = nodes_iterator.next()
+        retries = 0
         not_null = lambda v: v if v is not None else 0
 
+        rest = RestConnection(node)
         while not self._aborted():
             time.sleep(frequency)
             log.info("Collecting ns_server_stats")
-            for node in nodes:
-                rest = RestConnection(node)
-                data_json = rest.fetch_bucket_stats(bucket=bucket, zoom='minute')
-                fixed_data = dict(
-                    (k, map(not_null, v))
-                    for k, v in data_json["op"]["samples"].iteritems()
-                )
-                data_json["op"]["samples"] = fixed_data
-                d[node]["snapshots"].append(data_json)
-
-                data_json = rest.fetch_system_stats()
-                d[node]["system_snapshots"].append(data_json)
-
-        for node in nodes:
-            for snapshot in d[node]["snapshots"]:
-                self._task["ns_server_stats"].append(snapshot)
-            for snapshot in d[node]["system_snapshots"]:
-                self._task["ns_server_stats_system"].append(snapshot)
+            try:
+                # Bucket stats
+                ns_server_stats = rest.fetch_bucket_stats(bucket=bucket)
+                for key, value in ns_server_stats["op"]["samples"].iteritems():
+                    ns_server_stats["op"]["samples"][key] = not_null(value)
+                self._task["ns_server_stats"].append(ns_server_stats)
+                # System stats
+                ns_server_stats_system = rest.fetch_system_stats()
+                self._task["ns_server_stats_system"].append(ns_server_stats_system)
+            except ValueError, e:
+                retries += 1
+                log.error("Unable to parse json object {0}: {1}".format(node, e))
+                log.warning("Retries: {0} of {1}".format(retries, RETRIES))
+                if retries == RETRIES:
+                    try:
+                        node = nodes_iterator.next()
+                        rest = RestConnection(node)
+                        retries = 0
+                    except StopIteration:
+                        log.error("No nodes available: stop collecting ns_server_stats")
+                        return
 
         log.info("Finished ns_server_stats")
 
