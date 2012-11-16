@@ -358,7 +358,7 @@ class ClusterOperationHelper(object):
             product = "membase"
             if sh.is_couchbase_installed():
                 product = "couchbase"
-            command = "sed -i 's/A\+ 16/S %s/' /opt/%s/bin/%s-server"\
+            command = "sed -i 's/S\+ 128:128/S %s/' /opt/%s/bin/%s-server"\
                       % (value, product, product)
             o, r = sh.execute_command(command)
             sh.log_command_output(o, r)
