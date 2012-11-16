@@ -836,13 +836,21 @@ class StoreMemcachedBinary(Store):
         return ''.join(inflight_arr)
 
     def inflight_send(self, inflight_msg):
-        self.conn.s.sendall(inflight_msg)
+        try:
+            self.conn.s.sendall(inflight_msg)
+        except socket.error, e:
+            log.error("inflight_send: received socket error %s" % e)
+            return 0
         return len(inflight_msg)
 
     def inflight_recv(self, inflight, inflight_arr, expectBuffer=None):
         received = 0
         for i in range(inflight):
-            cmd, keylen, extralen, errcode, datalen, opaque, val, buf = self.recvMsg()
+            try:
+                cmd, keylen, extralen, errcode, datalen, opaque, val, buf = self.recvMsg()
+            except Exception, e:
+                log.error("inflight_recv: received socket error %s" % e)
+                return 0
             received += datalen + MIN_RECV_PACKET
         return received
 
