@@ -1233,8 +1233,8 @@ class RestConnection(object):
 
 
     def get_vbuckets(self, bucket='default'):
-        return self.get_bucket(bucket).vbuckets
-
+        b = self.get_bucket(bucket)
+        return None if not b else b.vbuckets
 
     def delete_bucket(self, bucket='default'):
         api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
