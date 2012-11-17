@@ -55,8 +55,11 @@ if config is None:
 
 celery.config_from_object(config)
 
-# separate stat process logger
-def stats_tasks_setup_logging(**kw):
+def setup_logging(**kw):
+    setup_stat_logger()
+    setup_query_logger()
+
+def setup_stat_logger():
     logger = logging.getLogger('app.stats')
     handler = logging.FileHandler(cfg.LOGDIR+'/celery-stats.log')
     formatter = logging.Formatter(logging.BASIC_FORMAT) # you may want to customize this.
@@ -64,4 +67,13 @@ def stats_tasks_setup_logging(**kw):
     logger.addHandler(handler)
     logger.propagate = False
 
-worker_process_init.connect(stats_tasks_setup_logging)
+def setup_query_logger():
+    logger = logging.getLogger('app.rest_client_tasks')
+    handler = logging.FileHandler(cfg.LOGDIR+'/celery-query.log')
+    formatter = logging.Formatter(logging.BASIC_FORMAT) # you may want to customize this.
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = False
+
+
+worker_process_init.connect(setup_logging)

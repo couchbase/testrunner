@@ -45,7 +45,10 @@ def send_query(url):
                'Accept': '*/*'}
     try:
         req = urllib2.Request(url, headers = headers)
-        urllib2.urlopen(req)
+        data = urllib2.urlopen(req)
+
+        # log 500 chars to output
+        logger.error(data.read()[:500])
     except urllib2.URLError:
         pass
 
