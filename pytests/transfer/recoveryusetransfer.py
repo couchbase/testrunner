@@ -75,7 +75,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
         time.sleep(30)
 
         self._wait_for_stats_all_buckets([self.server_recovery])
-        self._verify_all_buckets(self.server_recovery, 1, self.wait_timeout*50, self.max_verify)
+        self._verify_all_buckets(self.server_recovery, 1, self.wait_timeout*50, self.max_verify, True, 1)
         self._verify_stats_all_buckets([self.server_recovery])
 
     def recover_to_backupdir(self):
@@ -118,7 +118,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
         time.sleep(30)
 
         self._wait_for_stats_all_buckets([self.server_origin])
-        self._verify_all_buckets(self.server_origin, 1, self.wait_timeout*50, self.max_verify)
+        self._verify_all_buckets(self.server_origin, 1, self.wait_timeout*50, self.max_verify, True, 1)
         self._verify_stats_all_buckets([self.server_origin])
 
     def load_data(self):

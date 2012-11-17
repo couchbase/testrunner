@@ -90,7 +90,7 @@ class BackupBaseTest(BaseTestCase):
                         partition.delete(key)  #we delete keys whose prefix does not match the value assigned to -k in KVStore
                         bucket.kvs[kv_store].release_partition(key)
         if single_node_flag is False:
-            self._verify_all_buckets(server, kv_store, self.wait_timeout*50, self.max_verify)
+            self._verify_all_buckets(server, kv_store, self.wait_timeout*50, self.max_verify, True, 1)
         else:
             self.verify_single_node(server, kv_store)
 
@@ -122,4 +122,4 @@ class BackupBaseTest(BaseTestCase):
                     partition.delete(key)
                     bucket.kvs[kv_store].release_partition(key)
 
-        self._verify_all_buckets(server, kv_store, self.wait_timeout*50, self.max_verify)
+        self._verify_all_buckets(server, kv_store, self.wait_timeout*50, self.max_verify, True, 1)
