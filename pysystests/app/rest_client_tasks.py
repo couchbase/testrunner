@@ -25,13 +25,13 @@ SDK_PORT = 50008
 
 
 @celery.task
-def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", password = "", type_ = "view", batch_size = 100):
+def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", password = "", type_ = "view", batch_size = 100, limit=1000):
 
     pool = eventlet.GreenPool(batch_size)
     capiUrl = "http://%s:%s/couchBase/" % (cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT)
-    url = capiUrl + '%s/_design/%s/_%s/%s' % (bucket,
+    url = capiUrl + '%s/_design/%s/_%s/%s?limit=%s' % (bucket,
                                                 design_doc_name, type_,
-                                                view_name) # TODO: support filters
+                                                view_name, limit) # TODO: support filters
 
     for res in pool.imap(send_query, [url for i in xrange(count)]):
         pass
