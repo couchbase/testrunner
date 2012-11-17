@@ -46,7 +46,7 @@ class PerfBase(unittest.TestCase):
         else:
             bucket = self.param('bucket', 'default')
         vBuckets = self.rest.get_vbuckets(bucket)
-        self.vbucket_count = len(vBuckets)
+        self.vbucket_count = len(vBuckets) if vBuckets else 0
 
     def setUp(self):
         self.setUpBase0()
@@ -371,6 +371,12 @@ class PerfBase(unittest.TestCase):
     def mk_protocol(self, host, port='8091', prefix='membase-binary'):
         return self.param('protocol',
                           prefix + '://' + host + ':' + port)
+
+    def get_backups(self, protocol):
+        """ Get backup server lists for memcached-binary """
+        port = protocol.split(":")[-1]
+        return map(lambda server: "%s:%s" % (server.ip, port),
+                   self.input.servers[1:])
 
     def restartProxy(self, bucket=None):
         self.tear_down_proxy()
@@ -743,14 +749,15 @@ class PerfBase(unittest.TestCase):
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
                    stats_collector=None, stores=None, ctl=None,
-                   heartbeat=0, why="", bucket="default"):
+                   heartbeat=0, why="", bucket="default", backups=None):
         return mcsoda.run(cfg, cur, protocol, host_port, user, pswd,
                           stats_collector=stats_collector,
                           stores=stores,
                           ctl=ctl,
                           heartbeat=heartbeat,
                           why=why,
-                          bucket=bucket)
+                          bucket=bucket,
+                          backups=backups)
 
     def rebalance_nodes(self, num_nodes):
         """Rebalance cluster(s) if more than 1 node provided"""
@@ -962,6 +969,7 @@ class PerfBase(unittest.TestCase):
             protocol = self.mk_protocol(host=self.input.servers[0].ip,
                                         port=self.input.servers[0].port)
 
+        backups = self.get_backups(protocol)
         self.log.info("mcsoda - protocol %s" % protocol)
         protocol, host_port, user, pswd = \
             self.protocol_parse(protocol, use_direct=use_direct)
@@ -979,6 +987,7 @@ class PerfBase(unittest.TestCase):
                       (protocol, host_port, user, pswd))
         self.log.info("mcsoda - cfg: " + str(cfg))
         self.log.info("mcsoda - cur: " + str(self.cur))
+        self.log.info("mcsoda - backups: %s" % backups)
 
         # For query tests always use StoreCouchbase
         if protocol == "couchbase":
@@ -988,7 +997,8 @@ class PerfBase(unittest.TestCase):
             self.mcsoda_run(cfg, self.cur, protocol, host_port, user, pswd,
                             stats_collector=sc, ctl=ctl, stores=stores,
                             heartbeat=self.parami("mcsoda_heartbeat", 0),
-                            why="loop", bucket=self.param("bucket", "default"))
+                            why="loop", bucket=self.param("bucket", "default"),
+                            backups=backups)
 
         ops = {'tot-sets': self.cur.get('cur-sets', 0),
                'tot-gets': self.cur.get('cur-gets', 0),

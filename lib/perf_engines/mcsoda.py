@@ -19,7 +19,7 @@ sys.path.append('.')
 
 from lib import crc32
 from lib import mc_bin_client
-from lib.membase.api.exception import QueryViewException
+from lib.membase.api.exception import QueryViewException, ServerUnavailableException
 from lib.memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, \
     ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETMPFAIL, REQ_PKT_FMT, \
     RES_PKT_FMT, MIN_RECV_PACKET, SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE, \
@@ -36,6 +36,7 @@ OPAQUE_MAX = 4294967295
 INT_TYPE = type(123)
 FLOAT_TYPE = type(0.1)
 DICT_TYPE = type({})
+RETRIES = 5
 
 
 class Stack(object):
@@ -688,7 +689,7 @@ def choose_entry(arr, n):
 
 class Store(object):
 
-    def connect(self, target, user, pswd, cfg, cur, bucket="default"):
+    def connect(self, target, user, pswd, cfg, cur, bucket="default", backups=None):
         self.target = target
         self.cfg = cfg
         self.cur = cur
@@ -790,7 +791,7 @@ class Store(object):
 
 class StoreMemcachedBinary(Store):
 
-    def connect(self, target, user, pswd, cfg, cur, bucket="default"):
+    def connect(self, target, user, pswd, cfg, cur, bucket="default", backups=None):
         self.cfg = cfg
         self.cur = cur
         self.target = target
@@ -812,6 +813,22 @@ class StoreMemcachedBinary(Store):
         self.obs_key_cas = {}  # {key_num: cas} pair
         self.woq_key_cas = {}  # {key_num: cas} pair
         self.cor_key_cas = {}  # {key_num: cas} pair
+        self.retries = 0
+        self.backups = backups
+        self.bucket = bucket
+        self.user = user
+        self.pswd = pswd
+
+    def reconnect(self):
+        if self.backups:
+            self.target = self.backups[0]
+            self.backups.pop(0)
+
+        log.info("StoreMemcachedBinary: reconnect to %s" % self.target)
+        self.host_port = (self.target + ":11211").split(':')[0:2]
+        self.host_port[1] = int(self.host_port[1])
+        self.connect_host_port(self.host_port[0], self.host_port[1],
+                               self.user, self.pswd, bucket=self.bucket)
 
     def connect_host_port(self, host, port, user, pswd, bucket="default"):
         self.conn = mc_bin_client.MemcachedClient(host, port)
@@ -839,7 +856,15 @@ class StoreMemcachedBinary(Store):
         try:
             self.conn.s.sendall(inflight_msg)
         except socket.error, e:
-            log.error("inflight_send: received socket error %s" % e)
+            self.retries += 1
+            log.error("inflight_send: received socket error %s - retries = %s"
+                      % (e, self.retries))
+            if self.retries == RETRIES:
+                e = ServerUnavailableException(self.host_port)
+                self.reconnect()
+                self.retries = 0
+                raise e
+            time.sleep(0.2)
             return 0
         return len(inflight_msg)
 
@@ -847,10 +872,19 @@ class StoreMemcachedBinary(Store):
         received = 0
         for i in range(inflight):
             try:
-                cmd, keylen, extralen, errcode, datalen, opaque, val, buf = self.recvMsg()
+                cmd, keylen, extralen, errcode, datalen, opaque, val, buf = \
+                    self.recvMsg()
             except Exception, e:
-                log.error("inflight_recv: received socket error %s" % e)
-                return 0
+                self.retries += 1
+                log.error("inflight_recv: received socket error %s - retries = %s"
+                          % (e, self.retries))
+                if self.retries == RETRIES:
+                    e = ServerUnavailableException(self.host_port)
+                    self.reconnect()
+                    self.retries = 0
+                    raise e
+                time.sleep(0.2)
+                return received
             received += datalen + MIN_RECV_PACKET
         return received
 
@@ -859,10 +893,17 @@ class StoreMemcachedBinary(Store):
 
     def command(self, c):
         self.queue.append(c)
-        if len(self.queue) > self.flush_level():
+        if len(self.queue) <= self.flush_level():
+            return False
+
+        try:
             self.flush()
             return True
-        return False
+        except ServerUnavailableException, e:
+            log.error(e)
+            self.queue = list()
+            self.inflight_reinit()
+            return False
 
     def flush_level(self):
         return self.cur.get('batch') or self.cfg.get('batch', 100)
@@ -1228,7 +1269,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
 
 class StoreMemcachedAscii(Store):
 
-    def connect(self, target, user, pswd, cfg, cur, bucket="default"):
+    def connect(self, target, user, pswd, cfg, cur, bucket="default", backups=None):
         self.cfg = cfg
         self.cur = cur
         self.target = target
@@ -1407,8 +1448,8 @@ PROTOCOL_STORE = {'memcached-ascii': StoreMemcachedAscii,
                   'none': Store}
 
 
-def run(cfg, cur, protocol, host_port, user, pswd,
-        stats_collector=None, stores=None, ctl=None, heartbeat=0, why="", bucket="default"):
+def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
+        stores=None, ctl=None, heartbeat=0, why="", bucket="default", backups=None):
     if isinstance(cfg['min-value-size'], str):
         cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
     if not isinstance(cfg['min-value-size'], list):
@@ -1440,7 +1481,7 @@ def run(cfg, cur, protocol, host_port, user, pswd,
 
         log.debug("store: %s - %s" % (i, store.__class__))
 
-        store.connect(host_port, user, pswd, cfg, cur, bucket=bucket)
+        store.connect(host_port, user, pswd, cfg, cur, bucket=bucket, backups=backups)
         store.stats_collector(stats_collector)
 
         threads.append(threading.Thread(target=run_worker,
