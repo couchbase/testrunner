@@ -7,6 +7,7 @@ from membase.api.exception import RebalanceFailedException
 from membase.api.rest_client import RestConnection
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 class RebalanceInTests(RebalanceBaseTest):
 
@@ -287,8 +288,8 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance.result()
         except RebalanceFailedException:
             self.log.info("rebalance was failed as expected")
-            self.assertTrue(self._wait_warmup_completed(self, [warmup_node], self.default_bucket_name,
-                            wait_time=self.wait_timeout * 10))
+            self.assertTrue(ClusterOperationHelper._wait_warmup_completed(self, [warmup_node], \
+                            self.default_bucket_name, wait_time=self.wait_timeout * 10))
 
             self.log.info("second attempt to rebalance")
             rebalance = self.cluster.async_rebalance(servs_init + servs_in, [], [])

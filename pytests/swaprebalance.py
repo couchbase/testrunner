@@ -6,7 +6,7 @@ import logger
 from couchbase.cluster import Cluster
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import LoadWithMcsoda
 from couchbase.stats_tools import StatsCommon
@@ -405,7 +405,7 @@ class SwapRebalanceBase(unittest.TestCase):
             time.sleep(10)
             # we can't get stats for new node when rebalance falls
             if not self.swap_orchestrator:
-                BaseTestCase._wait_warmup_completed(self, [master], bucket, wait_time=600)
+                ClusterOperationHelper._wait_warmup_completed(self, [master], bucket, wait_time=600)
             i = 0
             #we expect that rebalance will be failed
             while rest._rebalance_progress_status() == "running" and i < 60:
