@@ -93,7 +93,7 @@ class SwapRebalanceBase(unittest.TestCase):
             if server.data_path:
                 rest = RestConnection(server)
                 rest.set_data_path(data_path=server.data_path)
-        ClusterHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.log.info("==============  SwapRebalanceBase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
 
@@ -254,7 +254,7 @@ class SwapRebalanceBase(unittest.TestCase):
         optNodesIds = [node.id for node in toBeEjectedNodes]
 
         if self.swap_orchestrator:
-            status, content = ClusterHelper.find_orchestrator(master)
+            status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                 format(status, content))
             if self.num_swap is len(current_nodes):
@@ -344,7 +344,7 @@ class SwapRebalanceBase(unittest.TestCase):
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.num_swap)
         optNodesIds = [node.id for node in toBeEjectedNodes]
         if self.swap_orchestrator:
-            status, content = ClusterHelper.find_orchestrator(master)
+            status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
             # When swapping all the nodes
@@ -458,7 +458,7 @@ class SwapRebalanceBase(unittest.TestCase):
                 self.log.info("Node %s not failed over" % server.ip)
 
         if self.fail_orchestrator:
-            status, content = ClusterHelper.find_orchestrator(master)
+            status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                 format(status, content))
             # When swapping all the nodes
@@ -542,7 +542,7 @@ class SwapRebalanceBase(unittest.TestCase):
         toBeEjectedNodes = RebalanceHelper.pick_nodes(master, howmany=self.failover_factor)
         optNodesIds = [node.id for node in toBeEjectedNodes]
         if self.fail_orchestrator:
-            status, content = ClusterHelper.find_orchestrator(master)
+            status, content = ClusterOperationHelper.find_orchestrator(master)
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
             format(status, content))
             optNodesIds[0] = content
