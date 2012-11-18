@@ -41,7 +41,8 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
         log.info("10 seconds delay to wait for couchbase-server to start")
         time.sleep(10)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase, \
+                wait_time=AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME * 15, wait_if_warmup=True)
         try:
             rest = RestConnection(self._servers[0])
             buckets = rest.get_buckets()
@@ -51,7 +52,6 @@ class AutoFailoverBaseTest(unittest.TestCase):
             pass
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         log.info("==============  common_tearDown was finished for test #{0} {1} =============="\
                           .format(testcase.case_number, testcase._testMethodName))
 
