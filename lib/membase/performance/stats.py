@@ -444,7 +444,7 @@ class StatsCollector(object):
                 try:
                     kB_read, kB_wrtn, util, iowait, idle = \
                         self._extract_io_info(shell)
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, IndexError):
                     continue
                 if kB_read and kB_wrtn:
                     self._task["iostats"].append({"time": time.time(),
