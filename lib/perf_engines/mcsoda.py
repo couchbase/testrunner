@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import re
 import sys
 import math
@@ -11,46 +10,29 @@ import random
 import threading
 import multiprocessing
 import Queue
+import logging
+import logging.config
 from collections import deque
 from hashlib import md5
 
-sys.path.append("lib")
-sys.path.append(".")
+sys.path.append('.')
 
-try:
-    import logging
-    logging.config.fileConfig("mcsoda.logging.conf")
-    log = logging.getLogger()
-except:
-    class P:
-        def error(self, m):
-            print(m)
-        def info(self, m):
-            print(m)
-        def debug(self, m):
-            print(m)
-    log = P()
+from lib import crc32
+from lib import mc_bin_client
+from lib.membase.api.exception import QueryViewException
+from lib.memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, \
+    ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETMPFAIL, REQ_PKT_FMT, \
+    RES_PKT_FMT, MIN_RECV_PACKET, SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE, \
+    CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND  # "ARPA"
+from lib.perf_engines.libobserve.obs_mcsoda import McsodaObserver
+from lib.perf_engines.libobserve.obs import Observable
+from lib.perf_engines.libobserve.obs_helper import UnblockingJoinableQueue
 
-import crc32
-import mc_bin_client
-
-from membase.api.exception import QueryViewException
-
-from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
-from memcacheConstants import ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETMPFAIL
-from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
-from memcacheConstants import SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE
-from memcacheConstants import CMD_ADD, CMD_REPLACE, CMD_PREPEND, CMD_APPEND  # "ARPA"
-
-from libobserve.obs_mcsoda import McsodaObserver
-from libobserve.obs import Observable
-from libobserve.obs_helper import UnblockingJoinableQueue
+logging.config.fileConfig("mcsoda.logging.conf")
+log = logging.getLogger()
 
 LARGE_PRIME = 9576890767
 OPAQUE_MAX = 4294967295
-
-# --------------------------------------------------------
-
 INT_TYPE = type(123)
 FLOAT_TYPE = type(0.1)
 DICT_TYPE = type({})

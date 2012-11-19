@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from crc32 import crc32_hash
+from lib.crc32 import crc32_hash
 from multiprocessing.queues import JoinableQueue
 
 try:

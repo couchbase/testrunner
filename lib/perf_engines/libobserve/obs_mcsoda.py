@@ -1,16 +1,16 @@
 #!/usr/bin/env python
-
 from threading import Thread, RLock
 from time import sleep
 import socket
 
-from mc_bin_client import MemcachedClient
+from lib.mc_bin_client import MemcachedClient
+from lib.perf_engines.sys_helper import SocketHelper, synchronized
+
 from obs import Observer
 from obs_req import ObserveRequestKey, ObserveRequest
 from obs_res import ObserveResponse
 from obs_def import ObservePktFmt, ObserveStatus, ObserveKeyState
 from obs_helper import VbucketHelper
-from lib.perf_engines.sys_helper import SocketHelper, synchronized
 
 BACKOFF = 0.2
 MAX_BACKOFF = 1
