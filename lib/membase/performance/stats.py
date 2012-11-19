@@ -16,6 +16,7 @@ from lib.mc_bin_client import MemcachedError
 RETRIES = 10
 
 logging.config.fileConfig('mcsoda.logging.conf')
+logging.getLogger("paramiko").setLevel(logging.WARNING)
 log = logging.getLogger()
 
 
