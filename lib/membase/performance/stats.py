@@ -75,7 +75,7 @@ class StatsCollector(object):
                                     args=(nodes, 10, self._verbosity))
             iostats_thread.start()
             ns_server_stats_thread = Thread(target=self.ns_server_stats,
-                                            args=(nodes, bucket, 60, self._verbosity))
+                                            args=(nodes, bucket, 60))
             ns_server_stats_thread.start()
             bucket_size_thead = Thread(target=self.get_bucket_size,
                                        args=(bucket, nodes, frequency))
