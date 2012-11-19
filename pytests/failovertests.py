@@ -7,7 +7,7 @@ import sys
 import unittest
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -60,7 +60,7 @@ class FailoverBaseTest(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
         for server in self._servers:
             ClusterOperationHelper.cleanup_cluster([server])
-        ClusterHelper.wait_for_ns_servers_or_assert(self._servers, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self._servers, self)
         self._setup_cluster()
         self._create_buckets_()
         log.info("==============  setup was finished for test #{0} {1} =============="\
@@ -89,7 +89,7 @@ class FailoverBaseTest(unittest.TestCase):
                 shell.disconnect()
             BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
             ClusterOperationHelper.cleanup_cluster(self._servers)
-            ClusterHelper.wait_for_ns_servers_or_assert(self._servers, self)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(self._servers, self)
             log.info("==============  tearDown was finished for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
         finally:

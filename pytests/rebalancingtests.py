@@ -9,7 +9,7 @@ import logger
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from mc_bin_client import MemcachedError
-from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import VBucketAwareMemcached
 from threading import Thread
@@ -25,7 +25,7 @@ class RebalanceBaseTest(unittest.TestCase):
         servers = input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
-        ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         serverInfo = servers[0]
 
         log.info('picking server : {0} as the master'.format(serverInfo))
@@ -52,7 +52,7 @@ class RebalanceBaseTest(unittest.TestCase):
     def common_tearDown(servers, testcase):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
-        ClusterHelper.wait_for_ns_servers_or_assert(servers, testcase)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
 
     @staticmethod

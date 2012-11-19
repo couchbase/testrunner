@@ -2,7 +2,7 @@ import time
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
-from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
@@ -82,7 +82,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers[:self.initial_num_servers], servers_in, [])
         self.log.info("Rebalance in all 2.0 Nodes")
         time.sleep(self.sleep_time)
-        status, content = ClusterHelper.find_orchestrator(self.master)
+        status, content = ClusterOperationHelper.find_orchestrator(self.master)
         self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                         format(status, content))
         FIND_MASTER = False
@@ -113,7 +113,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.log.info("bucket info :- %s" % bucketinfo)
         if self.op_types == "data":
             self._wait_for_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
-            self._verify_all_buckets(self.master, 1, self.wait_timeout*50, self.max_verify, True, 1)
+            self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
             self._verify_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
 
     def online_upgrade_swap_rebalance(self):
@@ -131,19 +131,19 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.swap_num_servers = self.input.param('swap_num_servers', 1)
         old_servers = self.servers[:self.initial_num_servers]
         new_servers = []
-        for i in range(self.initial_num_servers/self.swap_num_servers):
-            servers_in = self.servers[(self.initial_num_servers+i*self.swap_num_servers):
-                                      (self.initial_num_servers+(i+1)*self.swap_num_servers)]
-            servers_out = self.servers[(i*self.swap_num_servers):((i+1)*self.swap_num_servers)]
+        for i in range(self.initial_num_servers / self.swap_num_servers):
+            servers_in = self.servers[(self.initial_num_servers + i * self.swap_num_servers):
+                                      (self.initial_num_servers + (i + 1) * self.swap_num_servers)]
+            servers_out = self.servers[(i * self.swap_num_servers):((i + 1) * self.swap_num_servers)]
             servers = old_servers + new_servers
             self.cluster.rebalance(servers, servers_in, servers_out)
             self.log.info("Swap rebalance: rebalance out %s old version nodes, rebalance in %s 2.0 Nodes"
                           % (self.swap_num_servers, self.swap_num_servers))
             time.sleep(self.sleep_time)
-            old_servers = self.servers[((i+1)*self.swap_num_servers):self.initial_num_servers]
+            old_servers = self.servers[((i + 1) * self.swap_num_servers):self.initial_num_servers]
             new_servers = new_servers + servers_in
             servers = old_servers + new_servers
-            status, content = ClusterHelper.find_orchestrator(servers[0])
+            status, content = ClusterOperationHelper.find_orchestrator(servers[0])
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                             format(status, content))
             FIND_MASTER = False

@@ -4,7 +4,7 @@ from TestInput import TestInputSingleton
 import logger
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper as ClusterHelper, ClusterOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached, LoadWithMcsoda
 from threading import Thread
@@ -94,7 +94,7 @@ class RebalanceBaseTest(unittest.TestCase):
         for server in self.servers:
             ClusterOperationHelper.cleanup_cluster([server])
         self.log.info("Stopping load in Teardown")
-        ClusterHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
     @staticmethod
     def replication_verification(master, bucket_data, replica, test, failed_over=False):
@@ -694,7 +694,7 @@ class StopRebalanceAfterFailoverTests(unittest.TestCase):
         creds = self.input.membase_settings
         bucket_data = RebalanceBaseTest.bucket_data_init(rest)
 
-        ClusterHelper.add_all_nodes_or_assert(master, self.servers, creds, self)
+        ClusterOperationHelper.add_all_nodes_or_assert(master, self.servers, creds, self)
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding nodes")
