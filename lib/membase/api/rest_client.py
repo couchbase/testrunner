@@ -1454,12 +1454,45 @@ class RestConnection(object):
         return self.diag_eval(cmd)
 
     def set_reb_index_waiting(self, disable):
-        """Enable/disable index waiting phase"""
-        cmd = 'ns_config:set(rebalance_index_waiting_disabled, %s).'\
-              % str(disable).lower()
-        log.info('%s index_waiting during rebalance'
-                 % ("Disabling" if disable else "Enabling"))
-        return self.diag_eval(cmd)
+        """Enable/disable rebalance index waiting"""
+        api = self.baseUrl + "internalSettings"
+        params = {"rebalanceIndexWaitingDisabled": str(disable).lower()}
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('rebalance index waiting was set as rebalanceIndexWaitingDisabled={0}'\
+                 .format(str(disable).lower()))
+        return status
+
+    def set_rebalance_index_pausing(self, disable):
+        """Enable/disable index pausing during rebalance"""
+        api = self.baseUrl + "internalSettings"
+        params = {"rebalanceIndexPausingDisabled": str(disable).lower()}
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('index pausing during rebalance was set as rebalanceIndexPausingDisabled={0}'\
+                 .format(str(disable).lower()))
+        return status
+
+    def set_max_parallel_indexers(self, count):
+        """set max parallel indexer threads"""
+        api = self.baseUrl + "internalSettings"
+        params = {"maxParallelIndexers": count}
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('max parallel indexer threads was set as maxParallelIndexers={0}'.\
+                 format(count))
+        return status
+
+    def set_max_parallel_replica_indexers(self, count):
+        """set max parallel replica indexers threads"""
+        api = self.baseUrl + "internalSettings"
+        params = {"maxParallelReplicaIndexers": count}
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('max parallel replica indexers threads was set as maxParallelReplicaIndexers={0}'.\
+                 format(count))
+        return status
+
 
     def set_mc_threads(self, mc_threads=4):
         """
