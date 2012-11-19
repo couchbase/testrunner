@@ -1384,12 +1384,15 @@ class MonitorActiveTask(Task):
         self.target_key = ""
         if self.type == "indexer":
             self.target_key = "design_documents"
+            if target_value.lower() in ['true', 'false']:
+                #track initial_build indexer task
+                self.target_key="initial_build"
         elif self.type == "bucket_compaction":
             self.target_key = "original_target"
         elif self.type == "view_compaction":
             self.target_key = "design_documents"
         else:
-            self.fail("type %s is not defined!" % self.type)
+            raise Exception("type %s is not defined!" % self.type)
         self.target_value = target_value
         self.wait_progress = wait_progress
         self.num_iterations = num_iterations
@@ -1407,7 +1410,8 @@ class MonitorActiveTask(Task):
         for task in tasks:
             if task["type"] == self.type and ((
                         self.target_key == "design_documents" and task[self.target_key][0] == self.target_value) or (
-                        self.target_key == "original_target" and task[self.target_key] == self.target_value)):
+                        self.target_key == "original_target" and task[self.target_key] == self.target_value) or (
+                        self.target_key == "initial_build" and str(task[self.target_key]) == self.target_value)):
                 self.current_progress = task["progress"]
                 self.task_pid = task["pid"]
                 self.log.info("monitoring active task was found:" + str(task))

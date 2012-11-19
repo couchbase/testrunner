@@ -6,6 +6,7 @@ from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.rebalance_helper import RebalanceHelper
+from couchbase.document import View
 
 class RebalanceInOutTests(RebalanceBaseTest):
 
@@ -260,12 +261,14 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self._load_all_buckets(self.master, gen_expire, "create", 0)
             self.verify_cluster_stats(self.servers[:self.num_servers])
 
-    """Rebalance in/out at once.
+    """PERFORMANCE:Rebalance in/out at once.
 
-    This test begins by loading a given number of items into the cluster with
-    self.nodes_init nodes in it. It then add  servs_in nodes and remove servs_out nodes
-    and start rebalance. Once cluster was rebalanced the test is finished.
-    Available parameters by default are: nodes_init=1, nodes_in=1, nodes_out=1"""
+    Then it creates cluster with self.nodes_init nodes. Further
+    test loads a given number of items into the cluster. It then
+    add  servs_in nodes and remove  servs_out nodes and start rebalance.
+    Once cluster was rebalanced the test is finished.
+    Available parameters by default are:
+    nodes_init=1, nodes_in=1, nodes_out=1"""
     def rebalance_in_out_at_once(self):
         servs_init = self.servers[:self.nodes_init]
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
@@ -328,3 +331,95 @@ class RebalanceInOutTests(RebalanceBaseTest):
             verified &= RebalanceHelper.wait_till_total_numbers_match(self.master, bucket)
         self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
 
+
+    """PERFORMANCE:Test to measure time to index doc during rebalance
+
+    Then it creates cluster with self.nodes_init nodes. Further
+    test loads a given number of items into the cluster. We create num_ddocs ddocs
+    and num_views views in each. Perform all queries and wait while view index is
+    completed. Then we additionally load data_perc_add items that were loaded before,
+    add servs_in nodes and remove  servs_out nodes and start rebalance.
+    After we begin to measure time, perform all view query and wait until
+    all the data will be obtained for each query.
+    Once we got all data,cluster was rebalanced the test is finished.
+    Available parameters by default are:
+    nodes_init=1, nodes_in=1, nodes_out=1
+    num_ddocs=1,num_views=1,data_perc_add=10
+
+    """
+    def measure_time_index_during_rebalance(self):
+        num_ddocs = self.input.param("num_ddocs", 1)
+        num_views = self.input.param("num_views", 1)
+        is_dev_ddoc = self.input.param("is_dev_ddoc", False)
+        ddoc_names = ['ddoc' + str(i) for i in xrange(num_ddocs)]
+        map_func = """function (doc, meta) {{\n  emit(meta.id, "emitted_value_{0}");\n}}"""
+        views=[View("view" + str(i), map_func.format(i), None, is_dev_ddoc , False) for i in xrange(num_views)]
+        #views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
+
+        prefix = ("", "dev_")[is_dev_ddoc]
+        query = {}
+        query["connectionTimeout"] = 60000;
+        if not is_dev_ddoc:
+            query["full_set"] = "true"
+        tasks = []
+
+        for bucket in self.buckets:
+            for ddoc_name in ddoc_names:
+                tasks += self.async_create_views(self.master, ddoc_name, views, bucket)
+        for task in tasks:
+            task.result(self.wait_timeout * 5)
+        for view in views:
+            # run queries to create indexes
+            self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+        time.sleep(5)
+        for i in num_ddocs*num_views*len(self.buckets):
+            #wait until all initial_build indexer processes are completed
+            active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "True", wait_task=False)
+            result = active_task.result()
+            self.assertTrue(result)
+
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        rest = RestConnection(self.master)
+        #self._wait_for_stats_all_buckets(servs_init)
+        self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+        self.log.info("adding nodes {0} to cluster".format(servs_in))
+        self.log.info("removing nodes {0} from cluster".format(servs_out))
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
+
+        data_perc_add = self.input.param("data_perc_add", 10)
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1,
+                                   end=self.num_items * (100 + data_perc_add) / 100)
+        load_tasks = self._async_load_all_buckets(self.master, gen_create, "create", 0)
+        rebalance = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
+
+        expected_rows = self.num_items * (100 + data_perc_add) / 100 - 1
+        start_time = time.time()
+
+        tasks = {}
+        for bucket in self.buckets:
+            for ddoc_name in ddoc_names:
+                for i in xrange(num_views):
+                    tasks["{0}/_design/{1}/_view/{2}".format(bucket, ddoc_name, "view" + str(i))] = \
+                        self.cluster.async_query_view(self.master, \
+                                        prefix + ddoc_name, "view" + str(i), query, expected_rows, bucket)
+        while len(tasks) > 0 and time.time() - start_time < self.wait_timeout * 30 :
+            completed_tasks = []
+            for task in  tasks:
+                if tasks[task].done:
+                    if tasks[task].result():
+                        self.log.info("expected query result with view {0} was obtained in {1} seconds".\
+                                 format(task, time.time() - start_time))
+                        completed_tasks += [task]
+            for completed_task in completed_tasks:
+                del tasks[completed_task]
+
+        if len(tasks) > 0:
+            for task in  tasks:
+                tasks[task].result(self.wait_timeout)
+
+        load_tasks[0].result()
+        rebalance.result()
+
+        self.verify_cluster_stats(result_nodes)
