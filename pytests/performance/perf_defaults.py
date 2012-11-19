@@ -106,3 +106,4 @@ class PerfDefaults:
     woq_verbose             =   0        # verbose output for woq pattern
     cor_pattern             =   0        # measure create/observe replication pattern on a different key space
     cor_persist             =   0        # block until item has been persisted to disk, 1: enabled, 0: disabled
+    exp_pager_stime         =   3600     # expiry pager interval

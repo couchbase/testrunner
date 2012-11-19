@@ -181,6 +181,13 @@ class PerfBase(unittest.TestCase):
         self.set_loglevel()
         self.customize_xdcr_settings()
         self.set_autocompaction()
+        self.set_exp_pager_stime()
+
+    def set_exp_pager_stime(self):
+        exp_pager_stime = self.param('exp_pager_stime',
+                                     PerfDefaults.exp_pager_stime)
+        if exp_pager_stime != PerfDefaults.exp_pager_stime:
+            self.set_ep_param('flush_param', 'exp_pager_stime', exp_pager_stime)
 
     def set_loglevel(self):
         """Set custom loglevel"""
