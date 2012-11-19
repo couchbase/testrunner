@@ -207,7 +207,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest = RestConnection(serverInfo)
             info = rest.get_nodes_self()
             proxyPort = rest.get_nodes_self().moxi
-            bucket_ram = info.mcdMemoryReserved
+            bucket_ram = info.memoryQuota
             try:
                 rest.create_bucket(bucket=name,
                                    ramQuotaMB=bucket_ram,
@@ -229,7 +229,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             try:
                 rest.create_bucket(bucket=name,
                                    ramQuotaMB=200,
-                                   replicaNumber=-1,
+                                   replicaNumber= -1,
                                    authType='sasl',
                                    proxyPort=proxyPort)
                 self.fail('bucket create succeded even with a negative replica count')
