@@ -76,7 +76,12 @@ class docloaderTests(CliBaseTest):
             command = "find %s/ -name *.json | wc -l" % (file)
             output, error = self.shell.execute_command(command.format(command))
             self.shell.log_command_output(output, error)
-            a = int(output[0])
+            if 'unable to resolve host' in output[0]:
+                #handle situation when DNS server does not have any entry for host, when
+                #we get output with 2 lines: error message and the number of received items
+                a = int(output[1])
+            else:
+                a = int(output[0])
 
             command = "find %s/design_docs/ -name *.json | wc -l" % (file)
             output, error = self.shell.execute_command(command.format(command))
