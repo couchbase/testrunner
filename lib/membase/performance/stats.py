@@ -206,8 +206,9 @@ class StatsCollector(object):
                 phase = '.loop'
             name = str(self.client_id) + phase
 
-        with gzip.open("{0}.json.gz".format(name), 'wb') as file:
-            file.write(json.dumps(obj))
+        file = gzip.open("{0}.json.gz".format(name), 'wb')
+        file.write(json.dumps(obj))
+        file.close()
 
     def get_bucket_size(self, bucket, nodes, frequency):
         self._task["bucket_size"] = []
