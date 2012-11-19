@@ -50,6 +50,10 @@ class BaseTestCase(unittest.TestCase):
         self.max_verify = self.input.param("max_verify", None)
         #we don't change consistent_view on server by default
         self.disabled_consistent_view = self.input.param("disabled_consistent_view", None)
+        self.rebalanceIndexWaitingDisabled = self.input.param("rebalanceIndexWaitingDisabled", None)
+        self.rebalanceIndexPausingDisabled = self.input.param("rebalanceIndexPausingDisabled", None)
+        self.maxParallelIndexers = self.input.param("maxParallelIndexers", None)
+        self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
         self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
         #avoid clean up if the previous test has been tear down
@@ -61,7 +65,9 @@ class BaseTestCase(unittest.TestCase):
             self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
         elif self.nodes_init > 1:
             self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
-        self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
+        self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
+                                        self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
+                                        self.maxParallelIndexers, self.maxParallelReplicaIndexers)
         if self.dgm_run:
             self.quota = 256
         if self.total_buckets > 0:
@@ -122,11 +128,13 @@ class BaseTestCase(unittest.TestCase):
         except:
             pass
 
-    def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None):
+    def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
+                          rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None):
         quota = 0
         init_tasks = []
         for server in servers:
-            init_tasks.append(cluster.async_init_node(server, disabled_consistent_view))
+            init_tasks.append(cluster.async_init_node(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
+                          rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:

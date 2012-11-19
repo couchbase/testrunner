@@ -63,11 +63,20 @@ class Task(Future):
         raise NotImplementedError
 
 class NodeInitializeTask(Task):
-    def __init__(self, server, disabled_consistent_view=None):
+    def __init__(self, server, disabled_consistent_view=None,
+                 rebalanceIndexWaitingDisabled=None,
+                 rebalanceIndexPausingDisabled=None,
+                 maxParallelIndexers=None,
+                 maxParallelReplicaIndexers=None):
         Task.__init__(self, "node_init_task")
         self.server = server
         self.quota = 0
         self.disable_consistent_view = disabled_consistent_view
+        self.rebalanceIndexWaitingDisabled = rebalanceIndexWaitingDisabled
+        self.rebalanceIndexPausingDisabled = rebalanceIndexPausingDisabled
+        self.maxParallelIndexers = maxParallelIndexers
+        self.maxParallelReplicaIndexers = maxParallelReplicaIndexers
+
 
     def execute(self, task_manager):
         try:
@@ -79,7 +88,16 @@ class NodeInitializeTask(Task):
         username = self.server.rest_username
         password = self.server.rest_password
 
-        rest.set_reb_cons_view(self.disable_consistent_view)
+        if self.disable_consistent_view is None:
+            rest.set_reb_cons_view(self.disable_consistent_view)
+        if self.disable_consistent_view is None:
+            rest.set_reb_index_waiting(self.rebalanceIndexWaitingDisabled)
+        if self.rebalanceIndexPausingDisabled is not None:
+            rest.set_rebalance_index_pausing(self.rebalanceIndexPausingDisabled)
+        if self.maxParallelIndexers is not None:
+            rest.set_max_parallel_indexers(self.maxParallelIndexers)
+        if self.maxParallelReplicaIndexers is not None:
+            rest.set_max_parallel_replica_indexers(self.maxParallelReplicaIndexers)
 
         rest.init_cluster(username, password)
         info = rest.get_nodes_self()

@@ -75,7 +75,9 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_init_node(self, server, disabled_consistent_view=None):
+    def async_init_node(self, server, disabled_consistent_view=None,
+                        rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
+                        maxParallelIndexers=None, maxParallelReplicaIndexers=None):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -84,10 +86,15 @@ class Cluster(object):
         Parameters:
             server - The server to initialize. (TestInputServer)
             disabled_consistent_view - disable consistent view
+            rebalanceIndexWaitingDisabled - index waiting during rebalance(Boolean)
+            rebalanceIndexPausingDisabled - index pausing during rebalance(Boolean)
+            maxParallelIndexers - max parallel indexers threads(Int)
+            maxParallelReplicaIndexers - max parallel replica indexers threads(int)
 
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
-        _task = NodeInitializeTask(server, disabled_consistent_view)
+        _task = NodeInitializeTask(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
+                          rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers)
         self.task_manager.schedule(_task)
         return _task
 
