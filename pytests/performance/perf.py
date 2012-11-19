@@ -7,7 +7,7 @@ import subprocess
 from TestInput import TestInputSingleton
 from lib import logger
 from lib import testconstants
-from lib.membase.api.rest_client import RestConnection, RestHelper
+from lib.membase.api.rest_client import RestConnection, RestHelper, Bucket
 from lib.membase.helper.bucket_helper import BucketOperationHelper
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.membase.helper.rebalance_helper import RebalanceHelper
@@ -261,6 +261,19 @@ class PerfBase(unittest.TestCase):
             # It's very hard to determine what exception it can raise.
             # Therefore we have to use general handler.
             print "ERROR while changing compaction settings: {0}".format(e)
+
+    def set_ep_param(self, type, param, value):
+        """
+        Set ep-engine specific param, using cbepctl
+
+        type: paramter type, e.g: flush_param, tap_param, etc
+        """
+        bucket = Bucket(name=self.buckets[0], authType="sasl", saslPassword="")
+        for server in self.input.servers:
+            shell = RemoteMachineShellConnection(server)
+            shell.execute_cbepctl(bucket,
+                                  "", "set %s" % type, param, value)
+            shell.disconnect()
 
     def tearDown(self):
         if self.parami("tear_down", 0) == 1:

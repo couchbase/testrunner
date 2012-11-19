@@ -12,7 +12,7 @@ from functools import wraps
 from TestInput import TestInputSingleton
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.membase.performance.stats import CallbackStatsCollector
-from lib.membase.api.rest_client import RestConnection, Bucket
+from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.perf_engines import mcsoda
 from lib.cbkarma.rest_client import CbKarmaClient
@@ -364,19 +364,6 @@ class EPerfMaster(perf.PerfBase):
             mvs.append(avg * 1.5)
         mvs.append(avg * 5)
         return mvs
-
-    def set_ep_param(self, type, param, value):
-        """
-        Set ep-engine specific param, using cbepctl
-
-        type: paramter type, e.g: flush_param, tap_param, etc
-        """
-        bucket = Bucket(name=self.buckets[0], authType="sasl", saslPassword="")
-        for server in self.input.servers:
-            shell = RemoteMachineShellConnection(server)
-            shell.execute_cbepctl(bucket,
-                                  "", "set %s" % type, param, value)
-            shell.disconnect()
 
     def set_nru_freq(self, freq):
         """Set up NRU access scanner running frequency"""
