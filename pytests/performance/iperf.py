@@ -525,8 +525,14 @@ class RebalanceTests(EVPerfClient):
 
         # Access phase
         if self.parami('access_phase', 1):
-            RebalanceHelper.rebalance_out(servers=self.input.servers,
-                                          how_many=1, monitor=True)
+            if self.param('rebalance', 'out') == 'out':
+                RebalanceHelper.rebalance_out(servers=self.input.servers,
+                                              how_many=1, monitor=True)
+            elif self.param('rebalance', 'out') == 'swap':
+                RebalanceHelper.rebalance_swap(servers=self.input.servers,
+                                               how_many=1, monitor=True)
+            else:
+                sys.exit('Only rebalance-out and swap rebalance supported.')
             self.measure_indexing_time(rc, ddocs)
 
     def measure_indexing_time(self, rc, ddocs):
