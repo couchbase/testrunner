@@ -611,11 +611,11 @@ class StatsCollector(object):
         """Collect view indexing stats"""
         self._task['view_info'] = list()
 
+        rests = [RestConnection(node) for node in nodes]
         while not self._aborted():
             time.sleep(frequency)
             log.info("Collecting view indexing stats")
-            for node in nodes:
-                rest = RestConnection(node)
+            for rest in rests:
                 data = rest.set_view_info(bucket, ddoc)
                 update_history = data[1]['stats']['update_history']
                 try:
@@ -634,13 +634,13 @@ class StatsCollector(object):
     def measure_indexing_throughput(self, nodes):
         self._task['indexer_info'] = list()
         indexers = defaultdict(dict)
+        rests = [RestConnection(node) for node in nodes]
         while not self._aborted():
             time.sleep(15)  # 15 seconds by default
 
             # Grab indexer tasks from all nodes
             tasks = list()
-            for node in nodes:
-                rest = RestConnection(node)
+            for rest in rests:
                 tasks.extend(filter(lambda t: t['type'] == 'indexer',
                                     rest.active_tasks()))
 
