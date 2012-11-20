@@ -592,7 +592,7 @@ class StatsCollector(object):
                 # System stats
                 ns_server_stats_system = rest.fetch_system_stats()
                 self._task["ns_server_stats_system"].append(ns_server_stats_system)
-            except ValueError, e:
+            except (ValueError, TypeError), e:
                 retries += 1
                 log.error("Unable to parse json object {0}: {1}".format(node, e))
                 log.warning("Retries: {0} of {1}".format(retries, RETRIES))
