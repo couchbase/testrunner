@@ -15,7 +15,6 @@ echo "prefix:"${prefix}", num_clients="${num_clients}", total_masters="${total_m
 phase="access"
 
 if [ ${load_phase} -eq 1 ] ; then
-    num_clients=3
     phase="load"
 fi
 
