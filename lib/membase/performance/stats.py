@@ -625,7 +625,7 @@ class StatsCollector(object):
                 except (IndexError, KeyError, ValueError):
                     avg_time = 0
                 finally:
-                    self._task['view_info'].append({'node': node.ip,
+                    self._task['view_info'].append({'node': rest.ip,
                                                     'indexing_time': avg_time,
                                                     'timestamp': time.time()})
 
