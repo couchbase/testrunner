@@ -7,6 +7,7 @@ from collections import defaultdict
 import logging
 import logging.config
 
+from lib.membase.api.exception import SetViewInfoNotFound
 from lib.membase.api.rest_client import RestConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
@@ -616,7 +617,11 @@ class StatsCollector(object):
             time.sleep(frequency)
             log.info("Collecting view indexing stats")
             for rest in rests:
-                data = rest.set_view_info(bucket, ddoc)
+                try:
+                    data = rest.set_view_info(bucket, ddoc)
+                except SetViewInfoNotFound as error:
+                    log.warning(error)
+                    continue
                 try:
                     update_history = data[1]['stats']['update_history']
                     indexing_time = \
