@@ -617,12 +617,12 @@ class StatsCollector(object):
             log.info("Collecting view indexing stats")
             for rest in rests:
                 data = rest.set_view_info(bucket, ddoc)
-                update_history = data[1]['stats']['update_history']
                 try:
+                    update_history = data[1]['stats']['update_history']
                     indexing_time = \
                         [event['indexing_time'] for event in update_history]
                     avg_time = sum(indexing_time) / len(indexing_time)
-                except (IndexError, KeyError):
+                except (IndexError, KeyError, ValueError):
                     avg_time = 0
                 finally:
                     self._task['view_info'].append({'node': node.ip,
