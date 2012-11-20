@@ -352,17 +352,18 @@ class StatsCollector(object):
         self._reb_stats["reb_dur"] = dur
 
     def _extract_proc_info(self, shell, pid):
-        o, r = shell.execute_command("cat /proc/{0}/stat".format(pid))
-        fields = ('pid comm state ppid pgrp session tty_nr tpgid flags minflt '
-                  'cminflt majflt cmajflt utime stime cutime cstime priority '
-                  'nice num_threads itrealvalue starttime vsize rss rsslim '
-                  'startcode endcode startstack kstkesp kstkeip signal blocked '
-                  'sigignore sigcatch wchan nswap cnswap exit_signal '
-                  'processor rt_priority policy delayacct_blkio_ticks '
-                  'guest_time cguest_time ').split(' ')
+        output, error = shell.execute_command("cat /proc/{0}/stat".format(pid))
+        fields = (
+            'pid', 'comm', 'state', 'ppid', 'pgrp', 'session', 'tty_nr',
+            'tpgid', 'flags', 'minflt', 'cminflt', 'majflt', 'cmajflt',
+            'utime', 'stime', 'cutime', 'cstime', 'priority ' 'nice',
+            'num_threads', 'itrealvalue', 'starttime', 'vsize', 'rss',
+            'rsslim', 'startcode', 'endcode', 'startstack', 'kstkesp',
+            'kstkeip', 'signal', 'blocked ', 'sigignore', 'sigcatch', 'wchan',
+            'nswap', 'cnswap', 'exit_signal', 'processor', 'rt_priority',
+            'policy', 'delayacct_blkio_ticks', 'guest_time', 'cguest_time')
 
-        d = dict(zip(fields, o[0].split(' ')))
-        return d
+        return {} if error else dict(zip(fields, output[0].split(' ')))
 
     def _extract_io_info(self, shell):
         """
