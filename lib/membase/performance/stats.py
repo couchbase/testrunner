@@ -677,18 +677,25 @@ class StatsCollector(object):
     def start_atop(self):
         """Start atop collector"""
         for node in self.nodes:
-            shell = RemoteMachineShellConnection(node)
-            cmd = "killall atop; rm -fr /tmp/*.atop;" + \
-                "atop -w /tmp/{0}.atop -a 15".format(node.ip) + \
-                " > /dev/null 2> /dev.null < /dev/null &"
-            shell.execute_command(cmd)
+            try:
+                shell = RemoteMachineShellConnection(node)
+            except SystemExit:
+                log.error("Can't establish SSH session with {0}".format(node.ip))
+            else:
+                cmd = "killall atop; rm -fr /tmp/*.atop;" + \
+                    "atop -w /tmp/{0}.atop -a 15".format(node.ip) + \
+                    " > /dev/null 2> /dev.null < /dev/null &"
+                shell.execute_command(cmd)
 
-    def stop_atop(self,):
+    def stop_atop(self):
         """Stop atop collector"""
         for node in self.nodes:
-            shell = RemoteMachineShellConnection(node)
-            shell.execute_command("killall atop")
-
+            try:
+                shell = RemoteMachineShellConnection(node)
+            except SystemExit:
+                log.error("Can't establish SSH session with {0}".format(node.ip))
+            else:
+                shell.execute_command("killall atop")
 
 class CallbackStatsCollector(StatsCollector):
 
