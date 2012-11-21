@@ -40,6 +40,7 @@ class EventType:
     STOP = "stop"
     ABORT = "abort"
 
+
 def cbtop(func):
 
     @wraps(func)
@@ -87,6 +88,7 @@ def cbtop(func):
         return ret
 
     return wrapper
+
 
 def multi_buckets(test):
     """
@@ -143,8 +145,8 @@ def multi_buckets(test):
 def measure_sched_delays(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if self.parami("prefix", -1) or\
-            not self.parami("sched_delays", PerfDefaults.sched_delays):
+        if self.parami("prefix", -1) or \
+                not self.parami("sched_delays", PerfDefaults.sched_delays):
             return func(self, *args, **kwargs)
 
         file = "%s-%s" % (self.param("spec", ""),
@@ -162,6 +164,7 @@ def measure_sched_delays(func):
         return ret
 
     return wrapper
+
 
 class EPerfMaster(perf.PerfBase):
 
@@ -409,14 +412,14 @@ class EPerfMaster(perf.PerfBase):
             shell.disconnect()
             print "access scanner will be executed on %s in %d minutes, " \
                   "at %d UTC, curr_time is %s" \
-                   % (server.ip, min_left, tm_hour, gmt_now)
+                  % (server.ip, min_left, tm_hour, gmt_now)
 
     def set_ep_mem_wat(self, percent, high=True):
         """Set ep engine high/low water marks for all nodes"""
-        n_bytes = self.parami("mem_quota", PerfDefaults.mem_quota) *\
-                  percent/100 * 1024 * 1024
+        n_bytes = self.parami("mem_quota", PerfDefaults.mem_quota) * \
+            percent / 100 * 1024 * 1024
         print "[set_ep_mem_wat] mem_%s_wat = %s percent, %s bytes"\
-              % ("high" if high else "low", percent, n_bytes)
+            % ("high" if high else "low", percent, n_bytes)
         self.set_ep_param("flush_param",
                           "mem_%s_wat" % ("high" if high else "low"),
                           n_bytes)
@@ -545,8 +548,7 @@ class EPerfMaster(perf.PerfBase):
             print "Loading"
 
             nru_freq = self.parami('nru_freq', PerfDefaults.nru_freq)
-            if nru_freq != PerfDefaults.nru_freq \
-                and self.is_leader:
+            if nru_freq != PerfDefaults.nru_freq and self.is_leader:
                 self.set_nru_freq(nru_freq)
 
             num_clients = self.parami("num_clients",
@@ -559,7 +561,7 @@ class EPerfMaster(perf.PerfBase):
             if 'xperf' in self.param('conf_file', '') and 'bi' in self.id():
                 prefix = self.params('cluster_prefix', '')
             else:
-                prefix= ''
+                prefix = ''
 
             self.load(items,
                       self.param('size', mvs),
@@ -591,7 +593,7 @@ class EPerfMaster(perf.PerfBase):
         num_loaded_items = self.parami("items", PerfDefaults.items)
         cpb = num_clients / num_buckets
         offset = num_loaded_items / num_buckets * \
-                 (self.parami("prefix", 0) / cpb)
+            (self.parami("prefix", 0) / cpb)
         return int(offset + self.paramf("start_at", 1.0) *
                    self.parami("prefix", 0) % cpb * num_items / num_clients)
 
@@ -645,8 +647,7 @@ class EPerfMaster(perf.PerfBase):
             mvs = self.min_value_size(self.parami("avg_value_size",
                                       PerfDefaults.avg_value_size))
 
-            if self.parami('nru_task', PerfDefaults.nru_task) \
-                and self.is_leader:
+            if self.parami('nru_task', PerfDefaults.nru_task) and self.is_leader:
                 self.set_nru_task()
                 self.nru_monitor = NRUMonitor(
                     self.parami("nru_polling_freq", PerfDefaults.nru_polling_freq),
@@ -658,7 +659,7 @@ class EPerfMaster(perf.PerfBase):
             if 'xperf' in self.param('conf_file', '') and 'bi' in self.id():
                 prefix = self.params('cluster_prefix', '')
             else:
-                prefix= ''
+                prefix = ''
 
             self.loop(num_ops=0,
                       num_items=items,
@@ -834,7 +835,7 @@ class EPerfMaster(perf.PerfBase):
                                    self.parami("reb_max_retries",
                                                PerfDefaults.reb_max_retries),
                                    self.parami("reb_mode",
-                                                PerfDefaults.reb_mode),
+                                               PerfDefaults.reb_mode),
                                    sync)
 
     # ---------------------------------------------
@@ -990,11 +991,11 @@ class EPerfMaster(perf.PerfBase):
         num_clients = self.parami("num_clients", len(self.input.clients) or 1)
 
         if not self.parami("nru_task", PerfDefaults.nru_task) and \
-            not self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
+                not self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
             rebalance_after = self.parami("rebalance_after",
-                                      PerfDefaults.rebalance_after)
+                                          PerfDefaults.rebalance_after)
             self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
-                                getattr(self, "latched_rebalance"))]
+                                     getattr(self, "latched_rebalance"))]
 
         reb_cons_view = self.parami("reb_cons_view", PerfDefaults.reb_cons_view)
         if reb_cons_view != PerfDefaults.reb_cons_view:
@@ -1020,7 +1021,7 @@ class EPerfMaster(perf.PerfBase):
             if self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
                 max_creates = 1
             else:
-                max_creates= \
+                max_creates = \
                     self.parami("max_creates", PerfDefaults.max_creates)
 
             self.access_phase(ratio_sets=self.paramf('ratio_sets',
@@ -1417,8 +1418,7 @@ class EPerfMaster(perf.PerfBase):
         query_suffix = self.param("query_suffix", "")
         view_gen = ViewGen()
         bucket = self.params('bucket', 'default')
-        queries = view_gen.generate_queries(limit, query_suffix, bucket,
-                                            ddocs=None)
+        queries = view_gen.generate_queries(limit, query_suffix, bucket)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
@@ -1670,13 +1670,13 @@ class EPerfClient(EPerfMaster):
         return True
 
 
-# The EVPerfClient subclass deploys another background thread to drive
-# a concurrent amount of memcached traffic, during the "loop" or
-# access phase.  Otherwise, with the basic EPerfClient, the http
-# queries would gate the ops/second performance due to mcsoda's
-# lockstep batching.
-#
 class EVPerfClient(EPerfClient):
+
+    """The EVPerfClient subclass deploys another background thread to drive a
+    concurrent amount of memcached traffic, during the "loop" or access phase.
+    Otherwise, with the basic EPerfClient, the HTTP queries would gate the
+    ops/second performance due to mcsoda'slockstep batching.
+    """
 
     def mcsoda_run(self, cfg, cur, protocol, host_port, user, pswd,
                    stats_collector=None, stores=None, ctl=None,
@@ -1758,7 +1758,7 @@ class EVPerfClient(EPerfClient):
         if self.bg_thread_ctl:
             self.bg_thread_ctl['run_ok'] = False
             while self.bg_thread.is_alive():
-                self.log.info('Waiting for background thread {0}.'\
+                self.log.info('Waiting for background thread {0}.'
                               .format(self.parami("prefix", 0)))
                 time.sleep(5)
 
@@ -1931,16 +1931,24 @@ class ViewGen:
         ddoc_names = \
             [name for name, ddoc in sorted(ddocs.iteritems()) for view in ddoc["views"]]
 
-        q = {}
-        q['city'] = b + '_design/' + ddoc_names[0] + '/_view/city1?limit=' + str(limit) + '&startkey="{city}"'
-        q['city2'] = b + '_design/' + ddoc_names[1] + '/_view/city2?limit=' + str(limit) + '&startkey="{city}"'
-        q['realm'] = b + '_design/' + ddoc_names[2] + '/_view/realm1?limit=30&startkey="{realm}"'
-        q['experts'] = b + '_design/' + ddoc_names[3] + '/_view/experts1?limit=30&startkey="{name}"'
-        q['coins-beg'] = b + '_design/' + ddoc_names[4] + '/_view/experts2?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]'
-        q['coins-exp'] = b + '_design/' + ddoc_names[4] + '/_view/experts2?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]'
-        q['and0'] = b + '_design/' + ddoc_names[5] + '/_view/realm2?limit=30&startkey=["{realm}",{coins}]'
-        q['and1'] = b + '_design/' + ddoc_names[6] + '/_view/realm3?limit=30&startkey=["{realm}",{coins}]'
-        q['and2'] = b + '_design/' + ddoc_names[7] + '/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'
+        q = {'city': b + '_design/' + ddoc_names[0] +
+                     '/_view/city1?limit=' + str(limit) + '&startkey="{city}"',
+             'city2': b + '_design/' + ddoc_names[1] +
+                      '/_view/city2?limit=' + str(limit) + '&startkey="{city}"',
+             'realm': b + '_design/' + ddoc_names[2] +
+                      '/_view/realm1?limit=30&startkey="{realm}"',
+             'experts': b + '_design/' + ddoc_names[3] +
+                        '/_view/experts1?limit=30&startkey="{name}"',
+             'coins-beg': b + '_design/' + ddoc_names[4] +
+                          '/_view/experts2?limit=30&startkey=[0,{int10}]&endkey=[0,{int100}]',
+             'coins-exp': b + '_design/' + ddoc_names[4] +
+                          '/_view/experts2?limit=30&startkey=[2,{int10}]&endkey=[2,{int100}]',
+             'and0': b + '_design/' + ddoc_names[5] +
+                     '/_view/realm2?limit=30&startkey=["{realm}",{coins}]',
+             'and1': b + '_design/' + ddoc_names[6] +
+                     '/_view/realm3?limit=30&startkey=["{realm}",{coins}]',
+             'and2': b + '_design/' + ddoc_names[7] +
+                     '/_view/category?limit=30&startkey=[0,"{realm}",{coins}]'}
 
         queries_by_kind = [
             [  # 45% / 5 = 9
@@ -1979,8 +1987,7 @@ class ViewGen:
 
     @staticmethod
     def create_stats_view(slave, bucket, prefix):
-        """Create view definition which counts number of replicated items
-        """
+        """Create view definition which counts number of replicated items"""
 
         rest = RestConnection(slave)
 
@@ -2015,7 +2022,7 @@ class ViewGen:
                 remaining[kind] = count - 1
                 k = queries_by_kind[kind]
                 queries.append(k[count % len(k)] + suffix)
-            i = i + 1
+            i += 1
 
         return queries
 
@@ -2039,117 +2046,115 @@ class ViewGen:
         queries = queries.replace(',', '%2C')
         return queries
 
+
 class NRUMonitor(threading.Thread):
 
-     CMD_NUM_RUNS = "/opt/couchbase/bin/cbstats localhost:11210 "\
-           "all | grep ep_num_access_scanner_runs"
+    CMD_NUM_RUNS = "/opt/couchbase/bin/cbstats localhost:11210 "\
+        "all | grep ep_num_access_scanner_runs"
 
-     CMD_NUM_ITEMS = "/opt/couchbase/bin/cbstats localhost:11210 "\
-            "all | grep ep_access_scanner_num_items"
+    CMD_NUM_ITEMS = "/opt/couchbase/bin/cbstats localhost:11210 "\
+        "all | grep ep_access_scanner_num_items"
 
-     CMD_RUNTIME = "/opt/couchbase/bin/cbstats localhost:11210 "\
-            "all | grep ep_access_scanner_last_runtime"
+    CMD_RUNTIME = "/opt/couchbase/bin/cbstats localhost:11210 "\
+        "all | grep ep_access_scanner_last_runtime"
 
-     def __init__(self, freq, reb_delay, eperf):
-         self.freq = freq
-         self.reb_delay = reb_delay
-         self.eperf = eperf
-         self.shell = None
-         super(NRUMonitor, self).__init__()
+    def __init__(self, freq, reb_delay, eperf):
+        self.freq = freq
+        self.reb_delay = reb_delay
+        self.eperf = eperf
+        self.shell = None
+        super(NRUMonitor, self).__init__()
 
-     def run(self):
-         print "[NRUMonitor] started running"
+    def run(self):
+        print "[NRUMonitor] started running"
 
-         # TODO: evaluate all servers, smarter polling freq
-         server = self.eperf.input.servers[0]
-         self.shell = RemoteMachineShellConnection(server)
+        # TODO: evaluate all servers, smarter polling freq
+        server = self.eperf.input.servers[0]
+        self.shell = RemoteMachineShellConnection(server)
 
-         nru_num = self.nru_num = self.get_nru_num()
-         if self.nru_num < 0:
-             return
+        nru_num = self.nru_num = self.get_nru_num()
+        if self.nru_num < 0:
+            return
 
-         while nru_num <= self.nru_num:
-             print "[NRUMonitor] nru_num = %d, sleep for %d seconds" \
+        while nru_num <= self.nru_num:
+            print "[NRUMonitor] nru_num = %d, sleep for %d seconds" \
                 % (nru_num, self.freq)
-             time.sleep(self.freq)
-             nru_num = self.get_nru_num()
-             if nru_num < 0:
-                 break
+            time.sleep(self.freq)
+            nru_num = self.get_nru_num()
+            if nru_num < 0:
+                break
 
-         gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
-         speed, num_items, run_time =  self.get_nru_speed()
+        gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
+        speed, num_items, run_time = self.get_nru_speed()
 
-         print "[NRUMonitor] access scanner finished at: %s, speed: %s, "\
-            "num_items: %s, run_time: %s" \
-            % (gmt_now, speed, num_items, run_time)
+        print "[NRUMonitor] access scanner finished at: %s, speed: %s, "\
+              "num_items: %s, run_time: %s"\
+              % (gmt_now, speed, num_items, run_time)
 
-         self.eperf.clear_hot_keys()
+        self.eperf.clear_hot_keys()
 
-         print "[NRUMonitor] scheduled rebalance after %d seconds"\
-             % self.reb_delay
+        print "[NRUMonitor] scheduled rebalance after %d seconds"\
+            % self.reb_delay
 
-         self.shell.disconnect()
-         self.eperf.latched_rebalance(delay=self.reb_delay, sync=True)
+        self.shell.disconnect()
+        self.eperf.latched_rebalance(delay=self.reb_delay, sync=True)
 
-         gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
-         print "[NRUMonitor] rebalance finished: %s" % gmt_now
+        gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
+        print "[NRUMonitor] rebalance finished: %s" % gmt_now
 
-         print "[NRUMonitor] stopped running"
+        print "[NRUMonitor] stopped running"
 
-     def get_nru_num(self):
-         """Retrieve how many times nru access scanner has been run"""
-         return self._get_shell_int(NRUMonitor.CMD_NUM_RUNS)
+    def get_nru_num(self):
+        """Retrieve how many times nru access scanner has been run"""
+        return self._get_shell_int(NRUMonitor.CMD_NUM_RUNS)
 
-     def get_nru_speed(self):
-         """
-         Retrieve runtime and num_items for the last access scanner run
-         Calculate access running speed
+    def get_nru_speed(self):
+        """Retrieve runtime and num_items for the last access scanner run
+        Calculate access running speed
 
-         @return (speed, num_items, run_time)
-         """
-         num_items = self._get_shell_int(NRUMonitor.CMD_NUM_ITEMS)
+        @return (speed, num_items, run_time)
+        """
+        num_items = self._get_shell_int(NRUMonitor.CMD_NUM_ITEMS)
 
-         if num_items <= 0:
-             return -1, -1, -1
+        if num_items <= 0:
+            return -1, -1, -1
 
-         run_time = self._get_shell_int(NRUMonitor.CMD_RUNTIME)
+        run_time = self._get_shell_int(NRUMonitor.CMD_RUNTIME)
 
-         if run_time <= 0:
-             return -1, num_items, -1
+        if run_time <= 0:
+            return -1, num_items, -1
 
-         speed = num_items / run_time
+        speed = num_items / run_time
 
-         return speed, num_items, run_time
+        return speed, num_items, run_time
 
-     def _get_shell_int(self, cmd):
-         """
-         Fire a shell command and return output as integer
-         """
-         if not cmd:
-             print "<_get_shell_int> invalid cmd"
-             return -1
+    def _get_shell_int(self, cmd):
+        """Fire a shell command and return output as integer"""
+        if not cmd:
+            print "<_get_shell_int> invalid cmd"
+            return -1
 
-         output, error = self.shell.execute_command(cmd)
+        output, error = self.shell.execute_command(cmd)
 
-         if error:
-             print "<_get_shell_int> unable to execute cmd '%s' from %s: %s"\
-                % (cmd, self.shell.ip, error)
-             return -1
+        if error:
+            print "<_get_shell_int> unable to execute cmd '%s' from %s: %s"\
+                  % (cmd, self.shell.ip, error)
+            return -1
 
-         if not output:
-             print "<_get_shell_int> unable to execute cmd '%s' from %s: "\
-                "empty output" % (cmd, self.shell.ip)
-             return -1
+        if not output:
+            print "<_get_shell_int> unable to execute cmd '%s' from %s: "\
+                  "empty output" % (cmd, self.shell.ip)
+            return -1
 
-         try:
-             num = int(output[0].split(":")[1])
-         except  (AttributeError, IndexError, ValueError), e:
-             print "<_get_shell_int> unable to execute cmd '%s' from %s:"\
-                "output - %s, error - %s" % (cmd, self.shell.ip, output, e)
-             return -1
+        try:
+            num = int(output[0].split(":")[1])
+        except (AttributeError, IndexError, ValueError), e:
+            print "<_get_shell_int> unable to execute cmd '%s' from %s:"\
+                  "output - %s, error - %s" % (cmd, self.shell.ip, output, e)
+            return -1
 
-         if num < 0:
-             print "<_get_shell_int> invalid number: %d" % num
-             return -1
+        if num < 0:
+            print "<_get_shell_int> invalid number: %d" % num
+            return -1
 
-         return num
+        return num
