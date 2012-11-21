@@ -71,34 +71,36 @@ class FailoverBaseTest(unittest.TestCase):
         self._cluster_helper.shutdown()
         log = logger.Logger.get_logger()
 
-        if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
-                    and TestInputSingleton.input.param("stop-on-failure", False))\
-                        or self.input.param("skip_cleanup", False):
+        if hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
+                    and TestInputSingleton.input.param("stop-on-failure", False):
+                    #supported starting with python2.7
                     log.warn("CLEANUP WAS SKIPPED")
-        try:
-            log.info("==============  tearDown was started for test #{0} {1} =============="\
+        else:
+            try:
+                log.info("==============  tearDown was started for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
-            RemoteUtilHelper.common_basic_setup(self._servers)
-            log.info("10 seconds delay to wait for membase-server to start")
-            time.sleep(10)
-            for server in self._cleanup_nodes:
-                shell = RemoteMachineShellConnection(server)
-                o, r = shell.execute_command("iptables -F")
-                shell.log_command_output(o, r)
-                o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j ACCEPT")
-                shell.log_command_output(o, r)
-                o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j ACCEPT")
-                shell.log_command_output(o, r)
-                o, r = shell.execute_command("/etc/init.d/couchbase-server start")
-                shell.log_command_output(o, r)
-                shell.disconnect()
-            BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
-            ClusterOperationHelper.cleanup_cluster(self._servers)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(self._servers, self)
-            log.info("==============  tearDown was finished for test #{0} {1} =============="\
+                RemoteUtilHelper.common_basic_setup(self._servers)
+                log.info("10 seconds delay to wait for membase-server to start")
+                time.sleep(10)
+                for server in self._cleanup_nodes:
+                    shell = RemoteMachineShellConnection(server)
+                    o, r = shell.execute_command("iptables -F")
+                    shell.log_command_output(o, r)
+                    o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j ACCEPT")
+                    shell.log_command_output(o, r)
+                    o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j ACCEPT")
+                    shell.log_command_output(o, r)
+                    o, r = shell.execute_command("/etc/init.d/couchbase-server start")
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
+                ClusterOperationHelper.cleanup_cluster(self._servers)
+                ClusterOperationHelper.wait_for_ns_servers_or_assert(self._servers, self)
+                log.info("==============  tearDown was finished for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
-        finally:
-            pass
+            finally:
+                pass
+
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None):
         quota = 0
