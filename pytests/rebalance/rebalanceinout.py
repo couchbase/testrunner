@@ -50,6 +50,46 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                    self.servers[i:self.num_servers], [])
             self.verify_cluster_stats(self.servers[:self.num_servers])
 
+    """Rebalances nodes in/out at once while doing mutations with max
+    number of buckets in the cluster.
+
+    This test begins by creating max number of buckets with bucket_size=quota/maxBucketCount.
+    one default bucket, all other are sasl and standart buckets. Then we load
+    a given number of items into the cluster. It then removes servs_in nodes and adds
+    servs_out, rebalances cluster. During the rebalancing we update all of the items in the cluster.
+    Once the node has been rebalanced we  wait for the disk queues to drain, and
+    then verify that there has been no data loss, sum(curr_items) match the curr_items_total."""
+    def rebalance_in_out_at_once_with_max_buckets_number(self):
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        rest = RestConnection(self.master)
+        self._wait_for_stats_all_buckets(servs_init)
+        self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+        self.log.info("adding nodes {0} to cluster".format(servs_in))
+        self.log.info("removing nodes {0} from cluster".format(servs_out))
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
+
+        rest = RestConnection(self.master)
+        bucket_num = rest.get_internalSettings("maxBucketCount")
+        self.bucket_size = self.quota / bucket_num
+
+        self.log.info('total %s buckets will be created with size %s MB' % (bucket_num, self.bucket_size))
+        self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
+        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+        self._create_sasl_buckets(self.master, (bucket_num - 1) / 2)
+        self._create_standard_buckets(self.master, bucket_num - 1 - (bucket_num - 1) / 2)
+
+        gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self._wait_for_stats_all_buckets(servs_init)
+
+        rebalance = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
+        self._async_load_all_buckets(self.master, gen, "update", 0)
+        rebalance.result()
+        self.verify_cluster_stats(result_nodes)
+
     """Rebalances nodes out and in of the cluster while doing mutations.
 
     This test begins by loading a given number of items into the cluster. It then
