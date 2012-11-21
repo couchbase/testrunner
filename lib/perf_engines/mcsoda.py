@@ -19,7 +19,10 @@ sys.path.append('.')
 
 from lib import crc32
 from lib import mc_bin_client
-from lib.membase.api.exception import QueryViewException, ServerUnavailableException
+from lib.memcached.helper.data_helper import VBucketAwareMemcached
+from lib.membase.api.rest_client import RestConnection
+from lib.membase.api.exception import QueryViewException, \
+    ServerUnavailableException
 from lib.memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, \
     ERR_NOT_MY_VBUCKET, ERR_ENOMEM, ERR_EBUSY, ERR_ETMPFAIL, REQ_PKT_FMT, \
     RES_PKT_FMT, MIN_RECV_PACKET, SET_PKT_FMT, CMD_GET, CMD_SET, CMD_DELETE, \
@@ -118,7 +121,7 @@ def dict_to_s_inner(d, level, res, suffix, ljust):
     histo_cur = 0  # Running total for histogram output.
     for key in scalars:
         if type(key) == FLOAT_TYPE:
-            k = re.sub("0*$", "", "%.7f" % (key))
+            k = re.sub("0*$", "", "%.7f" % key)
         else:
             k = str(key)
         if ljust:
@@ -463,16 +466,16 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
             xfer_recv_last = xfer_recv_curr
 
         if flushed:
-            """Code below is responsible for speed limitation.
-            Stream looks like ^_^_^_^_^_^_^
-
-            delta1 = flush time + previous sleep time (^_)
-            delta2 = flush time (^)
-
-            TODO: dynamic correction factor. We have to measure actual average
-            throughput - let's say - every minute. Thus we can adjust request
-            rate. For now it's empiric, because we always oversleep.
-            """
+            # Code below is responsible for speed limitation.
+            # Stream looks like ^_^_^_^_^_^_^
+            #
+            # delta1 = flush time + previous sleep time (^_)
+            # delta2 = flush time (^)
+            #
+            # TODO: dynamic correction factor.
+            # We have to measure actual average throughput - let's say - every
+            # minute. Thus we can adjust request rate. For now it's empiric,
+            # because we always oversleep.
             CORRECTION_FACTOR = 0.975
 
             delta1 = time.time() - t_last_cycle
@@ -575,7 +578,7 @@ def next_cmd(cfg, cur, store):
                                     choose_entry(cfg.get('min-value-size', MIN_VALUE_SIZE),
                                                  num_ops))
 
-        return (cmd, key_num, key_str, itm_val, expiration)
+        return cmd, key_num, key_str, itm_val, expiration
     else:
         cmd = 'get'
         cur['cur-gets'] = cur.get('cur-gets', 0) + 1
@@ -610,10 +613,10 @@ def next_cmd(cfg, cur, store):
                                          cur)
             key_str = prepare_key(key_num, cfg.get('prefix', ''))
 
-            return (cmd, key_num, key_str, itm_val, 0)
+            return cmd, key_num, key_str, itm_val, 0
         else:
             cur['cur-misses'] = cur.get('cur-misses', 0) + 1
-            return (cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None, 0)
+            return cmd, -1, prepare_key(-1, cfg.get('prefix', '')), None, 0
 
 
 def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
@@ -645,7 +648,7 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
     num_hot_items = positive(math.floor(ratio_hot * num_items))
     num_cold_items = positive(num_items - num_hot_items)
     num_init_items = positive(num_items - num_creates)
-    base = base % num_init_items
+    base %= num_init_items
 
     # calculate offset and apply it to the base
     if hit_hot_range:
@@ -971,12 +974,6 @@ class StoreMemcachedBinary(Store):
         latency_start = 0
         latency_end = 0
 
-        delta_gets = 0
-        delta_sets = 0
-        delta_deletes = 0
-        delta_arpas = 0
-        delta_queries = 0
-
         if self.inflight > 0:
             # Receive replies from the previous batch of inflight requests.
             self.xfer_recv += self.inflight_recv(self.inflight, self.inflight_grp)
@@ -996,9 +993,7 @@ class StoreMemcachedBinary(Store):
             # request latency.
             grp = self.inflight_start()
             latency_cmd, key_num, key_str, data, expiration = self.queue[0]
-            delta_gets, delta_sets, delta_deletes, delta_arpas, delta_queries = \
-                self.cmd_append(latency_cmd,
-                                key_num, key_str, data, expiration, grp)
+            self.cmd_append(latency_cmd, key_num, key_str, data, expiration, grp)
             msg = self.inflight_complete(grp)
 
             latency_start = time.time()
@@ -1107,9 +1102,6 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         Username and password should be rest_username and rest_password, \
         generally they are different from ssh identities.
         """
-        from membase.api.rest_client import RestConnection
-        from memcached.helper.data_helper import VBucketAwareMemcached
-
         info = {"ip": host, "port": port,
                 'username': user or self.cfg.get("rest_username", "Administrator"),
                 'password': pswd or self.cfg.get("rest_password", "password")}
@@ -1525,7 +1517,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
                 thread.daemon = True
                 thread.start()
 
-            while len(threads) > 0:
+            while threads:
                 threads[0].join(1)
                 threads = [t for t in threads if t.isAlive()]
     except KeyboardInterrupt:
@@ -1545,9 +1537,9 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
 
     threads = [t for t in threads if t.isAlive()]
     heartbeat = 0
-    while len(threads) > 0:
+    while threads:
         threads[0].join(1)
-        heartbeat = heartbeat + 1
+        heartbeat += 1
         if heartbeat >= 60:
             heartbeat = 0
             log.info("    mcsoda is running with %s threads" % len(threads))
