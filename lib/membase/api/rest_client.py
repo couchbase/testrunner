@@ -1442,6 +1442,17 @@ class RestConnection(object):
         cmd = 'ns_config:set(ensure_full_commit_enabled, {0}).'.format(value)
         return self.diag_eval(cmd)
 
+    def get_internalSettings(self, param):
+            """allows to get internalSettings values for:
+            indexAwareRebalanceDisabled, rebalanceIndexWaitingDisabled,
+            rebalanceIndexPausingDisabled, maxParallelIndexers,
+            maxParallelReplicaIndexers, maxBucketCount"""
+            api = self.baseUrl + "internalSettings"
+            status, content, header = self._http_request(api)
+            json_parsed = json.loads(content)
+            param = json_parsed[param]
+            return param
+
     def set_reb_cons_view(self, disable=None):
         #do not change if None
         if disable is None:
