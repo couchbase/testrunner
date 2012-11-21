@@ -245,8 +245,8 @@ class StatsCollector(object):
         for node in nodes:
             try:
                 shells.append(RemoteMachineShellConnection(node))
-            except:
-                pass
+            except Exception as error:
+                log.error(error)
         paths = []
         if shells[0].is_couchbase_installed():
             bucket_path = self.data_path + '/{0}'.format(bucket)
@@ -399,8 +399,8 @@ class StatsCollector(object):
                 bucket = RestConnection(node).get_buckets()[0].name
                 MemcachedClientHelper.direct_client(node, bucket)
                 shells.append(RemoteMachineShellConnection(node))
-            except:
-                pass
+            except Exception as error:
+                log.error(error)
         d = {"snapshots": []}
         #        "pname":"x","pid":"y","snapshots":[{"time":time,"value":value}]
 
@@ -427,15 +427,14 @@ class StatsCollector(object):
         log.info("Finished system_stats")
 
     def iostats(self, nodes, frequency, verbosity=False):
-
         shells = []
         for node in nodes:
             try:
                 bucket = RestConnection(node).get_buckets()[0].name
                 MemcachedClientHelper.direct_client(node, bucket)
                 shells.append(RemoteMachineShellConnection(node))
-            except:
-                pass
+            except Exception as error:
+                log.error(error)
 
         self._task["iostats"] = []
 
@@ -491,8 +490,8 @@ class StatsCollector(object):
             try:
                 bucket = RestConnection(node).get_buckets()[0].name
                 mcs.append(MemcachedClientHelper.direct_client(node, bucket))
-            except:
-                pass
+            except Exception as error:
+                log.error(error)
         self._task["membasestats"] = []
         self._task["timings"] = []
         self._task["dispatcher"] = []
