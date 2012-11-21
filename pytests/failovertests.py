@@ -68,9 +68,14 @@ class FailoverBaseTest(unittest.TestCase):
 
     @staticmethod
     def tearDown(self):
+        self._cluster_helper.shutdown()
+        log = logger.Logger.get_logger()
+
+        if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
+                    and TestInputSingleton.input.param("stop-on-failure", False))\
+                        or self.input.param("skip_cleanup", False):
+                    log.warn("CLEANUP WAS SKIPPED")
         try:
-            self._cluster_helper.shutdown()
-            log = logger.Logger.get_logger()
             log.info("==============  tearDown was started for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
             RemoteUtilHelper.common_basic_setup(self._servers)
