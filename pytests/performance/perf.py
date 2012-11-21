@@ -251,8 +251,9 @@ class PerfBase(unittest.TestCase):
             # ep_engine fragementation threshold
             ep_compaction = self.parami("ep_compaction",
                                         PerfDefaults.ep_compaction)
-            self.set_ep_compaction(ep_compaction)
-            print "[perf.setUp] ep_engine compaction = %d" % ep_compaction
+            if ep_compaction != PerfDefaults.ep_compaction:
+                self.set_ep_compaction(ep_compaction)
+                print "[perf.setUp] ep_engine compaction = %d" % ep_compaction
 
             # View fragmentation threshold
             if disable_view_compaction:
