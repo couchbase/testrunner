@@ -68,13 +68,13 @@ class StatsCollector(object):
 
         if collect_server_stats:
             mbstats_thread = Thread(target=self.membase_stats,
-                                    args=(nodes, bucket, 60, self._verbosity))
+                                    args=(nodes, 60))
             mbstats_thread.start()
             sysstats_thread = Thread(target=self.system_stats,
-                                     args=(nodes, pnames, frequency, self._verbosity))
+                                     args=(nodes, pnames, frequency))
             sysstats_thread.start()
             iostats_thread = Thread(target=self.iostats,
-                                    args=(nodes, 10, self._verbosity))
+                                    args=(nodes, 10))
             iostats_thread.start()
             ns_server_stats_thread = Thread(target=self.ns_server_stats,
                                             args=(nodes, bucket, 60))
@@ -392,7 +392,7 @@ class StatsCollector(object):
 
         return results.split(' ')
 
-    def system_stats(self, nodes, pnames, frequency, verbosity=False):
+    def system_stats(self, nodes, pnames, frequency):
         shells = []
         for node in nodes:
             try:
@@ -426,7 +426,7 @@ class StatsCollector(object):
         self._task["systemstats"] = d["snapshots"]
         log.info("Finished system_stats")
 
-    def iostats(self, nodes, frequency, verbosity=False):
+    def iostats(self, nodes, frequency):
         shells = []
         for node in nodes:
             try:
@@ -459,9 +459,6 @@ class StatsCollector(object):
                                                  "idle": idle})
         log.info("Finished capturing io stats")
 
-    def couchdb_stats(nodes):
-        pass
-
     def capture_mb_snapshot(self, node):
         """Capture membase stats snapshot manually"""
         log.info("Capturing memcache stats snapshot for {0}".format(node.ip))
@@ -484,7 +481,7 @@ class StatsCollector(object):
         log.info("Memcache stats snapshot captured")
         return True
 
-    def membase_stats(self, nodes, bucket, frequency, verbose=False):
+    def membase_stats(self, nodes, frequency):
         mcs = []
         for node in nodes:
             try:
