@@ -70,9 +70,9 @@ class FailoverBaseTest(unittest.TestCase):
     def tearDown(self):
         self._cluster_helper.shutdown()
         log = logger.Logger.get_logger()
-
         if hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
-                    and TestInputSingleton.input.param("stop-on-failure", False):
+                    and 'stop-on-failure' in TestInputSingleton.input.test_params and \
+                    str(TestInputSingleton.input.test_params['stop-on-failure']).lower() == 'true':
                     #supported starting with python2.7
                     log.warn("CLEANUP WAS SKIPPED")
         else:
