@@ -1505,8 +1505,10 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
                   float(key_num) / (gen_end - gen_start)))
 
     def stop_after(secs):
+        log.info("Started stop after thread-{0}".format(cfg.get('prefix', '')))
         time.sleep(secs)
         ctl['run_ok'] = False
+        log.info("Finished stop after thread-{0}".format(cfg.get('prefix', '')))
 
     if cfg.get('time', 0) > 0:
         t = threading.Thread(target=stop_after, args=(cfg.get('time', 0),))
