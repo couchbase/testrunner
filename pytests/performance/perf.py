@@ -593,7 +593,6 @@ class PerfBase(unittest.TestCase):
 
     def spec(self, reference):
         self.spec_reference = self.param("spec", reference)
-        self.log.info("spec: " + reference)
 
     def mk_stats(self, verbosity):
         return StatsCollector(verbosity)
