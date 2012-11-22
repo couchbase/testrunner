@@ -119,7 +119,6 @@ class ViewGen(object):
         return {'all': {'views': {'docs': {'map': MAP_FUNCTION}}}}
 
     def generate_queries(self, limit, query_suffix, ddocs, bucket='default',
-                         use_all_docs=False, use_reduce=False, pseudo=False,
                          extend=False):
         """Generate string from permuted queries.
 
@@ -138,15 +137,6 @@ class ViewGen(object):
         if ddocs is None:
             queries_by_kind = \
                 [[b + '_all_docs?limit=' + str(limit) + '&startkey="{key}"']]
-            remaining = [1]
-            queries = self.compute_queries(queries_by_kind, remaining,
-                                           query_suffix)
-            return self.join_queries(queries)
-
-        # Pseudo all docs case
-        if pseudo:
-            queries_by_kind =\
-                [[b + '_design/all/_view/docs?limit=' + str(limit) + '&startkey="{key}"']]
             remaining = [1]
             queries = self.compute_queries(queries_by_kind, remaining,
                                            query_suffix)
@@ -190,17 +180,6 @@ class ViewGen(object):
                q['and2']]]
 
         remaining = [9, 6, 5]
-
-        if use_all_docs:
-            q['all_docs'] = b + '_all_docs?limit=' + str(limit) +\
-                            '&startkey="{key}"'
-            queries_by_kind = [[q['all_docs']]] + queries_by_kind
-            remaining = [5] + remaining
-
-        if use_reduce:
-            q['reduce'] = b + '_design/reduce/_view/reduce?limit=' + str(limit)
-            queries_by_kind = queries_by_kind + [[q['reduce']]]
-            remaining = remaining + [5]
 
         queries = self.compute_queries(queries_by_kind, remaining,
                                        query_suffix)
