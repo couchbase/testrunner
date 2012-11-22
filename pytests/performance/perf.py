@@ -3,6 +3,7 @@ import time
 import threading
 import os
 import subprocess
+import pprint
 
 from TestInput import TestInputSingleton
 from lib import logger
@@ -727,8 +728,8 @@ class PerfBase(unittest.TestCase):
 
         self.log.info("mcsoda - %s %s %s %s" %
                       (protocol, host_port, user, pswd))
-        self.log.info("mcsoda - cfg: " + str(cfg))
-        self.log.info("mcsoda - cur: " + str(cur))
+        self.log.info("mcsoda - cfg:\n" + pprint.pformat(cfg))
+        self.log.info("mcsoda - cur:\n" + pprint.pformat(cfg))
 
         cur, start_time, end_time = \
             self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
@@ -992,8 +993,8 @@ class PerfBase(unittest.TestCase):
 
         self.log.info("mcsoda - %s %s %s %s" %
                       (protocol, host_port, user, pswd))
-        self.log.info("mcsoda - cfg: " + str(cfg))
-        self.log.info("mcsoda - cur: " + str(self.cur))
+        self.log.info("mcsoda - cfg:\n" + pprint.pformat(cfg))
+        self.log.info("mcsoda - cur:\n" + pprint.pformat(cfg))
         self.log.info("mcsoda - backups: %s" % backups)
 
         # For query tests always use StoreCouchbase

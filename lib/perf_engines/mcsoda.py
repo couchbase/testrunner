@@ -1527,14 +1527,13 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
     t_end = time.time()
 
     # Final stats
-    log.info("")
     log.info(dict_to_s(cur))
     total_time = float(t_end - t_start)
     if cur.get('cur-queries', 0):
         total_cmds = cur.get('cur-queries', 0)
     else:
         total_cmds = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
-    log.info("    ops/sec: %s" % (total_cmds / total_time))
+    log.info("ops/sec: %s" % (total_cmds / total_time))
 
     threads = [t for t in threads if t.isAlive()]
     heartbeat = 0
@@ -1543,7 +1542,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
         heartbeat += 1
         if heartbeat >= 60:
             heartbeat = 0
-            log.info("    mcsoda is running with %s threads" % len(threads))
+            log.info("mcsoda is running with %s threads" % len(threads))
         threads = [t for t in threads if t.isAlive()]
 
     log.warn("Exiting because... there is nothing else to do")
