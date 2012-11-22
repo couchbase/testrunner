@@ -353,21 +353,21 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
     while ctl.get('run_ok', True):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
-        if cfg.get('max-ops', 0) > 0 and cfg.get('max-ops', 0) <= num_ops:
+        if cfg.get('max-ops', 0) and num_ops >= cfg.get('max-ops', 0):
+            log.warn("Exiting because of max ops")
             break
-        if cfg.get('exit-after-creates', 0) > 0 and \
-                cfg.get('max-creates', 0) > 0 and \
-                cfg.get('max-creates', 0) <= cur.get('cur-creates', 0):
+        if cfg.get('exit-after-creates', 0) and cfg.get('max-creates', 0) and \
+                cur.get('cur-creates', 0) >= cfg.get('max-creates', 0):
+            log.warn("Exiting because of max creates")
             break
-
-        if cfg.get('exit-after-gets', 0) and\
-           cfg.get('max-gets', 0) > 0 and\
-           cfg.get('max-gets', 0) <= cur.get('cur-gets', 0):
+        if cfg.get('exit-after-gets', 0) and cfg.get('max-gets', 0) and \
+                cur.get('cur-gets', 0) >= cfg.get('max-gets', 0):
+            log.warn("Exiting because of max gets")
             break
-
-        if ctl.get('shutdown_event') is not None:
-            if ctl['shutdown_event'].is_set():
-                break
+        if ctl.get('shutdown_event') is not None and \
+                ctl['shutdown_event'].is_set():
+            log.warn("Exiting because of shutdown event")
+            break
 
         heartbeat_duration = time.time() - heartbeat_last
         if heartbeat != 0 and heartbeat_duration > heartbeat:
@@ -1498,10 +1498,9 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
                   float(key_num) / (gen_end - gen_start)))
 
     def stop_after(secs):
-        log.info("Started stop after thread-{0}".format(cfg.get('prefix', '')))
         time.sleep(secs)
+        log.warn("Exiting because of stop_after time")
         ctl['run_ok'] = False
-        log.info("Finished stop after thread-{0}".format(cfg.get('prefix', '')))
 
     if cfg.get('time', 0) > 0:
         t = threading.Thread(target=stop_after, args=(cfg.get('time', 0),))
@@ -1522,6 +1521,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
                 threads[0].join(1)
                 threads = [t for t in threads if t.isAlive()]
     except KeyboardInterrupt:
+        log.warn("Exiting because of KeyboardInterrupt")
         ctl['run_ok'] = False
 
     t_end = time.time()
@@ -1546,6 +1546,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
             log.info("    mcsoda is running with %s threads" % len(threads))
         threads = [t for t in threads if t.isAlive()]
 
+    log.warn("Exiting because... there is nothing else to do")
     ctl['run_ok'] = False
     if ctl.get('shutdown_event') is not None:
         ctl['shutdown_event'].set()
