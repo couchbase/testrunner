@@ -8,6 +8,7 @@ import urllib2
 import uuid
 import sys
 from os.path import basename, splitext
+from pprint import pprint
 sys.path = ["lib", "pytests"] + sys.path
 
 if sys.hexversion < 0x02060000:
@@ -108,7 +109,7 @@ def append_test(tests, name):
 
 
 def locate_conf_file(filename):
-    print "filename:%s" % filename
+    print "filename: %s" % filename
     if filename:
         if os.path.exists(filename):
             return file(filename)
@@ -250,9 +251,8 @@ if __name__ == "__main__":
     # ensure command line params get higher priority
     test_params.update(TestInputSingleton.input.test_params)
     TestInputSingleton.input.test_params = test_params
-    print "[Global Test input params]"
-    print TestInputSingleton.input.test_params
-    print
+    print "Global Test input params:"
+    pprint(TestInputSingleton.input.test_params)
 
     xunit = XUnitTestResult()
 
@@ -296,14 +296,16 @@ if __name__ == "__main__":
             log_config_filename = os.path.join(logs_folder_abspath, dotnames[-1] + ".logging.conf")
         create_log_file(log_config_filename, log_name, options.loglevel)
         logging.config.fileConfig(log_config_filename)
-        print("  ./testrunner -i {0} {1} -t {2}".format(arg_i or "", arg_p or "", name))
+        print "\n./testrunner -i {0} {1} -t {2}\n"\
+              .format(arg_i or "", arg_p or "", name)
         name = name.split(",")[0]
 
         # Update the test params for each test
         TestInputSingleton.input.test_params = params
         TestInputSingleton.input.test_params.update(test_params)
         TestInputSingleton.input.test_params["case_number"] = case_number
-        print "[Test Input params] : %s" % TestInputSingleton.input.test_params
+        print "Test Input params:"
+        pprint(TestInputSingleton.input.test_params)
         suite = unittest.TestLoader().loadTestsFromName(name)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         time_taken = time.time() - start_time
