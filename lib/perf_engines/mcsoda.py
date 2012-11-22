@@ -19,7 +19,6 @@ sys.path.append('.')
 
 from lib import crc32
 from lib import mc_bin_client
-from lib.memcached.helper.data_helper import VBucketAwareMemcached
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.api.exception import QueryViewException, \
     ServerUnavailableException
@@ -1102,6 +1101,8 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         Username and password should be rest_username and rest_password, \
         generally they are different from ssh identities.
         """
+        from lib.memcached.helper.data_helper import VBucketAwareMemcached
+
         info = {"ip": host, "port": port,
                 'username': user or self.cfg.get("rest_username", "Administrator"),
                 'password': pswd or self.cfg.get("rest_password", "password")}
