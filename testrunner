@@ -118,8 +118,7 @@ def locate_conf_file(filename):
 
 
 def parse_conf_file(filename, tests, params):
-    """
-    Parse a configuration file.
+    """Parse a configuration file.
     Configuration files contain information and parameters about test execution.
     Should follow the following order:
 
@@ -226,10 +225,10 @@ def get_cbcollect_info(input, path):
             print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
 
 
-# This little code snippet is from
-# http://greenteapress.com/semaphores/threading_cleanup.py (2012-07-31)
-# It's now possible to interrupt the testrunner via ctrl-c at any time
 def watcher():
+    """This little code snippet is from
+    http://greenteapress.com/semaphores/threading_cleanup.py (2012-07-31)
+    It's now possible to interrupt the testrunner via ctrl-c at any time"""
     child = os.fork()
     if child == 0: return
     try:
@@ -246,8 +245,10 @@ if __name__ == "__main__":
     watcher()
 
     names, test_params, arg_i, arg_p, options = parse_args(sys.argv)
-    TestInputSingleton.input = TestInputParser.get_test_input(sys.argv) # get params from command line
-    test_params.update(TestInputSingleton.input.test_params) # ensure command line params get higher priority
+    # get params from command line
+    TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
+    # ensure command line params get higher priority
+    test_params.update(TestInputSingleton.input.test_params)
     TestInputSingleton.input.test_params = test_params
     print "[Global Test input params]"
     print TestInputSingleton.input.test_params
@@ -351,7 +352,7 @@ if __name__ == "__main__":
             break
 
     if "makefile" in TestInputSingleton.input.test_params:
-        #print out fail for those tests which failed and do sys.exit() error code
+        # print out fail for those tests which failed and do sys.exit() error code
         fail_count = 0
         for result in results:
             if result["result"] == "fail":
