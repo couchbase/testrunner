@@ -11,8 +11,9 @@ from lib.membase.api import httplib2
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.helper.rebalance_helper import RebalanceHelper
 
-from pytests.performance.eperf import EPerfClient, EVPerfClient, ViewGen
+from pytests.performance.eperf import EPerfClient, EVPerfClient
 from pytests.performance.perf_defaults import PerfDefaults
+from pytests.performance.viewgen import ViewGen
 
 
 class PerfWrapper(object):
