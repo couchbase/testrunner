@@ -88,9 +88,9 @@ class NodeInitializeTask(Task):
         username = self.server.rest_username
         password = self.server.rest_password
 
-        if self.disable_consistent_view is None:
+        if self.disable_consistent_view is not None:
             rest.set_reb_cons_view(self.disable_consistent_view)
-        if self.disable_consistent_view is None:
+        if self.disable_consistent_view is not None:
             rest.set_reb_index_waiting(self.rebalanceIndexWaitingDisabled)
         if self.rebalanceIndexPausingDisabled is not None:
             rest.set_rebalance_index_pausing(self.rebalanceIndexPausingDisabled)
