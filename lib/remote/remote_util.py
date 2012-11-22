@@ -114,29 +114,32 @@ class RemoteMachineShellConnection:
         #That's a paramiko bug
         max_attempts_connect = 2
         attempt = 0
-        while (True):
+        while True:
             try:
                 if serverInfo.ssh_key == '':
-                    self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
+                    self._ssh_client.connect(hostname=serverInfo.ip,
+                                             username=serverInfo.ssh_username,
                                              password=serverInfo.ssh_password)
                 else:
-                    self._ssh_client.connect(hostname=serverInfo.ip, username=serverInfo.ssh_username,
+                    self._ssh_client.connect(hostname=serverInfo.ip,
+                                             username=serverInfo.ssh_username,
                                              key_filename=serverInfo.ssh_key)
                 break
             except paramiko.AuthenticationException:
-                log.info("Authentication failed")
+                log.error("Authentication failed")
                 exit(1)
             except paramiko.BadHostKeyException:
-                log.info("Invalid Host key")
+                log.error("Invalid Host key")
                 exit(1)
             except Exception as e:
-                if (str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
-                    attempt != max_attempts_connect):
-                    log.error("Can't establish SSH session: {0}. Will try again in 1 sec".format(e.message))
+                if str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
+                        attempt != max_attempts_connect:
+                    log.error("Can't establish SSH session: {0}. Will try again in 1 sec"
+                              .format(e))
                     attempt += 1
                     time.sleep(1)
                 else:
-                    log.info("Can't establish SSH session: {0}".format(e.message))
+                    log.error("Can't establish SSH session: {0}".format(e))
                     exit(1)
         log.info("Connected")
 
