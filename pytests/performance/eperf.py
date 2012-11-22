@@ -1143,7 +1143,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.DDOC_NAMES[0])
+                          ddoc=view_gen.ddoc_names.next())
 
     def test_evperf_workload3(self):
         """Like workload 2 but has queries on view with reduce step"""
@@ -1189,7 +1189,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix='couchbase',
                           host=host,
-                          ddoc=view_gen.DDOC_NAMES[0])
+                          ddoc=view_gen.ddoc_names.next())
 
     def test_vperf1(self):
         """1 design document, 1 view"""
@@ -1243,7 +1243,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.DDOC_NAMES[0])
+                          ddoc=view_gen.ddoc_names.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1296,7 +1296,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.DDOC_NAMES[0])
+                          ddoc=view_gen.ddoc_names.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1345,7 +1345,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.DDOC_NAMES[0])
+                          ddoc=view_gen.ddoc_names.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1395,7 +1395,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.DDOC_NAMES[0])
+                          ddoc=view_gen.ddoc_names.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1442,7 +1442,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.DDOC_NAMES[0])
+                          ddoc=view_gen.ddoc_names.next())
 
     def test_vperf6(self):
         """Only queries on pseudo primary index"""
@@ -1489,7 +1489,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.DDOC_NAMES[0])
+                          ddoc=view_gen.ddoc_names.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1545,7 +1545,7 @@ class EPerfMaster(perf.PerfBase):
                               queries=queries,
                               proto_prefix="couchbase",
                               host=host,
-                              ddoc=view_gen.DDOC_NAMES[0])
+                              ddoc=view_gen.ddoc_names.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)

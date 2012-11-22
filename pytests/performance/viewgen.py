@@ -1,11 +1,31 @@
-class ViewGen:
+import string
 
-    DDOC_NAMES = ["A", "B", "C", "D", "E", "F", "G", "H"]
 
-    VIEW_NAMES = ['city1', 'city2', 'realm1', 'experts1', 'experts2', 'realm2',
-                  'realm3', 'category']
+class RepeatableGenerator(object):
 
-    MAP_FUNCTIONS = [
+    def __init__(self, iterable):
+        self.reset()
+        self.iterable = iterable
+
+    def next(self):
+        self.counter += 1
+        if self.counter == len(self.iterable):
+            self.counter = 0
+        return self.iterable[self.counter]
+
+    def reset(self):
+        self.counter = -1
+
+
+class ViewGen(object):
+
+    ddoc_names = RepeatableGenerator(tuple(string.ascii_uppercase))
+
+    view_names = RepeatableGenerator(('city1', 'city2', 'realm1', 'experts1',
+                                      'experts2', 'realm2', 'realm3',
+                                      'category'))
+
+    map_functions = RepeatableGenerator((
         """
         function(doc, meta) {
             if (doc.city != null) {
@@ -60,51 +80,31 @@ class ViewGen:
                 emit(doc.category, doc.coins);
             }
         }
-        """]
+        """
+    ))
 
-    REDUCE_FUNCTIONS = ["_count", "_sum", "_stats"]
+    reduce_functions = RepeatableGenerator(('_count', '_sum', '_stats'))
 
-    def generate_ddocs(self, pattern=None, add_reduce=False):
+    def generate_ddocs(self, pattern=None):
         """Generate dictionary with design documents and views.
         Pattern looks like:
             [8, 8, 8] -- 8 ddocs (8 views, 8 views, 8 views)
             [2, 2, 4] -- 3 ddocs (2 views, 2 views, 4 views)
             [8] -- 1 ddoc (8 views)
             [1, 1, 1, 1, 1, 1, 1, 1] -- 8 ddocs (1 view)
-        If `add_reduce` argument is True, additional ddoc with single
+        TODO: If `add_reduce` argument is True, additional ddoc with single
         map-reduce view is added
         """
-
         ddocs = dict()
-
-        index_of_map = 0
-        index_of_ddoc = 0
-
         for number_of_views in pattern:
-            ddoc_name = self.DDOC_NAMES[index_of_ddoc]
+            ddoc_name = self.ddoc_names.next()
             ddocs[ddoc_name] = {'views': {}}
-            for index_of_view in range(number_of_views):
-                try:
-                    view_name = self.VIEW_NAMES[index_of_map]
-                except IndexError:
-                    index_of_map = 0
-                    view_name = self.VIEW_NAMES[index_of_map]
-                ddocs[ddoc_name]['views'][view_name] = {}
-                ddocs[ddoc_name]['views'][view_name]['map'] = \
-                    self.MAP_FUNCTIONS[index_of_map]
-                index_of_map += 1
-            index_of_ddoc += 1
-
-        if add_reduce:
-            ddocs['reduce'] = {
-                'views': {
-                    'reduce': {
-                        'map': self.MAP_FUNCTIONS[-1],
-                        'reduce': self.REDUCE_FUNCTIONS[-1]
-                    }
-                }
-            }
-
+            for index_of_view in xrange(number_of_views):
+                view_name = self.view_names.next()
+                map = self.map_functions.next()
+                ddocs[ddoc_name]['views'][view_name] = {'map': map}
+        self.ddoc_names.reset()
+        self.map_functions.reset()
         return ddocs
 
     def generate_all_docs_view(self):
