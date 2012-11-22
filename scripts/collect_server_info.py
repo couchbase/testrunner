@@ -1,15 +1,14 @@
+#!/usr/bin/env python
 import getopt
 import sys
 import time
 from threading import Thread
 from datetime import datetime
 
-sys.path.append(".")
-sys.path.append("lib")
-from remote.remote_util import RemoteMachineShellConnection
-import testconstants
+sys.path.extend(('.', 'lib'))
+from lib.remote.remote_util import RemoteMachineShellConnection
 import TestInput
-import logger
+
 
 def usage(error=None):
     print """\
@@ -27,6 +26,7 @@ Example:
 """
     sys.exit(error)
 
+
 class cbcollectRunner(object):
     def __init__(self, server, path):
         self.server = server
@@ -40,8 +40,9 @@ class cbcollectRunner(object):
         year = now.year
         hour = now.timetuple().tm_hour
         min = now.timetuple().tm_min
-        file_name = "%s-%s%s%s-%s%s-diag.zip" % (self.server.ip, month, day, year, hour, min)
-        print "Collecting logs from %s\n" % (self.server.ip)
+        file_name = "%s-%s%s%s-%s%s-diag.zip" % (self.server.ip,
+                                                 month, day, year, hour, min)
+        print "Collecting logs from %s\n" % self.server.ip
         output, error = remote_client.execute_cbcollect_info(file_name)
         print "\n".join(output)
         print "\n".join(error)
@@ -49,12 +50,17 @@ class cbcollectRunner(object):
         user_path = "/home/"
         if self.server.ssh_username == "root":
             user_path = "/"
-        if not remote_client.file_exists("%s%s" % (user_path, self.server.ssh_username), file_name):
-            raise Exception("%s doesn't exists on server" % (file_name))
-        if remote_client.get_file("%s%s" % (user_path, self.server.ssh_username), file_name, "%s/%s" % (self.path, file_name)):
-            print "Downloading zipped logs from %s" % (self.server.ip)
+        remote_path = "%s%s" % (user_path, self.server.ssh_username)
+        status = remote_client.file_exists(remote_path, file_name)
+        if not status:
+            raise Exception("%s doesn't exists on server" % file_name)
+        status = remote_client.get_file(remote_path, file_name,
+                                        "%s/%s" % (self.path, file_name))
+        if status:
+            print "Downloading zipped logs from %s" % self.server.ip
         else:
-            raise Exception("Fail to download zipped logs from %s" % (self.server.ip))
+            raise Exception("Fail to download zipped logs from %s"
+                            % self.server.ip)
         remote_client.disconnect()
 
 if __name__ == "__main__":
@@ -72,34 +78,23 @@ if __name__ == "__main__":
     except getopt.GetoptError, error:
         usage("ERROR: " + str(error))
 
-    file_path=input.param("path", ".")
-
-    remotes = []
-    for server in input.servers:
-        remotes.append(cbcollectRunner(server, file_path))
-
-    remote_threads = []
-    for remote in remotes:
-        remote_threads.append(Thread(target=remote.run))
+    file_path = input.param("path", ".")
+    remotes = (cbcollectRunner(server, file_path) for server in input.servers)
+    remote_threads = [Thread(target=remote.run) for remote in remotes]
 
     for remote_thread in remote_threads:
+        remote_thread.daemon = True
         remote_thread.start()
-        stop = False
-        start_time = 15
-        while not stop:
-            if remote_thread.isAlive():
-                print "collecting info.  Wait for 15 seconds"
-                time.sleep(15)
-                start_time += 15
-                if start_time >= 1200:
-                    print "cbcollect_info hang on this node.  Jump to next node"
-                    stop = True
-            else:
-                print "collect info done"
-                stop = True
+        run_time = 0
+        while remote_thread.isAlive() and run_time < 1200:
+            time.sleep(15)
+            run_time += 15
+            print "Waiting for another 15 seconds (time-out after 20 min)"
+        if run_time == 1200:
+            print "cbcollect_info hung on this node. Jumping to next node"
+        print "collect info done"
 
     for remote_thread in remote_threads:
-        remote_thread.join(1800)
+        remote_thread.join(120)
         if remote_thread.isAlive():
-            raise Exception("cbcollect_info hangs on remote node")
-
+            raise Exception("cbcollect_info hung on remote node")
