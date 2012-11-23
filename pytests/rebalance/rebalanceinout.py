@@ -157,7 +157,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             expected_progress = 20 * i
             reached = RestHelper(rest).rebalance_reached(expected_progress)
             self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
-            stopped = rest.stop_rebalance()
+            stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
             self.assertTrue(stopped, msg="unable to stop rebalance")
             rebalance.result()
             if RestHelper(rest).is_cluster_rebalanced():
