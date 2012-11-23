@@ -106,7 +106,7 @@ class FailoverTests(FailoverBaseTest):
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
 
-        RebalanceHelper.wait_for_replication(self._servers, self.cluster)
+        RebalanceHelper.wait_for_replication(self.servers, self.cluster)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=self.num_replicas)
         for node in chosen:
             #let's do op
@@ -123,7 +123,7 @@ class FailoverTests(FailoverBaseTest):
                     log.info("node {0}:{1} is 'unhealthy' as expected".format(node.ip, node.port))
                 else:
                     #verify iptables on the node if something wrong
-                    for server in self._servers:
+                    for server in self.servers:
                         if server.ip == node.ip:
                             shell = RemoteMachineShellConnection(server)
                             o, r = shell.execute_command("/sbin/iptables --list")
@@ -165,7 +165,7 @@ class FailoverTests(FailoverBaseTest):
                          self._cleanup_nodes.append(server)
 
         log.info("Begin VERIFICATION ...")
-        RebalanceHelper.wait_for_replication(self._servers, self.cluster)
+        RebalanceHelper.wait_for_replication(_servers_, self.cluster)
         self.verify_cluster_stats(_servers_, self.master)
 
 
