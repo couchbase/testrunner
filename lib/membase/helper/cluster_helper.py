@@ -477,26 +477,3 @@ class ClusterOperationHelper(object):
         command = "rpc:eval_everywhere(ns_config, set, [couchbase_num_vbuckets_default, {0}]).".format(vbuckets)
         status, content = rest.diag_eval(command)
         return status, content
-
-    @staticmethod
-    def wait_for_completion(rest, task_type='indexer'):
-        """Wait for ns_server task (defined by task_type argument) to finish.
-
-        Known tasks:
-        -- indexer
-        -- view_compaction
-        """
-        log = logger.Logger.get_logger()
-        t0 = time.time()
-        time.sleep(30)
-        while True:
-            tasks = rest.ns_server_tasks()
-            if tasks:
-                if filter(lambda t: t['type'] == task_type, tasks):
-                    log.info("{}: waiting for another 10 sec".format(task_type))
-                    time.sleep(10)
-                else:
-                    break
-        t1 = time.time()
-        log.info("Time taken to perform {0} task: {1} sec".format(task_type,
-                                                                  t1 - t0))

@@ -10,7 +10,6 @@ from multiprocessing import Process
 from functools import wraps
 
 from TestInput import TestInputSingleton
-from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.membase.performance.stats import CallbackStatsCollector
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -792,13 +791,11 @@ class EPerfMaster(perf.PerfBase):
 
             # Wait until there are no active indexing tasks
             if self.parami('wait_for_indexer', 1):
-                ClusterOperationHelper.wait_for_completion(self.rest,
-                                                           'indexer')
+                self.wait_for_task_completion('indexer')
 
             # Wait until there are no active view compaction tasks
             if self.parami('wait_for_compaction', 1):
-                ClusterOperationHelper.wait_for_completion(self.rest,
-                                                           'view_compaction')
+                self.wait_for_task_completion('view_compaction')
 
             # Stop stats collector
             if self.parami("collect_stats", 1):
