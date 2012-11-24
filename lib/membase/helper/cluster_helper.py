@@ -489,9 +489,14 @@ class ClusterOperationHelper(object):
         log = logger.Logger.get_logger()
         t0 = time.time()
         time.sleep(30)
-        while filter(lambda t: t['type'] == task_type, rest.ns_server_tasks()):
-            log.info("Waiting for {0} to finish".format(task_type))
-            time.sleep(10)
+        while True:
+            tasks = rest.ns_server_tasks()
+            if tasks:
+                if filter(lambda t: t['type'] == task_type, tasks):
+                    log.info("{}: waiting for another 10 sec".format(task_type))
+                    time.sleep(10)
+                else:
+                    break
         t1 = time.time()
         log.info("Time taken to perform {0} task: {1} sec".format(task_type,
                                                                   t1 - t0))
