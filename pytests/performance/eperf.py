@@ -105,7 +105,7 @@ def multi_buckets(test):
         if num_buckets <= 1:
             return test(self, *args, **kwargs)
 
-        print "\n[multi_buckets] started"
+        self.log.info("multi_buckets: started")
         buckets = self._get_bucket_names(num_buckets)
 
         num_clients = self.parami("num_clients", 1)
@@ -121,23 +121,24 @@ def multi_buckets(test):
             self.is_leader = new_prefix == 0
 
             if bucket_id == 0:
-                print "[multi_buckets] start test for %s" % buckets[bucket_id]
+                self.log.info("multi_buckets: start test for {0}"
+                              .format(buckets[bucket_id]))
                 test(self, *args, **kwargs)
             else:
-                print "[multi_buckets] start test in a new process for %s"\
-                      % buckets[bucket_id]
+                self.log.info("multi_buckets: start test in a new process for {0}"
+                              .format(buckets[bucket_id]))
                 proc = Process(target=test, args=(self, ))
                 proc.daemon = True
                 proc.start()
                 procs.append(proc)
 
-        print "[multi_buckets] %s finished, waiting for others"\
-              % buckets[bucket_id]
+        self.log.info("multi_buckets: {0} finished, waiting for others"
+                      .format(buckets[bucket_id]))
 
         for proc in procs:
             proc.join()
 
-        print "[multi_buckets] stopped"
+        self.log.info("multi_buckets: stopped")
 
     return wrapper
 
@@ -154,12 +155,12 @@ def measure_sched_delays(func):
 
         self.remove_sched_delay_logs()
         self.start_measure_sched_delay(file)
-        print "started measuring sched delays"
+        self.log.info("started measuring sched delays")
 
         ret = func(self, *args, **kwargs)
 
         self.stop_measure_sched_delay()
-        print "stopped measuring sched delays"
+        self.log.info("stopped measuring sched delays")
 
         return ret
 
@@ -210,11 +211,11 @@ class EPerfMaster(perf.PerfBase):
             shell = RemoteMachineShellConnection(client)
             filename = '{0}.json'.format(i)
             destination = "{0}/{1}".format(os.getcwd(), filename)
-            print "Getting client stats file {0} from {1}".format(filename,
-                                                                  client)
+            self.log.info("getting client stats file {0} from {1}"
+                          .format(filename, client))
             if not shell.get_file(remotepath, filename, destination):
-                print "Unable to fetch the json file {0} on Client {1} @ {2}"\
-                    .format(remotepath + '/' + filename, i, client.ip)
+                self.log.error("unable to fetch the json file {0} on Client {1} @ {2}"
+                               .format(remotepath + '/' + filename, i, client.ip))
                 exit(1)
             i += 1
 
@@ -306,8 +307,8 @@ class EPerfMaster(perf.PerfBase):
                 file = gzip.open("{0}.{1}.json.gz".format(i, type), 'rb')
                 break
             except IOError:
-                print "[stats aggregation error] cannot open file: " + \
-                      "{0}.{1}.json.gz".format(i, type)
+                self.log.warn("stats aggregation: cannot open file: " +
+                              "{0}.{1}.json.gz".format(i, type))
                 i += 1
 
         if file is None:
@@ -335,8 +336,8 @@ class EPerfMaster(perf.PerfBase):
             except IOError:
                 # cannot find stats produced by this client, check stats
                 # collection. the results might be incomplete.
-                print "[stats aggregation error] cannot open file: " +\
-                      "{0}.{1}.json.gz".format(i, type)
+                self.log.warn("stats aggregation: cannot open file: " +
+                              "{0}.{1}.json.gz".format(i, type))
                 continue
 
             dict = file.read()
@@ -387,14 +388,14 @@ class EPerfMaster(perf.PerfBase):
 
         # wait for access scanner
         nru_wait = self.parami("nru_wait", PerfDefaults.nru_wait)
-        print "[build_alog] waiting %s seconds for access scanner" % nru_wait
+        self.log.info("build_alog: waiting {0} seconds for access scanner"
+                      .format(nru_wait))
         time.sleep(nru_wait)
 
         # set back to default
         self.set_nru_freq(PerfDefaults.nru_freq)
 
-        print "[build_alog] finished at %s" % \
-              time.strftime(PerfDefaults.strftime)
+        self.log.info("build_alog: finished")
 
     def set_nru_task(self, tm_hour=0):
         """UTC/GMT time (hour) to schedule NRU access scanner"""
@@ -410,16 +411,16 @@ class EPerfMaster(perf.PerfBase):
                   "set flush_param alog_task_time {0}".format(tm_hour)
             self._exec_and_log(shell, cmd)
             shell.disconnect()
-            print "access scanner will be executed on %s in %d minutes, " \
-                  "at %d UTC, curr_time is %s" \
-                  % (server.ip, min_left, tm_hour, gmt_now)
+            self.log.info("access scanner will be executed on {0} "
+                          "in {1} minutes, at {2} UTC, curr_time is {3}"
+                          .format(server.ip, min_left, tm_hour, gmt_now))
 
     def set_ep_mem_wat(self, percent, high=True):
         """Set ep engine high/low water marks for all nodes"""
         n_bytes = self.parami("mem_quota", PerfDefaults.mem_quota) * \
             percent / 100 * 1024 * 1024
-        print "[set_ep_mem_wat] mem_%s_wat = %s percent, %s bytes"\
-            % ("high" if high else "low", percent, n_bytes)
+        self.log.info("set_ep_mem_wat: mem_{0}_wat = {1} percent, {2} bytes"
+                      .format("high" if high else "low", percent, n_bytes))
         self.set_ep_param("flush_param",
                           "mem_%s_wat" % ("high" if high else "low"),
                           n_bytes)
@@ -428,13 +429,15 @@ class EPerfMaster(perf.PerfBase):
         """Set up consistent view for rebalance task"""
         rest = RestConnection(node)
         rest.set_reb_cons_view(disable=disable)
-        print "[set_reb_cons_view] disable consistent view = %s" % disable
+        self.log.info("set_reb_cons_view: disable consistent view = {0}"
+                      .format(disable))
 
     def set_reb_index_waiting(self, node, disable=False):
         """Set up index waiting for rebalance task"""
         rest = RestConnection(node)
         rest.set_reb_index_waiting(disable=disable)
-        print "[set_reb_index_waiting] disable index waiting = %s" % disable
+        self.log.info("[set_reb_index_waiting] disable index waiting = {0}"
+                      .format(disable))
 
     def start_measure_sched_delay(self, file="sched-delay"):
         for server in self.input.servers:
@@ -545,7 +548,7 @@ class EPerfMaster(perf.PerfBase):
                 self.set_ep_mem_wat(mem_low_wat, high=False)
 
         if self.parami("load_phase", 1) > 0:
-            print "Loading"
+            self.log.info("Loading")
 
             nru_freq = self.parami('nru_freq', PerfDefaults.nru_freq)
             if nru_freq != PerfDefaults.nru_freq and self.is_leader:
@@ -626,7 +629,7 @@ class EPerfMaster(perf.PerfBase):
                      port=None,
                      ddoc=None):
         if self.parami("access_phase", 1) > 0:
-            print "Accessing"
+            self.log.info("Accessing")
             items = self.parami("items", PerfDefaults.items)
             num_clients, start_at = self.access_phase_clients_start_at()
             start_delay = self.parami("start_delay", PerfDefaults.start_delay)
@@ -698,7 +701,7 @@ class EPerfMaster(perf.PerfBase):
         """
         stack = self.cur.get('hot-stack', None)
         if not stack:
-            print "unable to clear hot stack : stack does not exist"
+            self.log.warn("unable to clear hot stack : stack does not exist")
             return False
 
         stack.clear()
@@ -964,11 +967,11 @@ class EPerfMaster(perf.PerfBase):
         if self.load_snapshots(file_base, bucket) \
                 and self.parami("warmup", PerfDefaults.warmup):
             self.gated_start(self.input.clients)
-            print "[test_eperf_warmup] loaded snapshot, start warmup phase"
+            self.log.info("test_eperf_warmup: loaded snapshot, start warmup phase")
             self.warmup_phase()
             return
 
-        print "[test_eperf_warmup] unable to find snapshot file, rerun the test"
+        self.log.warn("test_eperf_warmup: unable to find snapshot file, rerun the test")
         self.test_eperf_mixed(save_snapshot=True)
 
     @multi_buckets
@@ -1267,7 +1270,7 @@ class EPerfMaster(perf.PerfBase):
         try:
             time.sleep(self.parami('sleep_time', 3600))
         except KeyboardInterrupt:
-            print "Stats collection was interrupted"
+            self.log.warn("ctats collection was interrupted")
 
         end_time = time.time()
 
@@ -1352,7 +1355,7 @@ class EPerfClient(EPerfMaster):
 
     def init_seriesly(self, host, db):
         if not Seriesly:
-            print "unable to initialize seriesly: library not installed"
+            self.log.warn("unable to initialize seriesly: library not installed")
             return False
 
         if self.seriesly:
@@ -1363,7 +1366,8 @@ class EPerfClient(EPerfMaster):
         try:
             dbs = self.seriesly.list_dbs()
         except seriesly.exceptions.ConnectionError, e:
-            print "unable to connect to seriesly server %s: %s" % (host, e)
+            self.log.error("unable to connect to seriesly server {0}: {1}"
+                           .format(host, e))
             return False
 
         if db and db not in dbs:
