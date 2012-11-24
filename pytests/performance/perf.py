@@ -1155,18 +1155,21 @@ class PerfBase(unittest.TestCase):
     def wait_for_task_completion(self, task='indexer'):
         """Wait for ns_server task to finish"""
         t0 = time.time()
-        time.sleep(30)
+        self.log.info("Waiting 30 seconds before {0} monitoring".format(task))
+        time.sleep(5)
+
         while True:
             tasks = self.rest.ns_server_tasks()
             if tasks:
-                if filter(lambda t: t['type'] == task, tasks):
-                    self.log.info("{}: waiting for another 10 sec".format(task))
+                progress = [t['progress'] for t in tasks if t['type'] == task]
+                if progress:
+                    self.log.info("{0} progress: {1}".format(task, progress))
                     time.sleep(10)
                 else:
                     break
+
         t1 = time.time()
-        self.log.info("Time taken to perform {0} task: {1} sec"
-                      .format(task, t1 - t0))
+        self.log.info("Time taken to perform task: {1} sec".format(t1 - t0))
 
     def param(self, name, default_value):
         input = getattr(self, "input", TestInputSingleton.input)
