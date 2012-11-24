@@ -69,18 +69,23 @@ class StatsCollector(object):
         if collect_server_stats:
             mbstats_thread = Thread(target=self.membase_stats,
                                     args=(nodes, 60))
+            mbstats_thread.daemon = True
             mbstats_thread.start()
             sysstats_thread = Thread(target=self.system_stats,
                                      args=(nodes, pnames, frequency))
+            sysstats_thread.daemon = True
             sysstats_thread.start()
             iostats_thread = Thread(target=self.iostats,
                                     args=(nodes, 10))
+            iostats_thread.daemon = True
             iostats_thread.start()
             ns_server_stats_thread = Thread(target=self.ns_server_stats,
                                             args=(nodes, bucket, 60))
+            ns_server_stats_thread.daemon = True
             ns_server_stats_thread.start()
             bucket_size_thead = Thread(target=self.get_bucket_size,
                                        args=(bucket, nodes, frequency))
+            bucket_size_thead.daemon = True
             bucket_size_thead.start()
 
             self._task["threads"] = [sysstats_thread, ns_server_stats_thread,
@@ -88,8 +93,10 @@ class StatsCollector(object):
             if ddoc is not None:
                 view_stats_thread = Thread(target=self.collect_indexing_stats,
                                            args=(nodes, bucket, ddoc, frequency))
+                view_stats_thread.daemon = True
                 indexing_stats_thread = Thread(target=self.measure_indexing_throughput,
                                                args=(nodes, ))
+                indexing_stats_thread.daemon = True
                 view_stats_thread.start()
                 indexing_stats_thread.start()
                 self._task["threads"].append(view_stats_thread)
