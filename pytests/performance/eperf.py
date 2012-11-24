@@ -789,13 +789,9 @@ class EPerfMaster(perf.PerfBase):
                     else:
                         raise e
 
-            # Wait until there are no active indexing tasks
-            if self.parami('wait_for_indexer', 1):
-                self.wait_for_task_completion('indexer')
-
-            # Wait until there are no active view compaction tasks
-            if self.parami('wait_for_compaction', 1):
-                self.wait_for_task_completion('view_compaction')
+            # Wait until there are no active indexer and view compaction tasks
+            self.wait_for_task_completion('indexer')
+            self.wait_for_task_completion('view_compaction')
 
             # Stop stats collector
             if self.parami("collect_stats", 1):
