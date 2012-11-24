@@ -4,7 +4,6 @@ import os
 import gzip
 import copy
 import threading
-import socket
 import signal
 from multiprocessing import Process
 from functools import wraps
@@ -14,7 +13,6 @@ from lib.membase.performance.stats import CallbackStatsCollector
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.perf_engines import mcsoda
-from lib.cbkarma.rest_client import CbKarmaClient
 from scripts.perf.rel_cri_stats import CBStatsCollector
 
 from pytests.performance import perf
@@ -470,61 +468,6 @@ class EPerfMaster(perf.PerfBase):
         if not self.is_master:
             self.setUpBase1()
 
-    def _dashboard(phase):
-        def _outer(function):
-            def _inner(self, *args, **kargs):
-                if self.input.dashboard:
-                    # Create new rest client if it doesn't exist
-                    if not hasattr(self, 'cbkarma_client'):
-                        hostname, port = self.input.dashboard[0].split(':')
-                        self.cbkarma_client = CbKarmaClient(hostname, port)
-
-                    # Define new test id if it doesn't exist
-                    if not hasattr(self, 'test_id'):
-                        self.test_id = self.param("test_id",
-                                                  self.cbkarma_client.init()[-1])
-
-                    # Metadata
-                    build = self.rest.get_pools_info()['implementationVersion']
-                    build = build.replace('-enterprise', '')
-                    build = build.replace('-community', '')
-                    spec = self.param('spec', 'unknown')
-                    ini_filename = self.param('ini', 'unknown')
-                    ini = os.path.basename(ini_filename).split('.')[0]
-                    if self.parami('hot_load_phase', 0):
-                        prefix = 'hot_'
-                    else:
-                        prefix = ''
-                    client_phase = prefix + phase + '-' + \
-                        str(self.parami("prefix", 0))
-
-                    # Change status to 'started'
-                    if self.parami(phase + "_phase", 0):
-                        self.cbkarma_client.update(self.test_id, build=build,
-                                                   spec=spec, ini=ini,
-                                                   phase=client_phase,
-                                                   status='started')
-
-                    # Execute current phase
-                    result = function(self, *args, **kargs)
-
-                    # Change status to 'done'
-                    if self.parami(phase + "_phase", 0):
-                        self.cbkarma_client.update(self.test_id, build=build,
-                                                   spec=spec, ini=ini,
-                                                   phase=client_phase,
-                                                   status='done')
-
-                    # Sleep a second in order to avoid timestamp conflict
-                    time.sleep(1)
-                else:
-                    result = function(self, *args, **kargs)
-
-                return result
-            return _inner
-        return _outer
-
-    @_dashboard(phase='load')
     @cbtop
     def load_phase(self, num_nodes):
 
@@ -608,7 +551,6 @@ class EPerfMaster(perf.PerfBase):
                        num_clients)
         return num_clients, start_at
 
-    @_dashboard(phase='access')
     @measure_sched_delays
     @cbtop
     def access_phase(self,
@@ -708,7 +650,6 @@ class EPerfMaster(perf.PerfBase):
         return True
 
     # restart the cluster and wait for it to warm up
-    @_dashboard(phase='warmup')
     @cbtop
     def warmup_phase(self):
         if not self.is_leader:
@@ -744,7 +685,6 @@ class EPerfMaster(perf.PerfBase):
 
         self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
-    @_dashboard(phase='index')
     @cbtop
     def index_phase(self, ddocs):
         """Create design documents and views"""
@@ -805,7 +745,6 @@ class EPerfMaster(perf.PerfBase):
 
                 self.end_stats(sc, ops, self.spec_reference + ".index")
 
-    @_dashboard(phase='debug')
     def debug_phase(self, ddocs=None):
         """Run post-access phase debugging tasks"""
 
@@ -1468,14 +1407,6 @@ class EVPerfClient(EPerfClient):
                 self.log.warn('Waiting for background thread {0}.'
                               .format(self.parami("prefix", 0)))
                 time.sleep(5)
-
-        # Send histograms to dashboard
-        if self.input.dashboard and why == "loop":
-            description = socket.gethostname() + '-fg'
-            self.cbkarma_client.histo(self.test_id, description, rv_cur)
-            description = socket.gethostname() + '-bg'
-            self.cbkarma_client.histo(self.test_id, description,
-                                      self.bg_thread_cur)
 
         return rv_cur, start_time, end_time
 

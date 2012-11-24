@@ -1,8 +1,8 @@
 import json
 import urllib
 
-from membase.api.rest_client import RestConnection
-from membase.api.exception import ServerUnavailableException
+from lib.membase.api.rest_client import RestConnection
+from lib.membase.api.exception import ServerUnavailableException
 
 
 class CbKarmaClient(RestConnection):
