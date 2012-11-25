@@ -1161,12 +1161,16 @@ class PerfBase(unittest.TestCase):
         while True:
             tasks = self.rest.ns_server_tasks()
             if tasks:
-                progress = [t['progress'] for t in tasks if t['type'] == task]
-                if progress:
-                    self.log.info("{0} progress: {1}".format(task, progress))
-                    time.sleep(10)
+                try:
+                    progress = [t['progress'] for t in tasks if t['type'] == task]
+                except TypeError:
+                    self.log.error(tasks)
                 else:
-                    break
+                    if progress:
+                        self.log.info("{0} progress: {1}".format(task, progress))
+                        time.sleep(10)
+                    else:
+                        break
 
         t1 = time.time()
         self.log.info("Time taken to perform task: {1} sec".format(t1 - t0))
