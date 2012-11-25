@@ -1171,7 +1171,7 @@ class PerfBase(unittest.TestCase):
                         break
 
         t1 = time.time()
-        self.log.info("Time taken to perform task: {1} sec".format(t1 - t0))
+        self.log.info("Time taken to perform task: {0} sec".format(t1 - t0))
 
     def param(self, name, default_value):
         input = getattr(self, "input", TestInputSingleton.input)
