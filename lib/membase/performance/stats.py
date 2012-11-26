@@ -11,7 +11,6 @@ from lib.membase.api.exception import SetViewInfoNotFound
 from lib.membase.api.rest_client import RestConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
-from lib.mc_bin_client import MemcachedError
 
 
 RETRIES = 10
@@ -484,93 +483,80 @@ class StatsCollector(object):
         log.info("Memcache stats snapshot captured")
         return True
 
-    def membase_stats(self, nodes, frequency):
+    def membase_stats(self, nodes, frequency=60):
         mcs = []
         for node in nodes:
             try:
                 bucket = RestConnection(node).get_buckets()[0].name
-                mcs.append(MemcachedClientHelper.direct_client(node, bucket))
+                mc = MemcachedClientHelper.direct_client(node, bucket)
+                mcs.append(mc)
             except Exception as error:
                 log.error(error)
         self._task["membasestats"] = []
         self._task["timings"] = []
         self._task["dispatcher"] = []
-        d = {}
-        # "pname": "x", "pid": "y","snapshots": [{"time": time,"value": value}]
+        data = dict()
         for mc in mcs:
-            d[mc.host] = {"snapshots": [], "timings": [], "dispatcher": []}
+            data[mc.host] = {"snapshots": [], "timings": [], "dispatcher": []}
 
         while not self._aborted():
-            time_left = frequency
-            log.info("Collecting membase stats")
-            timings = None
-            # at minimum we want to check for aborted every minute
-            while not self._aborted() and time_left > 0:
-                time.sleep(min(time_left, 60))
-                time_left -= 60
+            time.sleep(frequency)
+            log.info("collecting membase stats")
             for mc in mcs:
-                retries = 0
-                stats = {}
-                while not stats and retries < RETRIES:
+                for rerty in xrange(RETRIES):
                     try:
                         stats = mc.stats()
-                        try:
-                            mem_stats = mc.stats('raw memory')
-                        except MemcachedError:
-                            mem_stats = mc.stats('memory')
-                        stats.update(mem_stats)
                     except Exception as e:
-                        log.error("{0}, retries = {1}".format(str(e), retries))
+                        log.warn("{0}, retries = {1}".format(str(e), rerty))
                         time.sleep(2)
                         mc.reconnect()
-                        retries += 1
-                        continue
-                stats["time"] = time.time()
-                stats["ip"] = mc.host
-                d[mc.host]["snapshots"].append(stats)
-                try:
-                    timings = mc.stats('timings')
-                    d[mc.host]["timings"].append(timings)
-                    dispatcher = mc.stats('dispatcher')
-                    d[mc.host]["dispatcher"].append(dispatcher)
-                except EOFError, e:
-                    log.error("Unable to get timings/dispatcher stats {0}: {1}"\
-                              .format(mc.host, e))
+                    else:
+                        break
+                else:
+                    stats = {}
+                data[mc.host]["snapshots"].append(stats)
 
-        start_time = str(self._task["time"])
-        for mc in mcs:
-            ip = mc.host
-            unique_id = ip + '-' + start_time
+                for arg in ("timings", "dispatcher"):
+                    try:
+                        stats = mc.stats(arg)
+                        data[mc.host][arg].append(stats)
+                    except EOFError, e:
+                        log.error("Unable to get {0} stats {1}: {2}"
+                                  .format(arg, mc.host, e))
+
+        for host in (mc.host for mc in mcs):
+            unique_id = host + '-' + str(self._task["time"])
             current_time = time.time()
-            if self._mb_stats["snapshots"]:
-                # use manually captured stats
+
+            if self._mb_stats["snapshots"]:  # use manually captured stats
                 self._task["membasestats"] = self._mb_stats["snapshots"]
-            else:
-                # use periodically captured stats
-                for snapshot in d[mc.host]["snapshots"]:
-                    snapshot['unique_id'] = unique_id
-                    snapshot['time'] = current_time
-                    snapshot['ip'] = ip
+            else:  # use periodically captured stats
+                for snapshot in data[host]["snapshots"]:
+                    snapshot["unique_id"] = unique_id
+                    snapshot["time"] = current_time
+                    snapshot["ip"] = host
                     self._task["membasestats"].append(snapshot)
-            for timing in d[mc.host]["timings"]:
-                timing['unique_id'] = unique_id
-                timing['time'] = current_time
-                timing['ip'] = ip
+
+            for timing in data[host]["timings"]:
+                timing["unique_id"] = unique_id
+                timing["time"] = current_time
+                timing["ip"] = host
                 self._task["timings"].append(timing)
-            for dispatcher in d[mc.host]["dispatcher"]:
-                dispatcher['unique_id'] = unique_id
-                dispatcher['time'] = current_time
-                dispatcher['ip'] = ip
+
+            for dispatcher in data[host]["dispatcher"]:
+                dispatcher["unique_id"] = unique_id
+                dispatcher["time"] = current_time
+                dispatcher["ip"] = host
                 self._task["dispatcher"].append(dispatcher)
 
-        if timings:  # TODO: dump timings for all servers
-            timestamp = time.strftime('%X %x %Z')
-            log.info("Dumping disk timing stats: {0}".format(timestamp))
-            for key, value in sorted(timings.iteritems()):
-                if key.startswith("disk"):
-                    print "{0:50s}:     {1}".format(key, value)
+            if data[host]["timings"]:
+                log.info("dumping disk timing stats: {0}".format(host))
+                latests_timings = data[host]["timings"][-1]
+                for key, value in sorted(latests_timings.iteritems()):
+                    if key.startswith("disk"):
+                        print "{0:50s}: {1}".format(key, value)
 
-        log.info("Finished membase_stats")
+        log.info("finished membase_stats")
 
     def ns_server_stats(self, nodes, bucket, frequency):
         self._task["ns_server_stats"] = []
