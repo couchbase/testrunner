@@ -78,7 +78,8 @@ class StatsCollector(object):
                                        args=(bucket, nodes, frequency))
 
             self._task["threads"] = [sysstats_thread, ns_server_stats_thread,
-                                     bucket_size_thead, mbstats_thread]
+                                     bucket_size_thead, mbstats_thread,
+                                     iostats_thread]
             if ddoc is not None:
                 view_stats_thread = Thread(target=self.collect_indexing_stats,
                                            args=(nodes, bucket, ddoc, frequency))
