@@ -111,7 +111,7 @@ class ViewQueryTests(unittest.TestCase):
         #delete docs
         doc_names = ViewBaseTests._delete_docs(self, self.num_docs, self.num_docs / 2,
                                                data_set.views[0].prefix)
-
+        RebalanceHelper.wait_for_persistence(self.servers[0], data_set.bucket)
         for view in data_set.views:
             for q in view.queries:
                 q.expected_num_docs = self.num_docs / 2
@@ -2825,7 +2825,7 @@ class EmployeeDataSet:
 
 
 class SimpleDataSet:
-    def __init__(self, rest, num_docs, limit = None, reduce_fn=None):
+    def __init__(self, rest, num_docs, limit = None, reduce_fn=None, bucket='default'):
         self.num_docs = num_docs
         self.views = self.create_views(rest,reduce = reduce_fn)
         self.name = "simple_dataset"
@@ -2833,6 +2833,7 @@ class SimpleDataSet:
         self.kv_template = {"name": "doc-${prefix}-${seed}-", "age": "${prefix}"}
         self.limit = limit
         self.reduce_fn = reduce_fn
+        self.bucket = bucket
 
     def create_views(self, rest, reduce=None):
         view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
