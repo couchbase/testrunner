@@ -177,10 +177,10 @@ def obs_cb(store):
     callback for observe thread.
     """
     if not store:
-        log.error("[mcsoda] obs_cb is broken")
+        log.error("obs_cb is broken")
         return
 
-    log.info("[mcsoda] obs_cb: clear obs_key_cas %s" % store.obs_key_cas)
+    log.info("obs_cb: clear obs_key_cas %s" % store.obs_key_cas)
     store.obs_key_cas.clear()
 
 
@@ -194,7 +194,7 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
     query_params = {"limit": 10,
                     "stale": "false"}
 
-    log.info("[mcsoda] woq_worker started")
+    log.info("woq_worker started")
     woq_observer = McsodaObserver(ctl, cfg, store, None)
 
     while True:
@@ -211,7 +211,7 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
 
         obs_latency = time.time() - start_time
         if cfg.get("woq-verbose", 0):
-            log.info("[mcsoda] woq_worker obs latency: %s, key = %s, cas = %s "
+            log.info("woq_worker obs latency: %s, key = %s, cas = %s "
                      % (obs_latency, key, cas))
 
         query_start = time.time()
@@ -219,22 +219,22 @@ def woq_worker(req_queue, stats_queue, ctl, cfg, store):
         try:
             result = store.rest.query_view(ddoc, view, bucket, query_params)
         except QueryViewException as e:
-            log.error("[mcsoda] woq_worker QueryViewException: %s" % e)
+            log.error("woq_worker QueryViewException: %s" % e)
             stats_queue.put([key, cas, 0, 0, 0, 0], block=True)
             req_queue.task_done()
             continue
 
         query_latency = time.time() - query_start
         if cfg.get("woq-verbose", 0):
-            log.info("[mcsoda] woq_worker query latency: %s, key = %s, cas = %s "
+            log.info("woq_worker query latency: %s, key = %s, cas = %s "
                      % (query_latency, key, cas))
-            log.info("[mcsoda] woq_worker query result: %s" % result)
+            log.info("woq_worker query result: %s" % result)
 
         latency = time.time() - start_time
         stats_queue.put([key, cas, start_time, obs_latency, query_latency, latency],
                         block=True)
         req_queue.task_done()
-    log.info("[mcsoda] woq_worker stopped working")
+    log.info("woq_worker stopped working")
 
 
 def cor_worker(stats_queue, ctl, cfg, cur, store):
@@ -253,17 +253,17 @@ def cor_worker(stats_queue, ctl, cfg, cur, store):
     if isinstance(store, StoreMembaseBinary):
         store.awareness.reset()
     else:
-        log.error("[mcsoda] cannot start cor_worker: invalid store %s" % store)
+        log.error("cannot start cor_worker: invalid store %s" % store)
         return
 
-    log.info("[mcsoda] cor_worker started")
+    log.info("cor_worker started")
 
     observer = McsodaObserver(ctl, cfg, store, None)
 
     while True:
 
         if backoff:
-            log.info("[mcsoda] cor_worker sleep for %s seconds" % backoff)
+            log.info("cor_worker sleep for %s seconds" % backoff)
             time.sleep(backoff)
             backoff = 0
 
@@ -300,7 +300,7 @@ def cor_worker(stats_queue, ctl, cfg, cur, store):
         if latency < OP_WIN:
             backoff = OP_WIN - latency
 
-    log.info("[mcsoda] cor_worker stopped")
+    log.info("cor_worker stopped")
 
 
 def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
@@ -322,11 +322,11 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
     if cfg.get('max-ops-per-sec', 0) > 0 and not 'batch' in cur:
         cur['batch'] = 10
 
-    log.debug("[mcsoda: %s] starts cfg: %s" % (why, cfg))
-    log.debug("[mcsoda: %s] starts cur: %s" % (why, cur))
-    log.debug("[mcsoda: %s] starts store: %s" % (why, store))
-    log.debug("[mcsoda: %s] starts prefix: %s" % (why, prefix))
-    log.debug("[mcsoda: %s] starts running." % why)
+    log.debug("%s starts cfg: %s" % (why, cfg))
+    log.debug("%s starts cur: %s" % (why, cur))
+    log.debug("%s starts store: %s" % (why, store))
+    log.debug("%s starts prefix: %s" % (why, prefix))
+    log.debug("%s starts running." % why)
 
     heartbeat_last = t_last
 
@@ -372,7 +372,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
         heartbeat_duration = time.time() - heartbeat_last
         if heartbeat != 0 and heartbeat_duration > heartbeat:
             heartbeat_last += heartbeat_duration
-            log.info("[mcsoda: %s] num_ops = %s. duration = %s" % (why, num_ops, heartbeat_duration))
+            log.info("%s num_ops = %s. duration = %s" % (why, num_ops, heartbeat_duration))
 
         command = next_cmd(cfg, cur, store)
         flushed = store.command(command)
@@ -392,7 +392,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
                         store.add_timing_sample("woq", latency)
                         store.save_stats(start_time)
                         store.woq_key_cas.clear()   # simply clear all, no key/cas sanity check
-                        log.info("[mcsoda] woq_stats: key: %s, cas: %s, "
+                        log.info("woq_stats: key: %s, cas: %s, "
                                  "obs_latency: %f, query_latency: %f, latency: %f"
                                  % (key, cas, obs_latency, query_latency, latency))
                 except Queue.Empty:
@@ -427,7 +427,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
                     if latency:
                         store.add_timing_sample("cor", latency)
                         store.save_stats(start_time)
-                        log.info("[mcsoda] cor_stats: key: %s, cas: %s, latency: %f"
+                        log.info("cor_stats: key: %s, cas: %s, latency: %f"
                                  % (key, cas, latency))
                 except Queue.Empty:
                     pass
@@ -630,7 +630,7 @@ def choose_key_num(num_items, ratio_hot, ratio_hot_choice,
     """
     num_creates = cur.get('cur-creates', 0)
     if num_items < 0 or ratio_hot < 0 or ratio_hot > 1:
-        log.error("[mcsoda choose_key_num error] num_items: {0}, num_creates:{1}, ratio_hot: {2}"
+        log.error("num_items: {0}, num_creates:{1}, ratio_hot: {2}"
                   .format(num_items, num_creates, ratio_hot))
         return 1
 
@@ -751,13 +751,13 @@ class Store(object):
             try:
                 data = skt.recv(max(nbytes - len(buf), 4096))
             except socket.timeout:
-                log.error("[mcsoda] EXCEPTION: Store.readbytes-socket.timeout / recv timed out")
+                log.error("EXCEPTION: Store.readbytes-socket.timeout / recv timed out")
                 self.cur["cur-ex-Store.readbytes-socket.timeout"] = self.cur.get("cur-ex-Store.readbytes-socket.timeout", 0) + 1
             except Exception as e:
-                log.error("[mcsoda] EXCEPTION: Store.readbytes: " + str(e))
+                log.error("EXCEPTION: Store.readbytes: " + str(e))
                 self.cur["cur-ex-Store.readbytes"] = self.cur.get("cur-ex-Store.readbytes", 0) + 1
             if not data:
-                log.error("[mcsoda] Store.readbytes-nodata / skt.read no data.")
+                log.error("Store.readbytes-nodata / skt.read no data.")
                 self.cur["cur-Store.readbytes-nodata"] = self.cur.get("cur-Store.readbytes-odata", 0) + 1
                 return None, ''
             buf += data
@@ -775,7 +775,7 @@ class Store(object):
                 bucket = round(self.histo_bucket(delta), 6)
                 histo[bucket] = histo.get(bucket, 0) + 1
             except TypeError as e:
-                log.error("[mcsoda TypeError] {0}, delta = {1}".format(str(e), delta))
+                log.error("{0}, delta = {1}".format(str(e), delta))
 
     def histo_bucket(self, samp):
         hp = self.cfg.get("histo-precision", 2)
@@ -1024,7 +1024,7 @@ class StoreMemcachedBinary(Store):
             if self.ops - self.previous_ops > self.stats_ops:
                 self.previous_ops = self.ops
                 self.save_stats()
-                log.debug("[mcsoda %s] save_stats : %s" % (self.why, latency_cmd))
+                log.debug("%s save_stats : %s" % (self.why, latency_cmd))
 
     def save_stats(self, cur_time=0):
         for key in self.cur:
@@ -1154,16 +1154,16 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                         conn.s.settimeout(timeout_sec)
                     sent = conn.s.send(buf)
                     if sent == 0:
-                        log.error("[mcsoda] StoreMembaseBinary.send-zero / skt.send returned 0.")
+                        log.error("StoreMembaseBinary.send-zero / skt.send returned 0.")
                         self.cur["cur-StoreMembaseBinary.send-zero"] = self.cur.get("cur-StoreMembaseBinary.send-zero", 0) + 1
                         break
                     sent_tuple += sent
                 except socket.timeout:
-                    log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.send-socket.timeout / inflight_send timed out")
+                    log.error("EXCEPTION: StoreMembaseBinary.send-socket.timeout / inflight_send timed out")
                     self.cur["cur-ex-StoreMembaseBinary.send-socket.timeout"] = self.cur.get("cur-ex-StoreMembaseBinary.send-socket.timeout", 0) + 1
                     break
                 except Exception as e:
-                    log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.send / inflight_send: " + str(e))
+                    log.error("EXCEPTION: StoreMembaseBinary.send / inflight_send: " + str(e))
                     self.cur["cur-ex-StoreMembaseBinary.send"] = self.cur.get("cur-ex-StoreMembaseBinary.send", 0) + 1
                     break
 
@@ -1198,15 +1198,15 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                                 errcode == ERR_EBUSY or \
                                 errcode == ERR_ETMPFAIL:
                             backoff = True
-                            log.error("[mcsoda] inflight recv errorcode = %s" % errcode)
+                            log.error("inflight recv errorcode = %s" % errcode)
                     except Exception as e:
-                        log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.recvMsgSockBuf / inflight_recv inner: " + str(e))
+                        log.error("EXCEPTION: StoreMembaseBinary.recvMsgSockBuf / inflight_recv inner: " + str(e))
                         self.cur["cur-ex-StoreMembaseBinary.recvMsgSockBuf"] = self.cur.get("cur-ex-StoreMembaseBinary.recvMsgSockBuf", 0) + 1
                         reset_my_awareness = True
                         backoff = True
                 conn.recvBuf = recvBuf
             except Exception as e:
-                log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.inflight_recv / outer: " + str(e))
+                log.error("EXCEPTION: StoreMembaseBinary.inflight_recv / outer: " + str(e))
                 self.cur["cur-ex-StoreMembaseBinary.inflight_recv"] = self.cur.get("cur-ex-StoreMembaseBinary.inflight_recv", 0) + 1
                 reset_my_awareness = True
                 backoff = True
@@ -1216,7 +1216,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                 self.cfg.get('backoff-factor', 2.0)
             if self.backoff > 0:
                 self.cur['cur-backoffs'] = self.cur.get('cur-backoffs', 0) + 1
-                log.info("[mcsoda] inflight recv backoff = %s" % self.backoff)
+                log.info("inflight recv backoff = %s" % self.backoff)
                 time.sleep(self.backoff)
         else:
             self.backoff = 0
@@ -1225,7 +1225,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
             try:
                 self.awareness.reset()
             except Exception as e:
-                log.error("[mcsoda] EXCEPTION: StoreMembaseBinary.awareness.reset: " + str(e))
+                log.error("EXCEPTION: StoreMembaseBinary.awareness.reset: " + str(e))
                 self.cur["cur-ex-StoreMembaseBinary.awareness.reset"] = self.cur.get("cur-ex-StoreMembaseBinary.awareness.reset", 0) + 1
                 log.error("EXCEPTION: self.awareness.reset()")
                 pass
@@ -1549,7 +1549,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
     ctl['run_ok'] = False
     if ctl.get('shutdown_event') is not None:
         ctl['shutdown_event'].set()
-    log.info("[mcsoda: %s] stopped running." % why)
+    log.info("%s stopped running." % why)
     return cur, t_start, t_end
 
 # --------------------------------------------------------
