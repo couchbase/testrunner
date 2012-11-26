@@ -64,22 +64,23 @@ class StatsCollector(object):
         self.data_path = info.storage[0].get_data_path()
         self.client_id = str(client_id)
         self.nodes = nodes
+        self.bucket = bucket
 
         if collect_server_stats:
-            mbstats_thread = Thread(target=self.membase_stats, args=(nodes, ))
-            sysstats_thread = Thread(target=self.system_stats, args=(nodes, pnames, ))
-            iostats_thread = Thread(target=self.iostats, args=(nodes, ))
-            ns_server_stats_thread = Thread(target=self.ns_server_stats, args=(nodes, bucket))
-            bucket_size_thead = Thread(target=self.get_bucket_size, args=(bucket, nodes))
+            mbstats_thread = Thread(target=self.membase_stats)
+            sysstats_thread = Thread(target=self.system_stats, args=(pnames, ))
+            iostats_thread = Thread(target=self.iostats)
+            ns_server_stats_thread = Thread(target=self.ns_server_stats)
+            bucket_size_thead = Thread(target=self.get_bucket_size)
 
             self._task["threads"] = [sysstats_thread, ns_server_stats_thread,
                                      bucket_size_thead, mbstats_thread,
                                      iostats_thread]
             if ddoc is not None:
-                view_stats_thread = Thread(target=self.collect_indexing_stats,
-                                           args=(nodes, bucket, ddoc))
-                indexing_stats_thread = Thread(target=self.measure_indexing_throughput,
-                                               args=(nodes, ))
+                view_stats_thread = \
+                    Thread(target=self.collect_indexing_stats, args=(ddoc, ))
+                indexing_stats_thread = \
+                    Thread(target=self.measure_indexing_throughput)
                 self._task["threads"].append(view_stats_thread)
                 self._task["threads"].append(indexing_stats_thread)
 
@@ -204,22 +205,23 @@ class StatsCollector(object):
         file.write(json.dumps(obj))
         file.close()
 
-    def get_bucket_size(self, bucket, nodes, interval=60):
+    def get_bucket_size(self, interval=60):
         self._task["bucket_size"] = []
         retries = 0
-        nodes_iterator = (node for node in nodes)
+        nodes_iterator = (node for node in self.nodes)
         node = nodes_iterator.next()
         rest = RestConnection(node)
         while not self._aborted():
             time.sleep(interval)
             log.info("collecting bucket size stats")
             try:
-                status, db_size = rest.get_database_disk_size(bucket)
+                status, db_size = rest.get_database_disk_size(self.bucket)
                 if status:
                     self._task["bucket_size"].append(db_size)
             except IndexError, e:
                 retries += 1
-                log.error("unable to get bucket size {0}: {1}".format(bucket, e))
+                log.error("unable to get bucket size {0}: {1}"
+                          .format(self.bucket, e))
                 log.warning("retries: {0} of {1}".format(retries, RETRIES))
                 if retries == RETRIES:
                     try:
@@ -384,9 +386,9 @@ class StatsCollector(object):
 
         return results.split(' ')
 
-    def system_stats(self, nodes, pnames, interval=10):
+    def system_stats(self, pnames, interval=10):
         shells = []
-        for node in nodes:
+        for node in self.nodes:
             try:
                 shells.append(RemoteMachineShellConnection(node))
             except Exception as error:
@@ -400,7 +402,7 @@ class StatsCollector(object):
             current_time = time.time()
             i = 0
             for shell in shells:
-                node = nodes[i]
+                node = self.nodes[i]
                 unique_id = node.ip + '-' + start_time
                 for pname in pnames:
                     obj = RemoteMachineHelper(shell).is_process_running(pname)
@@ -416,9 +418,9 @@ class StatsCollector(object):
         self._task["systemstats"] = d["snapshots"]
         log.info("finished system_stats")
 
-    def iostats(self, nodes, interval=10):
+    def iostats(self, interval=10):
         shells = []
-        for node in nodes:
+        for node in self.nodes:
             try:
                 shells.append(RemoteMachineShellConnection(node))
             except Exception as error:
@@ -469,9 +471,9 @@ class StatsCollector(object):
         log.info("memcache stats snapshot captured")
         return True
 
-    def membase_stats(self, nodes, interval=60):
+    def membase_stats(self, interval=60):
         mcs = []
-        for node in nodes:
+        for node in self.nodes:
             try:
                 bucket = RestConnection(node).get_buckets()[0].name
                 mc = MemcachedClientHelper.direct_client(node, bucket)
@@ -544,10 +546,10 @@ class StatsCollector(object):
 
         log.info("finished membase_stats")
 
-    def ns_server_stats(self, nodes, bucket, interval=60):
+    def ns_server_stats(self, interval=60):
         self._task["ns_server_stats"] = []
         self._task["ns_server_stats_system"] = []
-        nodes_iterator = (node for node in nodes)
+        nodes_iterator = (node for node in self.nodes)
         node = nodes_iterator.next()
         retries = 0
         not_null = lambda v: v if v is not None else 0
@@ -558,7 +560,7 @@ class StatsCollector(object):
             log.info("collecting ns_server_stats")
             try:
                 # Bucket stats
-                ns_server_stats = rest.fetch_bucket_stats(bucket=bucket)
+                ns_server_stats = rest.fetch_bucket_stats(bucket=self.bucket)
                 for key, value in ns_server_stats["op"]["samples"].iteritems():
                     ns_server_stats["op"]["samples"][key] = not_null(value)
                 self._task["ns_server_stats"].append(ns_server_stats)
@@ -580,17 +582,17 @@ class StatsCollector(object):
 
         log.info("finished ns_server_stats")
 
-    def collect_indexing_stats(self, nodes, bucket, ddoc, interval=60):
+    def collect_indexing_stats(self, ddoc, interval=60):
         """Collect view indexing stats"""
         self._task['view_info'] = list()
 
-        rests = [RestConnection(node) for node in nodes]
+        rests = [RestConnection(node) for node in self.nodes]
         while not self._aborted():
             time.sleep(interval)
             log.info("collecting view indexing stats")
             for rest in rests:
                 try:
-                    data = rest.set_view_info(bucket, ddoc)
+                    data = rest.set_view_info(self.bucket, ddoc)
                 except SetViewInfoNotFound as error:
                     log.warning(error)
                     continue
@@ -608,10 +610,10 @@ class StatsCollector(object):
 
         log.info("finished collecting view indexing stats")
 
-    def measure_indexing_throughput(self, nodes, interval=15):
+    def measure_indexing_throughput(self, interval=15):
         self._task['indexer_info'] = list()
         indexers = defaultdict(dict)
-        rests = [RestConnection(node) for node in nodes]
+        rests = [RestConnection(node) for node in self.nodes]
         while not self._aborted():
             time.sleep(interval)  # 15 seconds by default
 
