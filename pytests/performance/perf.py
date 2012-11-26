@@ -122,8 +122,7 @@ class PerfBase(unittest.TestCase):
 
     def set_up_cluster(self, master):
         """Initialize cluster"""
-
-        self.log.info("perf.setUp: setting up cluster")
+        self.log.info("setting up cluster")
 
         self.rest.init_cluster(master.rest_username, master.rest_password)
 
@@ -153,7 +152,7 @@ class PerfBase(unittest.TestCase):
     def set_up_buckets(self):
         """Set up data bucket(s)"""
 
-        self.log.info("perf.setUp: setting up buckets")
+        self.log.info("setting up buckets")
 
         self.get_bucket_conf()
 
@@ -177,7 +176,7 @@ class PerfBase(unittest.TestCase):
     def reconfigure(self):
         """Customize basic Couchbase setup"""
 
-        self.log.info("perf.setUp: customizing setup")
+        self.log.info("customizing setup")
 
         self.set_loglevel()
         self.customize_xdcr_settings()
@@ -201,8 +200,7 @@ class PerfBase(unittest.TestCase):
         """Change number of memcached threads"""
         rest = RestConnection(node)
         rest.set_mc_threads(mc_threads)
-        self.log.info("perf.setUp: num of memcached threads = {0}"
-                      .format(mc_threads))
+        self.log.info("num of memcached threads = {0}".format(mc_threads))
 
     def customize_xdcr_settings(self):
         """Set custom XDCR environment variables"""
@@ -248,16 +246,14 @@ class PerfBase(unittest.TestCase):
             # Database fragmentation threshold
             db_compaction = self.parami("db_compaction",
                                         PerfDefaults.db_compaction)
-            self.log.info("perf.setUp: database compaction = {0}"
-                          .format(db_compaction))
+            self.log.info("database compaction = {0}".format(db_compaction))
 
             # ep_engine fragementation threshold
             ep_compaction = self.parami("ep_compaction",
                                         PerfDefaults.ep_compaction)
             if ep_compaction != PerfDefaults.ep_compaction:
                 self.set_ep_compaction(ep_compaction)
-                self.log.info("perf.setUp: ep_engine compaction = {0}"
-                              .format(ep_compaction))
+                self.log.info("ep_engine compaction = {0}".format(ep_compaction))
 
             # View fragmentation threshold
             if disable_view_compaction:
@@ -290,15 +286,15 @@ class PerfBase(unittest.TestCase):
 
     def tearDown(self):
         if self.parami("tear_down", 0) == 1:
-            self.log.info("perf.tearDown: tearDown routine skipped")
+            self.log.info("routine skipped")
             return
 
-        self.log.info("[perf.tearDown: tearDown routine starts")
+        self.log.info("routine starts")
 
         if self.parami("tear_down_proxy", 1) == 1:
             self.tear_down_proxy()
         else:
-            self.log.info("perf.tearDown: proxy tearDown skipped")
+            self.log.info("proxy tearDown skipped")
 
         if self.sc is not None:
             self.sc.stop()
@@ -307,33 +303,33 @@ class PerfBase(unittest.TestCase):
         if self.parami("tear_down_bucket", 0) == 1:
             self.tear_down_buckets()
         else:
-            self.log.info("perf.tearDown: bucket tearDown skipped")
+            self.log.info("bucket tearDown skipped")
 
         if self.parami("tear_down_cluster", 1) == 1:
             self.tear_down_cluster()
         else:
-            self.log.info("perf.tearDown: cluster tearDown skipped")
+            self.log.info("cluster tearDown skipped")
 
-        self.log.info("perf.tearDown: tearDown routine finished")
+        self.log.info("routine finished")
 
     def tear_down_buckets(self):
-        self.log.info("perf.tearDown: tearing down bucket")
+        self.log.info("tearing down bucket")
         BucketOperationHelper.delete_all_buckets_or_assert(self.input.servers,
                                                            self)
-        self.log.info("[perf.tearDown: bucket teared down")
+        self.log.info("bucket teared down")
 
     def tear_down_cluster(self):
-        self.log.info("perf.tearDown: tearing down cluster")
+        self.log.info("tearing down cluster")
         ClusterOperationHelper.cleanup_cluster(self.input.servers)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.input.servers,
                                                              self)
-        self.log.info("perf.tearDown: Cluster teared down")
+        self.log.info("Cluster teared down")
 
     def set_up_proxy(self, bucket=None):
         """Set up and start Moxi"""
 
         if self.input.moxis:
-            self.log.info("perf.setUp: setting up proxy")
+            self.log.info("setting up proxy")
 
             bucket = bucket or self.param('bucket', 'default')
 
@@ -504,7 +500,7 @@ class PerfBase(unittest.TestCase):
                                         testconstants.COUCHBASE_DATA_PATH)
         dest_data_path = "{0}-snapshots".format(src_data_path)
 
-        self.log.info("perf: _save_snapshot: server={0}, src_data_path={1}, dest_data_path={2}"
+        self.log.info("server={0}, src_data_path={1}, dest_data_path={2}"
                       .format(server.ip, src_data_path, dest_data_path))
 
         shell = RemoteMachineShellConnection(server)
@@ -532,7 +528,7 @@ class PerfBase(unittest.TestCase):
                                          testconstants.COUCHBASE_DATA_PATH)
         src_data_path = "{0}-snapshots".format(dest_data_path)
 
-        self.log.info("perf._load_snapshot: server={0}, src_data_path={1}, dest_data_path={2}"
+        self.log.info("server={0}, src_data_path={1}, dest_data_path={2}"
                       .format(server.ip, src_data_path, dest_data_path))
 
         shell = RemoteMachineShellConnection(server)
@@ -543,7 +539,7 @@ class PerfBase(unittest.TestCase):
         src_file = self._build_tar_name(bucket, full_version, file_base)
 
         if not shell.file_exists(src_data_path, src_file):
-            self.log.error("perf._load_snapshot: file '{0}/{1}' does not exist"
+            self.log.error("file '{0}/{1}' does not exist"
                            .format(src_data_path, src_file))
             shell.disconnect()
             return False
@@ -567,7 +563,7 @@ class PerfBase(unittest.TestCase):
     def save_snapshots(self, file_base, bucket):
         """Save snapshots on all servers"""
         if not self.input.servers or not bucket:
-            self.log.error("perf.save_snapshot: invalid server list or bucket name")
+            self.log.error("invalid server list or bucket name")
             return False
 
         ClusterOperationHelper.stop_cluster(self.input.servers)
@@ -582,7 +578,7 @@ class PerfBase(unittest.TestCase):
     def load_snapshots(self, file_base, bucket):
         """Load snapshots on all servers"""
         if not self.input.servers or not bucket:
-            self.log.error("perf.load_snapshot: invalid server list or bucket name")
+            self.log.error("invalid server list or bucket name")
             return False
 
         ClusterOperationHelper.stop_cluster(self.input.servers)
@@ -608,8 +604,7 @@ class PerfBase(unittest.TestCase):
             result = subprocess.Popen(['git', 'rev-parse', 'HEAD'],
                                       stdout=subprocess.PIPE).communicate()[0]
         except subprocess.CalledProcessError as e:
-            self.log.error("perf: unable to get src code version : {0}"
-                           .format(str(e)))
+            self.log.error("unable to get src code version : {0}".format(e))
             return "unknown version"
         return result.rstrip()[:7]
 
@@ -731,10 +726,10 @@ class PerfBase(unittest.TestCase):
             if not "11211" in host_port:
                 pswd = self.input.servers[0].rest_password
 
-        self.log.info("mcsoda - %s %s %s %s" %
+        self.log.info("mcsoda %s %s %s %s" %
                       (protocol, host_port, user, pswd))
-        self.log.info("mcsoda - cfg:\n" + pprint.pformat(cfg))
-        self.log.info("mcsoda - cur:\n" + pprint.pformat(cfg))
+        self.log.info("mcsoda cfg:\n" + pprint.pformat(cfg))
+        self.log.info("mcsoda cur:\n" + pprint.pformat(cfg))
 
         cur, start_time, end_time = \
             self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
@@ -779,7 +774,7 @@ class PerfBase(unittest.TestCase):
             self.log.warn("running on single node cluster")
             return
         else:
-            self.log.info("perf.setUp: rebalancing nodes - num_nodes = {0}"
+            self.log.info("rebalancing nodes - num_nodes = {0}"
                           .format(num_nodes))
 
         if self.input.clusters:
@@ -799,11 +794,10 @@ class PerfBase(unittest.TestCase):
                                  reb_mode=PerfDefaults.REB_MODE.IN):
         time.sleep(delay_seconds)
         gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
-        self.log.info("delayed_rebalance_worker: rebalance started: {0}"
-                      .format(gmt_now))
+        self.log.info("rebalance started")
 
         if not sc:
-            self.log.error("delayed_rebalance_worker: invalid stats collector")
+            self.log.error("invalid stats collector")
             return
         status = False
         retries = 0
@@ -817,7 +811,7 @@ class PerfBase(unittest.TestCase):
                 status, nodes = RebalanceHelper.rebalance_in(servers,
                                         num_nodes - 1, do_check=(not retries))
             end_time = time.time()
-            self.log.info("delayed_rebalance_worker: status: {0}, nodes: {1}, retries: {2}"
+            self.log.info("status: {0}, nodes: {1}, retries: {2}"
                           .format(status, nodes, retries))
             if not status:
                 retries += 1
@@ -983,7 +977,7 @@ class PerfBase(unittest.TestCase):
                                         port=self.input.servers[0].port)
 
         backups = self.get_backups(protocol)
-        self.log.info("mcsoda - protocol %s" % protocol)
+        self.log.info("mcsoda protocol %s" % protocol)
         protocol, host_port, user, pswd = \
             self.protocol_parse(protocol, use_direct=use_direct)
 
@@ -996,11 +990,11 @@ class PerfBase(unittest.TestCase):
             if not "11211" in host_port:
                 pswd = self.input.servers[0].rest_password
 
-        self.log.info("mcsoda - %s %s %s %s" %
+        self.log.info("mcsoda %s %s %s %s" %
                       (protocol, host_port, user, pswd))
-        self.log.info("mcsoda - cfg:\n" + pprint.pformat(cfg))
-        self.log.info("mcsoda - cur:\n" + pprint.pformat(cfg))
-        self.log.info("mcsoda - backups: %s" % backups)
+        self.log.info("mcsoda cfg:\n" + pprint.pformat(cfg))
+        self.log.info("mcsoda cur:\n" + pprint.pformat(cfg))
+        self.log.info("mcsoda backups: %s" % backups)
 
         # For query tests always use StoreCouchbase
         if protocol == "couchbase":
@@ -1035,13 +1029,12 @@ class PerfBase(unittest.TestCase):
 
         why = self.params("why", "main")
         prefix = self.parami("prefix", 0)
-        self.log.info("Finished access phase for worker: {0}:{1}."
-                      .format(why, prefix))
+        self.log.info("finished")
 
         return ops, start_time, end_time
 
     def wait_until_drained(self):
-        self.log.info("perf.drain: draining disk write queue")
+        self.log.info("draining disk write queue")
 
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
@@ -1053,12 +1046,12 @@ class PerfBase(unittest.TestCase):
                                               'ep_flusher_todo', 0,
                                               fn=RebalanceHelper.wait_for_stats_no_timeout)
 
-        self.log.info("perf.drain: disk write queue has been drained")
+        self.log.info("disk write queue has been drained")
 
         return time.time()
 
     def wait_until_repl(self):
-        self.log.info("perf.repl: waiting for replication")
+        self.log.info("waiting for replication")
 
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
@@ -1079,7 +1072,7 @@ class PerfBase(unittest.TestCase):
             'ep_tap_replica_qlen', 0,
             fn=RebalanceHelper.wait_for_stats_no_timeout)
 
-        self.log.info("perf.repl: replication is done")
+        self.log.info("replication is done")
 
     def warmup(self, collect_stats=True, flush_os_cache=False):
         """
@@ -1087,7 +1080,7 @@ class PerfBase(unittest.TestCase):
         In current version, affect the master node only.
         """
         if not self.input.servers:
-            self.log.info("warmup error: empty server list")
+            self.log.error("empty server list")
             return
 
         if collect_stats:
@@ -1099,26 +1092,26 @@ class PerfBase(unittest.TestCase):
                                   test_params=test_params,
                                   client_id=client_id)
 
-        self.log.info("warmup: preparing to warmup cluster ...")
+        self.log.info("preparing to warmup cluster ...")
 
         server = self.input.servers[0]
         shell = RemoteMachineShellConnection(server)
 
         start_time = time.time()
 
-        self.log.info("warmup: stopping couchbase ... ({0})".format(server.ip))
+        self.log.info("stopping couchbase ... ({0})".format(server.ip))
         shell.stop_couchbase()
-        self.log.info("warmup: couchbase stopped ({0})".format(server.ip))
+        self.log.info("couchbase stopped ({0})".format(server.ip))
 
         if flush_os_cache:
-            self.log.info("warmup: flushing os cache ...")
+            self.log.info("flushing os cache ...")
             shell.flush_os_caches()
 
         shell.start_couchbase()
-        self.log.info("warmup: couchbase restarted ({0})".format(server.ip))
+        self.log.info("couchbase restarted ({0})".format(server.ip))
 
         self.wait_until_warmed_up()
-        self.log.info("warmup: warmup finished")
+        self.log.info("warmup finished")
 
         end_time = time.time()
         ops = {'tot-sets': 0,

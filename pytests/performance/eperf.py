@@ -93,12 +93,12 @@ def measure_sched_delays(func):
 
         self.remove_sched_delay_logs()
         self.start_measure_sched_delay(file)
-        self.log.info("started measuring sched delays")
+        self.log.info("started")
 
         ret = func(self, *args, **kwargs)
 
         self.stop_measure_sched_delay()
-        self.log.info("stopped measuring sched delays")
+        self.log.info("stopped")
 
         return ret
 
@@ -245,8 +245,7 @@ class EPerfMaster(perf.PerfBase):
                 file = gzip.open("{0}.{1}.json.gz".format(i, type), 'rb')
                 break
             except IOError:
-                self.log.warn("stats aggregation: cannot open file: " +
-                              "{0}.{1}.json.gz".format(i, type))
+                self.log.warn("cannot open file {0}.{1}.json.gz".format(i, type))
                 i += 1
 
         if file is None:
@@ -274,8 +273,7 @@ class EPerfMaster(perf.PerfBase):
             except IOError:
                 # cannot find stats produced by this client, check stats
                 # collection. the results might be incomplete.
-                self.log.warn("stats aggregation: cannot open file: " +
-                              "{0}.{1}.json.gz".format(i, type))
+                self.log.warn("cannot open file: {0}.{1}.json.gz".format(i, type))
                 continue
 
             dict = file.read()
@@ -326,14 +324,13 @@ class EPerfMaster(perf.PerfBase):
 
         # wait for access scanner
         nru_wait = self.parami("nru_wait", PerfDefaults.nru_wait)
-        self.log.info("build_alog: waiting {0} seconds for access scanner"
-                      .format(nru_wait))
+        self.log.info("waiting {0} seconds for access scanner".format(nru_wait))
         time.sleep(nru_wait)
 
         # set back to default
         self.set_nru_freq(PerfDefaults.nru_freq)
 
-        self.log.info("build_alog: finished")
+        self.log.info("finished")
 
     def set_nru_task(self, tm_hour=0):
         """UTC/GMT time (hour) to schedule NRU access scanner"""
@@ -357,7 +354,7 @@ class EPerfMaster(perf.PerfBase):
         """Set ep engine high/low water marks for all nodes"""
         n_bytes = self.parami("mem_quota", PerfDefaults.mem_quota) * \
             percent / 100 * 1024 * 1024
-        self.log.info("set_ep_mem_wat: mem_{0}_wat = {1} percent, {2} bytes"
+        self.log.info("mem_{0}_wat = {1} percent, {2} bytes"
                       .format("high" if high else "low", percent, n_bytes))
         self.set_ep_param("flush_param",
                           "mem_%s_wat" % ("high" if high else "low"),
@@ -367,15 +364,13 @@ class EPerfMaster(perf.PerfBase):
         """Set up consistent view for rebalance task"""
         rest = RestConnection(node)
         rest.set_reb_cons_view(disable=disable)
-        self.log.info("set_reb_cons_view: disable consistent view = {0}"
-                      .format(disable))
+        self.log.info("disable consistent view = {0}".format(disable))
 
     def set_reb_index_waiting(self, node, disable=False):
         """Set up index waiting for rebalance task"""
         rest = RestConnection(node)
         rest.set_reb_index_waiting(disable=disable)
-        self.log.info("[set_reb_index_waiting] disable index waiting = {0}"
-                      .format(disable))
+        self.log.info("disable index waiting = {0}".format(disable))
 
     def start_measure_sched_delay(self, file="sched-delay"):
         for server in self.input.servers:
@@ -846,11 +841,11 @@ class EPerfMaster(perf.PerfBase):
         if self.load_snapshots(file_base, bucket) \
                 and self.parami("warmup", PerfDefaults.warmup):
             self.gated_start(self.input.clients)
-            self.log.info("test_eperf_warmup: loaded snapshot, start warmup phase")
+            self.log.info("loaded snapshot, start warmup phase")
             self.warmup_phase()
             return
 
-        self.log.warn("test_eperf_warmup: unable to find snapshot file, rerun the test")
+        self.log.warn("unable to find snapshot file, rerun the test")
         self.test_eperf_mixed(save_snapshot=True)
 
     @multi_buckets

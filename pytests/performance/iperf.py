@@ -164,8 +164,8 @@ class PerfWrapper(object):
                     slave = self.input.clusters[1][0]
                     try:
                         self.start_replication(master, slave, bidir=bidir)
-                    except Exception, why:
-                        print why
+                    except Exception, error:
+                        self.log.warn(error)
                     self.wait_for_xdc_replication()
                 return xdc_test
             return wrapper
@@ -316,7 +316,7 @@ class XPerfTests(EPerfClient):
         rest = RestConnection(self.input.servers[0])
         bucket = self.param('bucket', 'default')
         while True:  # we have to wait at least once
-            print "Waiting for XDC replication to finish"
+            self.log.info("waiting for another 15 seconds")
             time.sleep(15)
             if not rest.get_xdc_queue_size(bucket):
                 break
@@ -547,7 +547,7 @@ class RebalanceTests(EVPerfClient):
                               bucket=self.params('bucket', 'default'),
                               query=query, timeout=14400)
         t1 = time.time()
-        self.log.info('Time taken to build index: {0} sec'.format(t1 - t0))
+        self.log.info('time taken to build index: {0} sec'.format(t1 - t0))
 
 
 class XRebalanceTests(XVPerfTests):
