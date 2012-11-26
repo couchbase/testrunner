@@ -52,10 +52,10 @@ class StatsCollector(object):
         self.is_leader = False
         self.active_mergers = 0
 
-    def start(self, nodes, bucket, pnames, name, frequency, client_id='',
+    def start(self, nodes, bucket, pnames, name, client_id='',
               collect_server_stats=True, ddoc=None):
         """This function starts collecting stats from all nodes with the given
-        frequency"""
+        interval"""
         self._task = {"state": "running", "threads": [], "name": name,
                       "time": time.time(), "ops": [], "totalops": [],
                       "ops-temp": [], "latency": {}, "data_size_stats": []}
@@ -66,23 +66,18 @@ class StatsCollector(object):
         self.nodes = nodes
 
         if collect_server_stats:
-            mbstats_thread = Thread(target=self.membase_stats,
-                                    args=(nodes, 60))
-            sysstats_thread = Thread(target=self.system_stats,
-                                     args=(nodes, pnames, frequency))
-            iostats_thread = Thread(target=self.iostats,
-                                    args=(nodes, 10))
-            ns_server_stats_thread = Thread(target=self.ns_server_stats,
-                                            args=(nodes, bucket, 60))
-            bucket_size_thead = Thread(target=self.get_bucket_size,
-                                       args=(bucket, nodes, frequency))
+            mbstats_thread = Thread(target=self.membase_stats, args=(nodes, ))
+            sysstats_thread = Thread(target=self.system_stats, args=(nodes, pnames, ))
+            iostats_thread = Thread(target=self.iostats, args=(nodes, ))
+            ns_server_stats_thread = Thread(target=self.ns_server_stats, args=(nodes, bucket))
+            bucket_size_thead = Thread(target=self.get_bucket_size, args=(bucket, nodes))
 
             self._task["threads"] = [sysstats_thread, ns_server_stats_thread,
                                      bucket_size_thead, mbstats_thread,
                                      iostats_thread]
             if ddoc is not None:
                 view_stats_thread = Thread(target=self.collect_indexing_stats,
-                                           args=(nodes, bucket, ddoc, frequency))
+                                           args=(nodes, bucket, ddoc))
                 indexing_stats_thread = Thread(target=self.measure_indexing_throughput,
                                                args=(nodes, ))
                 self._task["threads"].append(view_stats_thread)
@@ -209,14 +204,14 @@ class StatsCollector(object):
         file.write(json.dumps(obj))
         file.close()
 
-    def get_bucket_size(self, bucket, nodes, frequency):
+    def get_bucket_size(self, bucket, nodes, interval=60):
         self._task["bucket_size"] = []
         retries = 0
         nodes_iterator = (node for node in nodes)
         node = nodes_iterator.next()
         rest = RestConnection(node)
         while not self._aborted():
-            time.sleep(frequency)
+            time.sleep(interval)
             log.info("collecting bucket size stats")
             try:
                 status, db_size = rest.get_database_disk_size(bucket)
@@ -237,7 +232,7 @@ class StatsCollector(object):
 
         log.info("finished bucket size stats")
 
-    def get_data_file_size(self, nodes, frequency, bucket):
+    def get_data_file_size(self, nodes, interval, bucket):
         shells = []
         for node in nodes:
             try:
@@ -257,7 +252,7 @@ class StatsCollector(object):
         start_time = str(self._task["time"])
 
         while not self._aborted():
-            time.sleep(frequency)
+            time.sleep(interval)
             current_time = time.time()
             i = 0
             for shell in shells:
@@ -389,7 +384,7 @@ class StatsCollector(object):
 
         return results.split(' ')
 
-    def system_stats(self, nodes, pnames, frequency):
+    def system_stats(self, nodes, pnames, interval=10):
         shells = []
         for node in nodes:
             try:
@@ -401,7 +396,7 @@ class StatsCollector(object):
 
         start_time = str(self._task["time"])
         while not self._aborted():
-            time.sleep(frequency)
+            time.sleep(interval)
             current_time = time.time()
             i = 0
             for shell in shells:
@@ -421,7 +416,7 @@ class StatsCollector(object):
         self._task["systemstats"] = d["snapshots"]
         log.info("finished system_stats")
 
-    def iostats(self, nodes, frequency):
+    def iostats(self, nodes, interval=10):
         shells = []
         for node in nodes:
             try:
@@ -434,7 +429,7 @@ class StatsCollector(object):
         log.info("started capturing io stats")
 
         while not self._aborted():
-            time.sleep(frequency)
+            time.sleep(interval)
             log.info("collecting io stats")
             for shell in shells:
                 try:
@@ -474,7 +469,7 @@ class StatsCollector(object):
         log.info("memcache stats snapshot captured")
         return True
 
-    def membase_stats(self, nodes, frequency=60):
+    def membase_stats(self, nodes, interval=60):
         mcs = []
         for node in nodes:
             try:
@@ -491,7 +486,7 @@ class StatsCollector(object):
             data[mc.host] = {"snapshots": [], "timings": [], "dispatcher": []}
 
         while not self._aborted():
-            time.sleep(frequency)
+            time.sleep(interval)
             log.info("collecting membase stats")
             for mc in mcs:
                 for rerty in xrange(RETRIES):
@@ -549,7 +544,7 @@ class StatsCollector(object):
 
         log.info("finished membase_stats")
 
-    def ns_server_stats(self, nodes, bucket, frequency):
+    def ns_server_stats(self, nodes, bucket, interval=60):
         self._task["ns_server_stats"] = []
         self._task["ns_server_stats_system"] = []
         nodes_iterator = (node for node in nodes)
@@ -559,7 +554,7 @@ class StatsCollector(object):
 
         rest = RestConnection(node)
         while not self._aborted():
-            time.sleep(frequency)
+            time.sleep(interval)
             log.info("collecting ns_server_stats")
             try:
                 # Bucket stats
@@ -585,13 +580,13 @@ class StatsCollector(object):
 
         log.info("finished ns_server_stats")
 
-    def collect_indexing_stats(self, nodes, bucket, ddoc, frequency):
+    def collect_indexing_stats(self, nodes, bucket, ddoc, interval=60):
         """Collect view indexing stats"""
         self._task['view_info'] = list()
 
         rests = [RestConnection(node) for node in nodes]
         while not self._aborted():
-            time.sleep(frequency)
+            time.sleep(interval)
             log.info("collecting view indexing stats")
             for rest in rests:
                 try:
@@ -613,12 +608,12 @@ class StatsCollector(object):
 
         log.info("finished collecting view indexing stats")
 
-    def measure_indexing_throughput(self, nodes):
+    def measure_indexing_throughput(self, nodes, interval=15):
         self._task['indexer_info'] = list()
         indexers = defaultdict(dict)
         rests = [RestConnection(node) for node in nodes]
         while not self._aborted():
-            time.sleep(15)  # 15 seconds by default
+            time.sleep(interval)  # 15 seconds by default
 
             # Grab indexer tasks from all nodes
             tasks = list()

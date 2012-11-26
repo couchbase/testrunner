@@ -622,7 +622,7 @@ class PerfBase(unittest.TestCase):
         servers = servers or self.input.servers
         sc = self.mk_stats(False)
         bucket = self.param("bucket", "default")
-        sc.start(servers, bucket, process_names, stats_spec, 10, client_id,
+        sc.start(servers, bucket, process_names, stats_spec, client_id,
                  collect_server_stats=collect_server_stats, ddoc=ddoc)
         test_params['testrunner'] = self._get_src_version()
         self.test_params = test_params
