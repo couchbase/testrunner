@@ -67,22 +67,28 @@ class StatsCollector(object):
         self.bucket = bucket
 
         if collect_server_stats:
-            mbstats_thread = Thread(target=self.membase_stats)
-            sysstats_thread = Thread(target=self.system_stats, args=(pnames, ))
-            iostats_thread = Thread(target=self.iostats)
-            ns_server_stats_thread = Thread(target=self.ns_server_stats)
-            bucket_size_thead = Thread(target=self.get_bucket_size)
-
-            self._task["threads"] = [sysstats_thread, ns_server_stats_thread,
-                                     bucket_size_thead, mbstats_thread,
-                                     iostats_thread]
+            self._task["threads"].append(
+                Thread(target=self.membase_stats, name="membase")
+            )
+            self._task["threads"].append(
+                Thread(target=self.system_stats, name="system", args=(pnames, ))
+            )
+            self._task["threads"].append(
+                Thread(target=self.iostats, name="iostats")
+            )
+            self._task["threads"].append(
+                Thread(target=self.ns_server_stats, name="ns_server")
+            )
+            self._task["threads"].append(
+                Thread(target=self.get_bucket_size, name="bucket_size")
+            )
             if ddoc is not None:
-                view_stats_thread = \
-                    Thread(target=self.collect_indexing_stats, args=(ddoc, ))
-                indexing_stats_thread = \
-                    Thread(target=self.measure_indexing_throughput)
-                self._task["threads"].append(view_stats_thread)
-                self._task["threads"].append(indexing_stats_thread)
+                self._task["threads"].append(
+                    Thread(target=self.indexing_time_stats, name="index_time", args=(ddoc, ))
+                )
+                self._task["threads"].append(
+                    Thread(target=self.indexing_throughput_stats, name="index_thr")
+                )
 
             for thread in self._task["threads"]:
                 thread.daemon = True
@@ -582,7 +588,7 @@ class StatsCollector(object):
 
         log.info("finished ns_server_stats")
 
-    def collect_indexing_stats(self, ddoc, interval=60):
+    def indexing_time_stats(self, ddoc, interval=60):
         """Collect view indexing stats"""
         self._task['view_info'] = list()
 
@@ -610,7 +616,7 @@ class StatsCollector(object):
 
         log.info("finished collecting view indexing stats")
 
-    def measure_indexing_throughput(self, interval=15):
+    def indexing_throughput_stats(self, interval=15):
         self._task['indexer_info'] = list()
         indexers = defaultdict(dict)
         rests = [RestConnection(node) for node in self.nodes]
