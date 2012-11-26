@@ -1154,7 +1154,7 @@ class PerfBase(unittest.TestCase):
         """Wait for ns_server task to finish"""
         t0 = time.time()
         self.log.info("Waiting 30 seconds before {0} monitoring".format(task))
-        time.sleep(5)
+        time.sleep(30)
 
         while True:
             tasks = self.rest.ns_server_tasks()
