@@ -450,13 +450,9 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
             xfer_recv_per_sec = xfer_recv_delta / t_delta
 
             log.debug(prefix + dict_to_s(cur))
-            log.info("%s  ops: %s secs: %s ops/sec: %s"
-                     " tx-bytes/sec: %s rx-bytes/sec: %s" %
-                     (prefix,
-                      string.ljust(str(o_delta), 10),
-                      string.ljust(str(t_delta), 15),
-                      string.ljust(str(int(ops_per_sec)), 10),
-                      string.ljust(str(int(xfer_sent_per_sec) or "unknown"), 10),
+            log.info("%s ops: %s secs: %s ops/sec: %s tx-bytes/sec: %s rx-bytes/sec: %s" %
+                     (prefix, o_delta, t_delta, int(ops_per_sec),
+                      int(xfer_sent_per_sec) or "unknown",
                       int(xfer_recv_per_sec) or "unknown"))
 
             t_last = t_curr
