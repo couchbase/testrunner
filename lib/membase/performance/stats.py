@@ -114,7 +114,7 @@ class StatsCollector(object):
         for t in self._task["threads"]:
             t.join(120)
             if t.is_alive():
-                log.error("Failed to join {0} thread".format(t.name))
+                log.error("failed to join {0} thread".format(t.name))
 
         self._task["time"] = time.time() - self._task["time"]
 
@@ -226,25 +226,25 @@ class StatsCollector(object):
         rest = RestConnection(node)
         while not self._aborted():
             time.sleep(frequency)
-            log.info("Collecting bucket size stats")
+            log.info("collecting bucket size stats")
             try:
                 status, db_size = rest.get_database_disk_size(bucket)
                 if status:
                     self._task["bucket_size"].append(db_size)
             except IndexError, e:
                 retries += 1
-                log.error("Unable to get bucket size {0}: {1}".format(bucket, e))
-                log.warning("Retries: {0} of {1}".format(retries, RETRIES))
+                log.error("unable to get bucket size {0}: {1}".format(bucket, e))
+                log.warning("retries: {0} of {1}".format(retries, RETRIES))
                 if retries == RETRIES:
                     try:
                         node = nodes_iterator.next()
                         rest = RestConnection(node)
                         retries = 0
                     except StopIteration:
-                        log.error("No nodes available: stop collecting bucket_size")
+                        log.error("no nodes available: stop collecting bucket_size")
                         return
 
-        log.info("Finished bucket size stats")
+        log.info("finished bucket size stats")
 
     def get_data_file_size(self, nodes, frequency, bucket):
         shells = []
@@ -283,7 +283,7 @@ class StatsCollector(object):
                     d["snapshots"].append(value.copy())
                 i += 1
         self._task["data_size_stats"] = d["snapshots"]
-        log.info("Finished data_size_stats")
+        log.info("finished data_size_stats")
 
     #ops stats
     #{'tot-sets': 899999, 'tot-gets': 1, 'tot-items': 899999, 'tot-creates': 899999}
@@ -353,7 +353,7 @@ class StatsCollector(object):
         self._task["machinestats"] = machine_stats
 
     def reb_stats(self, start, dur):
-        log.info("Recording reb start = {0}, reb duration = {1}".format(start, dur))
+        log.info("recording reb start = {0}, reb duration = {1}".format(start, dur))
         self._reb_stats["reb_start"] = start
         self._reb_stats["reb_dur"] = dur
 
@@ -428,7 +428,7 @@ class StatsCollector(object):
                         d["snapshots"].append(value)
                 i += 1
         self._task["systemstats"] = d["snapshots"]
-        log.info("Finished system_stats")
+        log.info("finished system_stats")
 
     def iostats(self, nodes, frequency):
         shells = []
@@ -440,11 +440,11 @@ class StatsCollector(object):
 
         self._task["iostats"] = []
 
-        log.info("Started capturing io stats")
+        log.info("started capturing io stats")
 
         while not self._aborted():
             time.sleep(frequency)
-            log.info("Collecting io_stats")
+            log.info("collecting io stats")
             for shell in shells:
                 try:
                     kB_read, kB_wrtn, util, iowait, idle = \
@@ -459,11 +459,11 @@ class StatsCollector(object):
                                                  "util": util,
                                                  "iowait": iowait,
                                                  "idle": idle})
-        log.info("Finished capturing io stats")
+        log.info("finished capturing io stats")
 
     def capture_mb_snapshot(self, node):
         """Capture membase stats snapshot manually"""
-        log.info("Capturing memcache stats snapshot for {0}".format(node.ip))
+        log.info("capturing memcache stats snapshot for {0}".format(node.ip))
         stats = {}
 
         try:
@@ -472,7 +472,7 @@ class StatsCollector(object):
             stats = mc.stats()
             stats.update(mc.stats("warmup"))
         except Exception as e:
-            log.error("Exception: {0}".format(str(e)))
+            log.error(e)
             return False
         finally:
             stats["time"] = time.time()
@@ -480,7 +480,7 @@ class StatsCollector(object):
             self._mb_stats["snapshots"].append(stats)
             print stats
 
-        log.info("Memcache stats snapshot captured")
+        log.info("memcache stats snapshot captured")
         return True
 
     def membase_stats(self, nodes, frequency=60):
@@ -521,7 +521,7 @@ class StatsCollector(object):
                         stats = mc.stats(arg)
                         data[mc.host][arg].append(stats)
                     except EOFError, e:
-                        log.error("Unable to get {0} stats {1}: {2}"
+                        log.error("unable to get {0} stats {1}: {2}"
                                   .format(arg, mc.host, e))
 
         for host in (mc.host for mc in mcs):
@@ -569,7 +569,7 @@ class StatsCollector(object):
         rest = RestConnection(node)
         while not self._aborted():
             time.sleep(frequency)
-            log.info("Collecting ns_server_stats")
+            log.info("collecting ns_server_stats")
             try:
                 # Bucket stats
                 ns_server_stats = rest.fetch_bucket_stats(bucket=bucket)
@@ -581,18 +581,18 @@ class StatsCollector(object):
                 self._task["ns_server_stats_system"].append(ns_server_stats_system)
             except (ValueError, TypeError), e:
                 retries += 1
-                log.error("Unable to parse json object {0}: {1}".format(node, e))
-                log.warning("Retries: {0} of {1}".format(retries, RETRIES))
+                log.error("unable to parse json object {0}: {1}".format(node, e))
+                log.warning("retries: {0} of {1}".format(retries, RETRIES))
                 if retries == RETRIES:
                     try:
                         node = nodes_iterator.next()
                         rest = RestConnection(node)
                         retries = 0
                     except StopIteration:
-                        log.error("No nodes available: stop collecting ns_server_stats")
+                        log.error("no nodes available: stop collecting ns_server_stats")
                         return
 
-        log.info("Finished ns_server_stats")
+        log.info("finished ns_server_stats")
 
     def collect_indexing_stats(self, nodes, bucket, ddoc, frequency):
         """Collect view indexing stats"""
@@ -601,7 +601,7 @@ class StatsCollector(object):
         rests = [RestConnection(node) for node in nodes]
         while not self._aborted():
             time.sleep(frequency)
-            log.info("Collecting view indexing stats")
+            log.info("collecting view indexing stats")
             for rest in rests:
                 try:
                     data = rest.set_view_info(bucket, ddoc)
@@ -620,7 +620,7 @@ class StatsCollector(object):
                                                     'indexing_time': avg_time,
                                                     'timestamp': time.time()})
 
-        log.info("Finished collecting view indexing stats")
+        log.info("finished collecting view indexing stats")
 
     def measure_indexing_throughput(self, nodes):
         self._task['indexer_info'] = list()
@@ -665,7 +665,7 @@ class StatsCollector(object):
             try:
                 shell = RemoteMachineShellConnection(node)
             except SystemExit:
-                log.error("Can't establish SSH session with {0}".format(node.ip))
+                log.error("can't establish SSH session with {0}".format(node.ip))
             else:
                 cmd = "killall atop; rm -fr /tmp/*.atop;" + \
                     "atop -w /tmp/{0}.atop -a 15".format(node.ip) + \
@@ -678,7 +678,7 @@ class StatsCollector(object):
             try:
                 shell = RemoteMachineShellConnection(node)
             except SystemExit:
-                log.error("Can't establish SSH session with {0}".format(node.ip))
+                log.error("can't establish SSH session with {0}".format(node.ip))
             else:
                 shell.execute_command("killall atop")
 
