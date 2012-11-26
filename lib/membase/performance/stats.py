@@ -403,8 +403,6 @@ class StatsCollector(object):
         shells = []
         for node in nodes:
             try:
-                bucket = RestConnection(node).get_buckets()[0].name
-                MemcachedClientHelper.direct_client(node, bucket)
                 shells.append(RemoteMachineShellConnection(node))
             except Exception as error:
                 log.error(error)
@@ -437,8 +435,6 @@ class StatsCollector(object):
         shells = []
         for node in nodes:
             try:
-                bucket = RestConnection(node).get_buckets()[0].name
-                MemcachedClientHelper.direct_client(node, bucket)
                 shells.append(RemoteMachineShellConnection(node))
             except Exception as error:
                 log.error(error)
