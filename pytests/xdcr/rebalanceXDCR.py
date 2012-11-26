@@ -1,5 +1,7 @@
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from membase.helper.rebalance_helper import RebalanceHelper
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 from xdcrbasetests import XDCRReplicationBaseTest
 import time
 
@@ -14,6 +16,9 @@ class Rebalance(XDCRReplicationBaseTest):
                 start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
             self.gen_update2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size, start=0,
                 end=int(self._num_items * (float)(self._percent_update) / 100))
+        BucketOperationHelper.delete_all_buckets_or_assert(self._floating_servers_set, self)
+        ClusterOperationHelper.cleanup_cluster(self._floating_servers_set, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self._floating_servers_set, self)
 
     def tearDown(self):
         super(Rebalance, self).tearDown()
