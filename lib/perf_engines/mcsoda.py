@@ -1541,7 +1541,6 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
             log.info("mcsoda is running with %s threads" % len(threads))
         threads = [t for t in threads if t.isAlive()]
 
-    log.warn("Exiting because... there is nothing else to do")
     ctl['run_ok'] = False
     if ctl.get('shutdown_event') is not None:
         ctl['shutdown_event'].set()
