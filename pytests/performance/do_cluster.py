@@ -29,6 +29,7 @@ import sys
 import os
 
 sys.path.append("lib")
+from lib import logger
 from TestInput import TestInputParser, TestInputSingleton
 import pytests.performance.eperf as eperf
 try:
@@ -57,6 +58,7 @@ def main():
         obj.setUp()
     else:
         num_clients = obj.parami("num_clients", 10) * obj.parami("num_buckets", 1)
+        obj.log = logger.Logger.get_logger()
         obj.aggregate_all_stats(num_clients, "load")
         obj.aggregate_all_stats(num_clients, "reload")
         obj.aggregate_all_stats(num_clients, "loop")
