@@ -63,6 +63,18 @@ def post_to_cbm(input_json):
     if "reb_dur" in input_json["info"]:
         rs[("[%s:%s] Rebalance Time, s" % (cluster_name, name))] = \
             int(input_json["info"]["reb_dur"])
+    else:
+        if "latency-get-90th-avg" in input_json["info"]:
+            rs[("[%s:%s] 90th Get Latency, us" % (cluster_name, name))] =\
+                int(input_json["info"]["latency-get-90th-avg"])
+
+        if "latency-set-90th-avg" in input_json["info"]:
+            rs[("[%s:%s] 90th Set Latency, us" % (cluster_name, name))] =\
+                int(input_json["info"]["latency-set-90th-avg"])
+
+        if "latency-query-90th-avg" in input_json["info"]:
+            rs[("[%s:%s] 90th Query Latency, us" % (cluster_name, name))] =\
+                int(input_json["info"]["latency-query-90th-avg"])
 
     client = CbmonitorClient(input_json["info"]["cbm-host"],
                              input_json["info"]["cbm-port"])
