@@ -14,6 +14,8 @@ import logging
 import logging.config
 from collections import deque
 from hashlib import md5
+import json
+import inspect
 
 sys.path.append('.')
 
@@ -682,10 +684,11 @@ def prepare_key(key_num, prefix=None):
 def choose_entry(arr, n):
     return arr[n % len(arr)]
 
-# --------------------------------------------------------
-
 
 class Store(object):
+
+    def __init__(self):
+        self.errors = dict()
 
     def connect(self, target, user, pswd, cfg, cur, bucket="default", backups=None):
         self.target = target
@@ -693,6 +696,17 @@ class Store(object):
         self.cur = cur
         self.xfer_sent = 0
         self.xfer_recv = 0
+
+    def err_msg(self, error):
+        """Generate error message with class.method names as prefix"""
+        cname = self.__class__.__name__
+        fname = inspect.stack()[2][3]  # err_msg <- save_error <- caller
+        return "[{0}.{1}] {2}".format(cname, fname, error)
+
+    def save_error(self, error):
+        """Update dictionary with errors"""
+        err_msg = self.err_msg(error)
+        self.errors[err_msg] = self.errors.get(err_msg, 0) + 1
 
     def show_some_keys(self):
         log.debug("first 5 keys...")
@@ -746,16 +760,13 @@ class Store(object):
             data = None
             try:
                 data = skt.recv(max(nbytes - len(buf), 4096))
-            except socket.timeout:
-                log.error("EXCEPTION: Store.readbytes-socket.timeout / recv timed out")
-                self.cur["cur-ex-Store.readbytes-socket.timeout"] = self.cur.get("cur-ex-Store.readbytes-socket.timeout", 0) + 1
-            except Exception as e:
-                log.error("EXCEPTION: Store.readbytes: " + str(e))
-                self.cur["cur-ex-Store.readbytes"] = self.cur.get("cur-ex-Store.readbytes", 0) + 1
+            except Exception as error:
+                self.save_error(error)
+                log.error(error)
             if not data:
-                log.error("Store.readbytes-nodata / skt.read no data.")
-                self.cur["cur-Store.readbytes-nodata"] = self.cur.get("cur-Store.readbytes-odata", 0) + 1
-                return None, ''
+                self.save_error("no data")
+                log.error("no data")
+                return None, ""
             buf += data
         return buf[:nbytes], buf[nbytes:]
 
@@ -770,8 +781,9 @@ class Store(object):
             try:
                 bucket = round(self.histo_bucket(delta), 6)
                 histo[bucket] = histo.get(bucket, 0) + 1
-            except TypeError as e:
-                log.error("{0}, delta = {1}".format(str(e), delta))
+            except TypeError, error:
+                self.save_error(error)
+                log.error(error)
 
     def histo_bucket(self, samp):
         hp = self.cfg.get("histo-precision", 2)
@@ -853,10 +865,10 @@ class StoreMemcachedBinary(Store):
     def inflight_send(self, inflight_msg):
         try:
             self.conn.s.sendall(inflight_msg)
-        except socket.error, e:
+        except socket.error, error:
             self.retries += 1
-            log.error("inflight_send: received socket error %s - retries = %s"
-                      % (e, self.retries))
+            self.save_error(error)
+            log.error("%s, retries = %s", error, self.retries)
             if self.retries == RETRIES:
                 e = ServerUnavailableException(self.host_port)
                 self.reconnect()
@@ -872,10 +884,10 @@ class StoreMemcachedBinary(Store):
             try:
                 cmd, keylen, extralen, errcode, datalen, opaque, val, buf = \
                     self.recvMsg()
-            except Exception, e:
+            except Exception, error:
                 self.retries += 1
-                log.error("inflight_recv: received socket error %s - retries = %s"
-                          % (e, self.retries))
+                self.save_error(error)
+                log.error("%s, retries = %s", error, self.retries)
                 if self.retries == RETRIES:
                     e = ServerUnavailableException(self.host_port)
                     self.reconnect()
@@ -897,8 +909,9 @@ class StoreMemcachedBinary(Store):
         try:
             self.flush()
             return True
-        except ServerUnavailableException, e:
-            log.error(e)
+        except ServerUnavailableException, error:
+            self.save_error(error)
+            log.error(error)
             self.queue = list()
             self.inflight_reinit()
             return False
@@ -1150,17 +1163,17 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                         conn.s.settimeout(timeout_sec)
                     sent = conn.s.send(buf)
                     if sent == 0:
-                        log.error("StoreMembaseBinary.send-zero / skt.send returned 0.")
-                        self.cur["cur-StoreMembaseBinary.send-zero"] = self.cur.get("cur-StoreMembaseBinary.send-zero", 0) + 1
+                        self.save_error("socket.send returned 0")
+                        log.error("socket.send returned 0")
                         break
                     sent_tuple += sent
                 except socket.timeout:
-                    log.error("EXCEPTION: StoreMembaseBinary.send-socket.timeout / inflight_send timed out")
-                    self.cur["cur-ex-StoreMembaseBinary.send-socket.timeout"] = self.cur.get("cur-ex-StoreMembaseBinary.send-socket.timeout", 0) + 1
+                    self.save_error("socket timeout")
+                    log.error("socket timeout")
                     break
-                except Exception as e:
-                    log.error("EXCEPTION: StoreMembaseBinary.send / inflight_send: " + str(e))
-                    self.cur["cur-ex-StoreMembaseBinary.send"] = self.cur.get("cur-ex-StoreMembaseBinary.send", 0) + 1
+                except Exception, error:
+                    self.save_error(error)
+                    log.error(error)
                     break
 
             sent_total += sent_tuple
@@ -1177,7 +1190,9 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                 conn = self.awareness.memcacheds[server]
                 try:
                     recvBuf = conn.recvBuf
-                except:
+                except Exception, error:
+                    self.save_error(error)
+                    log.error(error)
                     recvBuf = ''
                 if expectBuffer == False and recvBuf != '':
                     raise Exception("Was expecting empty buffer, but have (" +
@@ -1194,16 +1209,17 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                                 errcode == ERR_EBUSY or \
                                 errcode == ERR_ETMPFAIL:
                             backoff = True
-                            log.error("inflight recv errorcode = %s" % errcode)
-                    except Exception as e:
-                        log.error("EXCEPTION: StoreMembaseBinary.recvMsgSockBuf / inflight_recv inner: " + str(e))
-                        self.cur["cur-ex-StoreMembaseBinary.recvMsgSockBuf"] = self.cur.get("cur-ex-StoreMembaseBinary.recvMsgSockBuf", 0) + 1
+                            self.save_error("errorcode = %s" % errcode)
+                            log.error("errorcode = %s" % errcode)
+                    except Exception, error:
+                        self.save_error(error)
+                        log.error(error)
                         reset_my_awareness = True
                         backoff = True
                 conn.recvBuf = recvBuf
-            except Exception as e:
-                log.error("EXCEPTION: StoreMembaseBinary.inflight_recv / outer: " + str(e))
-                self.cur["cur-ex-StoreMembaseBinary.inflight_recv"] = self.cur.get("cur-ex-StoreMembaseBinary.inflight_recv", 0) + 1
+            except Exception, error:
+                self.save_error(error)
+                log.error(error)
                 reset_my_awareness = True
                 backoff = True
 
@@ -1220,11 +1236,9 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         if reset_my_awareness:
             try:
                 self.awareness.reset()
-            except Exception as e:
-                log.error("EXCEPTION: StoreMembaseBinary.awareness.reset: " + str(e))
-                self.cur["cur-ex-StoreMembaseBinary.awareness.reset"] = self.cur.get("cur-ex-StoreMembaseBinary.awareness.reset", 0) + 1
-                log.error("EXCEPTION: self.awareness.reset()")
-                pass
+            except Exception, error:
+                self.save_error("awareness.reset: {0}".format(error))
+                log.error("awareness.reset: %s", error)
 
         return received
 
@@ -1437,6 +1451,18 @@ PROTOCOL_STORE = {'memcached-ascii': StoreMemcachedAscii,
                   'none': Store}
 
 
+def final_report(cur, store, total_time):
+    """Report final stats"""
+    log.info(dict_to_s(cur))
+    if cur.get('cur-queries', 0):
+        total_cmds = cur.get('cur-queries', 0)
+    else:
+        total_cmds = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
+    log.info("ops/sec: %s" % (total_cmds / float(total_time)))
+    if store.errors:
+        log.warn("errors:\n%s", json.dumps(store.errors, indent=4))
+
+
 def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
         stores=None, ctl=None, heartbeat=0, why="", bucket="default", backups=None):
     if isinstance(cfg['min-value-size'], str):
@@ -1522,14 +1548,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
 
     t_end = time.time()
 
-    # Final stats
-    log.info(dict_to_s(cur))
-    total_time = float(t_end - t_start)
-    if cur.get('cur-queries', 0):
-        total_cmds = cur.get('cur-queries', 0)
-    else:
-        total_cmds = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
-    log.info("ops/sec: %s" % (total_cmds / total_time))
+    final_report(cur, store, total_time=t_end - t_start)
 
     threads = [t for t in threads if t.isAlive()]
     heartbeat = 0
@@ -1544,6 +1563,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
     ctl['run_ok'] = False
     if ctl.get('shutdown_event') is not None:
         ctl['shutdown_event'].set()
+
     log.info("%s stopped running." % why)
     return cur, t_start, t_end
 
