@@ -404,7 +404,7 @@ class StatsCollector(object):
         for node in self.nodes:
             try:
                 shells.append(RemoteMachineShellConnection(node))
-            except Exception as error:
+            except Exception, error:
                 log.error(error)
         d = {"snapshots": []}
         #        "pname":"x","pid":"y","snapshots":[{"time":time,"value":value}]
@@ -436,7 +436,7 @@ class StatsCollector(object):
         for node in self.nodes:
             try:
                 shells.append(RemoteMachineShellConnection(node))
-            except Exception as error:
+            except Exception, error:
                 log.error(error)
 
         self._task["iostats"] = []
@@ -472,7 +472,7 @@ class StatsCollector(object):
             mc = MemcachedClientHelper.direct_client(node, bucket)
             stats = mc.stats()
             stats.update(mc.stats("warmup"))
-        except Exception as e:
+        except Exception, e:
             log.error(e)
             return False
         finally:
@@ -491,7 +491,7 @@ class StatsCollector(object):
                 bucket = RestConnection(node).get_buckets()[0].name
                 mc = MemcachedClientHelper.direct_client(node, bucket)
                 mcs.append(mc)
-            except Exception as error:
+            except Exception, error:
                 log.error(error)
         self._task["membasestats"] = []
         self._task["timings"] = []
@@ -606,7 +606,7 @@ class StatsCollector(object):
             for rest in rests:
                 try:
                     data = rest.set_view_info(self.bucket, ddoc)
-                except SetViewInfoNotFound as error:
+                except SetViewInfoNotFound, error:
                     log.warning(error)
                     continue
                 try:
