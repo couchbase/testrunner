@@ -202,7 +202,13 @@ def sys_swap(ip):
 
 def atop_dsk(ip):
     flags = "-d"
-    cmd = "grep beam.smp | awk '{print $2, $3, $5}'"
+    cmd_column = "atop -r /tmp/atop-node.log -d | grep beam.smp | head -1 | awk '{print NF}'"
+    count = exec_cmd(ip, cmd_column)
+    count = int(count[0][0])
+    rcol = count - 4
+    wcol = count - 3
+    pcol = count - 1
+    cmd = "grep beam.smp | awk '{print $%d, $%d, $%d}'" % (rcol, wcol, pcol)
     return _atop_exec(ip, cmd, flags)
 
 def _atop_exec(ip, cmd, flags = ""):
