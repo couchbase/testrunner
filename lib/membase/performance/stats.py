@@ -46,6 +46,7 @@ class StatsCollector(object):
     _verbosity = True
     _mb_stats = {"snapshots": []}  # manually captured memcached stats
     _reb_stats = {}
+    _lat_avg_stats = {}     # aggregated top level latency stats
 
     def __init__(self, verbosity):
         self._verbosity = verbosity
@@ -117,6 +118,7 @@ class StatsCollector(object):
     def export(self, name, test_params):
         for latency in self._task["latency"].keys():
             # save the last histogram snapshot
+            per_90th_tot = 0
             histos = self._task["latency"].get(latency, [])
             if histos:
                 key = latency + "-histogram"
@@ -138,12 +140,17 @@ class StatsCollector(object):
                 # p is list of tuples
                 for val in p:
                     temp.append(val[-1])
+                per_90th_tot += temp[1]
                 temp.append(self.client_id)
                 temp.append(time)
                 temp.append(delta)
                 self._task["latency"][key].append(temp)
+            if per_90th_tot:
+                self._lat_avg_stats["%s-90th-avg" % latency] \
+                    = per_90th_tot / len(histos) * 1000000
 
         test_params.update(self._reb_stats)
+        test_params.update(self._lat_avg_stats)
 
         obj = {
             "buildinfo": self._task.get("buildstats", {}),
