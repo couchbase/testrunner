@@ -30,59 +30,62 @@ class BaseTestCase(unittest.TestCase):
         self.buckets = []
         self.master = self.servers[0]
         self.cluster = Cluster()
-        self.wait_timeout = self.input.param("wait_timeout", 60)
-        #number of case that is performed from testrunner( increment each time)
-        self.case_number = self.input.param("case_number", 0)
-        self.default_bucket = self.input.param("default_bucket", True)
-        if self.default_bucket:
-            self.default_bucket_name = "default"
-        self.standard_buckets = self.input.param("standard_buckets", 0)
-        self.sasl_buckets = self.input.param("sasl_buckets", 0)
-        self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets
-        self.num_servers = self.input.param("servers", len(self.servers))
-        #initial number of items in the cluster
-        self.nodes_init = self.input.param("nodes_init", 1)
+        try:
+            self.wait_timeout = self.input.param("wait_timeout", 60)
+            #number of case that is performed from testrunner( increment each time)
+            self.case_number = self.input.param("case_number", 0)
+            self.default_bucket = self.input.param("default_bucket", True)
+            if self.default_bucket:
+                self.default_bucket_name = "default"
+            self.standard_buckets = self.input.param("standard_buckets", 0)
+            self.sasl_buckets = self.input.param("sasl_buckets", 0)
+            self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets
+            self.num_servers = self.input.param("servers", len(self.servers))
+            #initial number of items in the cluster
+            self.nodes_init = self.input.param("nodes_init", 1)
 
-        self.num_replicas = self.input.param("replicas", 1)
-        self.num_items = self.input.param("items", 1000)
-        self.dgm_run = self.input.param("dgm_run", False)
-        #max items number to verify in ValidateDataTask, None - verify all
-        self.max_verify = self.input.param("max_verify", None)
-        #we don't change consistent_view on server by default
-        self.disabled_consistent_view = self.input.param("disabled_consistent_view", None)
-        self.rebalanceIndexWaitingDisabled = self.input.param("rebalanceIndexWaitingDisabled", None)
-        self.rebalanceIndexPausingDisabled = self.input.param("rebalanceIndexPausingDisabled", None)
-        self.maxParallelIndexers = self.input.param("maxParallelIndexers", None)
-        self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
-        self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
-                      .format(self.case_number, self._testMethodName))
-        #avoid clean up if the previous test has been tear down
-        if not self.input.param("skip_cleanup", True) or self.case_number == 1:
-            self.tearDown()
-            self.cluster = Cluster()
-        if str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1:
-            #rebalance all nodes into the cluster before each test
-            self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
-        elif self.nodes_init > 1:
-            self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
-        self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
-                                        self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                        self.maxParallelIndexers, self.maxParallelReplicaIndexers)
-        if self.dgm_run:
-            self.quota = 256
-        if self.total_buckets > 0:
-            self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+            self.num_replicas = self.input.param("replicas", 1)
+            self.num_items = self.input.param("items", 1000)
+            self.dgm_run = self.input.param("dgm_run", False)
+            #max items number to verify in ValidateDataTask, None - verify all
+            self.max_verify = self.input.param("max_verify", None)
+            #we don't change consistent_view on server by default
+            self.disabled_consistent_view = self.input.param("disabled_consistent_view", None)
+            self.rebalanceIndexWaitingDisabled = self.input.param("rebalanceIndexWaitingDisabled", None)
+            self.rebalanceIndexPausingDisabled = self.input.param("rebalanceIndexPausingDisabled", None)
+            self.maxParallelIndexers = self.input.param("maxParallelIndexers", None)
+            self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
+            self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
+                          .format(self.case_number, self._testMethodName))
+            #avoid clean up if the previous test has been tear down
+            if not self.input.param("skip_cleanup", True) or self.case_number == 1:
+                self.tearDown()
+                self.cluster = Cluster()
+            if str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1:
+                #rebalance all nodes into the cluster before each test
+                self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
+            elif self.nodes_init > 1:
+                self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
+            self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers)
+            if self.dgm_run:
+                self.quota = 256
+            if self.total_buckets > 0:
+                self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
 
-        if self.default_bucket:
-            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+            if self.default_bucket:
+                self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
+                self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        self._create_standard_buckets(self.master, self.standard_buckets)
-        self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
-                      .format(self.case_number, self._testMethodName))
-        self._log_start(self)
+            self._create_sasl_buckets(self.master, self.sasl_buckets)
+            self._create_standard_buckets(self.master, self.standard_buckets)
+            self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
+                          .format(self.case_number, self._testMethodName))
+            self._log_start(self)
+        except:
+            self.cluster.shutdown()
 
     def tearDown(self):
             try:
