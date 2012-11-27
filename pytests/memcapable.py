@@ -592,7 +592,7 @@ class GetrTests(unittest.TestCase):
         prefix = str(uuid.uuid4())[:7]
 
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
-        BucketOperationHelper.create_bucket(self.master, name=self.bucket_name, replica=replica_count, port=11210, test_case=self, bucket_ram=-1, password="")
+        BucketOperationHelper.create_bucket(self.master, name=self.bucket_name, replica=replica_count, port=11210, test_case=self, bucket_ram= -1, password="")
 
         if rebalance == GetrTests.DURING_REBALANCE or rebalance == GetrTests.AFTER_REBALANCE:
             # leave 1 node unclustered for rebalance in
@@ -1210,9 +1210,15 @@ class WarmUpMemcachedTest(unittest.TestCase):
                                       memoryQuota=info.mcdMemoryReserved)
         ClusterOperationHelper.cleanup_cluster([self.master])
         ClusterOperationHelper.wait_for_ns_servers_or_assert([self.master], self)
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+        # recreate bucket instead of flush
+        self._create_default_bucket()
+        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
         self._log_start()
 
     def tearDown(self):
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
         self._log_finish()
 
     def _log_start(self):
@@ -1234,16 +1240,12 @@ class WarmUpMemcachedTest(unittest.TestCase):
         name = "default"
         master = self.master
         rest = RestConnection(master)
-        helper = RestHelper(RestConnection(master))
-        if not helper.bucket_exists(name):
-            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
-            info = rest.get_nodes_self()
-            available_ram = info.memoryQuota * node_ram_ratio
-            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
-            ready = BucketOperationHelper.wait_for_memcached(master, name)
-            self.assertTrue(ready, msg="wait_for_memcached failed")
-        self.assertTrue(helper.bucket_exists(name),
-                        msg="unable to create {0} bucket".format(name))
+        node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
+        info = rest.get_nodes_self()
+        available_ram = info.memoryQuota * node_ram_ratio
+        rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+        ready = BucketOperationHelper.wait_for_memcached(master, name)
+        self.assertTrue(ready, msg="wait_for_memcached failed")
         self.load_thread = None
         self.shutdown_load_data = False
 
@@ -1256,11 +1258,6 @@ class WarmUpMemcachedTest(unittest.TestCase):
 
     def _do_warmup(self, howmany, timeout_in_seconds=1800):
         # max_time is in micro seconds
-        # recreate bucket instead of flush
-        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
-        self._create_default_bucket()
-        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
-
         self._insert_data(howmany)
         curr_items = int(self.onenodemc.stats()["curr_items"])
         uptime = int(self.onenodemc.stats()["uptime"])
