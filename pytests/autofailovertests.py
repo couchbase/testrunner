@@ -358,19 +358,17 @@ class AutoFailoverTests(unittest.TestCase):
                                ramQuotaMB=bucket_ram,
                                replicaNumber=replicas,
                                proxyPort=info.moxi)
-            ready = BucketOperationHelper.wait_for_memcached(self.master, bucket_name)
-            nodes = rest.node_statuses()
-            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
-            buckets = rest.get_buckets()
         else:
             created = BucketOperationHelper.create_multiple_buckets(self.master, replicas, howmany=num_buckets)
             self.assertTrue(created, "unable to create multiple buckets")
-            buckets = rest.get_buckets()
-            for bucket in buckets:
+
+        buckets = rest.get_buckets()
+        for bucket in buckets:
                 ready = BucketOperationHelper.wait_for_memcached(self.master, bucket.name)
                 self.assertTrue(ready, msg="wait_for_memcached failed")
-                nodes = rest.node_statuses()
-                rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+        nodes = rest.node_statuses()
+        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+
 
         for bucket in buckets:
             inserted_keys_cnt = self.load_data(self.master, bucket.name, keys_count)
