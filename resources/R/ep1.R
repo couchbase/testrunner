@@ -9,7 +9,6 @@ require(gplots, quietly=TRUE)
 
 library(plotrix)
 library(methods)
-library(gtools)
 
 #Rscript ep1.R 1.8.0r-55-g80f24f2-community 2.0.0r-552-gd0bac7a-community EPT-READ-original couchdb2.couchbaseqe.com eperf ept-read-#nonjson-180r55-200r552
 #Rscript ep1.R 1.8.0r-55-g80f24f2-enterprise 2.0.0r-710-toy-community EPT-WRITE-original couchdb2.couchbaseqe.com eperf EPT-SCALED-DOWN-WRITE.1-2.0.0r-709-toy-community-1.8.0r-55-g80f24f2-enterprise
@@ -263,9 +262,14 @@ for(index in 1:nrow(builds_list)) {
     # cat(paste(url,"\n"))
     # cat(paste(builds_list[index,]$id,"\n"))
     tryCatch({
-        doc_json <- fromJSON(file=url)
-        unlisted <- plyr::ldply(doc_json, unlist)
-        result <- smartbind(result, unlisted)
+            doc_json <- fromJSON(file=url)
+            unlisted <- plyr::ldply(doc_json, unlist)
+        if (ncol(result) > 0 & ncol(result) != ncol(unlisted)) {
+            #rbind.fill does not work if arg1 or arg2 is empty
+            result <- rbind.fill(result,unlisted)
+        } else {
+            result <- rbind(result,unlisted)
+        }
     }, error=function(e) {
         print("cannot generate ns server data")
         print(e)
