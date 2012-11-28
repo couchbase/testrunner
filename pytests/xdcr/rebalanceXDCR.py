@@ -19,7 +19,6 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def tearDown(self):
         super(Rebalance, self).tearDown()
-        self._cleanup_broken_setup()
         BucketOperationHelper.delete_all_buckets_or_assert(self._floating_servers_set, self)
         ClusterOperationHelper.cleanup_cluster(self._floating_servers_set, self)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self._floating_servers_set, self)
