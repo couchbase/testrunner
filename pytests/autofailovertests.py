@@ -122,14 +122,18 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_enable(self):
         # AUTOFAIL_TEST_1
-        self.rest.update_autofailover_settings(True, self.timeout / 2)
+        status = self.rest.update_autofailover_settings(True, self.timeout / 2)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         #read settings and verify
         settings = self.rest.get_autofailover_settings()
         self.assertEquals(settings.enabled, True)
 
     def test_disable(self):
         # AUTOFAIL_TEST_2
-        self.rest.update_autofailover_settings(False, self.timeout)
+        status = self.rest.update_autofailover_settings(False, self.timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         #read settings and verify
         settings = self.rest.get_autofailover_settings()
         self.assertEquals(settings.enabled, False)
@@ -138,7 +142,9 @@ class AutoFailoverTests(unittest.TestCase):
         # AUTOFAIL_TEST_3
         timeouts = [30, 31, 300, 3600, 300000]
         for timeout in timeouts:
-            self.rest.update_autofailover_settings(True, timeout)
+            status = self.rest.update_autofailover_settings(True, timeout)
+            if not status:
+                self.fail('failed to change autofailover_settings!')
             #read settings and verify
             settings = self.rest.get_autofailover_settings()
             self.assertTrue(settings.timeout == timeout)
@@ -147,7 +153,9 @@ class AutoFailoverTests(unittest.TestCase):
         # AUTOFAIL_TEST_4
         timeout = self.timeout / 2
         server_fail = self._servers[1]
-        self.rest.update_autofailover_settings(True, timeout)
+        status = self.rest.update_autofailover_settings(True, timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         time_start = time.time()
         self._enable_firewall(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
@@ -160,7 +168,9 @@ class AutoFailoverTests(unittest.TestCase):
         # AUTOFAIL_TEST_5
         timeout = self.timeout
         server_fail = self._servers[1]
-        self.rest.update_autofailover_settings(True, timeout)
+        status = self.rest.update_autofailover_settings(True, timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         time_start = time.time()
         self._enable_firewall(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
@@ -173,7 +183,9 @@ class AutoFailoverTests(unittest.TestCase):
         # AUTOFAIL_TEST_6
         timeout = self.timeout
         server_fail = self._servers[1]
-        self.rest.update_autofailover_settings(True, timeout)
+        status = self.rest.update_autofailover_settings(True, timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         time_start = time.time()
         self._stop_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
@@ -186,7 +198,9 @@ class AutoFailoverTests(unittest.TestCase):
         # AUTOFAIL_TEST_7
         timeout = self.timeout
         server_fail = self._servers[1]
-        self.rest.update_autofailover_settings(True, timeout)
+        status = self.rest.update_autofailover_settings(True, timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         time_start = time.time()
         self._stop_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
@@ -200,7 +214,9 @@ class AutoFailoverTests(unittest.TestCase):
         timeout = self.timeout / 2
         server_fail1 = self._servers[1]
         server_fail2 = self._servers[2]
-        self.rest.update_autofailover_settings(True, timeout)
+        status = self.rest.update_autofailover_settings(True, timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
 
         self.log.info("stopping the first server")
         time_start = time.time()
@@ -212,7 +228,9 @@ class AutoFailoverTests(unittest.TestCase):
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
         self.log.info("resetting the autofailover count")
-        self.rest.reset_autofailover()
+        status = self.rest.reset_autofailover()
+        if not status:
+            self.fail('failed to reset autofailover count!')
 
         self.log.info("stopping the second server")
         time_start = time.time()
@@ -224,13 +242,17 @@ class AutoFailoverTests(unittest.TestCase):
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
         self.log.info("resetting the autofailover count")
-        self.rest.reset_autofailover()
+        status = self.rest.reset_autofailover()
+        if not status:
+            self.fail('failed to reset autofailover count!')
 
     def test_30s_timeout_pause(self):
         # AUTOFAIL_TEST_9
         timeout = self.timeout / 2
         server_fail = self._servers[1]
-        self.rest.update_autofailover_settings(True, timeout)
+        status = self.rest.update_autofailover_settings(True, timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         time_start = time.time()
         self._pause_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
@@ -243,7 +265,9 @@ class AutoFailoverTests(unittest.TestCase):
         # AUTOFAIL_TEST_10
         timeout = self.timeout
         server_fail = self._servers[1]
-        self.rest.update_autofailover_settings(True, timeout)
+        status = self.rest.update_autofailover_settings(True, timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         time_start = time.time()
         self._pause_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
@@ -257,7 +281,9 @@ class AutoFailoverTests(unittest.TestCase):
         # AUTOFAIL_TESTN_1
         timeouts = [-360, -60, 0, 15, 29]
         for timeout in timeouts:
-            self.rest.update_autofailover_settings(True, timeout)
+            status = self.rest.update_autofailover_settings(True, timeout)
+            if status:
+                self.fail('autofailover_settings have been changed incorrectly!')
             #read settings and verify
             settings = self.rest.get_autofailover_settings()
             self.assertTrue(settings.timeout >= 30)
@@ -267,8 +293,9 @@ class AutoFailoverTests(unittest.TestCase):
         timeout = self.timeout / 2
         server_fail1 = self._servers[1]
         server_fail2 = self._servers[2]
-        self.rest.update_autofailover_settings(True, timeout)
-
+        status = self.rest.update_autofailover_settings(True, timeout)
+        if not status:
+            self.fail('failed to change autofailover_settings!')
         self.log.info("stopping the first server")
         time_start = time.time()
         self._stop_couchbase(server_fail1)
