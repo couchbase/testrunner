@@ -1336,10 +1336,10 @@ class EVPerfClient(EPerfClient):
                                                  bucket=bucket,
                                                  backups=backups)
         if self.bg_thread_ctl:
-            self.log.warn("Trying to stop background thread")
+            self.log.info("trying to stop background thread")
             self.bg_thread_ctl['run_ok'] = False
             while self.bg_thread.is_alive():
-                self.log.warn('Waiting for background thread {0}.'
+                self.log.info('waiting for background thread {0}.'
                               .format(self.parami("prefix", 0)))
                 time.sleep(5)
 

@@ -356,19 +356,19 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
         num_ops = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
 
         if cfg.get('max-ops', 0) and num_ops >= cfg.get('max-ops', 0):
-            log.warn("Exiting because of max ops")
+            log.info("exiting because of max ops")
             break
         if cfg.get('exit-after-creates', 0) and cfg.get('max-creates', 0) and \
                 cur.get('cur-creates', 0) >= cfg.get('max-creates', 0):
-            log.warn("Exiting because of max creates")
+            log.info("exiting because of max creates")
             break
         if cfg.get('exit-after-gets', 0) and cfg.get('max-gets', 0) and \
                 cur.get('cur-gets', 0) >= cfg.get('max-gets', 0):
-            log.warn("Exiting because of max gets")
+            log.info("exiting because of max gets")
             break
         if ctl.get('shutdown_event') is not None and \
                 ctl['shutdown_event'].is_set():
-            log.warn("Exiting because of shutdown event")
+            log.info("exiting because of shutdown event")
             break
 
         heartbeat_duration = time.time() - heartbeat_last
@@ -1526,7 +1526,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
 
     def stop_after(secs):
         time.sleep(secs)
-        log.warn("Exiting because of stop_after time")
+        log.info("exiting because of stop_after time")
         ctl['run_ok'] = False
 
     if cfg.get('time', 0) > 0:
@@ -1548,7 +1548,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
                 threads[0].join(1)
                 threads = [t for t in threads if t.isAlive()]
     except KeyboardInterrupt:
-        log.warn("Exiting because of KeyboardInterrupt")
+        log.warn("exiting because of KeyboardInterrupt")
         ctl['run_ok'] = False
 
     t_end = time.time()
