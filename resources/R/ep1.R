@@ -9,6 +9,7 @@ require(gplots, quietly=TRUE)
 
 library(plotrix)
 library(methods)
+library(gtools)
 
 #Rscript ep1.R 1.8.0r-55-g80f24f2-community 2.0.0r-552-gd0bac7a-community EPT-READ-original couchdb2.couchbaseqe.com eperf ept-read-#nonjson-180r55-200r552
 #Rscript ep1.R 1.8.0r-55-g80f24f2-enterprise 2.0.0r-710-toy-community EPT-WRITE-original couchdb2.couchbaseqe.com eperf EPT-SCALED-DOWN-WRITE.1-2.0.0r-709-toy-community-1.8.0r-55-g80f24f2-enterprise
@@ -259,16 +260,17 @@ cat("generating ns_server_data ")
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
     url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","ns_server_data", sep='')
-    # cat(paste(url,"\n"))
-    # cat(paste(builds_list[index,]$id,"\n"))
     tryCatch({
-            doc_json <- fromJSON(file=url)
-            unlisted <- plyr::ldply(doc_json, unlist)
-        if (ncol(result) > 0 & ncol(result) != ncol(unlisted)) {
-            #rbind.fill does not work if arg1 or arg2 is empty
-            result <- rbind.fill(result,unlisted)
-        } else {
+        doc_json <- fromJSON(file=url)
+        unlisted <- plyr::ldply(doc_json, unlist)
+        if (ncol(result) == 0) {
             result <- rbind(result,unlisted)
+        } else {
+            if (ncol(result) != ncol(unlisted)) {
+                result <- rbind.fill(result,unlisted)
+            } else {
+                result <- smartbind(result, unlisted)
+            }
         }
     }, error=function(e) {
         print("cannot generate ns server data")
