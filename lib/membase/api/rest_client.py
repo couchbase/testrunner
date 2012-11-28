@@ -4,20 +4,18 @@ import urllib
 import httplib2
 import socket
 import time
-import logger
 
-try:
-    from couchbase.document import DesignDocument, View
-except ImportError:
-    from lib.couchbase.document import DesignDocument, View
+from lib.logger import Logger
+from lib.couchbase.document import DesignDocument
+from lib.memcached.helper.kvstore import KVStore
 
+from exception import ServerAlreadyJoinedException, ServerUnavailableException,\
+    InvalidArgumentException, BucketCreationException, ServerSelfJoinException,\
+    RebalanceFailedException, FailoverFailedException, DesignDocCreationException,\
+    QueryViewException, ReadDocumentException, GetBucketInfoFailed, CompactViewFailed,\
+    SetViewInfoNotFound, AddNodeException, BucketFlushFailed
 
-from memcached.helper.kvstore import KVStore
-from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
-from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
-    RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
-    ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, BucketFlushFailed
-log = logger.Logger.get_logger()
+log = Logger.get_logger()
 #helper library methods built on top of RestConnection interface
 
 class RestHelper(object):
