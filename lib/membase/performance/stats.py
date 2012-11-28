@@ -7,7 +7,7 @@ from collections import defaultdict
 import logging
 import logging.config
 
-from lib.membase.api.exception import SetViewInfoNotFound
+from lib.membase.api.exception import SetViewInfoNotFound, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
@@ -606,8 +606,8 @@ class StatsCollector(object):
             for rest in rests:
                 try:
                     data = rest.set_view_info(self.bucket, ddoc)
-                except SetViewInfoNotFound, error:
-                    log.warning(error)
+                except (SetViewInfoNotFound, ServerUnavailableException), error:
+                    log.error(error)
                     continue
                 try:
                     update_history = data[1]['stats']['update_history']
@@ -633,8 +633,14 @@ class StatsCollector(object):
             # Grab indexer tasks from all nodes
             tasks = list()
             for rest in rests:
-                tasks.extend(filter(lambda t: t['type'] == 'indexer',
-                                    rest.active_tasks()))
+                try:
+                    active_tasks = rest.active_tasks()
+                except ServerUnavailableException, error:
+                    log.error(error)
+                    continue
+                indexer_tasks = filter(lambda t: t['type'] == 'indexer',
+                                       active_tasks)
+                tasks.extend(indexer_tasks)
 
             # Calculate throughput for every unique PID
             thr = 0
