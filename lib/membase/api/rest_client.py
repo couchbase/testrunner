@@ -1223,7 +1223,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api)
         num = 1
         while not status and num_attempt > num:
-            log.info("try again after {0} sec".format(timeout))
+            log.error("try to get {0} again after {1} sec".format(api, timeout))
             time.sleep(timeout)
             status, content, header = self._http_request(api)
             num += 1
