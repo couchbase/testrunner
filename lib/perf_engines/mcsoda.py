@@ -1195,9 +1195,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                 conn = self.awareness.memcacheds[server]
                 try:
                     recvBuf = conn.recvBuf
-                except Exception, error:
-                    self.save_error(error)
-                    log.error(error)
+                except AttributeError:
                     recvBuf = ''
                 if expectBuffer == False and recvBuf != '':
                     raise Exception("Was expecting empty buffer, but have (" +
