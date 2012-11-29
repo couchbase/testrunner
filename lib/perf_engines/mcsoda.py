@@ -17,7 +17,7 @@ from hashlib import md5
 import json
 import inspect
 
-sys.path.append('.')
+sys.path.extend(('.', 'lib'))
 
 from lib import crc32
 from lib import mc_bin_client
