@@ -360,6 +360,11 @@ class EPerfMaster(perf.PerfBase):
                           "mem_%s_wat" % ("high" if high else "low"),
                           n_bytes)
 
+    def set_ep_mutation_mem_threshold(self, percent):
+        """Set ep engine tmp oom threshold for all nodes"""
+        self.log.info("mutation_mem_threshold = {0} percent".format(percent))
+        self.set_ep_param("flush_param", "mutation_mem_threshold", percent)
+
     def set_reb_cons_view(self, node, disable=False):
         """Set up consistent view for rebalance task"""
         rest = RestConnection(node)
@@ -420,10 +425,14 @@ class EPerfMaster(perf.PerfBase):
         if self.is_leader:
             mem_high_wat = self.parami('mem_high_wat', PerfDefaults.mem_high_wat)
             mem_low_wat = self.parami('mem_low_wat', PerfDefaults.mem_low_wat)
+            mutation_mem_threshold = self.parami('mutation_mem_threshold',
+                                                 PerfDefaults.mutation_mem_threshold)
             if mem_high_wat != PerfDefaults.mem_high_wat:
                 self.set_ep_mem_wat(mem_high_wat)
             if mem_low_wat != PerfDefaults.mem_low_wat:
                 self.set_ep_mem_wat(mem_low_wat, high=False)
+            if mutation_mem_threshold != PerfDefaults.mutation_mem_threshold:
+                self.set_ep_mutation_mem_threshold(mutation_mem_threshold)
 
         if self.parami("load_phase", 1) > 0:
             self.log.info("Loading")

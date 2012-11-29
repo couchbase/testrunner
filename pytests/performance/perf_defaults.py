@@ -10,18 +10,19 @@ class PerfDefaults:
     REB_MODE = namedtuple('REB_MODE', 'IN, OUT, SWAP')(0, 1, 2)
 
     # general
-    batch               =    50
-    kind                =    "nonjson"
-    mem_quota           =    6000
-    num_nodes           =    10
-    conf_file           =    "default.conf"
-    bucket              =    "default"
-    strftime            =     "%b-%d-%Y_%H:%M:%S"
-    mc_threads          =    4
-    sched_delays        =    0
-    erlang_schedulers   =    ""
-    mem_high_wat        =    75          # percentage
-    mem_low_wat         =    60          # percentage
+    batch                   =    50
+    kind                    =    "nonjson"
+    mem_quota               =    6000
+    num_nodes               =    10
+    conf_file               =    "default.conf"
+    bucket                  =    "default"
+    strftime                =     "%b-%d-%Y_%H:%M:%S"
+    mc_threads              =    4
+    sched_delays            =    0
+    erlang_schedulers       =    ""
+    mem_high_wat            =    75          # percentage
+    mem_low_wat             =    60          # percentage
+    mutation_mem_threshold  =    90          # percentage, tmp oom threshold
 
     # publish results to cbmonitor dashboard
     cbm                 =    0
