@@ -25,47 +25,47 @@ class PerfDefaults:
     mutation_mem_threshold  =    90          # percentage, tmp oom threshold
 
     # publish results to cbmonitor dashboard
-    cbm                 =    0
-    cbm_host            =    "dashboard.hq.couchbase.com"
-    cbm_port            =    80
+    cbm                     =    0
+    cbm_host                =    "dashboard.hq.couchbase.com"
+    cbm_port                =    80
 
     # load phase
-    items               =    22000000    # 22 million
-    alog_hot_load       =    0           # run access log before hot load phase
+    items                   =    22000000    # 22 million
+    alog_hot_load           =    0           # run access log before hot load phase
 
     # access phase
     # Read:Insert:Update:Delete Ratio = 20:15:60:5.
-    ratio_sets          =    0.8
-    ratio_misses        =    0.05
-    ratio_creates       =    0.1875
-    ratio_deletes       =    0.0769
-    ratio_hot           =    0.05
-    ratio_hot_gets      =    0.995
-    ratio_hot_sets      =    0.995
-    ratio_expirations   =    0.025
-    max_creates         =    30000000    # 30 million
-    limit               =    50
+    ratio_sets              =    0.8
+    ratio_misses            =    0.05
+    ratio_creates           =    0.1875
+    ratio_deletes           =    0.0769
+    ratio_hot               =    0.05
+    ratio_hot_gets          =    0.995
+    ratio_hot_sets          =    0.995
+    ratio_expirations       =    0.025
+    max_creates             =    30000000    # 30 million
+    limit                   =    50
 
     # cbstats collector
-    cb_stats            =    0
-    cb_stats_exc        =    "/opt/couchbase/bin/cbstats"
-    cb_stats_freq       =    1200        # collect cbstats every 20 minutes
+    cb_stats                =    0
+    cb_stats_exc            =    "/opt/couchbase/bin/cbstats"
+    cb_stats_freq           =    1200        # collect cbstats every 20 minutes
 
     # cbtop
-    cbtop_itv           =    20          # stats polling interval (seconds)
-    cbtop_dbhost        =    "127.0.0.1" # host where seriesly database is located
-    cbtop_dbslow        =    "slow"      # seriesly database to store slow changing data
-    cbtop_dbfast        =    "fast"      # seriesly database to store fast changing data
-    cbtop_dbevent       =    "event"     # seriesly database to store events
+    cbtop_itv               =    20          # stats polling interval (seconds)
+    cbtop_dbhost            =    "127.0.0.1" # host where seriesly database is located
+    cbtop_dbslow            =    "slow"      # seriesly database to store slow changing data
+    cbtop_dbfast            =    "fast"      # seriesly database to store fast changing data
+    cbtop_dbevent           =    "event"     # seriesly database to store events
 
     # rebalance
-    rebalance_after     =    200000
-    num_nodes_after     =    7           # num of nodes after rebalance.
-    reb_max_retries     =    0           # num of retries if rebalance fails
-    reb_cons_view       =    -1          # consistent view for rebalance task, 1: enable, 0: disable
-    reb_index_waiting   =    -1          # index wating for rebalance task, 1: enable, 0: disable
-    reb_no_fg           =    0           # rebalance without foreground load. 1: enable, 0: disable
-    reb_mode            =    REB_MODE.IN # rebalance mode
+    rebalance_after         =    200000
+    num_nodes_after         =    7           # num of nodes after rebalance.
+    reb_max_retries         =    0           # num of retries if rebalance fails
+    reb_cons_view           =    -1          # consistent view for rebalance task, 1: enable, 0: disable
+    reb_index_waiting       =    -1          # index wating for rebalance task, 1: enable, 0: disable
+    reb_no_fg               =    0           # rebalance without foreground load. 1: enable, 0: disable
+    reb_mode                =    REB_MODE.IN # rebalance mode
 
     # control
     avg_value_size          =   2048     # average size of document body
