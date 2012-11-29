@@ -413,6 +413,9 @@ class SwapRebalanceBase(unittest.TestCase):
                 time.sleep(1)
                 i += 1
             self.log.info("rebalance progress status:{0}".format(rest._rebalance_progress_status()))
+            if rest._rebalance_progress_status() == "running":
+                self.log.info("rebalance is still running even after restarting memcached")
+                continue
             knownNodes = rest.node_statuses();
             self.log.info("nodes are still in cluster: {0}".format([(node.ip, node.port) for node in knownNodes]))
             ejectedNodes = list(set(optNodesIds) & set([node.id for node in knownNodes]))
