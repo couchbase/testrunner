@@ -1705,7 +1705,7 @@ class ViewCompactionTask(Task):
         return (curr_no_of_compactions, curr_ddoc_fragemtation)
 
     def _is_compacting(self):
-        status, content = sefl.rest.set_view_info(self.bucket, self.design_doc_name)
+        status, content = self.rest.set_view_info(self.bucket, self.design_doc_name)
         return content["compact_running"] == True
 
 '''task class for failover. This task will only failover nodes but doesn't
