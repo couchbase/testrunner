@@ -1001,7 +1001,7 @@ class EPerfMaster(perf.PerfBase):
         limit = self.parami('limit', 10)
         query_suffix = self.param("query_suffix", "")
         bucket = self.params('bucket', 'default')
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket)
+        queries = view_gen.generate_queries(ddocs, bucket)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
@@ -1028,7 +1028,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.ddoc_names.next())
+                          ddoc=view_gen.ddocs.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1050,10 +1050,8 @@ class EPerfMaster(perf.PerfBase):
         self.index_phase(ddocs)
 
         # Access phase
-        limit = self.parami('limit', 10)
-        query_suffix = self.param("query_suffix", "")
         bucket = self.params('bucket', 'default')
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket)
+        queries = view_gen.generate_queries(ddocs, bucket)
 
         self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
         self.fg_max_ops = self.parami('fg_max_ops', 1000000)
@@ -1076,7 +1074,7 @@ class EPerfMaster(perf.PerfBase):
                           queries=queries,
                           proto_prefix="couchbase",
                           host=host,
-                          ddoc=view_gen.ddoc_names.next())
+                          ddoc=view_gen.ddocs.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
@@ -1103,8 +1101,7 @@ class EPerfMaster(perf.PerfBase):
         limit = self.parami('limit', PerfDefaults.limit)
         query_suffix = self.param("query_suffix", "")
         bucket = self.params('bucket', 'default')
-        queries = view_gen.generate_queries(limit, query_suffix, ddocs, bucket,
-                                            extend=True)
+        queries = view_gen.generate_queries(ddocs, bucket)
 
         # Rotate host so multiple clients don't hit the same HTTP/REST server.
         server_sn = self.parami("prefix", 0) % len(self.input.servers)
@@ -1132,7 +1129,7 @@ class EPerfMaster(perf.PerfBase):
                               queries=queries,
                               proto_prefix="couchbase",
                               host=host,
-                              ddoc=view_gen.ddoc_names.next())
+                              ddoc=view_gen.ddocs.next())
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
