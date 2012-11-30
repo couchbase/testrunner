@@ -548,7 +548,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
             self._process_values_for_create(key_val)
             self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
             self._populate_kvstore(partition_keys_dic, key_val)
-        except MemcachedError as error:
+        except (MemcachedError, ServerUnavailableException) as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -558,7 +558,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
             self._process_values_for_update(partition_keys_dic, key_val)
             self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
             self._populate_kvstore(partition_keys_dic, key_val)
-        except MemcachedError as error:
+        except (MemcachedError, ServerUnavailableException) as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -576,6 +576,10 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
                         self.state = FINISHED
                         self.set_exception(error)
                         return
+                except ServerUnavailableException:
+                    self.state = FINISHED
+                    self.set_exception(error)
+
 
     def _read_batch(self, partition_keys_dic, key_val):
         try:
