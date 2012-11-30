@@ -552,7 +552,7 @@ class RestConnection(object):
         """Get view diagnostic info (node specific)"""
         api = self.capiBaseUrl
         if isinstance(bucket, Bucket):
-            api += '/_set_view/{0}/_design/{1}/_info'.format(bucket, design_name)
+            api += '/_set_view/{0}/_design/{1}/_info'.format(bucket.name, design_name)
         else:
             api += '_set_view/{0}/_design/{1}/_info'.format(bucket, design_name)
 
