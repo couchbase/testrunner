@@ -1607,16 +1607,15 @@ class ViewCompactionTask(Task):
         self.compaction_revision = 0
         self.precompacted_fragmentation = 0
         self.with_rebalance = with_rebalance
+        self.rest = RestConnection(self.server)
 
     def execute(self, task_manager):
-        rest = RestConnection(self.server)
-
         try:
             self.compaction_revision, self.precompacted_fragmentation = \
                 self._get_compaction_details()
             self.log.info("stats compaction before triggering it: ({0},{1})".
                           format(self.compaction_revision, self.precompacted_fragmentation))
-            rest.ddoc_compaction(self.ddoc_id)
+            self.rest.ddoc_compaction(self.ddoc_id)
             self.state = CHECKING
             task_manager.schedule(self, 2)
         except (CompactViewFailed, SetViewInfoNotFound) as ex:
@@ -1680,6 +1679,13 @@ class ViewCompactionTask(Task):
                             return
                         else:
                             continue
+                #print details in case of failure
+                new_compaction_revision, fragmentation = self._get_compaction_details()
+                self.log.error("stats compaction still: ({0},{1})".
+                          format(new_compaction_revision, fragmentation))
+                status, content = self.rest.set_view_info(self.bucket, self.design_doc_name)
+                stats = content["stats"]
+                self.warn("general compaction stats:{0}".format(stats))
                 self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
 
         except (SetViewInfoNotFound) as ex:
@@ -1692,16 +1698,14 @@ class ViewCompactionTask(Task):
             self.set_exception(e)
 
     def _get_compaction_details(self):
-        rest = RestConnection(self.server)
-        status, content = rest.set_view_info(self.bucket, self.design_doc_name)
+        status, content = self.rest.set_view_info(self.bucket, self.design_doc_name)
         curr_no_of_compactions = content["stats"]["compactions"]
         curr_ddoc_fragemtation = \
-            MonitorViewFragmentationTask.calc_ddoc_fragmentation(rest, self.design_doc_name, self.bucket, self.with_rebalance)
+            MonitorViewFragmentationTask.calc_ddoc_fragmentation(self.rest, self.design_doc_name, self.bucket, self.with_rebalance)
         return (curr_no_of_compactions, curr_ddoc_fragemtation)
 
     def _is_compacting(self):
-        rest = RestConnection(self.server)
-        status, content = rest.set_view_info(self.bucket, self.design_doc_name)
+        status, content = sefl.rest.set_view_info(self.bucket, self.design_doc_name)
         return content["compact_running"] == True
 
 '''task class for failover. This task will only failover nodes but doesn't
