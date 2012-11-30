@@ -38,14 +38,14 @@ class StoreMongo(mcsoda.Store):
         if d is None:
             d = { "_id": key_str,
                   "key_num": key_num,
-                  "name": mcsoda.key_to_name(key_num, key_str),
-                  "email": mcsoda.key_to_email(key_num, key_str),
-                  "city": mcsoda.key_to_city(key_num, key_str),
-                  "country": mcsoda.key_to_country(key_num, key_str),
-                  "realm": mcsoda.key_to_realm(key_num, key_str),
-                  "coins": mcsoda.key_to_coins(key_num, key_str),
-                  "category": mcsoda.key_to_category(key_num, key_str),
-                  "achievements": mcsoda.key_to_achievements(key_num, key_str) }
+                  "name": mcsoda.key_to_name(key_str),
+                  "email": mcsoda.key_to_email(key_str),
+                  "city": mcsoda.key_to_city(key_str),
+                  "country": mcsoda.key_to_country(key_str),
+                  "realm": mcsoda.key_to_realm(key_str),
+                  "coins": mcsoda.key_to_coins(key_str),
+                  "category": mcsoda.key_to_category(key_str),
+                  "achievements": mcsoda.key_to_achievements(key_str) }
         if cache:
             mongoDocCache[key_num] = d
 

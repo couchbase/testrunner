@@ -1364,36 +1364,36 @@ class StoreMemcachedAscii(Store):
 # A key is a 16 char hex string.
 
 
-def key_to_name(key_num, key_str):
+def key_to_name(key_str):
     return "%s %s" % (key_str[-16:-12], key_str[-4:-1])
 
 
-def key_to_email(key_num, key_str):
+def key_to_email(key_str):
     return "%s@%s.com" % (key_str[-16:-12], key_str[-13:-11])
 
 
-def key_to_city(key_num, key_str):
+def key_to_city(key_str):
     return key_str[-12:-9]
 
 
-def key_to_country(key_num, key_str):
+def key_to_country(key_str):
     return key_str[-9:-7]
 
 
-def key_to_realm(key_num, key_str):
+def key_to_realm(key_str):
     return key_str[-7:-5]
 
 
-def key_to_coins(key_num, key_str):
+def key_to_coins(key_str):
     sub_key = key_str[-16:]
     return max(0.0, int(sub_key[0:4], 16) / 100.0)
 
 
-def key_to_category(key_num, key_str):
+def key_to_category(key_str):
     return int(key_str[-12], 16) % 3
 
 
-def key_to_achievements(key_num, key_str):
+def key_to_achievements(key_str):
     next = 300
     achievements = []
     sub_key = key_str[-16:]
@@ -1430,14 +1430,14 @@ def gen_doc_string(key_num, key_str, min_value_size, suffix, json,
  "category":%s,
  "achievements":%s,""" % (key_name, key_str,
                           key_num,
-                          key_to_name(key_num, key_str),
-                          key_to_email(key_num, key_str),
-                          key_to_city(key_num, key_str),
-                          key_to_country(key_num, key_str),
-                          key_to_realm(key_num, key_str),
-                          key_to_coins(key_num, key_str),
-                          key_to_category(key_num, key_str),
-                          key_to_achievements(key_num, key_str))
+                          key_to_name(key_str),
+                          key_to_email(key_str),
+                          key_to_city(key_str),
+                          key_to_country(key_str),
+                          key_to_realm(key_str),
+                          key_to_coins(key_str),
+                          key_to_category(key_str),
+                          key_to_achievements(key_str))
         if not whitespace:
             d = d.replace("\n ", "")
         if cache:
