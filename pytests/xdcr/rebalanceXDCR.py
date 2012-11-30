@@ -10,6 +10,9 @@ import time
 class Rebalance(XDCRReplicationBaseTest):
     def setUp(self):
         super(Rebalance, self).setUp()
+        self.the_floating_set = self._floating_servers_set
+        self.the_source_set = self.src_nodes
+        self.the_destination_set = self.dest_nodes
         if self._replication_direction_str in "bidirection":
             self.gen_create2 = BlobGenerator('LoadTwo', 'LoadTwo', self._value_size, end=self._num_items)
             self.gen_delete2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size,
@@ -19,6 +22,9 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def tearDown(self):
         super(Rebalance, self).tearDown()
+        self.src_nodes = self.the_source_set
+        self.dest_nodes = self.the_destination_set
+        self._floating_servers_set = self.the_floating_set
         BucketOperationHelper.delete_all_buckets_or_assert(self._floating_servers_set, self)
         ClusterOperationHelper.cleanup_cluster(self._floating_servers_set, self)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self._floating_servers_set, self)
