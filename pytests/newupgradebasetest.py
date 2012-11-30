@@ -16,7 +16,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         super(NewUpgradeBaseTest, self).setUp()
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '1.8.1-942-rel')
-        self.initial_vbuckets = self.input.param('initial_vbuckets', 64)
+        self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.rest_settings = self.input.membase_settings
         self.rest = RestConnection(self.master)
         self.rest_helper = RestHelper(self.rest)
