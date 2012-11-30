@@ -253,6 +253,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.src_nodes.remove(remove_node)
                 self.src_nodes.append(add_node)
                 removed_src_nodes.append(remove_node)
+                removed_floating_nodes.append(add_node)
             time.sleep(self._timeout / 2)
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                 if "source" in self._rebalance:
@@ -265,7 +266,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.dest_nodes.remove(remove_node)
                 self.dest_nodes.append(add_node)
                 removed_dest_nodes.append(remove_node)
-            removed_floating_nodes.append(add_node)
+                removed_floating_nodes.append(add_node)
 
             time.sleep(self._timeout / 6)
             if self._replication_direction_str in "unidirection":
@@ -324,6 +325,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.src_nodes.remove(self.src_master)
                 removed_src_nodes.append(self.src_master)
                 self.src_master = self.src_nodes[0]
+                removed_floating_nodes.append(add_node)
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                 if "source" in self._rebalance:
                     add_node = self._floating_servers_set[num_rebalance]
@@ -335,7 +337,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.dest_nodes.remove(self.dest_master)
                 removed_dest_nodes.append(self.dest_master)
                 self.dest_master = self.dest_nodes[0]
-            removed_floating_nodes.append(add_node)
+                removed_floating_nodes.append(add_node)
 
             time.sleep(self._timeout / 6)
             if self._replication_direction_str in "unidirection":
