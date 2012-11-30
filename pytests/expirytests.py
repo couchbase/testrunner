@@ -42,7 +42,7 @@ class ExpiryTests(unittest.TestCase):
                            proxyPort=info.memcached)
         msg = 'create_bucket succeeded but bucket "default" does not exist'
         self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self._bucket_name, rest), msg=msg)
-        ready = BucketOperationHelper.wait_for_memcached(serverInfo,self._bucket_name)
+        ready = BucketOperationHelper.wait_for_memcached(serverInfo, self._bucket_name)
         self.assertTrue(ready, "wait_for_memcached failed")
         self._log_start()
 
@@ -105,9 +105,9 @@ class ExpiryTests(unittest.TestCase):
         server = self.master
         # callback to track deletes
         queue = Queue(maxsize=10000)
-        listener = TapListener(queue,server,"CMD_TAP_DELETE")
+        listener = TapListener(queue, server, "CMD_TAP_DELETE")
 
-        client = MemcachedClientHelper.direct_client(server,self._bucket_name)
+        client = MemcachedClientHelper.direct_client(server, self._bucket_name)
         expirations = [15]
         for expiry in expirations:
             testuuid = uuid.uuid4()
@@ -125,7 +125,6 @@ class ExpiryTests(unittest.TestCase):
             msg = "sleeping for {0} seconds to wait for those items with expiry set to {1} to expire"
             self.log.info(msg.format(delay, expiry))
             time.sleep(delay)
-            listener.start()
             self.log.info('verifying that all those keys have expired...')
             for key in keys:
                 try:
@@ -136,20 +135,22 @@ class ExpiryTests(unittest.TestCase):
                     self.assertEquals(error.status, 1,
                                       msg="expected error code {0} but saw error code {1}".format(1, error.status))
             self.log.info("verified that those keys inserted with expiry set to {0} have expired".format(expiry))
-            listener.aborted = True
-            was_empty = 0
-            deletes_seen = 0
-            while was_empty < 2:
-                try:
-                    queue.get(False, 5)
-                    deletes_seen += 1
-                except Empty:
-                    print "exception thrown"
-                    print "how many deletes_seen ? {0}".format(deletes_seen)
-                    was_empty += 1
-            self.assertEquals(deletes_seen, 0, msg="some some deletes")
-            self.log.info("seen {0} CMD_TAP_DELETE".format(deletes_seen))
-
+            listener.start()
+            try:
+                was_empty = 0
+                deletes_seen = 0
+                while was_empty < 2:
+                    try:
+                        queue.get(False, 5)
+                        deletes_seen += 1
+                    except Empty:
+                        print "exception thrown"
+                        print "how many deletes_seen ? {0}".format(deletes_seen)
+                        was_empty += 1
+                self.assertEquals(deletes_seen, 0, msg="some some deletes")
+                self.log.info("seen {0} CMD_TAP_DELETE".format(deletes_seen))
+            finally:
+                listener.aborted = True
 
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert(servers=[self.master], test_case=self)
