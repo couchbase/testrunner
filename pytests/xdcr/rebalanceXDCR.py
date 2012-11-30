@@ -69,6 +69,7 @@ class Rebalance(XDCRReplicationBaseTest):
         if self._replication_direction_str in "bidirection":
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
+        removed_floating_nodes = []
         time.sleep(self._timeout / 6)
         for num_rebalance in range(self._num_rebalance):
             add_node = self._floating_servers_set[num_rebalance - 1]
@@ -79,6 +80,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     " Starting rebalance-in node {0} at Source cluster {1}".format(add_node.ip, self.src_master.ip))
 
                 self.src_nodes.extend([add_node])
+                removed_floating_nodes.append(add_node)
 
             if "destination" in self._rebalance:
                 if "source" in self._rebalance:
@@ -87,6 +89,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._log.info(" Starting rebalance-in node{0} at Destination cluster {1}".format(add_node.ip,
                     self.dest_master.ip))
                 self.dest_nodes.extend([add_node])
+                removed_floating_nodes.append(add_node)
             time.sleep(self._timeout / 2)
 
             if self._replication_direction_str in "unidirection":
@@ -111,6 +114,9 @@ class Rebalance(XDCRReplicationBaseTest):
                 self.src_nodes.remove(node)
             if node in self.dest_nodes:
                 self.dest_nodes.remove(node)
+        for node in removed_floating_nodes:
+            if node not in self._floating_servers_set:
+                self._floating_servers_set.append(node)
 
 
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
@@ -124,6 +130,8 @@ class Rebalance(XDCRReplicationBaseTest):
         if self._replication_direction_str in "bidirection":
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
+        removed_src_nodes = []
+        removed_dest_nodes = []
         time.sleep(self._timeout / 6)
         for num_rebalance in range(self._num_rebalance):
             tasks = []
@@ -133,12 +141,14 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._log.info(" Starting rebalance-out node {0} at Source cluster {1}".format(remove_node.ip,
                     self.src_master.ip))
                 self.src_nodes.remove(remove_node)
+                removed_src_nodes.append(remove_node)
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                 remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                 tasks.extend(self._async_rebalance(self.dest_nodes, [], [remove_node]))
                 self._log.info(" Starting rebalance-out node{0} at Destination cluster {1}".format(remove_node.ip,
                     self.dest_master.ip))
                 self.dest_nodes.remove(remove_node)
+                removed_dest_nodes.append(remove_node)
 
             time.sleep(self._timeout / 6)
 
@@ -158,11 +168,10 @@ class Rebalance(XDCRReplicationBaseTest):
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
                 self.verify_results(verify_src=True)
 
-        for node in self._floating_servers_set:
-            if node in self.src_nodes:
-                self.src_nodes.remove(node)
-            if node in self.dest_nodes:
-                self.dest_nodes.remove(node)
+        for node in removed_src_nodes:
+            self.src_nodes.append(node)
+        for node in removed_dest_nodes:
+            self.dest_nodes.append(node)
 
     """Loading only at source cluster. Async Rebalance-Out Master node at Source/Destination while
 Create/Update/Delete are performed in parallel based on doc-ops specified by the user.
@@ -173,6 +182,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
 
         if self._replication_direction_str in "bidirection":
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+
+        removed_src_nodes = []
+        removed_dest_nodes = []
         time.sleep(self._timeout / 6)
         tasks = []
         if "source" in self._rebalance:
@@ -180,6 +192,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             self._log.info(" Starting rebalance-out Master node {0} at Source cluster {1}".format(self.src_master.ip,
                 self.src_master.ip))
             self.src_nodes.remove(self.src_master)
+            removed_src_nodes.append(self.src_master)
             self.src_master = self.src_nodes[0]
         if "destination" in self._rebalance:
             tasks.extend(self._async_rebalance(self.dest_nodes, [], [self.dest_master]))
@@ -187,6 +200,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 " Starting rebalance-out Master node {0} at Destination cluster {1}".format(self.dest_master.ip,
                     self.dest_master.ip))
             self.dest_nodes.remove(self.dest_master)
+            removed_dest_nodes.append(self.dest_master)
             self.dest_master = self.dest_nodes[0]
 
         time.sleep(self._timeout / 6)
@@ -207,11 +221,10 @@ Verifying whether XDCR replication is successful on subsequent destination clust
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
             self.verify_results(verify_src=True)
 
-        for node in self._floating_servers_set:
-            if node in self.src_nodes:
-                self.src_nodes.remove(node)
-            if node in self.dest_nodes:
-                self.dest_nodes.remove(node)
+        for node in removed_src_nodes:
+            self.src_nodes.append(node)
+        for node in removed_dest_nodes:
+            self.dest_nodes.append(node)
 
         """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
         Swap Rebalance-Out Non-master node at Source/Destination while
@@ -224,6 +237,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
         if self._replication_direction_str in "bidirection":
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
+        removed_src_nodes = []
+        removed_dest_nodes = []
+        removed_floating_nodes = []
         time.sleep(self._timeout / 6)
         for num_rebalance in range(self._num_rebalance):
             tasks = []
@@ -236,6 +252,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                         self.src_master.ip, add_node.ip, remove_node.ip))
                 self.src_nodes.remove(remove_node)
                 self.src_nodes.append(add_node)
+                removed_src_nodes.append(remove_node)
             time.sleep(self._timeout / 2)
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                 if "source" in self._rebalance:
@@ -247,6 +264,8 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                         add_node.ip, remove_node.ip))
                 self.dest_nodes.remove(remove_node)
                 self.dest_nodes.append(add_node)
+                removed_dest_nodes.append(remove_node)
+            removed_floating_nodes.append(add_node)
 
             time.sleep(self._timeout / 6)
             if self._replication_direction_str in "unidirection":
@@ -270,6 +289,13 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.src_nodes.remove(node)
             if node in self.dest_nodes:
                 self.dest_nodes.remove(node)
+        for node in removed_src_nodes:
+            self.src_nodes.append(node)
+        for node in removed_dest_nodes:
+            self.dest_nodes.append(node)
+        for node in removed_floating_nodes:
+            if node not in self._floating_servers_set:
+                self._floating_servers_set.append(node)
 
             """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
              Swap Rebalance-Out Master node at Source/Destination while
@@ -282,6 +308,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
         if self._replication_direction_str in "bidirection":
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
+        removed_src_nodes = []
+        removed_dest_nodes = []
+        removed_floating_nodes = []
         time.sleep(self._timeout / 6)
         for num_rebalance in range(self._num_rebalance):
             tasks = []
@@ -293,6 +322,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                     " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                         self.src_master.ip, add_node.ip, remove_node.ip))
                 self.src_nodes.remove(self.src_master)
+                removed_src_nodes.append(self.src_master)
                 self.src_master = self.src_nodes[0]
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                 if "source" in self._rebalance:
@@ -303,7 +333,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                     " Starting rebalance-out node{0} at Destination cluster {1}".format(self.dest_master.ip,
                         add_node.ip, remove_node.ip))
                 self.dest_nodes.remove(self.dest_master)
+                removed_dest_nodes.append(self.dest_master)
                 self.dest_master = self.dest_nodes[0]
+            removed_floating_nodes.append(add_node)
 
             time.sleep(self._timeout / 6)
             if self._replication_direction_str in "unidirection":
@@ -327,6 +359,13 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.src_nodes.remove(node)
             if node in self.dest_nodes:
                 self.dest_nodes.remove(node)
+        for node in removed_src_nodes:
+            self.src_nodes.append(node)
+        for node in removed_dest_nodes:
+            self.dest_nodes.append(node)
+        for node in removed_floating_nodes:
+            if node not in self._floating_servers_set:
+                self._floating_servers_set.append(node)
 
     """Replication with compaction ddocs and view queries on both clusters.Loading only
         at source cluster, swap rebalancing at source/destination as specified by the user.
@@ -338,6 +377,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
         if self._replication_direction_str in "bidirection":
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
+        removed_src_nodes = []
+        removed_dest_nodes = []
+        removed_floating_nodes = []
         time.sleep(self._timeout / 6)
 
         src_buckets = self._get_cluster_buckets(self.src_master)
@@ -362,6 +404,7 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                     " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                         self.src_master.ip, add_node.ip, remove_node.ip))
                 self.src_nodes.remove(remove_node)
+                removed_src_nodes.append(remove_node)
             if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                 remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                 tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
@@ -369,6 +412,8 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                     " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                         self.dest_master.ip, add_node.ip, remove_node.ip))
                 self.dest_nodes.remove(remove_node)
+                removed_dest_nodes.append(remove_node)
+            removed_floating_nodes.append(add_node)
 
             time.sleep(30)
             for task in tasks:
@@ -403,6 +448,13 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.src_nodes.remove(node)
             if node in self.dest_nodes:
                 self.dest_nodes.remove(node)
+        for node in removed_src_nodes:
+            self.src_nodes.append(node)
+        for node in removed_dest_nodes:
+            self.dest_nodes.append(node)
+        for node in removed_floating_nodes:
+            if node not in self._floating_servers_set:
+                self._floating_servers_set.append(node)
 
     def swap_rebalance_replication_with_view_queries_and_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
@@ -410,6 +462,9 @@ Verifying whether XDCR replication is successful on subsequent destination clust
         if self._replication_direction_str in "bidirection":
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
+        removed_src_nodes = []
+        removed_dest_nodes = []
+        removed_floating_nodes = []
         time.sleep(self._timeout / 6)
 
         src_buckets = self._get_cluster_buckets(self.src_master)
@@ -460,14 +515,17 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                         " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                             self.src_master.ip, add_node.ip, remove_node.ip))
                     self.src_nodes.remove(remove_node)
+                    removed_src_nodes.append(remove_node)
 
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
-                     remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
-                     tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
-                     self._log.info(
+                    remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
+                    tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
+                    self._log.info(
                         " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                             self.dest_master.ip, add_node.ip, remove_node.ip))
-                     self.dest_nodes.remove(remove_node)
+                    self.dest_nodes.remove(remove_node)
+                    removed_dest_nodes.append(remove_node)
+                removed_floating_nodes.append(add_node)
 
             time.sleep(5)
 
@@ -507,3 +565,10 @@ Verifying whether XDCR replication is successful on subsequent destination clust
                 self.src_nodes.remove(node)
             if node in self.dest_nodes:
                 self.dest_nodes.remove(node)
+        for node in removed_src_nodes:
+            self.src_nodes.append(node)
+        for node in removed_dest_nodes:
+            self.dest_nodes.append(node)
+        for node in removed_floating_nodes:
+            if node not in self._floating_servers_set:
+                self._floating_servers_set.append(node)
