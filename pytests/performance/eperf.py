@@ -1,3 +1,4 @@
+import sys
 import time
 import json
 import os
@@ -981,155 +982,61 @@ class EPerfMaster(perf.PerfBase):
                               max_creates=self.parami("max_creates",
                                                       PerfDefaults.max_creates))
 
-    def test_vperf2(self):
-        """1 design document, 8 views"""
+    def test_vperf(self):
+        """View performance test"""
+        self.spec(self.__str__().split(" ")[0])
 
-        self.spec("vperf2")
-
+        # Configuration
         self.gated_start(self.input.clients)
-
-        # Load phase
-        if self.parami("load_phase", 0):
-            self.load_phase(self.parami('num_nodes', 10))
-
-        # Index phase
         view_gen = ViewGen()
-        ddocs = view_gen.generate_ddocs([8])
-        self.index_phase(ddocs)
-
-        # Access phase
-        limit = self.parami('limit', 10)
-        query_suffix = self.param("query_suffix", "")
-        bucket = self.params('bucket', 'default')
-        queries = view_gen.generate_queries(ddocs, bucket)
-
-        self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
-        self.fg_max_ops = self.parami('fg_max_ops', 1000000)
-
-        # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        if self.parami('num_nodes_before', 0):
-            server_sn = self.parami('prefix', 0) % \
-                self.parami('num_nodes_before', 0)
-        else:
-            server_sn = self.parami('prefix', 0) % len(self.input.servers)
-        host = self.input.servers[server_sn].ip
-
-        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
-                          ratio_misses=self.paramf('ratio_misses', 0.05),
-                          ratio_creates=self.paramf('ratio_creates', 0.33),
-                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
-                          ratio_hot=self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations=self.paramf('ratio_expirations',
-                                                        0.03),
-                          max_creates=self.parami("max_creates", 30000000),
-                          ratio_queries=self.paramf('ratio_queries', 0.3571),
-                          queries=queries,
-                          proto_prefix="couchbase",
-                          host=host,
-                          ddoc=view_gen.ddocs.next())
-
-        if self.parami("debug_phase", 0):
-            self.debug_phase(ddocs)
-
-    def test_vperf4(self):
-        """3 design documents, 2-2-4 view"""
-
-        self.spec("vperf4")
-
-        self.gated_start(self.input.clients)
+        try:
+            views = self.param("views", None)
+            ddocs = view_gen.generate_ddocs(eval(views))
+        except (SyntaxError, TypeError):
+            self.log.error("Wrong or missing views parameter")
+            sys.exit()
 
         # Load phase
         if self.parami("load_phase", 0):
-            self.load_phase(self.parami('num_nodes', 10))
-
-        # Index phase
-        view_gen = ViewGen()
-        ddocs = view_gen.generate_ddocs([2, 2, 4])
-        self.index_phase(ddocs)
-
-        # Access phase
-        bucket = self.params('bucket', 'default')
-        queries = view_gen.generate_queries(ddocs, bucket)
-
-        self.bg_max_ops_per_sec = self.parami('bg_max_ops_per_sec', 100)
-        self.fg_max_ops = self.parami('fg_max_ops', 1000000)
-
-        # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        server_sn = self.parami("prefix", 0) % len(self.input.servers)
-        host = self.input.servers[server_sn].ip
-
-        self.access_phase(ratio_sets=self.paramf('ratio_sets', 0.3),
-                          ratio_misses=self.paramf('ratio_misses', 0.05),
-                          ratio_creates=self.paramf('ratio_creates', 0.33),
-                          ratio_deletes=self.paramf('ratio_deletes', 0.25),
-                          ratio_hot=self.paramf('ratio_hot', 0.2),
-                          ratio_hot_gets=self.paramf('ratio_hot_gets', 0.95),
-                          ratio_hot_sets=self.paramf('ratio_hot_sets', 0.95),
-                          ratio_expirations=self.paramf('ratio_expirations',
-                                                        0.03),
-                          max_creates=self.parami("max_creates", 30000000),
-                          ratio_queries=self.paramf('ratio_queries', 0.3571),
-                          queries=queries,
-                          proto_prefix="couchbase",
-                          host=host,
-                          ddoc=view_gen.ddocs.next())
-
-        if self.parami("debug_phase", 0):
-            self.debug_phase(ddocs)
-
-    def test_evperf2(self):
-        """3 design documents, 8 views per design document"""
-
-        self.spec("evperf2")
-
-        self.gated_start(self.input.clients)
-        num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
-
-        # Load phase
-        if self.parami("load_phase", 0):
+            num_nodes = self.parami("num_nodes", 10)
             self.load_phase(num_nodes)
 
         # Index phase
-        view_gen = ViewGen()
-        ddocs = view_gen.generate_ddocs([8, 8, 8])
         if self.parami("index_phase", 0):
             self.index_phase(ddocs)
 
         # Access phase
-        limit = self.parami('limit', PerfDefaults.limit)
-        query_suffix = self.param("query_suffix", "")
-        bucket = self.params('bucket', 'default')
-        queries = view_gen.generate_queries(ddocs, bucket)
+        if self.parami("access_phase", 0) == 1:
+            bucket = self.params("bucket", "default")
+            queries = view_gen.generate_queries(ddocs, bucket)
 
-        # Rotate host so multiple clients don't hit the same HTTP/REST server.
-        server_sn = self.parami("prefix", 0) % len(self.input.servers)
-        host = self.input.servers[server_sn].ip
+            self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
+            self.fg_max_ops = self.parami("fg_max_ops", 1000000)
 
-        if self.parami("access_phase", 0):
-            self.access_phase(ratio_sets=self.paramf('ratio_sets',
-                                                     PerfDefaults.ratio_sets),
-                              ratio_misses=self.paramf('ratio_misses',
-                                                       PerfDefaults.ratio_misses),
-                              ratio_creates=self.paramf('ratio_creates',
-                                                        PerfDefaults.ratio_creates),
-                              ratio_deletes=self.paramf('ratio_deletes',
-                                                        PerfDefaults.ratio_deletes),
-                              ratio_hot=self.paramf('ratio_hot',
-                                                    PerfDefaults.ratio_hot),
-                              ratio_hot_gets=self.paramf('ratio_hot_gets',
-                                                         PerfDefaults.ratio_hot_gets),
-                              ratio_hot_sets=self.paramf('ratio_hot_sets',
-                                                         PerfDefaults.ratio_hot_sets),
-                              ratio_expirations=self.paramf('ratio_expirations',
-                                                            PerfDefaults.ratio_expirations),
-                              max_creates=self.parami("max_creates",
-                                                      PerfDefaults.max_creates),
-                              queries=queries,
-                              proto_prefix="couchbase",
-                              host=host,
-                              ddoc=view_gen.ddocs.next())
+            # Rotate hosts so multiple clients don't hit the same HTTP/REST
+            # server
+            if self.parami('num_nodes_before', 0):
+                server_sn = self.parami('prefix', 0) % \
+                            self.parami('num_nodes_before', 0)
+            else:
+                server_sn = self.parami('prefix', 0) % len(self.input.servers)
+            host = self.input.servers[server_sn].ip
+
+            self.access_phase(
+                ratio_sets=self.paramf('ratio_sets', PerfDefaults.ratio_sets),
+                ratio_misses=self.paramf('ratio_misses', PerfDefaults.ratio_misses),
+                ratio_creates=self.paramf('ratio_creates', PerfDefaults.ratio_creates),
+                ratio_deletes=self.paramf('ratio_deletes', PerfDefaults.ratio_deletes),
+                ratio_hot=self.paramf('ratio_hot', PerfDefaults.ratio_hot),
+                ratio_hot_gets=self.paramf('ratio_hot_gets', PerfDefaults.ratio_hot_gets),
+                ratio_hot_sets=self.paramf('ratio_hot_sets', PerfDefaults.ratio_hot_sets),
+                ratio_expirations=self.paramf('ratio_expirations', PerfDefaults.ratio_expirations),
+                max_creates=self.parami("max_creates", PerfDefaults.max_creates),
+                queries=queries,
+                proto_prefix="couchbase",
+                host=host,
+                ddoc=view_gen.ddocs.next()
+            )
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)

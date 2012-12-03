@@ -216,19 +216,8 @@ class MultiClientTests(EVPerfClient):
     """
 
     @PerfWrapper.multiply
-    def test_evperf2(self):
-        """3 design ddocs, 8 views per ddoc"""
-        super(MultiClientTests, self).test_evperf2()
-
-    @PerfWrapper.multiply
-    def test_vperf2(self):
-        """1 design ddoc, 8 views"""
-        super(MultiClientTests, self).test_vperf2()
-
-    @PerfWrapper.multiply
-    def test_vperf4(self):
-        """3 design ddocs, 2-2-4 views"""
-        super(MultiClientTests, self).test_vperf4()
+    def test_vperf(self):
+        super(MultiClientTests, self).test_vperf()
 
 
 class RampUpTests(EVPerfClient):
@@ -238,8 +227,7 @@ class RampUpTests(EVPerfClient):
 
     @PerfWrapper.rampup
     def test_view_rampup_1(self):
-        """1 design ddoc, 8 views"""
-        super(RampUpTests, self).test_vperf2()
+        super(RampUpTests, self).test_vperf()
 
 
 class XPerfTests(EPerfClient):
@@ -406,28 +394,15 @@ class XVPerfTests(XPerfTests, EVPerfClient):
 
     @PerfWrapper.xperf()
     def test_vperf_unidir(self):
-        """1 design ddoc, 8 views"""
-        super(XVPerfTests, self).test_vperf2()
+        super(XVPerfTests, self).test_vperf()
 
     @PerfWrapper.xperf(bidir=True)
     def test_vperf_bidir(self):
-        """1 design ddoc, 8 views"""
-        super(XVPerfTests, self).test_vperf2()
-
-    @PerfWrapper.xperf()
-    def test_vperf_3d_unidir(self):
-        """3 design ddocs, 2-2-4 views"""
-        super(XVPerfTests, self).test_vperf4()
-
-    @PerfWrapper.xperf(bidir=True)
-    def test_vperf_3d_bidir(self):
-        """3 design ddocs, 2-2-4 views"""
-        super(XVPerfTests, self).test_vperf4()
+        super(XVPerfTests, self).test_vperf()
 
     @PerfWrapper.xperf_load
     def test_vperf_load(self):
-        """1 design ddoc, 8 views"""
-        super(XVPerfTests, self).test_vperf2()
+        super(XVPerfTests, self).test_vperf()
 
 
 class RebalanceTests(EVPerfClient):
@@ -436,21 +411,15 @@ class RebalanceTests(EVPerfClient):
     """
 
     @PerfWrapper.rebalance
-    def test_view_rebalance_1(self):
-        """1 design ddoc, 8 views"""
-        super(RebalanceTests, self).test_vperf2()
-
-    @PerfWrapper.rebalance
-    def test_view_rebalance_2(self):
-        """3 design ddocs, 2-2-4 views"""
-        super(RebalanceTests, self).test_vperf4()
+    def test_views_rebalance(self):
+        super(RebalanceTests, self).test_vperf()
 
     @PerfWrapper.rebalance
     def test_mixed_rebalance(self):
         """Mixed read/write test w/o views"""
         super(RebalanceTests, self).test_eperf_mixed()
 
-    def test_view_rebalance(self):
+    def test_alk_rebalance(self):
         """Alk's specification.
 
         Cluster setup:
@@ -558,6 +527,6 @@ class XRebalanceTests(XVPerfTests):
         super(XRebalanceTests, self).test_mixed_bidir()
 
     @PerfWrapper.rebalance
-    def test_vperf_3d_unidir_rebalance(self):
+    def test_vperf_unidir_rebalance(self):
         """Mixed read/write test with views"""
-        super(XRebalanceTests, self).test_vperf_3d_unidir()
+        super(XRebalanceTests, self).test_vperf_unidir()
