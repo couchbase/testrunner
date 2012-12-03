@@ -991,7 +991,11 @@ class EPerfMaster(perf.PerfBase):
         view_gen = ViewGen()
         try:
             views = self.param("views", None)
-            ddocs = view_gen.generate_ddocs(eval(views))
+            if isinstance(views, str):
+                ddocs = view_gen.generate_ddocs(eval(views))
+            else:
+                views = [int(v) for v in views]
+                ddocs = view_gen.generate_ddocs(views)
         except (SyntaxError, TypeError):
             self.log.error("Wrong or missing views parameter")
             sys.exit()
