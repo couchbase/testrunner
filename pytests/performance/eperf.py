@@ -989,13 +989,17 @@ class EPerfMaster(perf.PerfBase):
         # Configuration
         self.gated_start(self.input.clients)
         view_gen = ViewGen()
+        views = self.param("views", None)
         try:
-            views = self.param("views", None)
             if isinstance(views, str):
-                ddocs = view_gen.generate_ddocs(eval(views))
-            else:
+                views = eval(views)
+                if isinstance(views, int):
+                    views = [views]
+            elif isinstance(views, list):
                 views = [int(v) for v in views]
-                ddocs = view_gen.generate_ddocs(views)
+            else:
+                raise TypeError
+            ddocs = view_gen.generate_ddocs(views)
         except (SyntaxError, TypeError):
             self.log.error("Wrong or missing views parameter")
             sys.exit()
