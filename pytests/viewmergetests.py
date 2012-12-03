@@ -39,6 +39,7 @@ class ViewMergingTests(BaseTestCase):
             self.is_dev_view = self.input.param("is_dev_view", True)
             self.map_view_name = 'mapview1'
             self.red_view_name = 'redview1'
+            self.red_view_stats_name = 'redview_stats'
             self.clients = self.init_clients()
             if 'first_case' in TestInputSingleton.input.test_params:
                  self.create_ddocs()
@@ -131,6 +132,24 @@ class ViewMergingTests(BaseTestCase):
         self.assertEquals(results.get(u'total_rows', None), self.num_docs + 2)
         self.assertEquals(len(results.get(u'rows', None)), self.num_docs + 2)
         self.verify_keys_are_sorted(results)
+
+    def test_stats_error(self):
+        nodes = self.input.param("num_nodes", 0)
+        params = {'stale': 'false', 'on_error': 'stop'}
+        if nodes == 1:
+            try:
+                self.merged_query(self.red_view_stats_name, params=params, ddoc='test2')
+                self.assertTrue(False, "Expected exception when querying _stats view")
+            except QueryViewException as ex:
+                expectedStr = 'Error occured querying view ' + self.red_view_stats_name + \
+                    ': {"error":"error","reason":"Builtin _stats function requires map' + \
+                    ' values to be numbers"}'
+                self.assertEquals(str(ex).strip("\n"), expectedStr)
+        else:
+            self.assertTrue(nodes > 1)
+            results = self.merged_query(self.red_view_stats_name, params=params, ddoc='test2')
+            self.assertEquals(len(results.get(u'rows', None)), 0)
+            self.assertEquals(len(results.get(u'errors', None)), 1)
 
     def calculate_matching_keys(self, params):
         keys = range(1, self.num_docs + 1)
@@ -232,6 +251,10 @@ class ViewMergingTests(BaseTestCase):
              emit([doc.integer, doc.string], doc.integer);
           }''', '''_count''', dev_view=self.is_dev_view)
         self.cluster.create_view(self.master, 'test', redview)
+        redview_stats = View(self.red_view_stats_name, '''function(doc) {
+             emit(doc.string, doc.string);
+          }''', '''_stats''', dev_view=self.is_dev_view)
+        self.cluster.create_view(self.master, 'test2', redview_stats)
         RebalanceHelper.wait_for_persistence(self.master, self.bucket, 0)
 
     def init_clients(self):
