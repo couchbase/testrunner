@@ -1689,7 +1689,7 @@ class ViewCompactionTask(Task):
                           format(new_compaction_revision, fragmentation))
                 status, content = self.rest.set_view_info(self.bucket, self.design_doc_name)
                 stats = content["stats"]
-                self.warn("general compaction stats:{0}".format(stats))
+                self.log.warn("general compaction stats:{0}".format(stats))
                 self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
 
         except (SetViewInfoNotFound) as ex:
