@@ -150,6 +150,8 @@ class ViewGen(object):
         """
         if filter(lambda v: v > 10, pattern):
             raise Exception("Maximum 10 views per ddoc allowed")
+        if len(pattern) > 10:
+            raise Exception("Maximum 10 design documents allowed")
 
         ddocs = dict()
         for number_of_views in pattern:
