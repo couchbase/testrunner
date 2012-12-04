@@ -317,15 +317,17 @@ class BaseTestCase(unittest.TestCase):
         ref_view.name = (prefix, ref_view.name)[prefix is None]
         return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
 
-    def _load_doc_data_all_buckets(self, data_op="create", batch_size=1000):
+    def _load_doc_data_all_buckets(self, data_op="create", batch_size=1000, gen_load=None):
         #initialize the template for document generator
         age = range(5)
         first = ['james', 'sharon']
-        template = '{{ "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
+        template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
+        if gen_load is None:
+            gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
 
         self.log.info("%s %s documents..." % (data_op, self.num_items))
         self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size=batch_size)
+        return gen_load
 
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None):
         if servers is None:

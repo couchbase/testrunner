@@ -3,6 +3,7 @@ import time
 from view_base import ViewBaseTest
 from couchbase.document import DesignDocument, View
 from membase.api.rest_client import RestConnection
+from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
 
@@ -439,6 +440,60 @@ class CreateDeleteViewTests(ViewBaseTest):
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
             self._verify_ddoc_data_all_buckets()
+
+    """MB-7285
+    Check ddoc compaction during rebalance.
+    NOTE: 1 ddoc has multiply views with different total number of emitted results
+
+    This test begins by loading a given number of items into the cluster.
+    It creates views in 1 ddoc as development/production view with given
+    funcs(is_dev_ddoc = True by default). Then we disabled compaction for
+    ddoc. Start rebalance. While we don't reach expected fragmentation for
+    ddoc we update docs and perform view queries. Start compation when
+    fragmentation was reached fragmentation_value. Wait while compaction
+    will be completed. """
+    def rebalance_in_with_ddoc_compaction(self):
+        fragmentation_value = self.input.param("fragmentation_value", 80)
+        is_dev_ddoc = False
+        ddoc_name = "ddoc_compaction"
+        map_fn_2 = "function (doc) { if (doc.first_name == 'sharon') {emit(doc.age, doc.first_name);}}"
+
+        ddoc = DesignDocument(ddoc_name, [View(ddoc_name + "0", self.default_map_func,
+                                               None,
+                                               dev_view=is_dev_ddoc),
+                                          View(ddoc_name + "1",
+                                               map_fn_2, None,
+                                               dev_view=is_dev_ddoc)])
+        prefix = ("", "dev_")[is_dev_ddoc]
+        query = {"connectionTimeout" : 60000}
+        self.disable_compaction()
+
+        for view in ddoc.views:
+            self.cluster.create_view(self.master, ddoc.name, view, bucket=self.default_bucket_name)
+
+        generator = self._load_doc_data_all_buckets()
+        RebalanceHelper.wait_for_persistence(self.master, self.default_bucket_name)
+
+        # generate load until fragmentation reached
+        rebalance = self.cluster.async_rebalance([self.master], self.servers[1:self.nodes_in + 1], [])
+        while rebalance.state != "FINISHED":
+            fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
+                             prefix + ddoc_name, fragmentation_value, self.default_bucket_name)
+            end_time = time.time() + self.wait_timeout * 30
+            while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
+                # update docs to create fragmentation
+                self._load_doc_data_all_buckets("update", gen_load=generator)
+                for view in ddoc.views:
+                    # run queries to create indexes
+                    self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+            if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
+                self.fail("impossible to reach compaction value after %s sec" % (self.wait_timeout * 20))
+            fragmentation_monitor.result()
+            compaction_task = self.cluster.async_compact_view(self.master, prefix + ddoc_name,
+                                                              self.default_bucket_name, with_rebalance=True)
+            result = compaction_task.result(self.wait_timeout * 10)
+            self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+        rebalance.result()
 
     """Add nodes to the cluster and execute design doc/view operations while nodes are in pending add."""
     def pending_add_with_ddoc_ops(self):
