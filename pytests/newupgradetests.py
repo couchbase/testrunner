@@ -7,10 +7,6 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
         super(SingleNodeUpgradeTests, self).setUp()
-        if self.initial_version.startswith("1.6") or self.initial_version.startswith("1.7"):
-            self.product = 'membase-server'
-        else:
-            self.product = 'couchbase-server'
 
     def tearDown(self):
         super(SingleNodeUpgradeTests, self).tearDown()
@@ -18,11 +14,9 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def test_upgrade(self):
         self._install([self.master])
         self.operations()
-        upgrade_versions = self.input.param('upgrade_version', '2.0.0-1870-rel')
-        upgrade_versions = upgrade_versions.split(";")
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         time.sleep(self.sleep_time)
-        for upgrade_version in upgrade_versions:
+        for upgrade_version in self.upgrade_versions:
             remote = RemoteMachineShellConnection(self.master)
             self._upgrade(upgrade_version, self.master, remote)
             time.sleep(self.expire_time)
@@ -35,10 +29,6 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
 class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
         super(MultiNodesUpgradeTests, self).setUp()
-        if self.initial_version.startswith("1.6") or self.initial_version.startswith("1.7"):
-            self.product = 'membase-server'
-        else:
-            self.product = 'couchbase-server'
         self.initial_num_servers = self.input.param('initial_num_servers', 2)
 
     def tearDown(self):
@@ -47,11 +37,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.initial_num_servers])
         self.operations(multi_nodes=True)
-        upgrade_versions = self.input.param('upgrade_version', '2.0.0-1870-rel')
-        upgrade_versions = upgrade_versions.split(";")
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
         time.sleep(self.sleep_time)
-        for upgrade_version in upgrade_versions:
+        for upgrade_version in self.upgrade_versions:
             for server in self.servers[:self.initial_num_servers]:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -71,8 +59,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(multi_nodes=True)
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         time.sleep(self.sleep_time)
-        upgrade_version = self.input.param('upgrade_version', '2.0.0-1870-rel')
-        self.initial_version = upgrade_version
+        self.initial_version = self.upgrade_versions[0]
         self.product = 'couchbase-server'
         self._install(self.servers[self.initial_num_servers:self.num_servers])
         self.log.info("Installation of new version is done. Wait for %s sec for rebalance" % (self.sleep_time))
@@ -121,8 +108,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(multi_nodes=True)
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         time.sleep(self.sleep_time)
-        upgrade_version = self.input.param('upgrade_version', '2.0.0-1870-rel')
-        self.initial_version = upgrade_version
+        self.initial_version = self.upgrade_versions[0]
         self.product = 'couchbase-server'
         self._install(self.servers[self.initial_num_servers:self.num_servers])
         self.log.info("Installation of new version is done. Wait for %s sec for rebalance" % (self.sleep_time))

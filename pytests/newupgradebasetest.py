@@ -17,6 +17,12 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '1.8.1-942-rel')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
+        self.upgrade_versions = self.input.param('upgrade_version', '2.0.0-1870-rel')
+        self.upgrade_versions = upgrade_versions.split(";")
+        upgrade_path = input.param('upgrade_path', [])
+        if upgrade_path:
+            upgrade_path = upgrade_path.split(",")
+        self.upgrade_versions = upgrade_path + self.upgrade_versions
         self.rest_settings = self.input.membase_settings
         self.rest = RestConnection(self.master)
         self.rest_helper = RestHelper(self.rest)
@@ -25,6 +31,10 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.op_types = self.input.param('op_types', 'bucket')
         self.item_flag = self.input.param('item_flag', 4042322160)
         self.expire_time = self.input.param('expire_time', 0)
+        if self.initial_version.startswith("1.6") or self.initial_version.startswith("1.7"):
+            self.product = 'membase-server'
+        else:
+            self.product = 'couchbase-server'
 
     def tearDown(self):
         super(NewUpgradeBaseTest, self).tearDown()
@@ -59,7 +69,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
         if multi_nodes:
-            servers_in = [self.servers[i+1] for i in range(self.initial_num_servers-1)]
+            servers_in = [self.servers[i + 1] for i in range(self.initial_num_servers - 1)]
             self.cluster.rebalance(self.servers[:1], servers_in, [])
         if self.op_types == "data":
             self._load_data_all_buckets("create")
@@ -123,9 +133,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         if self.op_types == "data":
             if multi_nodes:
                 self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-                self._verify_all_buckets(self.master, 1, self.wait_timeout*50, self.max_verify, True, 1)
+                self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
                 self._verify_stats_all_buckets(self.servers[:self.num_servers])
             else:
                 self._wait_for_stats_all_buckets([self.master])
-                self._verify_all_buckets(self.master, 1, self.wait_timeout*50, self.max_verify, True, 1)
+                self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
                 self._verify_stats_all_buckets([self.master])
