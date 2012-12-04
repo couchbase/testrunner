@@ -2,13 +2,17 @@ import os
 import sys
 import uuid
 import paramiko
-import logger
 import time
+import logging
+
+import logger
 from builds.build_query import BuildQuery
 import testconstants
 from membase.api.rest_client import RestConnection, RestHelper
 
+
 log = logger.Logger.get_logger()
+logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 
 class RemoteMachineInfo(object):
