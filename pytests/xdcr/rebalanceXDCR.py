@@ -21,10 +21,10 @@ class Rebalance(XDCRReplicationBaseTest):
                 end=int(self._num_items * (float)(self._percent_update) / 100))
 
     def tearDown(self):
-        super(Rebalance, self).tearDown()
         self.src_nodes = self.the_source_set
         self.dest_nodes = self.the_destination_set
         self._floating_servers_set = self.the_floating_set
+        super(Rebalance, self).tearDown()
         BucketOperationHelper.delete_all_buckets_or_assert(self._floating_servers_set, self)
         ClusterOperationHelper.cleanup_cluster(self._floating_servers_set, self)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self._floating_servers_set, self)
