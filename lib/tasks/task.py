@@ -1684,6 +1684,7 @@ class ViewCompactionTask(Task):
                         else:
                             continue
                 #print details in case of failure
+                self.log.info("design doc {0} is compacting:{1}".format(self.design_doc_name, self._is_compacting()))
                 new_compaction_revision, fragmentation = self._get_compaction_details()
                 self.log.error("stats compaction still: ({0},{1})".
                           format(new_compaction_revision, fragmentation))
