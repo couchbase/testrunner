@@ -326,7 +326,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info("%s %s documents..." % (data_op, self.num_items))
         self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size=batch_size)
 
-    def verify_cluster_stats(self, servers=None, master=None, max_verify=None):
+    def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None):
         if servers is None:
             servers = self.servers
         if master is None:
@@ -334,7 +334,7 @@ class BaseTestCase(unittest.TestCase):
         if max_verify is None:
             max_verify = self.max_verify
         self._wait_for_stats_all_buckets(servers)
-        self._verify_all_buckets(master, max_verify=max_verify)
+        self._verify_all_buckets(master, max_verify=max_verify, timeout)
         self._verify_stats_all_buckets(servers)
         #verify that curr_items_tot corresponds to sum of curr_items from all nodes
         verified = True
