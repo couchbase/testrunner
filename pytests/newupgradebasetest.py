@@ -18,7 +18,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_version = self.input.param('initial_version', '1.8.1-942-rel')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.0-1870-rel')
-        self.upgrade_versions = upgrade_versions.split(";")
+        self.upgrade_versions = self.upgrade_versions.split(";")
         upgrade_path = input.param('upgrade_path', [])
         if upgrade_path:
             upgrade_path = upgrade_path.split(",")
