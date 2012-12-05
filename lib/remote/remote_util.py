@@ -1392,8 +1392,13 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
         shell = self._ssh_client.invoke_shell()
 
-        shell.send('export {0}={1}\n'.format(name, value))
-        shell.send('/etc/init.d/couchbase-server restart\n')
+        if self.extract_remote_info().type.lower() == "windows":
+            shell.send('net stop CouchbaseServer\n')
+            shell.send('set {0}={1}\n'.format(name, value))
+            shell.send('net start CouchbaseServer\n')
+        elif self.extract_remote_info().type.lower() == "linux":
+            shell.send('export {0}={1}\n'.format(name, value))
+            shell.send('/etc/init.d/couchbase-server restart\n')
 
         time.sleep(30)
         shell.close()
