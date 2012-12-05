@@ -19,7 +19,7 @@ class DesignDocument():
         if 'spatial' in json_object:
             spatial_json = json_object['spatial']
             for view in spatial_json.items():
-                sp_view = View._init_from_json(view)
+                sp_view = View._init_from_json(view,spatial=True)
                 sp_view.is_spatial = True
                 ddoc_self.spatial_views.append(sp_view)
 
@@ -92,22 +92,29 @@ class View():
         self.is_spatial = is_spatial
 
     @classmethod
-    def _init_from_json(view_self, json_object):
+    def _init_from_json(view_self, json_object, spatial=False):
         name = json_object[0]
-        map_func = clean_string(json_object[1]['map'])
-
-        if 'reduce' in json_object[1]:
-            red_func = clean_string(json_object[1]['reduce'])
-        else:
+        if spatial:
+            map_func = clean_string(json_object[1])
             red_func = None
+        else:
+            map_func = clean_string(json_object[1]['map'])
 
-        return View(name, map_func, red_func)
+            if 'reduce' in json_object[1]:
+                red_func = clean_string(json_object[1]['reduce'])
+            else:
+                red_func = None
+
+        return View(name, map_func, red_func, is_spatial=spatial)
 
     def as_json(self):
-        if self.red_func is None:
-            return {self.name: {'map': self.map_func}}
+        if self.is_spatial:
+            return {self.name : self.map_func}
         else:
-            return {self.name: {'map': self.map_func, 'reduce': self.red_func}}
+            if self.red_func is None:
+                return {self.name: {'map': self.map_func}}
+            else:
+                return {self.name: {'map': self.map_func, 'reduce': self.red_func}}
 
     def __str__(self):
         return self.__repr__()
