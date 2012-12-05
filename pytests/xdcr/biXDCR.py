@@ -515,11 +515,17 @@ class bidirectional(XDCRReplicationBaseTest):
 
         i = len(self.dest_nodes) - 1
         shell = RemoteMachineShellConnection(self.dest_nodes[i])
-        o, r = shell.execute_command("reboot")
+        if shell.extract_remote_info().type.lower() == 'windows':
+            o, r = shell.execute_command("shutdown -r -f -t 0")
+        elif shell.extract_remote_info().type.lower() == 'linux':
+            o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
         i = len(self.src_nodes) - 1
         shell = RemoteMachineShellConnection(self.src_nodes[i])
-        o, r = shell.execute_command("reboot")
+        if shell.extract_remote_info().type.lower() == 'windows':
+            o, r = shell.execute_command("shutdown -r -f -t 0")
+        elif shell.extract_remote_info().type.lower() == 'linux':
+            o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
         time.sleep(self._timeout * 2)
 
