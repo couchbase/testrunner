@@ -85,7 +85,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         while not loaded and count < 60:
             try :
                 self._load_all_buckets(self.master, gen_load, op_type, self.expire_time, 1,
-                                       self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                                       self.item_flag, True, batch_size=1000, pause_secs=5, timeout_secs=180)
                 loaded = True
             except MemcachedError as error:
                 if error.status == 134:
