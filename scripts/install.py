@@ -319,12 +319,6 @@ class CouchbaseServerInstaller(Installer):
 
                 rest = RestConnection(server)
 
-                # Initialize cluster
-                rest.init_cluster(username=server.rest_username,
-                                  password=server.rest_password)
-                memory_quota = rest.get_nodes_self().mcdMemoryReserved
-                rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
-
                 # Make sure that data_path is writable by couchbase user
                 if server.data_path:
                     time.sleep(3)
@@ -341,6 +335,12 @@ class CouchbaseServerInstaller(Installer):
                     rest.set_data_path(data_path=server.data_path,
                                        index_path=server.index_path)
                     time.sleep(3)
+
+                # Initialize cluster
+                rest.init_cluster(username=server.rest_username,
+                                  password=server.rest_password)
+                memory_quota = rest.get_nodes_self().mcdMemoryReserved
+                rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
 
                 # TODO: Symlink data-dir to custom path
                 #remote_client.stop_couchbase()
