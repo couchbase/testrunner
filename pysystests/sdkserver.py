@@ -129,7 +129,11 @@ class CouchClientManager():
             except Exception as ex:
                 raise Exception(ex)
 
-        client.recv_bulk_responses()
+        rc = client.recv_bulk_responses()
+        if len(rc) > 0:
+            for msg in rc:
+                if msg["error"] > 0:
+                    print "MemcachedError%d: %s" % (msg["error"], msg["rv"])
 
         return True
 
@@ -170,6 +174,10 @@ class CouchClientManager():
 
         if client.pending_get_msgs > 400:
             rc = client.recv_bulk_responses()
+            if len(rc) > 0:
+                for msg in rc:
+                    if msg["error"] > 0:
+                        print "MemcachedError%d: %s" % (msg["error"], msg["rv"])
             client.pending_get_msgs = 0
         else:
             client.noop()
