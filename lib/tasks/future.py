@@ -106,6 +106,7 @@ class Future(object):
 
     def __get_result(self):
         if self._exception:
+            print traceback.extract_stack()
             raise self._exception
         else:
             return self._result
