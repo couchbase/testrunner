@@ -1673,6 +1673,7 @@ class ViewCompactionTask(Task):
                     time.sleep(5)
                     if self._is_compacting():
                         task_manager.schedule(self, 2)
+                        return
                     else:
                         new_compaction_revision, fragmentation = self._get_compaction_details()
                         self.log.info("stats compaction: ({0},{1})".
