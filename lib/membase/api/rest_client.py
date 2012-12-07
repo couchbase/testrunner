@@ -1379,7 +1379,7 @@ class RestConnection(object):
         if status:
             for i in xrange(wait_timeout):
                 if self._rebalance_progress_status() == 'running':
-                    log.info("rebalance is not stopped yet")
+                    log.warn("rebalance is not stopped yet after {0} sec".format(i + 1))
                     time.sleep(1)
                     status = False
                 else:
