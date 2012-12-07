@@ -834,7 +834,7 @@ class VBucketAwareMemcached(object):
             try:
                 return self._send_op(self.memcached(key).set, key, exp, flags, value)
             except MemcachedError as error:
-                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
                     vb_error += 1
                 else:
@@ -843,13 +843,13 @@ class VBucketAwareMemcached(object):
             except EOFError as error:
                 if "Got empty data (remote died?)" in  error.message or \
                    "Timeout waiting for socket send." in  error.message \
-                    and vb_error < 3:
+                    and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
                     vb_error += 1
                 else:
                     raise error
             except BaseException as error:
-                if vb_error < 3:
+                if vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
                     vb_error += 1
                 else:
@@ -862,7 +862,7 @@ class VBucketAwareMemcached(object):
             try:
                 return self._send_op(self.memcached(key).get, key)
             except MemcachedError as error:
-                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 3:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
                     vb_error += 1
                 else:
@@ -870,13 +870,13 @@ class VBucketAwareMemcached(object):
             except EOFError as error:
                 if "Got empty data (remote died?)" in  error.message or \
                    "Timeout waiting for socket send." in  error.message \
-                    and vb_error < 3:
+                    and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
                     vb_error += 1
                 else:
                     raise error
             except BaseException as error:
-                if vb_error < 3:
+                if vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
                     vb_error += 1
                 else:
@@ -1062,7 +1062,7 @@ class VBucketAwareMemcached(object):
             try:
                 return self._send_op(self.memcached(key).delete, key)
             except MemcachedError as error:
-                if error.status in [ERR_NOT_MY_VBUCKET, ERR_EINVAL] and vb_error < 3:
+                if error.status in [ERR_NOT_MY_VBUCKET, ERR_EINVAL] and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
                     vb_error += 1
                 else:
@@ -1070,13 +1070,13 @@ class VBucketAwareMemcached(object):
             except EOFError as error:
                 if "Got empty data (remote died?)" in  error.message or \
                    "Timeout waiting for socket send." in  error.message \
-                    and vb_error < 3:
+                    and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([key]))
                     vb_error += 1
                 else:
                     raise error
             except BaseException as error:
-                if vb_error < 3:
+                if vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
                     vb_error += 1
                 else:
@@ -1529,5 +1529,3 @@ class LoadWithMcsoda(object):
 
     def load_stop(self):
         self.ctl['run_ok'] = False
-
-
