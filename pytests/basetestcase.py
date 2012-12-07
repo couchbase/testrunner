@@ -84,8 +84,9 @@ class BaseTestCase(unittest.TestCase):
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             self._log_start(self)
-        except:
+        except Exception, e:
             self.cluster.shutdown()
+            self.fail(e)
 
     def tearDown(self):
             try:
