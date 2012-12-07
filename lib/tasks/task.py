@@ -478,6 +478,10 @@ class GenericLoadingTask(Thread, Task):
             else:
                 self.state = FINISHED
                 self.set_exception(error)
+        except Exception as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
 
 class LoadDocumentsTask(GenericLoadingTask):
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True):
