@@ -15,6 +15,8 @@ from threading import Thread
 import Queue
 from collections import defaultdict
 from couchbase.stats_tools import StatsCommon
+from remote.remote_util import RemoteMachineShellConnection
+from subprocess import call
 
 class BucketOperationHelper():
 
@@ -52,7 +54,7 @@ class BucketOperationHelper():
             else:
                 bucket_ram = 100
                 #choose a port that is not taken by this ns server
-            port = info.moxi+1
+            port = info.moxi + 1
             for i in range(0, howmany):
                 name = "bucket-{0}".format(i)
                 if sasl:
@@ -93,7 +95,7 @@ class BucketOperationHelper():
                     assert_on_test.fail(msg=msg)
 
     @staticmethod
-    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1, password=None):
+    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram= -1, password=None):
         log = logger.Logger.get_logger()
         rest = RestConnection(serverInfo)
         if bucket_ram < 0:
@@ -136,6 +138,7 @@ class BucketOperationHelper():
                 status = rest.delete_bucket(bucket.name)
                 if not status:
                     try:
+                        BucketOperationHelper.print_dataStorage_content(servers)
                         log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
                     except:
                         log.error("Unable to get timings for bucket")
@@ -144,6 +147,7 @@ class BucketOperationHelper():
                 if test_case:
                     if not BucketOperationHelper.wait_for_bucket_deletion(bucket.name, rest, 200):
                         try:
+                            BucketOperationHelper.print_dataStorage_content(servers)
                             log.info(StatsCommon.get_stats([serverInfo], bucket.name, "timings"))
                         except:
                             log.error("Unable to get timings for bucket")
@@ -159,6 +163,7 @@ class BucketOperationHelper():
             status = rest.delete_bucket(bucket)
             if not status:
                 try:
+                    BucketOperationHelper.print_dataStorage_content([serverInfo])
                     log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
                 except:
                     log.error("Unable to get timings for bucket")
@@ -167,10 +172,38 @@ class BucketOperationHelper():
         if test_case:
             if not BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200):
                  try:
+                    print_dataStorage_content([serverInfo])
                     log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
                  except:
                     log.error("Unable to get timings for bucket")
                  test_case.fail(msg)
+
+
+    @staticmethod
+    def print_dataStorage_content(servers):
+        """"printout content of data and index path folders"""
+        #Determine whether its a cluster_run/not
+        cluster_run = True
+
+        firstIp = servers[0].ip
+        if len(servers) == 1 and servers[0].port == '8091':
+            cluster_run = False
+        else:
+            for node in servers:
+                if node.ip != firstIp:
+                    cluster_run = False
+                    break
+
+        for serverInfo in servers:
+            node = RestConnection(serverInfo).get_nodes_self()
+            paths = set([node.storage[0].path, node.storage[0].index_path])
+            for path in paths:
+                if cluster_run:
+                    call(["ls", "-lR", path])
+                else:
+                    shell = RemoteMachineShellConnection(serverInfo)
+                    o, r = shell.execute_command("ls -LR {0}".format(path))
+                    shell.log_command_output(o, r)
 
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
     # BUCKET DELETION IS A SYNC CALL W.R.T MEMCACHED
