@@ -20,9 +20,9 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def tearDown(self):
         super(Rebalance, self).tearDown()
-        BucketOperationHelper.delete_all_buckets_or_assert(self._servers, self)
-        ClusterOperationHelper.cleanup_cluster(self._servers, self)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(self._servers, self)
+        BucketOperationHelper.delete_all_buckets_or_assert(self._floating_servers_set, self)
+        ClusterOperationHelper.cleanup_cluster(self._floating_servers_set, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self._floating_servers_set, self)
 
     def _async_modify_data(self):
         tasks = []
