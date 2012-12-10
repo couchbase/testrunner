@@ -180,10 +180,10 @@ class XDCRBaseTest(unittest.TestCase):
         self.ord_keys_len = len(self.ord_keys)
 
         self.src_nodes = copy.copy(self._clusters_dic[0])
-        self.src_master = copy.copy(self.src_nodes[0])
+        self.src_master = self.src_nodes[0]
 
         self.dest_nodes = copy.copy(self._clusters_dic[1])
-        self.dest_master = copy.copy(self.dest_nodes[0])
+        self.dest_master = self.dest_nodes[0]
 
         self._defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
         self._default_view_name = "default_view"
