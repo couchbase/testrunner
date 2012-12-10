@@ -4,6 +4,8 @@ from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
+from membase.helper.rebalance_helper import RebalanceHelper
 
 class RebalanceInOutTests(RebalanceBaseTest):
 
@@ -260,11 +262,10 @@ class RebalanceInOutTests(RebalanceBaseTest):
 
     """Rebalance in/out at once.
 
-    This test begins by loading a given number of items into the cluster. It then
-    add  servs_in nodes and remove  servs_out nodes and start rebalance.
-    Once cluster was rebalanced the test is finished.
-    Available parameters by default are:
-    nodes_init=1, nodes_in=1, nodes_out=1"""
+    This test begins by loading a given number of items into the cluster with
+    self.nodes_init nodes in it. It then add  servs_in nodes and remove servs_out nodes
+    and start rebalance. Once cluster was rebalanced the test is finished.
+    Available parameters by default are: nodes_init=1, nodes_in=1, nodes_out=1"""
     def rebalance_in_out_at_once(self):
         servs_init = self.servers[:self.nodes_init]
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
@@ -277,3 +278,53 @@ class RebalanceInOutTests(RebalanceBaseTest):
         result_nodes = set(servs_init + servs_in) - set(servs_out)
         self.cluster.rebalance(servs_init[:self.nodes_init], servs_in, servs_out)
         self.verify_cluster_stats(result_nodes)
+
+
+    """Rebalance in/out at once with stopped persistence.
+
+    This test begins by loading a given number of items into the cluster with
+    self.nodes_init nodes in it. Then we stop persistence on some nodes.
+    Test starts  to update some data and load new data in the cluster.
+    At that time we add  servs_in nodes and remove  servs_out nodes and start rebalance.
+    After rebalance and data ops are completed we start verification phase:
+    wait for the disk queues to drain, verify the number of items that were/or not persisted
+    with expected values, verify that there has been no data loss,
+    sum(curr_items) match the curr_items_total.Once All checks passed, test is finished.
+    Available parameters by default are:
+    nodes_init=1, nodes_in=1, nodes_out=1,num_nodes_with_stopped_persistence=1
+    num_items_without_persistence=100000"""
+    def rebalance_in_out_at_once_persistence_stopped(self):
+        num_nodes_with_stopped_persistence = self.input.param("num_nodes_with_stopped_persistence", 1)
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        rest = RestConnection(self.master)
+        self._wait_for_stats_all_buckets(servs_init)
+        for server in servs_init[:min(num_nodes_with_stopped_persistence, self.nodes_init)]:
+            shell = RemoteMachineShellConnection(server)
+            for bucket in self.buckets:
+                shell.execute_cbepctl(bucket, "stop", "", "", "")
+        time.sleep(5)
+        self.num_items_without_persistence = self.input.param("num_items_without_persistence", 100000)
+        gen_extra = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2\
+                                      , end=self.num_items / 2 + self.num_items_without_persistence)
+        self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+        self.log.info("adding nodes {0} to cluster".format(servs_in))
+        self.log.info("removing nodes {0} from cluster".format(servs_out))
+        tasks = self._async_load_all_buckets(self.master, gen_extra, "create", 0, batch_size=1000)
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
+        # wait timeout in 60 min because MB-7386 rebalance stuck
+        self.cluster.rebalance(servs_init[:self.nodes_init], servs_in, servs_out, timeout=self.wait_timeout * 60)
+        for task in tasks:
+            task.result()
+
+        self._wait_for_stats_all_buckets(servs_init[:self.nodes_init - self.nodes_out], ep_queue_size=self.num_items_without_persistence)
+        self._wait_for_stats_all_buckets(servs_in)
+        self._verify_all_buckets(self.master, timeout=None)
+        self._verify_stats_all_buckets(result_nodes)
+        #verify that curr_items_tot corresponds to sum of curr_items from all nodes
+        verified = True
+        for bucket in self.buckets:
+            verified &= RebalanceHelper.wait_till_total_numbers_match(self.master, bucket)
+        self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
+
