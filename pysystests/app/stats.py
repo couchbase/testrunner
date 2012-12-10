@@ -166,6 +166,7 @@ def get_atop_sample(ip):
     sample = {"ip" : ip}
     cpu = atop_cpu(ip)
     mem = atop_mem(ip)
+    mem_mc = atop_mem_mc(ip)
     swap = sys_swap(ip)
     disk = atop_dsk(ip)
     if cpu:
@@ -174,6 +175,10 @@ def get_atop_sample(ip):
     if mem:
         sample.update({"vsize" : mem[0],
                        "rsize" : mem[1]})
+
+    if mem_mc:
+        sample.update({"vsize_mc" : mem_mc[0],
+                       "rsize_mc" : mem_mc[1]})
 
     if swap:
         sample.update({"swap" : swap[0][0]})
@@ -196,6 +201,11 @@ def atop_mem(ip):
     cmd = "grep beam.smp | head -1 |  awk '{print $5,$6}'"
     return _atop_exec(ip, cmd, flags)
 
+def atop_mem_mc(ip):
+    flags = "-M -m"
+    cmd = "grep memcached | head -1 |  awk '{print $5,$6}'"
+    return _atop_exec(ip, cmd, flags)
+
 def sys_swap(ip):
     cmd = "free | grep Swap | awk '{print $3}'"
     return exec_cmd(ip, cmd)
@@ -204,11 +214,15 @@ def atop_dsk(ip):
     flags = "-d"
     cmd_column = "atop -r /tmp/atop-node.log -d | grep beam.smp | head -1 | awk '{print NF}'"
     count = exec_cmd(ip, cmd_column)
-    count = int(count[0][0])
-    rcol = count - 4
-    wcol = count - 3
-    pcol = count - 1
-    cmd = "grep beam.smp | awk '{print $%d, $%d, $%d}'" % (rcol, wcol, pcol)
+    cmd = "grep beam.smp | awk '{print $2, $3, $5}'"
+    if len(count[0]) > 0:
+        count = int(count[0][0])
+        rcol = count - 4
+        wcol = count - 3
+        pcol = count - 1
+        cmd = "grep beam.smp | awk '{print $%d, $%d, $%d}'" % (rcol, wcol, pcol)
+    else:
+        logger.error(count[1][0])
     return _atop_exec(ip, cmd, flags)
 
 def _atop_exec(ip, cmd, flags = ""):

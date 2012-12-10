@@ -4,7 +4,7 @@ if [ $# != 1 ]; then
     exit -1
 fi
 
-stats="rddsk disk_util disk_wq disk_used swap usr_cpu rsize sys_cpu vsize wrdsk bg_fetched bg_fetch_wait"
+stats="rddsk disk_util disk_wq disk_used swap usr_cpu rsize sys_cpu vsize wrdsk rsize_mc vsize_mc bg_fetched bg_fetch_wait"
 file=$1
 
 echo "Max"
