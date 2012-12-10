@@ -43,7 +43,7 @@ class cbstatsTests(CliBaseTest):
     def _verify_direct_client_stats(self, bucket, command, output):
         mc_conn = MemcachedClientHelper.direct_client(self.master, bucket.name, self.timeout)
         for line in output:
-            stats = line.split(":")
+            stats = line.split(":", 1)
             self.log.info("CbStats###### for %s:::%s==%s" % (stats[0], mc_conn.stats(command)[stats[0].strip()], stats[1].strip()))
             if stats[1].strip() == mc_conn.stats(command)[stats[0].strip()]:
                 continue
