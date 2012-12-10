@@ -106,9 +106,9 @@ class ViewGen(object):
 
     queries = {
         "id_by_city":
-            baseq + '?key="{{city}}"',
+            baseq + '?key="{{city}}"&limit=30',
         "name_and_email_by_city":
-            baseq + '?key="{{city}}"',
+            baseq + '?key="{{city}}"&limit=30',
         "id_by_realm":
             baseq + '?startkey="{{realm}}"&limit=30',
         "experts_coins_by_name":
