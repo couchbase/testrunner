@@ -69,9 +69,13 @@ class SpatialViewsTests(BaseTestCase):
         try:
             self.create_ddocs([ddoc])
         except Exception as ex:
-            if error and ex.message.find(error) != -1:
+            if error and str(ex).find(error) != -1:
                 self.log.info("Error caught as expected %s" % error)
-            self.fail("Unexpected error appeared during run %s" % ex)
+                return
+            else:
+                self.fail("Unexpected error appeared during run %s" % ex)
+        if error:
+                self.fail("Expected error '%s' didn't appear" % error)
 
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
