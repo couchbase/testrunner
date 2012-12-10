@@ -221,11 +221,14 @@ class RestConnection(object):
                 log.error("Error 'Node is unknown to this cluster' was gotten,\
                     5 seconds sleep before retry")
                 time.sleep(5)
+                if iteration == 2:
+                    log.error("node {0}:{1} is in a broken state!".format(self.ip, self.port))
+                    raise ServerUnavailableException(self.ip)
                 continue
             else:
                 break
         #couchApiBase appeared in version 2.*
-        if not http_res or http_res["version"][0:2] == "1.":\
+        if not http_res or http_res["version"][0:2] == "1.":
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
             for iteration in xrange(5):
