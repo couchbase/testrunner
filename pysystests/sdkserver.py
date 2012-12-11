@@ -133,7 +133,10 @@ class CouchClientManager():
         if len(rc) > 0:
             for msg in rc:
                 if msg["error"] > 0:
-                    print "MemcachedError%d: %s" % (msg["error"], msg["rv"])
+                    ts = time.localtime()
+                    ts_string = "%s/%s/%s %s:%s:%s" %\
+                        (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
+                    print "%s:set MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"])
 
         return True
 
@@ -177,7 +180,10 @@ class CouchClientManager():
             if len(rc) > 0:
                 for msg in rc:
                     if msg["error"] > 0:
-                        print "MemcachedError%d: %s" % (msg["error"], msg["rv"])
+                        ts = time.localtime()
+                        ts_string = "%s/%s/%s %s:%s:%s" %\
+                            (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
+                        print "%s:get MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"])
             client.pending_get_msgs = 0
         else:
             client.noop()
