@@ -121,6 +121,30 @@ class SpatialViewsTests(BaseTestCase):
         for create_thread in create_threads:
             create_thread.join()
 
+    def test_create_with_other_ddoc_ops(self):
+        num_ddoc = self.input.param('num-ddoc', 1)
+        views_per_ddoc = self.input.param('views-per-ddoc', 2)
+        operation = self.input.param('operation', 'create')
+        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
+        other_ddocs = self.make_ddocs(num_ddoc, 0, views_per_ddoc)
+        if operation == 'delete' or operation == 'update':
+            self.create_ddocs(other_ddocs)
+        other_ddoc_threads = []
+        for ddoc in other_ddocs:
+            if operation == 'create' or operation == 'update':
+                other_ddoc_thread = Thread(target=self.create_ddocs,
+                                           name="other_doc_thread",
+                                           args=(other_ddocs,))
+            else:
+                other_ddoc_thread = Thread(target=self.delete_views,
+                                           name="other_doc_thread",
+                                           args=(other_ddocs,))
+            other_ddoc_threads.append(other_ddoc_thread)
+            other_ddoc_thread.start()
+        self.create_ddocs(ddocs)
+        for thread in other_ddoc_threads:
+            thread.join()
+
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
         for i in xrange(ddocs_num):
@@ -144,6 +168,19 @@ class SpatialViewsTests(BaseTestCase):
                 self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
             for view in ddoc.spatial_views:
                 self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+
+    def delete_views(self, ddocs, views=[], spatial_views=[]):
+        for ddoc in ddocs:
+            if views or spatial_views:
+                for view in views:
+                    self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+                for view in spatial_views:
+                    self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+            else:
+                for view in ddoc.views:
+                    self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+                for view in ddoc.spatial_views:
+                    self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
 
 class SpatialViewTests(unittest.TestCase):
     def setUp(self):
