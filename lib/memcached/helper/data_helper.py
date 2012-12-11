@@ -900,11 +900,15 @@ class VBucketAwareMemcached(object):
         server_keyval = self._get_server_keyval_dic(key_val_dic)
         # get memcached client against each server and multi set
         for server_str , keyval in server_keyval.items() :
-            mc = self.memcacheds[server_str]
-            errors = self._setMulti_rec(mc, exp, flags, keyval, pause_sec, timeout_sec, self._setMulti_seq)
-            if errors:
-                self.log.error(errors, exc_info=1)
-                raise errors[0]
+            #if the server has been removed after server_keyval has been gotten
+            if server_str not in self.memcacheds:
+                self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec)
+            else:
+                mc = self.memcacheds[server_str]
+                errors = self._setMulti_rec(mc, exp, flags, keyval, pause_sec, timeout_sec, self._setMulti_seq)
+                if errors:
+                    self.log.error(list(set(str(error) for error in errors)), exc_info=1)
+                    raise errors[0]
 
     def _setMulti_parallel(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5):
         #set keys in their respective vbuckets and identify the server for each vBucketId
