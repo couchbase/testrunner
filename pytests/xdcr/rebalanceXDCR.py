@@ -50,6 +50,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
         for task in tasks:
             task.result()
+        time.sleep(self._timeout)
 
 
     def _async_update_delete_data(self):
@@ -71,6 +72,7 @@ class Rebalance(XDCRReplicationBaseTest):
             time.sleep(5)
         for task in tasks:
             task.result()
+        time.sleep(self._timeout)
 
 
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
@@ -105,16 +107,16 @@ class Rebalance(XDCRReplicationBaseTest):
                         self.dest_master.ip))
                     self.dest_nodes.extend([add_node])
                     self._floating_servers_set.remove(add_node)
+
                 time.sleep(self._timeout / 2)
+                for task in tasks:
+                    task.result()
 
                 if self._replication_direction_str in "unidirection":
                     self._async_modify_data()
                 elif self._replication_direction_str in "bidirection":
                     self._async_update_delete_data()
-
                 time.sleep(self._timeout / 2)
-                for task in tasks:
-                    task.result()
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -156,15 +158,14 @@ class Rebalance(XDCRReplicationBaseTest):
                     self.dest_nodes.remove(remove_node)
 
                 time.sleep(self._timeout / 2)
+                for task in tasks:
+                    task.result()
 
                 if self._replication_direction_str in "unidirection":
                     self._async_modify_data()
                 elif self._replication_direction_str in "bidirection":
                     self._async_update_delete_data()
-
                 time.sleep(self._timeout / 2)
-                for task in tasks:
-                    task.result()
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -261,14 +262,14 @@ class Rebalance(XDCRReplicationBaseTest):
                     self.dest_nodes.append(add_node)
 
                 time.sleep(self._timeout / 2)
+                for task in tasks:
+                    task.result()
+
                 if self._replication_direction_str in "unidirection":
                     self._async_modify_data()
                 elif self._replication_direction_str in "bidirection":
                     self._async_update_delete_data()
-
                 time.sleep(self._timeout / 2)
-                for task in tasks:
-                    task.result()
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
