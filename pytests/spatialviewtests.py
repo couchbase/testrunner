@@ -77,6 +77,33 @@ class SpatialViewsTests(BaseTestCase):
         if error:
                 self.fail("Expected error '%s' didn't appear" % error)
 
+    def test_add_views_to_1_ddoc(self):
+        same_names = self.input.param('same-name', False)
+        error = self.input.param('error', None)
+        num_views_per_ddoc = 10
+        create_threads = []
+        try:
+            for i in xrange(num_views_per_ddoc):
+                ddoc = DesignDocument(self.default_ddoc_name, [], spatial_views=[
+                                      View(self.default_view_name + (str(i), "")[same_names],
+                                           self.default_map,
+                                           dev_view=self.use_dev_views, is_spatial=True)])
+                create_thread = Thread(target=self.create_ddocs,
+                                       name="create_thread" + str(i),
+                                       args=([ddoc,],))
+                create_threads.append(create_thread)
+                create_thread.start()
+            for create_thread in create_threads:
+                create_thread.join()
+        except Exception as ex:
+            if error and str(ex).find(error) != -1:
+               self.log.info("Error caught as expected %s" % error)
+               return
+            else:
+               self.fail("Unexpected error appeared during run %s" % ex)
+        if error:
+            self.fail("Expected error '%s' didn't appear" % error)
+
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
         for i in xrange(ddocs_num):
