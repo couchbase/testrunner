@@ -145,6 +145,35 @@ class SpatialViewsTests(BaseTestCase):
         for thread in other_ddoc_threads:
             thread.join()
 
+    def test_create_views_during_rebalance(self):
+        num_ddoc = self.input.param('num-ddoc', 1)
+        views_per_ddoc = self.input.param('views-per-ddoc', 2)
+        non_spatial_views_per_ddoc = self.input.param('non-spatial-views-per-ddoc', 0)
+        start_cluster = self.input.param('start-cluster', 1)
+        servers_in = self.input.param('servers_in', 0)
+        servers_out = self.input.param('servers_out', 0)
+        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, non_spatial_views_per_ddoc)
+        if start_cluster > 1:
+            rebalance = self.cluster.async_rebalance(self.servers[:1],
+                                                     self.servers[1:start_cluster], [])
+            rebalance.result()
+        servs_in = []
+        servs_out = []
+        if servers_in:
+            servs_in = self.servers[start_cluster:servers_in + 1]
+        if servers_out:
+            if start_cluster > 1:
+                servs_out = self.servers[1:start_cluster]
+                servs_out = servs_out[-servers_out:]
+            else:
+                servs_out = self.servers[-servers_out:]
+        rebalance_thread = Thread(target=self.cluster.rebalance,
+                                           name="reb_thread",
+                                           args=(self.servers[:1], servs_in, servs_out))
+        rebalance_thread.start()
+        self.create_ddocs(ddocs)
+        rebalance_thread.join()
+
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
         for i in xrange(ddocs_num):
