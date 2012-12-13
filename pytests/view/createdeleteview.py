@@ -282,6 +282,21 @@ class CreateDeleteViewTests(ViewBaseTest):
                 self.fail("server allowed creation of invalid "
                                "view named `{0}`".format(view_name))
 
+    def test_invalid_map_fn_view(self):
+        self._load_doc_data_all_buckets()
+        views = [View("view1", 'function (doc) { emit(doc.age, doc.first_name);',
+                      red_func=None, dev_view=False),
+                 View("view1", self.default_map_func,
+                      red_func='abc', dev_view=False),
+                 View("view1", 'function (doc)',
+                      red_func=None, dev_view=False)]
+        for view in views:
+            with self.assertRaises(DesignDocCreationException):
+                self.cluster.create_view(
+                    self.master, self.default_design_doc_name, view,
+                    'default', self.wait_timeout * 2)
+                self.fail("server allowed creation of invalid view")
+
     def test_create_view_with_duplicate_name(self):
         self._load_doc_data_all_buckets()
         for i in xrange(2):
