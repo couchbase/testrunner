@@ -30,6 +30,7 @@ class BaseTestCase(unittest.TestCase):
         self.buckets = []
         self.master = self.servers[0]
         self.cluster = Cluster()
+        self.pre_warmup_stats = {}
         try:
             self.wait_timeout = self.input.param("wait_timeout", 60)
             #number of case that is performed from testrunner( increment each time)
@@ -357,3 +358,71 @@ class BaseTestCase(unittest.TestCase):
         for bucket in self.buckets:
             verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
         self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
+
+    def _stats_befor_warmup(self):
+        if not self.access_log:
+            self.stat_str = ""
+        else:
+            self.stat_str = "warmup"
+        self.stats_monitor = self.input.param("stats_monitor", "curr_items_tot")
+        self.stats_monitor = self.stats_monitor.split(";")
+        for server in self.servers[:self.nodes_init]:
+            mc_conn = MemcachedClientHelper.direct_client(server, self.bucket_name, self.timeout)
+            self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)] = {}
+            for stat_to_monitor in self.stats_monitor:
+                self.pre_warmup_stats["%s:%s" % (server.ip, server.port)][stat_to_monitor] = mc_conn.stats(self.stat_str)[stat_to_monitor]
+                self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["uptime"] = mc_conn.stats("")["uptime"]
+                self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["curr_items_tot"] = mc_conn.stats("")["curr_items_tot"]
+                self.log.info("memcached %s:%s has %s value %s" % (server.ip, server.port, stat_to_monitor , mc_conn.stats(self.stat_str)[stat_to_monitor]))
+            mc_conn.close()
+
+    def _kill_nodes(self, nodes):
+        is_partial = self.input.param("is_partial", "True")
+        _nodes = []
+        if len(self.servers) > 1 :
+         skip = 2
+        else:
+         skip = 1
+        if is_partial:
+         _nodes = nodes[:len(nodes):skip]
+        else:
+         _nodes = nodes
+
+        for node in _nodes:
+         _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
+                  "password": self.servers[0].rest_password}
+         _mc = MemcachedClientHelper.direct_client(_node, self.bucket_name)
+         self.log.info("restarted the node %s:%s" % (node.ip, node.port))
+         pid = _mc.stats()["pid"]
+         node_rest = RestConnection(_node)
+         command = "os:cmd(\"kill -9 {0} \")".format(pid)
+         self.log.info(command)
+         killed = node_rest.diag_eval(command)
+         self.log.info("killed ??  {0} ".format(killed))
+         _mc.close()
+
+
+    def _restart_memcache(self):
+        rest = RestConnection(self.master)
+        nodes = rest.node_statuses()
+        self._kill_nodes(nodes)
+        start = time.time()
+        memcached_restarted = False
+        for server in self.servers[:self.nodes_init]:
+            mc = None
+            while time.time() - start < 60:
+                try:
+                    mc = MemcachedClientHelper.direct_client(server, self.bucket_name)
+                    stats = mc.stats()
+                    new_uptime = int(stats["uptime"])
+                    if new_uptime < self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["uptime"]:
+                        self.log.info("memcached restarted...")
+                        memcached_restarted = True
+                        break;
+                except Exception:
+                    self.log.error("unable to connect to %s:%s" % (server.ip, server.port))
+                    if mc:
+                        mc.close()
+                    time.sleep(1)
+            if not memcached_restarted:
+                self.fail("memcached did not start %s:%s" % (server.ip, server.port))
