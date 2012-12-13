@@ -232,6 +232,32 @@ class SpatialViewsTests(BaseTestCase):
         ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 1)
         self.create_ddocs(ddocs)
 
+    def test_views_during_ddoc_compaction(self):
+        num_ddoc = self.input.param('num-ddoc', 1)
+        views_per_ddoc = self.input.param('views-per-ddoc', 2)
+        fragmentation_value = self.input.param("fragmentation_value", 80)
+        ddoc_to_compact = DesignDocument("ddoc_to_compact", [], spatial_views=[
+                                  View(self.default_view_name,
+                                       'function (doc) { emit(doc.age, doc.first_name);}',
+                                       dev_view=self.use_dev_views)])
+        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
+        self.disable_compaction()
+        self.create_ddocs([ddoc_to_compact,])
+        fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
+                             ddoc_to_compact.name, fragmentation_value, self.default_bucket_name)
+        end_time = time.time() + self.wait_timeout * 30
+        while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
+            self.helper.insert_docs(self.num_items, 'spatial-doc', wait_for_persistence=True)
+
+        if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
+            self.fail("impossible to reach compaction value after %s sec" % (self.wait_timeout * 20))
+        fragmentation_monitor.result()
+        compaction_task = self.cluster.async_compact_view(self.master, ddoc_to_compact.name,
+                                                          self.default_bucket_name)
+        self.create_ddocs(ddocs)
+        result = compaction_task.result(self.wait_timeout * 10)
+        self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
         for i in xrange(ddocs_num):
