@@ -12,6 +12,7 @@ from couchbase.document import DesignDocument, View
 from membase.api.rest_client import RestConnection
 from membase.helper.spatial_helper import SpatialHelper
 from membase.helper.failover_helper import FailoverHelper
+from membase.helper.rebalance_helper import RebalanceHelper
 
 
 class SpatialViewsTests(BaseTestCase):
@@ -173,6 +174,37 @@ class SpatialViewsTests(BaseTestCase):
         rebalance_thread.start()
         self.create_ddocs(ddocs)
         rebalance_thread.join()
+
+    def test_views_node_pending_state(self):
+        num_ddoc = self.input.param('num-ddoc', 1)
+        views_per_ddoc = self.input.param('views-per-ddoc', 2)
+        operation = self.input.param('operation', 'add_node')
+        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
+        rest = RestConnection(self.master)
+        if operation == 'add_node':
+            self.log.info("adding the node %s:%s" % (
+                        self.servers[1].ip, self.servers[1].port))
+            otpNode = rest.add_node(self.master.rest_username, self.master.rest_password,
+                                    self.servers[1].ip, self.servers[1].port)
+        elif operation == 'failover':
+            nodes = rest.node_statuses()
+            nodes = [node for node in nodes
+                     if node.ip != self.master.ip or node.port != self.master.port]
+            rest.fail_over(nodes[0].id)
+        else:
+            self.fail("There is no operation %s" % operation)
+        self.create_ddocs(ddocs)
+
+    def test_views_failover(self):
+        num_ddoc = self.input.param('num-ddoc', 1)
+        views_per_ddoc = self.input.param('views-per-ddoc', 2)
+        num_nodes = self.input.param('num-nodes', 1)
+        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
+        RebalanceHelper.wait_for_persistence(self.master, self.bucket_name)
+        self.cluster.failover(self.servers,
+                              self.servers[1:num_nodes])
+        self.cluster.rebalance(self.servers, [], self.servers[1:num_nodes])
+        self.create_ddocs(ddocs)
 
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
