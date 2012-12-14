@@ -13,6 +13,7 @@ from membase.api.rest_client import RestConnection
 from membase.helper.spatial_helper import SpatialHelper
 from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class SpatialViewsTests(BaseTestCase):
@@ -204,6 +205,18 @@ class SpatialViewsTests(BaseTestCase):
         self.cluster.failover(self.servers,
                               self.servers[1:num_nodes])
         self.cluster.rebalance(self.servers, [], self.servers[1:num_nodes])
+        self.create_ddocs(ddocs)
+
+    def test_views_with_warm_up(self):
+        num_ddoc = self.input.param('num-ddoc', 1)
+        views_per_ddoc = self.input.param('views-per-ddoc', 10)
+        warmup_node = self.servers[-1]
+        shell = RemoteMachineShellConnection(warmup_node)
+        shell.stop_couchbase()
+        time.sleep(20)
+        shell.start_couchbase()
+        shell.disconnect()
+        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
         self.create_ddocs(ddocs)
 
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
