@@ -1393,13 +1393,14 @@ class RestConnection(object):
             log.error("Rebalance is not stopped due to {0}".format(content))
         return status
 
-
     def set_data_path(self, data_path=None, index_path=None):
+        api = self.baseUrl + '/nodes/self/controller/settings'
+        paths = {}
         if data_path:
-            api = self.baseUrl + '/nodes/self/controller/settings'
-            paths = {'path': data_path}
-            if index_path:
-                paths['index_path'] = index_path
+            paths['path'] = data_path
+        if index_path:
+            paths['index_path'] = index_path
+        if paths:
             params = urllib.urlencode(paths)
             log.info('/nodes/self/controller/settings params : {0}'.format(params))
 
