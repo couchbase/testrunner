@@ -18,6 +18,7 @@ from membase.api.exception import BucketCreationException, ServerSelfJoinExcepti
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
     ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, BucketFlushFailed
 log = logger.Logger.get_logger()
+
 #helper library methods built on top of RestConnection interface
 
 class RestHelper(object):
@@ -95,6 +96,8 @@ class RestHelper(object):
             vBuckets = self.rest.get_vbuckets(bucket)
             if vBuckets:
                 return True
+            if isinstance(vBuckets, tuple):
+               return True  # es vbucket format
             else:
                 time.sleep(0.5)
         msg = 'vbucket map is not ready for bucket {0} after waiting {1} seconds'
@@ -159,8 +162,30 @@ class RestHelper(object):
                 replicated = False
         return replicated
 
-
 class RestConnection(object):
+
+    def __new__(self, serverInfo):
+        # allow port to determine
+        # behavior of restconnection
+
+        port = None
+        if isinstance(serverInfo, dict):
+            port = serverInfo['port']
+        else:
+            port = serverInfo.port
+
+        if not port:
+            port = 8091
+
+        if int(port) in xrange(9091, 9100):
+            # return elastic search rest connection
+            from membase.api.esrest_client import EsRestConnection
+            obj = object.__new__(EsRestConnection, serverInfo)
+        else:
+            # default
+            obj = object.__new__(self, serverInfo)
+        return obj
+
     #port is always 8091
     # deprecated, should be removed in the future?
     def __init__(self, ip, username='Administrator', password='password'):
@@ -1777,6 +1802,7 @@ class RestParser(object):
         node.version = parsed['version']
         node.port = parsed["hostname"][parsed["hostname"].find(":") + 1:]
         node.os = parsed['os']
+
         if "otpNode" in parsed:
             node.id = parsed["otpNode"]
             if parsed["otpNode"].find('@') >= 0:
