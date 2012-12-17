@@ -219,6 +219,19 @@ class SpatialViewsTests(BaseTestCase):
         ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
         self.create_ddocs(ddocs)
 
+    def test_views_during_index(self):
+        num_ddoc = self.input.param('num-ddoc', 2)
+        views_per_ddoc = self.input.param('views-per-ddoc', 5)
+        ddocs =  self.make_ddocs(1, 1, 1)
+        self.create_ddocs(ddocs)
+        #run query stale=false to start index
+        rest = RestConnection(self.master)
+        for ddoc in ddocs:
+            for view in ddoc.spatial_views:
+                self.helper.query_view(rest, ddoc, view, bucket=self.bucket_name, extra_params={})
+        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 1)
+        self.create_ddocs(ddocs)
+
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
         for i in xrange(ddocs_num):
@@ -229,7 +242,7 @@ class SpatialViewsTests(BaseTestCase):
             non_spatial_views = []
             if non_spatial_views_per_ddoc:
                 for k in xrange(non_spatial_views_per_ddoc):
-                    views.append(View(self.default_view_name + str(k), 'function (doc) { emit(null, doc);}',
+                    non_spatial_views.append(View(self.default_view_name + str(k), 'function (doc) { emit(null, doc);}',
                                       dev_view=self.use_dev_views))
             ddocs.append(DesignDocument(self.default_ddoc_name + str(i), non_spatial_views, spatial_views=views))
         return ddocs
@@ -255,6 +268,8 @@ class SpatialViewsTests(BaseTestCase):
                     self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
                 for view in ddoc.spatial_views:
                     self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+
+
 
 class SpatialViewTests(unittest.TestCase):
     def setUp(self):

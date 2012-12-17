@@ -166,7 +166,7 @@ class SpatialHelper:
                     params["full_set"] = True
                 params.update(extra_params)
 
-                results = rest.self.rest.query_view(ddoc.name, view.name, bucket, params,
+                results = rest.query_view(ddoc.name, view.name, bucket, params,
                                                     type="spatial")
                 delta = time.time() - start
                 if results:
