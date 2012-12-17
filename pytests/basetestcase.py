@@ -258,8 +258,9 @@ class BaseTestCase(unittest.TestCase):
         servers - A list of all of the servers in the cluster. ([TestInputServer])
         ep_queue_size - expected ep_queue_size (int)
         ep_flusher_todo - expected ep_flusher_todo (int)
+        timeout - Waiting the end of the thread. (str)
     """
-    def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, ep_flusher_todo=0):
+    def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, ep_flusher_todo=0, timeout=360):
         tasks = []
         for server in servers:
             for bucket in self.buckets:
@@ -268,7 +269,7 @@ class BaseTestCase(unittest.TestCase):
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                    'ep_flusher_todo', '==', ep_flusher_todo))
         for task in tasks:
-            task.result()
+            task.result(timeout)
 
     """Verifies data on all of the nodes in a cluster.
 
@@ -278,6 +279,7 @@ class BaseTestCase(unittest.TestCase):
     Args:
         server - A server in the cluster. (TestInputServer)
         kv_store - The kv store index to check. (int)
+        timeout - Waiting the end of the thread. (str)
     """
     def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1000):
         tasks = []
