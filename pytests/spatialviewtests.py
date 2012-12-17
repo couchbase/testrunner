@@ -131,8 +131,8 @@ class SpatialViewsTests(BaseTestCase):
 
     def test_create_with_other_ddoc_ops(self):
         operation = self.input.param('operation', 'create')
-        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
-        other_ddocs = self.make_ddocs(num_ddoc, 0, views_per_ddoc)
+        ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 0)
+        other_ddocs = self.make_ddocs(self.num_ddoc, 0, self.views_per_ddoc)
         if operation == 'delete' or operation == 'update':
             self.create_ddocs(other_ddocs)
         other_ddoc_threads = []
@@ -147,7 +147,7 @@ class SpatialViewsTests(BaseTestCase):
                                            args=(other_ddocs,))
             other_ddoc_threads.append(other_ddoc_thread)
             other_ddoc_thread.start()
-        self.create_ddocs(ddocs)
+        self.perform_ddoc_ops(ddocs)
         for thread in other_ddoc_threads:
             thread.join()
 
@@ -155,7 +155,7 @@ class SpatialViewsTests(BaseTestCase):
         start_cluster = self.input.param('start-cluster', 1)
         servers_in = self.input.param('servers_in', 0)
         servers_out = self.input.param('servers_out', 0)
-        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, non_spatial_views_per_ddoc)
+        ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, self.non_spatial_views_per_ddoc)
         if start_cluster > 1:
             rebalance = self.cluster.async_rebalance(self.servers[:1],
                                                      self.servers[1:start_cluster], [])
@@ -174,12 +174,12 @@ class SpatialViewsTests(BaseTestCase):
                                            name="reb_thread",
                                            args=(self.servers[:1], servs_in, servs_out))
         rebalance_thread.start()
-        self.create_ddocs(ddocs)
+        self.perform_ddoc_ops(ddocs)
         rebalance_thread.join()
 
     def test_views_node_pending_state(self):
         operation = self.input.param('operation', 'add_node')
-        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
+        ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 0)
         rest = RestConnection(self.master)
         if operation == 'add_node':
             self.log.info("adding the node %s:%s" % (
@@ -193,16 +193,16 @@ class SpatialViewsTests(BaseTestCase):
             rest.fail_over(nodes[0].id)
         else:
             self.fail("There is no operation %s" % operation)
-        self.create_ddocs(ddocs)
+        self.perform_ddoc_ops(ddocs)
 
     def test_views_failover(self):
         num_nodes = self.input.param('num-nodes', 1)
-        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
+        ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 0)
         RebalanceHelper.wait_for_persistence(self.master, self.bucket_name)
         self.cluster.failover(self.servers,
                               self.servers[1:num_nodes])
         self.cluster.rebalance(self.servers, [], self.servers[1:num_nodes])
-        self.create_ddocs(ddocs)
+        self.perform_ddoc_ops(ddocs)
 
     def test_views_with_warm_up(self):
         num_ddoc = self.input.param('num-ddoc', 1)
