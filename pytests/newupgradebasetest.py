@@ -55,22 +55,13 @@ class NewUpgradeBaseTest(BaseTestCase):
                     sys.exit(1)
 
     def operations(self, multi_nodes=False):
-        self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
-        self.buckets = []
-        gc.collect()
-        if self.total_buckets > 0:
-            self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
-
-        if self.default_bucket:
-            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        self._create_standard_buckets(self.master, self.standard_buckets)
         if multi_nodes:
             servers_in = [self.servers[i + 1] for i in range(self.initial_num_servers - 1)]
             self.cluster.rebalance(self.servers[:1], servers_in, [])
+        self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
+        self.buckets = []
+        gc.collect()
+        self._bucket_creation()
         if self.op_types == "data":
             self._load_data_all_buckets("create")
             if multi_nodes:
@@ -111,16 +102,19 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         return appropriate_build
 
-    def _upgrade(self, upgrade_version, server, remote):
+    def _upgrade(self, upgrade_version, server):
+        remote = RemoteMachineShellConnection(server)
         appropriate_build = self._get_build(server, upgrade_version, remote)
         self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
         remote.download_build(appropriate_build)
         remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
-        self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
+        remote.disconnect()
+        if not self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
+            self.fail("node {0}:{1} is not running agter upgrade".format(server.ip, server.port))
         self.rest.init_cluster_port(self.rest_settings.rest_username, self.rest_settings.rest_password)
         time.sleep(self.sleep_time)
 
-    def verification(self, multi_nodes=False):
+    def verification(self, servers):
         for bucket in self.buckets:
             if self.rest_helper.bucket_exists(bucket.name):
                 continue
@@ -129,13 +123,5 @@ class NewUpgradeBaseTest(BaseTestCase):
             if self.op_types == "bucket":
                 bucketinfo = self.rest.get_bucket(bucket.name)
                 self.log.info("bucket info :- %s" % bucketinfo)
-
-        if self.op_types == "data":
-            if multi_nodes:
-                self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-                self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
-                self._verify_stats_all_buckets(self.servers[:self.num_servers])
-            else:
-                self._wait_for_stats_all_buckets([self.master])
-                self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
-                self._verify_stats_all_buckets([self.master])
+        self.verify_cluster_stats(servers, max_verify=self.max_verify, \
+                                  timeout=self.wait_timeout * 50)

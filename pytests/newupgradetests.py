@@ -1,4 +1,5 @@
 import time
+from threading import Thread
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
@@ -18,13 +19,13 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
         time.sleep(self.sleep_time)
         for upgrade_version in self.upgrade_versions:
             remote = RemoteMachineShellConnection(self.master)
-            self._upgrade(upgrade_version, self.master, remote)
+            self._upgrade(upgrade_version, self.master)
             time.sleep(self.expire_time)
             for bucket in self.buckets:
                 remote.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
             time.sleep(30)
             remote.disconnect()
-            self.verification()
+            self.verification([self.master])
 
 class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
@@ -33,6 +34,23 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def tearDown(self):
         super(MultiNodesUpgradeTests, self).tearDown()
+
+    def _verify_upgrade_rebalance_in_out(self):
+        self.master = self.servers[self.initial_num_servers]
+        self.rest = RestConnection(self.master)
+        self.rest_helper = RestHelper(self.rest)
+        for bucket in self.buckets:
+            if self.rest_helper.bucket_exists(bucket.name):
+                continue
+            else:
+                raise Exception("bucket:- %s not found" % bucket.name)
+        if self.op_types == "bucket":
+            bucketinfo = self.rest.get_bucket(bucket.name)
+            self.log.info("bucket info :- %s" % bucketinfo)
+        if self.op_types == "data":
+            self._wait_for_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
+            self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
+            self._verify_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
 
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.initial_num_servers])
@@ -46,13 +64,47 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 time.sleep(self.sleep_time)
                 remote.disconnect()
             for server in self.servers[:self.initial_num_servers]:
+                self._upgrade(upgrade_version, server)
+                time.sleep(self.sleep_time)
+            time.sleep(self.expire_time)
+            self.verification(self.servers[:self.initial_num_servers])
+
+    def offline_cluster_upgrade_non_default_path(self):
+        num_nodes_with_not_default = self.input.param('num_nodes_with_not_default', 1)
+        data_path = self.input.param('data_path', '/tmp/data').replace('|', "/")
+        index_path = self.input.param('index_path', data_path).replace('|', "/")
+        servers_with_not_default = self.servers[:num_nodes_with_not_default]
+        for server in servers_with_not_default:
+            server.data_path = data_path
+            server.index_path = index_path
+        self._install(self.servers)
+        self.operations(multi_nodes=True)
+        self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
+        time.sleep(self.sleep_time)
+        for upgrade_version in self.upgrade_versions:
+            for server in self.servers[:self.initial_num_servers]:
                 remote = RemoteMachineShellConnection(server)
-                self._upgrade(upgrade_version, server, remote)
+                remote.stop_server()
                 time.sleep(self.sleep_time)
                 remote.disconnect()
+            upgrade_threads = []
+            for server in self.servers[:self.initial_num_servers]:
+                upgrade_thread = Thread(target=self._upgrade,
+                                       name="upgrade_thread" + server.ip,
+                                       args=(upgrade_version, server))
+                upgrade_threads.append(upgrade_thread)
+                upgrade_thread.start()
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
             time.sleep(self.expire_time)
-            self.num_servers = self.initial_num_servers
-            self.verification(multi_nodes=True)
+            self.verification(self.servers[:self.initial_num_servers])
+            for server in servers_with_not_default:
+                rest = RestConnection(server)
+                node = rest.get_nodes_self()
+                self.assertTrue(node.storage[0].path, data_path)
+                self.assertTrue(node.storage[0].index_path, index_path)
+
+
 
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.initial_num_servers])
@@ -84,24 +136,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
         self.log.info("Rebalance out all old version nodes")
         time.sleep(self.sleep_time)
-        self.verify_upgrade_rebalance_in_out()
-
-    def verify_upgrade_rebalance_in_out(self):
-        self.master = self.servers[self.initial_num_servers]
-        self.rest = RestConnection(self.master)
-        self.rest_helper = RestHelper(self.rest)
-        for bucket in self.buckets:
-            if self.rest_helper.bucket_exists(bucket.name):
-                continue
-            else:
-                raise Exception("bucket:- %s not found" % bucket.name)
-        if self.op_types == "bucket":
-            bucketinfo = self.rest.get_bucket(bucket.name)
-            self.log.info("bucket info :- %s" % bucketinfo)
-        if self.op_types == "data":
-            self._wait_for_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
-            self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
-            self._verify_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
+        self._verify_upgrade_rebalance_in_out()
 
     def online_upgrade_swap_rebalance(self):
         self._install(self.servers[:self.initial_num_servers])
@@ -140,4 +175,4 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not FIND_MASTER:
                 raise Exception("After rebalance in 2.0 nodes, 2.0 doesn't become the master ")
 
-        self.verify_upgrade_rebalance_in_out()
+        self._verify_upgrade_rebalance_in_out()

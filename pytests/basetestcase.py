@@ -74,14 +74,8 @@ class BaseTestCase(unittest.TestCase):
                 self.quota = 256
             if self.total_buckets > 0:
                 self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
-
-            if self.default_bucket:
-                self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-                self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-
-            self._create_sasl_buckets(self.master, self.sasl_buckets)
-            self._create_standard_buckets(self.master, self.standard_buckets)
+            if str(self.__class__).find('newupgradetests') == -1:
+                self._bucket_creation()
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             self._log_start(self)
@@ -145,6 +139,16 @@ class BaseTestCase(unittest.TestCase):
             if node_quota < quota or quota == 0:
                 quota = node_quota
         return quota
+
+    def _bucket_creation(self):
+        if self.default_bucket:
+            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+
+        self._create_sasl_buckets(self.master, self.sasl_buckets)
+        self._create_standard_buckets(self.master, self.standard_buckets)
+
 
     def _get_bucket_size(self, quota, num_buckets, ratio=2.0 / 3.0):
         ip = self.servers[0]
