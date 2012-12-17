@@ -61,6 +61,16 @@ class DesignDocument():
 
         return view_deleted
 
+    def delete_spatial(self, view):
+        i = 0
+        for current_view in self.spatial_views:
+            if view.name == current_view.name:
+                del self.spatial_views[i]
+                return True
+            i += 1
+
+        return False
+
     def set_name(self, name):
         self.id = '_design/{0}'.format(name)
         self.name = name

@@ -23,8 +23,10 @@ class SpatialViewsTests(BaseTestCase):
         self.skip_rebalance = self.input.param("skip_rebalance", False)
         self.use_dev_views = self.input.param("use-dev-views", False)
         self.default_map = "function (doc) {emit(doc.geometry, doc.age);}"
+        self.map_updated = "function (doc) {emit(doc.geometry, doc.name);}"
         self.default_ddoc_name = self.input.param("default_ddoc_name", "test-ddoc")
         self.default_view_name = self.input.param("default_view_name", "test-view")
+        self.ddoc_op = self.input.param("ddoc-ops", "create") #create\update\delete
         self.bucket_name = "default"
         if self.standard_buckets:
             self.bucket_name = "standard_bucket0"
@@ -37,16 +39,20 @@ class SpatialViewsTests(BaseTestCase):
         self.docs = self.helper.insert_docs(self.num_items, 'spatial-doc',
                                             wait_for_persistence=True,
                                             return_docs=True)
+        self.num_ddoc = self.input.param('num-ddoc', 1)
+        self.views_per_ddoc = self.input.param('views-per-ddoc', 1)
+        self.non_spatial_views_per_ddoc = self.input.param('non-spatial-views-per-ddoc', 0)
+        if self.ddoc_op == 'update' or self.ddoc_op == 'delete':
+            ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc,
+                                     self.non_spatial_views_per_ddoc)
+            self.create_ddocs(ddocs)
 
     def tearDown(self):
         super(SpatialViewsTests, self).tearDown()
 
     def test_add_spatial_views(self):
-        num_ddoc = self.input.param('num-ddoc', 1)
-        views_per_ddoc = self.input.param('views-per-ddoc', 1)
-        non_spatial_views_per_ddoc = self.input.param('non-spatial-views-per-ddoc', 0)
-        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, non_spatial_views_per_ddoc)
-        self.create_ddocs(ddocs)
+        ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, self.non_spatial_views_per_ddoc)
+        self.perform_ddoc_ops(ddocs)
 
     def test_add_spatial_views_case_sensative(self):
         ddoc = DesignDocument(self.default_ddoc_name, [], spatial_views=[
@@ -124,8 +130,6 @@ class SpatialViewsTests(BaseTestCase):
             create_thread.join()
 
     def test_create_with_other_ddoc_ops(self):
-        num_ddoc = self.input.param('num-ddoc', 1)
-        views_per_ddoc = self.input.param('views-per-ddoc', 2)
         operation = self.input.param('operation', 'create')
         ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
         other_ddocs = self.make_ddocs(num_ddoc, 0, views_per_ddoc)
@@ -148,9 +152,6 @@ class SpatialViewsTests(BaseTestCase):
             thread.join()
 
     def test_create_views_during_rebalance(self):
-        num_ddoc = self.input.param('num-ddoc', 1)
-        views_per_ddoc = self.input.param('views-per-ddoc', 2)
-        non_spatial_views_per_ddoc = self.input.param('non-spatial-views-per-ddoc', 0)
         start_cluster = self.input.param('start-cluster', 1)
         servers_in = self.input.param('servers_in', 0)
         servers_out = self.input.param('servers_out', 0)
@@ -177,8 +178,6 @@ class SpatialViewsTests(BaseTestCase):
         rebalance_thread.join()
 
     def test_views_node_pending_state(self):
-        num_ddoc = self.input.param('num-ddoc', 1)
-        views_per_ddoc = self.input.param('views-per-ddoc', 2)
         operation = self.input.param('operation', 'add_node')
         ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
         rest = RestConnection(self.master)
@@ -197,8 +196,6 @@ class SpatialViewsTests(BaseTestCase):
         self.create_ddocs(ddocs)
 
     def test_views_failover(self):
-        num_ddoc = self.input.param('num-ddoc', 1)
-        views_per_ddoc = self.input.param('views-per-ddoc', 2)
         num_nodes = self.input.param('num-nodes', 1)
         ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
         RebalanceHelper.wait_for_persistence(self.master, self.bucket_name)
@@ -291,9 +288,20 @@ class SpatialViewsTests(BaseTestCase):
                     self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
             else:
                 for view in ddoc.views:
-                    self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+                    self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
                 for view in ddoc.spatial_views:
-                    self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+                    self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+
+    def perform_ddoc_ops(self, ddocs):
+        if self.ddoc_op == 'update':
+            for ddoc in ddocs:
+                for view in ddoc.spatial_views:
+                    view.map_func = self.map_updated
+        if self.ddoc_op == 'delete':
+            self.delete_views(ddocs)
+        else:
+            self.create_ddocs(ddocs)
+
 
 
 

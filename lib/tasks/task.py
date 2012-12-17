@@ -1151,7 +1151,10 @@ class ViewDeleteTask(Task):
                 # remove view from existing design doc
                 content, header = rest.get_ddoc(self.bucket, self.design_doc_name)
                 ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
-                status = ddoc.delete_view(self.view)
+                if self.view.is_spatial:
+                    status = ddoc.delete_spatial(self.view)
+                else:
+                    status = ddoc.delete_view(self.view)
                 if not status:
                     self.state = FINISHED
                     self.set_exception(Exception('View does not exist! %s' % (self.view.name)))
