@@ -511,7 +511,11 @@ class RemoteMachineShellConnection:
         releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1"]
 
         product_version = ""
-        if "2.0.0" in version:
+        if   "2.1.0" in version:
+            product_version = "2.1.0"
+        elif "2.0.1" in version:
+            product_version = "2.0.1"
+        elif "2.0.0" in version:
             product_version = "2.0.0"
         elif "1.8.0" in version:
             product_version = "1.8.0"
