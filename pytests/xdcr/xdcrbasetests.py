@@ -4,6 +4,7 @@ import datetime
 import unittest
 import logger
 import copy
+from threading import Thread
 
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase.cluster import Cluster
@@ -15,6 +16,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection
+from datetime import datetime
 
 from couchbase.documentgenerator import BlobGenerator
 from basetestcase import BaseTestCase
@@ -71,6 +73,13 @@ class XDCRBaseTest(unittest.TestCase):
             self._input = TestInputSingleton.input
             self._init_parameters()
             self._cluster_helper = Cluster()
+            #REPLICATION RATE STATS
+            self._local_replication_rate = {}
+            self._xdc_replication_ops = {}
+            self._xdc_replication_rate = {}
+            self._start_replication_time = {}
+            self._end_replication_flag = 0
+            ##
             self._log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
                 .format(self._case_number, self._testMethodName))
             if not self._input.param("skip_cleanup", False):
@@ -80,7 +89,28 @@ class XDCRBaseTest(unittest.TestCase):
             self.setup_extended()
             self._log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
-            self._log_start(self)
+            ## THREADS FOR STATS KEEPING
+            self._stats_thread1 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.src_master])
+            self._stats_thread2 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.dest_master])
+            self._stats_thread3 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.src_master])
+            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                self._stats_thread4 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.dest_master])
+                self._stats_thread5 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.src_master])
+                self._stats_thread6 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.dest_master])
+            self._stats_thread1.setDaemon(True)
+            self._stats_thread2.setDaemon(True)
+            self._stats_thread3.setDaemon(True)
+            self._stats_thread1.start()
+            self._stats_thread2.start()
+            self._stats_thread3.start()
+            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                self._stats_thread4.setDaemon(True)
+                self._stats_thread5.setDaemon(True)
+                self._stats_thread6.setDaemon(True)
+                self._stats_thread4.start()
+                self._stats_thread5.start()
+                self._stats_thread6.start()
+                self._log_start(self)
         except  Exception as e:
             self._log.error(e.message)
             self._log.error("Error while setting up clusters: %s", sys.exc_info())
@@ -89,6 +119,24 @@ class XDCRBaseTest(unittest.TestCase):
 
     def tearDown(self):
         try:
+            self._log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
+                    .format(self._case_number, self._testMethodName))
+            self._end_replication_flag = 1
+            self._stats_thread1.join()
+            self._stats_thread2.join()
+            self._stats_thread3.join()
+            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                self._stats_thread4.join()
+                self._stats_thread5.join()
+                self._stats_thread6.join()
+            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                self._log.info("Type of run: BIDIRECTIONAL XDCR")
+            else:
+                self._log.info("Type of run: UNIDIRECTIONAL XDCR")
+            self._print_stats(self.src_master)
+            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                self._print_stats(self.dest_master)
+            self._log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
             self._log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
             self.teardown_extended()
@@ -98,6 +146,48 @@ class XDCRBaseTest(unittest.TestCase):
         finally:
             self._cluster_helper.shutdown()
             self._log_finish(self)
+
+    def _print_stats(self, node):
+        if node == self.src_master:
+            node1 = self.dest_master
+        else:
+            node1 = self.src_master
+        self._log.info("STATS with source at {0} and destination at {1}".format(node.ip, node1.ip))
+        for the_bucket in self._get_cluster_buckets(node):
+            self._log.info("Bucket: {0}".format(the_bucket.name))
+            if node in self._local_replication_rate:
+                if the_bucket.name in self._local_replication_rate[node]:
+                    if self._local_replication_rate[node][the_bucket.name] is not None:
+                        _sum_ = 0
+                        for _i in self._local_replication_rate[node][the_bucket.name]:
+                            _sum_ += _i
+                        self._log.info("\tAverage local replica creation rate for bucket '{0}': {1} KB per second"\
+                            .format(the_bucket.name, (float)(_sum_)/(len(self._local_replication_rate[node][the_bucket.name]) * 1000)))
+            if node1 in self._xdc_replication_ops:
+                if the_bucket.name in self._xdc_replication_ops[node1]:
+                    if self._xdc_replication_ops[node1][the_bucket.name] is not None:
+                        _sum_ = 0
+                        for _i in self._xdc_replication_ops[node1][the_bucket.name]:
+                            _sum_ += _i
+                        self._xdc_replication_ops[node1][the_bucket.name].sort()
+                        _mid = len(self._xdc_replication_ops[node1][the_bucket.name]) / 2
+                        if len(self._xdc_replication_ops[node1][the_bucket.name])%2 == 0:
+                            _median_value_ = (float)(self._xdc_replication_ops[node1][the_bucket.name][_mid] +
+                                                     self._xdc_replication_ops[node1][the_bucket.name][_mid-1])/2
+                        else:
+                            _median_value_ = self._xdc_replication_ops[node1][the_bucket.name][_mid]
+                        self._log.info("\tMedian XDC replication ops for bucket '{0}': {1} K ops per second"\
+                            .format(the_bucket.name, (float)(_median_value_)/1000))
+                        self._log.info("\tMean XDC replication ops for bucket '{0}': {1} K ops per second"\
+                            .format(the_bucket.name, (float)(_sum_)/(len(self._xdc_replication_ops[node1][the_bucket.name]) * 1000)))
+            if node in self._xdc_replication_rate:
+                if the_bucket.name in self._xdc_replication_rate[node]:
+                    if self._xdc_replication_rate[node][the_bucket.name] is not None:
+                        _sum_ = 0
+                        for _i in self._xdc_replication_rate[node][the_bucket.name]:
+                            _sum_ += _i
+                        self._log.info("\tAverage XDCR data replication rate for bucket '{0}': {1} KB per second"\
+                            .format(the_bucket.name, (float)(_sum_)/(len(self._xdc_replication_rate[node][the_bucket.name]) * 1000)))
 
     def _cleanup_previous_setup(self):
         self.teardown_extended()
@@ -214,6 +304,50 @@ class XDCRBaseTest(unittest.TestCase):
             RestConnection(self.dest_master[0]).log_client_error(msg)
         except:
             pass
+
+    def _replication_stat_keeper(self, arg, node):
+        while not self._end_replication_flag == 1:
+            if arg == "replication_data_replicated":
+                rest = RestConnection(node)
+                for the_bucket in self._get_cluster_buckets(node):
+                    stats = rest.fetch_bucket_stats(bucket=the_bucket.name)["op"]["samples"]
+                    _x_ = stats[arg][-1]
+                    if _x_ > 0:
+                        _y_ = datetime.now()
+                        if node not in self._local_replication_rate:
+                            self._local_replication_rate[node] = {}
+                        if the_bucket.name not in self._local_replication_rate[node]:
+                            self._local_replication_rate[node][the_bucket.name] = []
+                        self._local_replication_rate[node][the_bucket.name].append((float)(_x_)/(_y_ - self._start_replication_time[the_bucket.name]).seconds)
+            elif arg == "xdc_ops":
+                rest = RestConnection(node)
+                for the_bucket in self._get_cluster_buckets(node):
+                    stats = rest.fetch_bucket_stats(bucket=the_bucket.name)["op"]["samples"]
+                    _x_ = stats[arg][-1]
+                    if _x_ > 0:
+                        if node not in self._xdc_replication_ops:
+                            self._xdc_replication_ops[node] = {}
+                        if the_bucket.name not in self._xdc_replication_ops[node]:
+                            self._xdc_replication_ops[node][the_bucket.name] = []
+                        self._xdc_replication_ops[node][the_bucket.name].append((float)(_x_))
+            elif arg == "data_replicated":
+                rest1 = RestConnection(node)
+                if node == self.src_master:
+                    rest2 = RestConnection(self.dest_master)
+                else:
+                    rest2 = RestConnection(self.src_master)
+                dest_uuid = rest2.get_pools_info()["uuid"]
+                for the_bucket in self._get_cluster_buckets(node):
+                    argument = "{0}/{1}/{2}/{3}/{4}".format("replications", dest_uuid, the_bucket.name, the_bucket.name, arg)
+                    stats = rest1.fetch_bucket_stats(bucket=the_bucket.name)["op"]["samples"]
+                    _x_ = stats[argument][-1]
+                    if _x_ > 0:
+                        _y_ = datetime.now()
+                        if node not in self._xdc_replication_rate:
+                            self._xdc_replication_rate[node] = {}
+                        if the_bucket.name not in self._xdc_replication_rate[node]:
+                            self._xdc_replication_rate[node][the_bucket.name] = []
+                        self._xdc_replication_rate[node][the_bucket.name].append((float)(_x_)/(_y_ - self._start_replication_time[the_bucket.name]).seconds)
 
     def _get_floating_servers(self):
         cluster_nodes = []
@@ -709,6 +843,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for bucket in self._get_cluster_buckets(src_master):
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
                 bucket.name, dest_cluster_name)
+            self._start_replication_time[bucket.name] = datetime.now()
             time.sleep(5)
         if self._get_cluster_buckets(src_master):
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
