@@ -49,6 +49,12 @@ class EsRestConnection(RestConnection):
 
         return buckets
 
+    def get_bucket(self, bucket_name):
+        for bucket in self.get_indices_as_buckets():
+            if bucket.name == bucket_name:
+                return bucket
+        return
+
     def get_buckets(self):
         return self.get_indices_as_buckets()
 
@@ -78,42 +84,63 @@ class EsRestConnection(RestConnection):
 
 
     def node_statuses(self, timeout=120):
-        nodes = []
-        node_stats = self.conn.cluster_nodes()['nodes']
 
-        for key in node_stats:
-            status = self.conn.cluster_health()['status']
-            if status == "green":
-                status = "healthy"
+        otp_nodes = []
+
+        for node in self.get_nodes():
 
             #get otp,get status
-            node = OtpNode(id="es@"+self.ip,
-                           status=status)
+            otp_node = OtpNode(id=node.id,
+                               status=node.status)
 
-            addr = node_stats[key]['http_address']
-            node.ip = addr[addr.rfind('/')+1:addr.rfind(':')]
-            node.port = addr[addr.rfind(':')+1:]
-            node.replication = None
-            nodes.append(node)
+            otp_node.ip = node.ip
+            otp_node.port = node.port
+            otp_node.replication = None
+            otp_nodes.append(node)
 
         # for now only return master node
         # to prevent automation from trying
         # to rebalance
-        return [nodes[0]]
+        return [otp_nodes[0]]
 
 
     def get_nodes_self(self, timeout=120):
-        master = self.node_statuses(timeout)[0]
 
-        node = Node()
-        node.status = master.status
-        node.id = master.id
-        node.ip = master.ip
-        node.port = master.port
-        return node
+        for node in self.get_nodes():
+            if node.port == int(self.port):
+                return node
+
+        return
 
     def get_nodes(self):
-        return [self.get_nodes_self()]
+
+        es_nodes = []
+        nodes = self.conn.cluster_nodes()['nodes']
+        status = self.conn.cluster_health()['status']
+        if status == "green":
+            status = "healthy"
+
+        for node_key in nodes:
+            nodeInfo = nodes[node_key]
+            node = ESNode(nodeInfo)
+            node.status = status
+            es_nodes.append(node)
+
+        return es_nodes
+
+    def all_docs(self, keys_only = False):
+
+        query = pyes.Search({'match_all' : {}})
+        rows = self.conn.search(query)
+        docs = []
+
+        for row in rows:
+            if keys_only:
+                row = row['meta']['id']
+            docs.append(row)
+
+        return docs
+
 
     def start_replication(self, *args, **kwargs):
         return "es",self.ip
@@ -164,4 +191,16 @@ class EsRestConnection(RestConnection):
     def remove_all_replications(self):
         pass
 
+def parse_addr(addr):
+    ip = addr[addr.rfind('/')+1:addr.rfind(':')]
+    port = addr[addr.rfind(':')+1:-1]
+    return str(ip), int(port)
 
+class ESNode(Node):
+    def __init__(self, info):
+        super(ESNode, self).__init__()
+        self.hostname = info['hostname']
+        self.id = "es@"+info['name']
+        self.ip, self.port = parse_addr(info["couchbase_address"])
+        self.tr_ip, self.tr_port = parse_addr(info["transport_address"])
+        self.ht_ip, self.ht_port = parse_addr(info["http_address"])
