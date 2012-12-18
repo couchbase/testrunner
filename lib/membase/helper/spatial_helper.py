@@ -5,6 +5,7 @@ import time
 import unittest
 
 from TestInput import TestInputSingleton
+from couchbase.document import DesignDocument, View
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -123,6 +124,36 @@ class SpatialHelper:
         self.log.info("inserted {0} json documents".format(num_of_docs))
         return doc_names
 
+    def create_default_views(self, is_one_ddoc=False):
+        views = [View(self.testcase.default_view_name + "0",
+                      'function (doc) {emit(doc.geometry, doc.age);}',
+                      dev_view=self.testcase.use_dev_views, is_spatial=True),
+                View(self.testcase.default_view_name + "1",
+                      'function (doc) {emit(doc.geometry, null);}',
+                      dev_view=self.testcase.use_dev_views, is_spatial=True),
+                View(self.testcase.default_view_name + "2",
+                      'function (doc) {emit(doc.geometry, doc.name);}',
+                      dev_view=self.testcase.use_dev_views, is_spatial=True),
+                View(self.testcase.default_view_name + "3",
+                      'function (doc) {emit(doc.geometry, [doc.name, doc.age]);}',
+                      dev_view=self.testcase.use_dev_views, is_spatial=True),
+                View(self.testcase.default_view_name + "4",
+                      'function (doc) {emit(doc.geometry, {result : {age:doc.age}});}',
+                      dev_view=self.testcase.use_dev_views, is_spatial=True)]
+        ddocs = []
+        if is_one_ddoc:
+            ddocs.append(DesignDocument(self.testcase.default_ddoc_name, [],
+                                        spatial_views=views))
+        else:
+            for i in xrange(5):
+                ddocs.append(DesignDocument(self.testcase.default_ddoc_name + str(i), [],
+                                        spatial_views=[views[i]]))
+        for ddoc in ddocs:
+            for view in ddoc.spatial_views:
+                self.testcase.cluster.create_view(self.testcase.master, ddoc.name, view,
+                                                  bucket=self.testcase.bucket_name)
+        return ddocs
+
     def generate_matching_docs(self, docs_inserted, params, value=None):
         expected_docs = []
         if 'bbox' in params:
@@ -131,24 +162,28 @@ class SpatialHelper:
                 doc['geometry']['coordinates'][0] > params['bbox'][0] and\
                 doc['geometry']['coordinates'][1] < params['bbox'][3] and\
                 doc['geometry']['coordinates'][1] > params['bbox'][1]:
-                    if values:
+                    if value:
                         expected_docs.append({'key' : doc['name'], 'value' : doc[value]})
                     else:
                         expected_docs.append(doc)
         if 'skip' in params:
-            expected_docs = docs_inserted[int(params['skip']):]
+            if int(params['skip']) > len(expected_docs):
+                expected_docs = expected_docs[int(params['skip']):]
         if 'limit' in params:
-            expected_docs = docs_inserted[:int(params['limit'])]
+            if int(params['limit']) < len(expected_docs):
+                expected_docs = expected_docs[:int(params['limit'])]
         return expected_docs
 
     def verify_matching_keys(self, expected, current):
         missing_docs = []
         extra_docs = []
+        self.log.info("Expected {0} items, current {1}".format(
+                                   len(expected), len(current)))
         for key in expected:
-            if not key['key'] in [doc['id'] for doc in current]:
+            if not key['name'] in [doc['id'] for doc in current]:
                 missing_docs.append(key)
         for key in current:
-            if not key['id'] in [doc['key'] for doc in expected]:
+            if not key['id'] in [doc['name'] for doc in expected]:
                 extra_docs.append(key)
         if missing_docs or extra_docs:
             self.testcase.fail("Extra docs: {0},\n Missing docs: {1}".format(
@@ -166,6 +201,9 @@ class SpatialHelper:
                     params["full_set"] = True
                 params.update(extra_params)
 
+                if "bbox" in params:
+                    params["bbox"] = ",".join([str(x) for x in params["bbox"]])
+
                 results = rest.query_view(ddoc.name, view.name, bucket, params,
                                                     type="spatial")
                 delta = time.time() - start
@@ -182,7 +220,7 @@ class SpatialHelper:
                                   .format(delta))
                     self.log.info("was able to get spatial results after "
                                   "trying {0} times".format((i + 1)))
-                    return results
+                    return results["rows"]
             except Exception as ex:
                 if ex.message.find('view_undefined') != -1 or ex.message.find('not_found') != -1 or \
                  ex.message.find('unable to reach') != -1 or ex.message.find('timeout') != -1 or \

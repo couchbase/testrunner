@@ -305,6 +305,73 @@ class SpatialViewsTests(BaseTestCase):
 
 
 
+class SpatialViewQueriesTests(BaseTestCase):
+
+    def setUp(self):
+        super(SpatialViewQueriesTests, self).setUp()
+        self.skip_rebalance = self.input.param("skip_rebalance", False)
+        self.use_dev_views = self.input.param("use-dev-views", False)
+        self.all_view_one_ddoc = self.input.param("all-view-one-ddoc", False)
+        self.default_ddoc_name = "test-ddoc-query"
+        self.default_view_name = "test-view-query"
+        self.bucket_name = "default"
+        if self.standard_buckets:
+            self.bucket_name = "standard_bucket0"
+        if self.sasl_buckets:
+            self.bucket_name = "bucket0"
+        self.helper = SpatialHelper(self, self.bucket_name)
+        if not self.skip_rebalance:
+            self.cluster.rebalance(self.servers[:], self.servers[1:], [])
+        #load some items to verify
+        self.docs = self.helper.insert_docs(self.num_items, 'spatial-doc',
+                                            wait_for_persistence=True,
+                                            return_docs=True)
+        self.ddocs = self.helper.create_default_views(
+                                        is_one_ddoc=self.all_view_one_ddoc)
+
+    def tearDown(self):
+        super(SpatialViewQueriesTests, self).tearDown()
+
+    def test_spatial_view_queries(self):
+        error = self.input.param('error', None)
+        params = self.get_query_params()
+        try:
+            self.query_and_verify_result(self.docs, params)
+        except Exception as ex:
+            if error and str(ex).find(error) != -1:
+               self.log.info("Error caught as expected %s" % error)
+               return
+            else:
+               self.fail("Unexpected error appeared during run %s" % ex)
+        if error:
+            self.fail("Expected error '%s' didn't appear" % error)
+
+    def get_query_params(self):
+        current_params = {}
+        for key in self.input.test_params:
+            if key == 'skip' or key == 'limit':
+                current_params[key] = int(self.input.test_params[key])
+            elif key == 'bbox':
+                current_params[key] = [int(x) for x in
+                                       self.input.test_params[key][1:-1].split(",")]
+            elif key == 'stale':
+                current_params[key] = self.input.test_params[key]
+        return current_params
+
+    def query_and_verify_result(self, doc_inserted, params, node=None):
+        rest = RestConnection(self.master)
+        if node:
+            rest = RestConnection(node)
+        expected_ddocs = self.helper.generate_matching_docs(doc_inserted, params)
+        for ddoc in self.ddocs:
+            for view in ddoc.spatial_views:
+                result_ddocs = self.helper.query_view(rest, ddoc, view,
+                                                      bucket=self.bucket_name,
+                                                      extra_params=params,
+                                                      num_expected=len(expected_ddocs),
+                                                      num_tries=20)
+                self.helper.verify_matching_keys(expected_ddocs, result_ddocs)
+
 class SpatialViewTests(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
