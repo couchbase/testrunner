@@ -102,7 +102,10 @@ def launchSystest(testMsg):
         # run phase
         phase = testMsg['phases'][phase_key]
 
-        runPhase(name, phase)
+        phase_status = runPhase(name, phase)
+
+        if phase_status == False:
+            break
 
     if 'loop' in testMsg and testMsg['loop']:
         launchSystest(testMsg)
@@ -162,10 +165,12 @@ def runPhase(name, phase):
         queryIds = activateQueries(query)
 
     # monitor phase
-    monitorPhase(runTime, workloadIds, rebalance_required, queryIds)
+    phase_status = monitorPhase(runTime, workloadIds, rebalance_required, queryIds)
 
     # phase complete: #TODO stat report
     time.sleep(5)
+
+    return phase_status
 
 def activateWorkloads(workload):
 
@@ -259,6 +264,7 @@ def monitorPhase(runTime, workloadIds, rebalancing = False, queryIds = None):
     # monitor pre/post conditions lala
 
     running = True
+    phase_status = True
     end_time = time.time() + int(runTime)
 
     while running:
@@ -266,7 +272,7 @@ def monitorPhase(runTime, workloadIds, rebalancing = False, queryIds = None):
         if time.time() > end_time:
 
             if rebalancing:
-                monitorRebalance()
+                phase_status = monitorRebalance()
                 rebalancing = False
             elif workloadIds is not None:
                 for workloadId in workloadIds:
@@ -284,6 +290,8 @@ def monitorPhase(runTime, workloadIds, rebalancing = False, queryIds = None):
         # stop queries
         for qid in queryIds:
             QueryWorkload.from_cache(qid).active = False
+
+    return phase_status
 
 def getWorkloadStatus(workloadId):
 

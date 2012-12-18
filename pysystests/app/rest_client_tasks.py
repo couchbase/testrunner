@@ -94,7 +94,8 @@ def perform_admin_tasks(adminMsg):
 
 def monitorRebalance():
     rest = create_rest()
-    rest.monitorRebalance()
+    rebalance_success = rest.monitorRebalance()
+    return rebalance_success
 
 
 @celery.task
