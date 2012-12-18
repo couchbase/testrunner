@@ -22,20 +22,13 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def tearDown(self):
 #        super(Rebalance, self).tearDown()
-        try:
-            self._log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
-                .format(self._case_number, self._testMethodName))
-            BucketOperationHelper.delete_all_buckets_or_assert(self.src_nodes, self)
-            ClusterOperationHelper.cleanup_cluster(self.src_nodes, self)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.src_nodes, self)
-            BucketOperationHelper.delete_all_buckets_or_assert(self.dest_nodes, self)
-            ClusterOperationHelper.cleanup_cluster(self.dest_nodes, self)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.dest_nodes, self)
-            self._log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
-                .format(self._case_number, self._testMethodName))
-        finally:
-            self._cluster_helper.shutdown()
-            self._log_finish(self)
+        BucketOperationHelper.delete_all_buckets_or_assert(self.src_nodes, self)
+        ClusterOperationHelper.cleanup_cluster(self.src_nodes, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.src_nodes, self)
+        BucketOperationHelper.delete_all_buckets_or_assert(self.dest_nodes, self)
+        ClusterOperationHelper.cleanup_cluster(self.dest_nodes, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.dest_nodes, self)
+        super(unidirectional, self).tearDown()
 
     def _async_modify_data(self):
         tasks = []
