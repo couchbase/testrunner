@@ -353,7 +353,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         is_dev_ddoc = self.input.param("is_dev_ddoc", False)
         ddoc_names = ['ddoc' + str(i) for i in xrange(num_ddocs)]
         map_func = """function (doc, meta) {{\n  emit(meta.id, "emitted_value_{0}");\n}}"""
-        views=[View("view" + str(i), map_func.format(i), None, is_dev_ddoc , False) for i in xrange(num_views)]
+        views = [View("view" + str(i), map_func.format(i), None, is_dev_ddoc , False) for i in xrange(num_views)]
         #views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
 
         prefix = ("", "dev_")[is_dev_ddoc]
@@ -371,12 +371,15 @@ class RebalanceInOutTests(RebalanceBaseTest):
         for view in views:
             # run queries to create indexes
             self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+        now = time.time()
         time.sleep(5)
-        for i in num_ddocs*num_views*len(self.buckets):
+        for i in num_ddocs * num_views * len(self.buckets):
             #wait until all initial_build indexer processes are completed
             active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "True", wait_task=False)
             result = active_task.result()
             self.assertTrue(result)
+        self.log.info("PERF: indexing time for {0} ddocs with {1} views:{2}".
+                      format(num_ddocs, num_views, time.time() - now))
 
         servs_init = self.servers[:self.nodes_init]
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
