@@ -3,7 +3,6 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from xdcrbasetests import XDCRReplicationBaseTest
 from esbasetests import ESReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
 from random import randrange
 
 import time
@@ -12,6 +11,7 @@ import time
 class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
     def setUp(self):
         super(ESKVTests, self).setUp()
+        self.verify_dest_added(self)
         self.setup_doc_gens()
 
     def tearDown(self):
@@ -46,6 +46,7 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
     def _async_modify_data(self):
         tasks = []
+
         """Setting up creates/updates/deletes at source nodes"""
         if self._doc_ops is not None:
             # allows multiple of them but one by one
@@ -55,17 +56,22 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_recreate, "create", 0))
             if "delete" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+            if "read" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "read", 0))
         for task in tasks:
             task.result()
 
-    """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
+    """Testing Unidirectional load( Loading only at source) Verifying whether ES/XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
-    def load_with_ops(self):
+    def load_with_async_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._async_modify_data()
         self.verify_results()
 
+    def test_plugin_connect(self):
+        pass
+
     #overriding xdcr verify results method for specific es verification
     def verify_results(self, verify_src=False):
-        self.verify_es_results(self, verify_src)
+        self.verify_es_results(verify_src)
 

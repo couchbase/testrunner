@@ -12,8 +12,9 @@ class ESReplicationBaseTest(object):
 
     xd_ref = None
 
-    def verify_es_results(self, xd_ref, verify_src = False, verification_count = 1000):
-        self.xd_ref = xd_ref
+    def verify_es_results(self, verify_src = False, verification_count = 1000):
+
+        xd_ref = self.xd_ref
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -59,7 +60,7 @@ class ESReplicationBaseTest(object):
         buckets = self.xd_ref._get_cluster_buckets(src_server)
         for bucket in buckets:
             cb_valid, cb_deleted = bucket.kvs[kv_store].key_set()
-            cb_num_items = len(cb_valid)
+            cb_num_items = cb_rest.get_bucket_stats(bucket.name)['curr_items']
             es_num_items = es_rest.get_bucket(bucket.name).stats.itemCount
             while retry > 0 and cb_num_items != es_num_items:
                 self.xd_ref._log.info("elasticsearch items %s, expected: %s....retry" %\
@@ -73,8 +74,8 @@ class ESReplicationBaseTest(object):
 
             # query for all es keys
             es_valid = es_rest.all_docs(keys_only=True)
-            for _id in cb_valid[:verification_count]:  # match at most 1k keys
-                if _id not in es_valid:
+            for _id in es_valid[:verification_count]:  # match at most 1k keys
+                if _id not in cb_valid:
                     self.xd_ref.fail("Document %s Missing from ES Index" % _id)
 
 
@@ -126,3 +127,19 @@ class ESReplicationBaseTest(object):
                 except MemcachedError as e:
                     self.xd_ref.fail("Error during verification.  Index contains invalid key: %s" % key)
 
+    def verify_dest_added(self, xd_ref):
+        self.xd_ref = xd_ref
+        src_master = self.xd_ref.src_master
+        dest_master = self.xd_ref.dest_master
+        rest = RestConnection(src_master)
+        remoteClusters = rest.get_remote_clusters()
+
+        # check remote cluster info to ensure dest cluster has been added
+        # and that it's status is correct
+        for clusterInfo in remoteClusters:
+            if clusterInfo['deleted'] == False:
+                ip, port = clusterInfo['hostname'].split(':')
+                if ip == dest_master.ip and port == dest_master.port:
+                    return
+
+        xd_ref.fail("Failed to setup replication to remote cluster %s " % dest_master)
