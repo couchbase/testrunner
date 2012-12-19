@@ -90,7 +90,7 @@ class NodeInitializeTask(Task):
 
         if self.disable_consistent_view is not None:
             rest.set_reb_cons_view(self.disable_consistent_view)
-        if self.disable_consistent_view is not None:
+        if self.rebalanceIndexWaitingDisabled is not None:
             rest.set_reb_index_waiting(self.rebalanceIndexWaitingDisabled)
         if self.rebalanceIndexPausingDisabled is not None:
             rest.set_rebalance_index_pausing(self.rebalanceIndexPausingDisabled)
