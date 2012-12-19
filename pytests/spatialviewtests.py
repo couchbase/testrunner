@@ -314,6 +314,7 @@ class SpatialViewQueriesTests(BaseTestCase):
         self.all_view_one_ddoc = self.input.param("all-view-one-ddoc", False)
         self.default_ddoc_name = "test-ddoc-query"
         self.default_view_name = "test-view-query"
+        self.params = self.get_query_params()
         self.bucket_name = "default"
         if self.standard_buckets:
             self.bucket_name = "standard_bucket0"
@@ -334,9 +335,8 @@ class SpatialViewQueriesTests(BaseTestCase):
 
     def test_spatial_view_queries(self):
         error = self.input.param('error', None)
-        params = self.get_query_params()
         try:
-            self.query_and_verify_result(self.docs, params)
+            self.query_and_verify_result(self.docs, self.params)
         except Exception as ex:
             if error and str(ex).find(error) != -1:
                self.log.info("Error caught as expected %s" % error)
@@ -345,6 +345,61 @@ class SpatialViewQueriesTests(BaseTestCase):
                self.fail("Unexpected error appeared during run %s" % ex)
         if error:
             self.fail("Expected error '%s' didn't appear" % error)
+
+    def test_view_queries_during_rebalance(self):
+        start_cluster = self.input.param('start-cluster', 1)
+        servers_in = self.input.param('servers_in', 0)
+        servers_out = self.input.param('servers_out', 0)
+        if start_cluster > 1:
+            rebalance = self.cluster.async_rebalance(self.servers[:1],
+                                                     self.servers[1:start_cluster], [])
+            rebalance.result()
+        servs_in = []
+        servs_out = []
+        if servers_in:
+            servs_in = self.servers[start_cluster:servers_in + 1]
+        if servers_out:
+            if start_cluster > 1:
+                servs_out = self.servers[1:start_cluster]
+                servs_out = servs_out[-servers_out:]
+            else:
+                servs_out = self.servers[-servers_out:]
+        rebalance = self.cluster.async_rebalance(self.servers, servs_in, servs_out)
+        self.query_and_verify_result(self.docs, self.params)
+        rebalance.result()
+
+    def test_view_queries_node_pending_state(self):
+        operation = self.input.param('operation', 'add_node')
+        rest = RestConnection(self.master)
+        if operation == 'add_node':
+            self.log.info("adding the node %s:%s" % (
+                        self.servers[1].ip, self.servers[1].port))
+            otpNode = rest.add_node(self.master.rest_username, self.master.rest_password,
+                                    self.servers[1].ip, self.servers[1].port)
+        elif operation == 'failover':
+            nodes = rest.node_statuses()
+            nodes = [node for node in nodes
+                     if node.ip != self.master.ip or node.port != self.master.port]
+            rest.fail_over(nodes[0].id)
+        else:
+            self.fail("There is no operation %s" % operation)
+        self.query_and_verify_result(self.docs, self.params)
+
+    def test_view_queries_failover(self):
+        num_nodes = self.input.param('num-nodes', 1)
+        self.cluster.failover(self.servers,
+                              self.servers[1:num_nodes])
+        self.cluster.rebalance(self.servers, [], self.servers[1:num_nodes])
+        self.query_and_verify_result(self.docs, self.params)
+
+    def test_views_with_warm_up(self):
+         warmup_node = self.servers[-1]
+         shell = RemoteMachineShellConnection(warmup_node)
+         shell.stop_couchbase()
+         time.sleep(20)
+         shell.start_couchbase()
+         shell.disconnect()
+         self.query_and_verify_result(self.docs, self.params)
 
     def get_query_params(self):
         current_params = {}
