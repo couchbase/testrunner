@@ -212,7 +212,7 @@ class SpatialViewsTests(BaseTestCase):
         shell.start_couchbase()
         shell.disconnect()
         ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 0)
-        self.create_ddocs(ddocs)
+        self.perform_ddoc_ops(ddocs)
 
     def test_views_during_index(self):
         ddocs =  self.make_ddocs(1, 1, 1)
@@ -223,7 +223,7 @@ class SpatialViewsTests(BaseTestCase):
             for view in ddoc.spatial_views:
                 self.helper.query_view(rest, ddoc, view, bucket=self.bucket_name, extra_params={})
         ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 1)
-        self.create_ddocs(ddocs)
+        self.perform_ddoc_ops(ddocs)
 
     def test_views_during_ddoc_compaction(self):
         fragmentation_value = self.input.param("fragmentation_value", 80)
@@ -245,7 +245,7 @@ class SpatialViewsTests(BaseTestCase):
         fragmentation_monitor.result()
         compaction_task = self.cluster.async_compact_view(self.master, ddoc_to_compact.name,
                                                           self.default_bucket_name)
-        self.create_ddocs(ddocs)
+        self.perform_ddoc_ops(ddocs)
         result = compaction_task.result(self.wait_timeout * 10)
         self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
 
