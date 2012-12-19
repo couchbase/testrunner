@@ -12,9 +12,31 @@ import time
 class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
     def setUp(self):
         super(ESKVTests, self).setUp()
+        self.setup_doc_gens()
 
     def tearDown(self):
         super(ESKVTests, self).tearDown()
+
+    def setup_doc_gens(self):
+        # create json doc generators
+        ordering = range(self._num_items)
+        sites = ['google', 'bing', 'yahoo', 'wiki']
+        template = '{{ "ordering": {0}, "site_name": "{1}" }}'
+
+        delete_start= int((self._num_items) * (float)(100 - self._percent_delete) / 100)
+        update_end = int((self._num_items) * (float)(self._percent_update) / 100)
+
+        self.gen_create =\
+            DocumentGenerator('es_xdcr_docs', template, ordering,
+                               sites, start=0, end=self._num_items)
+        self.gen_update =\
+            DocumentGenerator('es_xdcr_docs', template, ordering,
+                               sites, start=0, end=update_end)
+        self.gen_delete =\
+            DocumentGenerator('es_xdcr_docs', template, ordering,
+                               sites, start=delete_start, end=self._num_items)
+
+
 
     def _async_modify_data(self):
         tasks = []
