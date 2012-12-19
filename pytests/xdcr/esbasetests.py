@@ -1,6 +1,8 @@
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
+from mc_bin_client import MemcachedError
 import time
+import json
 
 """class used in conjunction with an XDCRReplicationBaseTest instance.
    purpose is to not clutter xdcrbasetests itself with these es safe
@@ -40,9 +42,14 @@ class ESReplicationBaseTest(object):
         self.verify_es_num_docs(src_nodes[0], dest_nodes[0], verification_count = verification_count)
 
         if xd_ref._doc_ops is not None:
-            # initial data set has been modified
+            # initial data has been modified
             # check revids
             self._verify_es_revIds(src_nodes[0], dest_nodes[0], verification_count = verification_count)
+
+            if "create" in xd_ref._doc_ops:
+                # initial data values have has been modified
+                self._verify_es_values(src_nodes[0], dest_nodes[0],
+                                       verification_count = verification_count)
 
 
 
@@ -92,6 +99,30 @@ class ESReplicationBaseTest(object):
                     if int(seqno_src) != seqno_dest:
                         self.xd_ref.fail("Document %s has invalid seqno (%s) expected (%s)" %\
                                         (key, seqno_src, seqno_dest))
+                except MemcachedError as e:
+                    self.xd_ref.fail("Error during verification.  Index contains invalid key: %s" % key)
+
+
+    def _verify_es_values(self, src_server, dest_server, kv_store = 1, verification_count = 1000):
+        cb_rest = RestConnection(src_server)
+        es_rest = RestConnection(dest_server)
+        buckets = self.xd_ref._get_cluster_buckets(src_server)
+        for bucket in buckets:
+            mc = MemcachedClientHelper.direct_client(src_server, bucket)
+            cb_valid, cb_deleted = bucket.kvs[kv_store].key_set()
+            es_valid = es_rest.all_docs()
+
+            # compare values of documents
+            for row in es_valid[:verification_count]:
+                key = str(row['meta']['id'])
+
+                try:
+                    _, _, doc = mc.get(key)
+                    val_src = str(json.loads(doc)['site_name'])
+                    val_dest = str(row['doc']['site_name'])
+                    if val_src != val_dest:
+                        self.xd_ref.fail("Document %s has unexpected value (%s) expected (%s)" %\
+                                        (key, val_src, val_dest))
                 except MemcachedError as e:
                     self.xd_ref.fail("Error during verification.  Index contains invalid key: %s" % key)
 

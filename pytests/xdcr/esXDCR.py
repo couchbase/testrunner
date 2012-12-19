@@ -19,8 +19,9 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
     def setup_doc_gens(self):
         # create json doc generators
-        ordering = range(self._num_items)
-        sites = ['google', 'bing', 'yahoo', 'wiki']
+        ordering = range(self._num_items/4)
+        sites1 = ['google', 'bing', 'yahoo', 'wiki']
+        sites2 = ['mashable', 'techcrunch', 'hackernews', 'slashdot']
         template = '{{ "ordering": {0}, "site_name": "{1}" }}'
 
         delete_start= int((self._num_items) * (float)(100 - self._percent_delete) / 100)
@@ -28,13 +29,18 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
         self.gen_create =\
             DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites, start=0, end=self._num_items)
+                               sites1, start=0, end=self._num_items)
+
+        self.gen_recreate =\
+            DocumentGenerator('es_xdcr_docs', template, ordering,
+                               sites2, start=0, end=self._num_items)
+
         self.gen_update =\
             DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites, start=0, end=update_end)
+                               sites1, start=0, end=update_end)
         self.gen_delete =\
             DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites, start=delete_start, end=self._num_items)
+                               sites1, start=delete_start, end=self._num_items)
 
 
 
@@ -46,7 +52,7 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
             if "update" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
             if "create" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(elf.src_master, self.gen_create, "create", 0))
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_recreate, "create", 0))
             if "delete" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
         for task in tasks:
@@ -54,10 +60,9 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
-
     def load_with_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self._modify_src_data()
+        self._async_modify_data()
         self.verify_results()
 
     #overriding xdcr verify results method for specific es verification
