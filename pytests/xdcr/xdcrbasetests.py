@@ -37,7 +37,7 @@ class XDCRConstants:
     INPUT_PARAM_SEED_DATA_OPERATION = "sdata_op"
 
     INPUT_PARAM_POLL_INTERVAL = "poll_interval" # in seconds
-    INPUT_PARAM_POLL_TIMEOUT = "poll_timeout"# in seconds
+    INPUT_PARAM_POLL_TIMEOUT = "poll_timeout" # in seconds
 
     #CLUSTER_TOPOLOGY_TYPE_LINE = "line"
     CLUSTER_TOPOLOGY_TYPE_CHAIN = "chain"
@@ -162,7 +162,7 @@ class XDCRBaseTest(unittest.TestCase):
                         for _i in self._local_replication_rate[node][the_bucket.name]:
                             _sum_ += _i
                         self._log.info("\tAverage local replica creation rate for bucket '{0}': {1} KB per second"\
-                            .format(the_bucket.name, (float)(_sum_)/(len(self._local_replication_rate[node][the_bucket.name]) * 1000)))
+                            .format(the_bucket.name, (float)(_sum_) / (len(self._local_replication_rate[node][the_bucket.name]) * 1000)))
             if node1 in self._xdc_replication_ops:
                 if the_bucket.name in self._xdc_replication_ops[node1]:
                     if self._xdc_replication_ops[node1][the_bucket.name] is not None:
@@ -171,15 +171,15 @@ class XDCRBaseTest(unittest.TestCase):
                             _sum_ += _i
                         self._xdc_replication_ops[node1][the_bucket.name].sort()
                         _mid = len(self._xdc_replication_ops[node1][the_bucket.name]) / 2
-                        if len(self._xdc_replication_ops[node1][the_bucket.name])%2 == 0:
+                        if len(self._xdc_replication_ops[node1][the_bucket.name]) % 2 == 0:
                             _median_value_ = (float)(self._xdc_replication_ops[node1][the_bucket.name][_mid] +
-                                                     self._xdc_replication_ops[node1][the_bucket.name][_mid-1])/2
+                                                     self._xdc_replication_ops[node1][the_bucket.name][_mid - 1]) / 2
                         else:
                             _median_value_ = self._xdc_replication_ops[node1][the_bucket.name][_mid]
                         self._log.info("\tMedian XDC replication ops for bucket '{0}': {1} K ops per second"\
-                            .format(the_bucket.name, (float)(_median_value_)/1000))
+                            .format(the_bucket.name, (float)(_median_value_) / 1000))
                         self._log.info("\tMean XDC replication ops for bucket '{0}': {1} K ops per second"\
-                            .format(the_bucket.name, (float)(_sum_)/(len(self._xdc_replication_ops[node1][the_bucket.name]) * 1000)))
+                            .format(the_bucket.name, (float)(_sum_) / (len(self._xdc_replication_ops[node1][the_bucket.name]) * 1000)))
             if node in self._xdc_replication_rate:
                 if the_bucket.name in self._xdc_replication_rate[node]:
                     if self._xdc_replication_rate[node][the_bucket.name] is not None:
@@ -187,7 +187,7 @@ class XDCRBaseTest(unittest.TestCase):
                         for _i in self._xdc_replication_rate[node][the_bucket.name]:
                             _sum_ += _i
                         self._log.info("\tAverage XDCR data replication rate for bucket '{0}': {1} KB per second"\
-                            .format(the_bucket.name, (float)(_sum_)/(len(self._xdc_replication_rate[node][the_bucket.name]) * 1000)))
+                            .format(the_bucket.name, (float)(_sum_) / (len(self._xdc_replication_rate[node][the_bucket.name]) * 1000)))
 
     def _cleanup_previous_setup(self):
         self.teardown_extended()
@@ -318,7 +318,7 @@ class XDCRBaseTest(unittest.TestCase):
                             self._local_replication_rate[node] = {}
                         if the_bucket.name not in self._local_replication_rate[node]:
                             self._local_replication_rate[node][the_bucket.name] = []
-                        self._local_replication_rate[node][the_bucket.name].append((float)(_x_)/(_y_ - self._start_replication_time[the_bucket.name]).seconds)
+                        self._local_replication_rate[node][the_bucket.name].append((float)(_x_) / (_y_ - self._start_replication_time[the_bucket.name]).seconds)
             elif arg == "xdc_ops":
                 rest = RestConnection(node)
                 for the_bucket in self._get_cluster_buckets(node):
@@ -347,7 +347,7 @@ class XDCRBaseTest(unittest.TestCase):
                             self._xdc_replication_rate[node] = {}
                         if the_bucket.name not in self._xdc_replication_rate[node]:
                             self._xdc_replication_rate[node][the_bucket.name] = []
-                        self._xdc_replication_rate[node][the_bucket.name].append((float)(_x_)/(_y_ - self._start_replication_time[the_bucket.name]).seconds)
+                        self._xdc_replication_rate[node][the_bucket.name].append((float)(_x_) / (_y_ - self._start_replication_time[the_bucket.name]).seconds)
 
     def _get_floating_servers(self):
         cluster_nodes = []
@@ -609,11 +609,11 @@ class XDCRBaseTest(unittest.TestCase):
             timeout = max(120, end_time - time.time())
             self._verify_stats_all_buckets(self.src_nodes, timeout=timeout)
             timeout = max(120, end_time - time.time())
-            self._verify_all_buckets(self.src_master, timeout=timeout)
+            self._verify_all_buckets(self.src_master)
         timeout = max(120, end_time - time.time())
         self._verify_stats_all_buckets(self.dest_nodes, timeout=timeout)
         timeout = max(120, end_time - time.time())
-        self._verify_all_buckets(self.dest_master, timeout=timeout)
+        self._verify_all_buckets(self.dest_master)
 
         errors_caught = 0
         if self._doc_ops is not None or self._doc_ops_dest is not None:
@@ -931,7 +931,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             raise ValueError(
                 "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
-    def _verify_all_buckets(self, server, kv_store=1, timeout=120):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=None):
         def verify():
             try:
                 tasks = []
