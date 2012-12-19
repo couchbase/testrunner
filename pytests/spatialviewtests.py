@@ -205,20 +205,16 @@ class SpatialViewsTests(BaseTestCase):
         self.perform_ddoc_ops(ddocs)
 
     def test_views_with_warm_up(self):
-        num_ddoc = self.input.param('num-ddoc', 1)
-        views_per_ddoc = self.input.param('views-per-ddoc', 10)
         warmup_node = self.servers[-1]
         shell = RemoteMachineShellConnection(warmup_node)
         shell.stop_couchbase()
         time.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
-        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
+        ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 0)
         self.create_ddocs(ddocs)
 
     def test_views_during_index(self):
-        num_ddoc = self.input.param('num-ddoc', 2)
-        views_per_ddoc = self.input.param('views-per-ddoc', 5)
         ddocs =  self.make_ddocs(1, 1, 1)
         self.create_ddocs(ddocs)
         #run query stale=false to start index
@@ -226,18 +222,16 @@ class SpatialViewsTests(BaseTestCase):
         for ddoc in ddocs:
             for view in ddoc.spatial_views:
                 self.helper.query_view(rest, ddoc, view, bucket=self.bucket_name, extra_params={})
-        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 1)
+        ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 1)
         self.create_ddocs(ddocs)
 
     def test_views_during_ddoc_compaction(self):
-        num_ddoc = self.input.param('num-ddoc', 1)
-        views_per_ddoc = self.input.param('views-per-ddoc', 2)
         fragmentation_value = self.input.param("fragmentation_value", 80)
         ddoc_to_compact = DesignDocument("ddoc_to_compact", [], spatial_views=[
                                   View(self.default_view_name,
                                        'function (doc) { emit(doc.age, doc.first_name);}',
                                        dev_view=self.use_dev_views)])
-        ddocs =  self.make_ddocs(num_ddoc, views_per_ddoc, 0)
+        ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 0)
         self.disable_compaction()
         self.create_ddocs([ddoc_to_compact,])
         fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
