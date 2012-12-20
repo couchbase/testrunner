@@ -7,6 +7,10 @@ Prerequisites
 Dependencies
 ------------
 
+Bootstrap:
+
+    pip install zc.buildout
+
 Common:
 
     pip install paramiko
@@ -53,6 +57,21 @@ Usage
         -t TESTCASE, --test=TESTCASE
                             Test name (multiple -t options add more tests) e.g -t
                             performance.perf.DiskDrainRate
+
+Bootstrap
+---------
+
+Initiate buildout directory structure:
+
+    buildout bootstrap
+
+Create sandbox, build packages and scripts, fetch dependencies, and etc.:
+
+    ./bin/buildout
+
+You can execute testrunner now:
+
+    ./bin/testrunner -h
 
 Resource Files
 --------------

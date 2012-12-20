@@ -9,3 +9,9 @@ dist/
 logs/
 ns_server_data*
 tmp*
+eggs
+develop-eggs
+.installed.cfg
+bin
+*.egg-info
+parts
