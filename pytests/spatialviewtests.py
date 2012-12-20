@@ -1,6 +1,6 @@
 import random
 import threading
-from threading import Thread
+from threading import Thread, Event
 import unittest
 import uuid
 import logger
@@ -20,6 +20,8 @@ class SpatialViewsTests(BaseTestCase):
 
     def setUp(self):
         super(SpatialViewsTests, self).setUp()
+        self.thread_crashed = Event()
+        self.thread_stopped = Event()
         self.skip_rebalance = self.input.param("skip_rebalance", False)
         self.use_dev_views = self.input.param("use-dev-views", False)
         self.default_map = "function (doc) {emit(doc.geometry, doc.age);}"
@@ -116,18 +118,27 @@ class SpatialViewsTests(BaseTestCase):
         same_names = self.input.param('same-name', False)
         num_views_per_ddoc = 10
         create_threads = []
+        ddocs = []
         for i in xrange(num_views_per_ddoc):
             ddoc = DesignDocument(self.default_ddoc_name + str(i), [], spatial_views=[
                                   View(self.default_view_name + (str(i), "")[same_names],
                                        self.default_map,
                                        dev_view=self.use_dev_views, is_spatial=True)])
-            create_thread = Thread(target=self.create_ddocs,
-                                   name="create_thread" + str(i),
+            ddocs.append(ddoc)
+        if self.ddoc_op == 'update' or self.ddoc_op == 'delete':
+            self.create_ddocs(ddocs)
+        i = 0
+        for ddoc in ddocs:
+            create_thread = Thread(target=self.perform_ddoc_ops,
+                                   name="ops_thread" + str(i),
                                    args=([ddoc,],))
+            i +=1
             create_threads.append(create_thread)
             create_thread.start()
         for create_thread in create_threads:
             create_thread.join()
+        if self.thread_crashed.is_set():
+            self.fail("Error occured during run")
 
     def test_create_with_other_ddoc_ops(self):
         operation = self.input.param('operation', 'create')
@@ -287,14 +298,22 @@ class SpatialViewsTests(BaseTestCase):
                     self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
 
     def perform_ddoc_ops(self, ddocs):
-        if self.ddoc_op == 'update':
-            for ddoc in ddocs:
-                for view in ddoc.spatial_views:
-                    view.map_func = self.map_updated
-        if self.ddoc_op == 'delete':
-            self.delete_views(ddocs)
-        else:
-            self.create_ddocs(ddocs)
+        try:
+            if self.ddoc_op == 'update':
+                for ddoc in ddocs:
+                    for view in ddoc.spatial_views:
+                        view.map_func = self.map_updated
+            if self.ddoc_op == 'delete':
+                self.delete_views(ddocs)
+            else:
+                self.create_ddocs(ddocs)
+        except Exception as ex:
+            self.thread_crashed.set()
+            self.log.error("****ERROR***** \n At least one of threads is crashed: %s" % (ex))
+            raise ex
+        finally:
+            if not self.thread_stopped.is_set():
+                self.thread_stopped.set()
 
 
 
