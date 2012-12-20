@@ -9,6 +9,10 @@ from lib.membase.api.exception import ServerUnavailableException
 
 class CbmonitorClient(RestConnection):
     """Cbmonitor rest client"""
+    def __new__(self, hostname="127.0.0.1", port=80):
+        """Funky method to override __new__ in RestConnection
+        """
+        return object.__new__(self, hostname, port)
 
     def __init__(self, hostname="127.0.0.1", port=80):
         """Create rest client.
