@@ -90,7 +90,7 @@ class RemoteJob(object):
         for remote_thread in remote_threads:
             remote_thread.join()
 
-if __name__ == "__main__":
+def main():
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
         for o, a in opts:
@@ -120,3 +120,7 @@ if __name__ == "__main__":
         RemoteJob().parallel_remote(input)
     else:
         RemoteJob().sequential_remote(input)
+
+
+if __name__ == "__main__":
+    main()
