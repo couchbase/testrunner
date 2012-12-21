@@ -282,8 +282,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.cluster.rebalance(servs_init[:self.nodes_init], servs_in, servs_out)
         self.verify_cluster_stats(result_nodes)
 
-
-    """Rebalance in/out at once with stopped persistence.
+    """PERFORMANCE:Rebalance in/out at once with stopped persistence.
 
     This test begins by loading a given number of items into the cluster with
     self.nodes_init nodes in it. Then we stop persistence on some nodes.
@@ -373,7 +372,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
         now = time.time()
         time.sleep(5)
-        for i in num_ddocs * num_views * len(self.buckets):
+        for i in xrange(num_ddocs * num_views * len(self.buckets)):
             #wait until all initial_build indexer processes are completed
             active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "True", wait_task=False)
             result = active_task.result()
