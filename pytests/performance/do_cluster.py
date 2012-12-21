@@ -26,17 +26,12 @@ At development time, we don't really use this script, and just use
 testrunner, which runs the full
 unittest.TestCase/setUp/testFoo/tearDown lifecycle."""
 import sys
-import os
 
 sys.path.append("lib")
 from lib import logger
 from TestInput import TestInputParser, TestInputSingleton
 import pytests.performance.eperf as eperf
-try:
-    os.symlink('testrunner', 'testrunner.py')
-except OSError:
-    pass
-from testrunner import parse_args
+from scripts.testrunner import parse_args
 
 
 class EPerfMasterWrapper(eperf.EPerfMaster):
