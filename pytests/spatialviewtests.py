@@ -240,7 +240,7 @@ class SpatialViewsTests(BaseTestCase):
         fragmentation_value = self.input.param("fragmentation_value", 80)
         ddoc_to_compact = DesignDocument("ddoc_to_compact", [], spatial_views=[
                                   View(self.default_view_name,
-                                       'function (doc) { emit(doc.age, doc.first_name);}',
+                                       'function (doc) { emit(doc.age, doc.name);}',
                                        dev_view=self.use_dev_views)])
         ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, 0)
         self.disable_compaction()
@@ -413,6 +413,25 @@ class SpatialViewQueriesTests(BaseTestCase):
          shell.start_couchbase()
          shell.disconnect()
          self.query_and_verify_result(self.docs, self.params)
+
+    def test_view_queries_during_ddoc_compaction(self):
+        fragmentation_value = self.input.param("fragmentation_value", 80)
+        self.disable_compaction()
+        fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
+                             self.ddocs[0].name, fragmentation_value, self.default_bucket_name)
+        end_time = time.time() + self.wait_timeout * 30
+        while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
+            self.docs = self.helper.insert_docs(self.num_items, 'spatial-doc',
+                                            wait_for_persistence=True, return_docs=True)
+
+        if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
+            self.fail("impossible to reach compaction value after %s sec" % (self.wait_timeout * 20))
+        fragmentation_monitor.result()
+        compaction_task = self.cluster.async_compact_view(self.master, self.ddocs[0].name,
+                                                          self.default_bucket_name)
+        self.query_and_verify_result(self.docs, self.params)
+        result = compaction_task.result(self.wait_timeout * 10)
+        self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
 
     def get_query_params(self):
         current_params = {}
