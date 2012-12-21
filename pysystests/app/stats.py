@@ -143,18 +143,52 @@ def get_du_sample(ip):
 def get_cbstat_sample(ip):
     sample = {}
     curr_items = cbstat_curr_items(ip)
+    cur_i_total = cbstat_curr_items_total(ip)
+    mem_used = cbstat_mem_used(ip)
     dwq = cbstat_disk_write_queue(ip)
     ep_bg = cbstat_ep_bg_fetched(ip)
+    ep_bg_meta = cbstat_ep_bg_meta_fetched(ip)
     ep_bg_wait = cbstat_ep_bg_wait(ip)
+    ep_access_scanner_num_items = cbstat_ep_access_scanner_num_items(ip)
+    active_res = cbstat_vb_active_perc_mem_resident(ip)
+    replica_res = cbstat_vb_replica_perc_mem_resident(ip)
 
     if curr_items:
         sample.update({"curr_items" : curr_items[1]})
+
+    if cur_i_total:
+        sample.update({"cur_items_total" : cur_i_total[1]})
+
+    if int(mem_used[1]) >= 0:
+        if int(mem_used[1]) >= (1024 * 1024 * 1024):
+            mem_used[1] = str(int(mem_used[1]) /(1024 * 1024 * 1024))
+            sample.update({"mem used in GB" : mem_used[1]})
+        elif int(mem_used[1]) >= (1024 * 1024):
+            mem_used[1] = str(int(mem_used[1]) /(1024 * 1024))
+            sample.update({"mem used in MB" : mem_used[1]})
+        elif int(mem_used[1]) >= (1024):
+            mem_used[1] = str(int(mem_used[1]) / 1024)
+            sample.update({"mem used in KB" : mem_used[1]})
+        else:
+            sample.update({"mem used in bytes" : mem_used[1]})
 
     if dwq >= 0:
         sample.update({"disk_wq" : dwq})
 
     if ep_bg:
         sample.update({"bg_fetched" : ep_bg[1]})
+
+    if ep_bg_meta:
+        sample.update({"bg_meta_fetched" : ep_bg_meta[1]})
+
+    if ep_access_scanner_num_items:
+        sample.update({"accessScanner_items" : ep_access_scanner_num_items[1]})
+
+    if active_res:
+        sample.update({"active_perc_res" : active_res[1]})
+
+    if replica_res:
+        sample.update({"replica_perc_res" : replica_res[1]})
 
     if ep_bg_wait:
         sample.update({"bg_fetch_wait" : ep_bg_wait[1]})
@@ -248,6 +282,14 @@ def cbstat_curr_items(ip):
     cmd = "grep curr_items: | head -1"
     return _cbtop_exec(ip, cmd)
 
+def cbstat_curr_items_total(ip):
+    cmd = "grep curr_items_tot: | head -1"
+    return _cbtop_exec(ip, cmd)
+
+def cbstat_mem_used(ip):
+    cmd = "grep mem_used: | head -1"
+    return _cbtop_exec(ip, cmd)
+
 def cbstat_disk_write_queue(ip):
 
     cmd = "grep ep_queue_size: | head -1"
@@ -263,6 +305,22 @@ def cbstat_disk_write_queue(ip):
 
 def cbstat_ep_bg_fetched(ip):
     cmd = "grep ep_bg_fetched: | head -1"
+    return  _cbtop_exec(ip, cmd)
+
+def cbstat_ep_bg_meta_fetched(ip):
+    cmd = "grep ep_bg_meta_fetched: | head -1"
+    return  _cbtop_exec(ip, cmd)
+
+def cbstat_ep_access_scanner_num_items(ip):
+    cmd = "grep ep_access_scanner_num_items: | head -1"
+    return  _cbtop_exec(ip, cmd)
+
+def cbstat_vb_active_perc_mem_resident(ip):
+    cmd = "grep vb_active_perc_mem_resident: | head -1"
+    return  _cbtop_exec(ip, cmd)
+
+def cbstat_vb_replica_perc_mem_resident(ip):
+    cmd = "grep vb_replica_perc_mem_resident: | head -1"
     return  _cbtop_exec(ip, cmd)
 
 def cbstat_ep_bg_wait(ip):
@@ -370,7 +428,7 @@ class NodeStats(object):
         str_ = str_ + "Phase: %20s \n" % self.phase
 
         for key in self.results:
-            str_ = str_ + "%10s: " % (key)
+            str_ = str_ + "%20s: " % (key)
             str_ = str_ + "current: %10s" % (self.samples[key][-1])
             for k, v  in self.results[key].items():
                 str_ = str_ + "%10s: %10s"  % (k,v)
