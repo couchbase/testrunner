@@ -12,6 +12,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from memcached.helper.data_helper import MemcachedError
+from memcached.helper.data_helper import VBucketAwareMemcached
 import memcacheConstants
 
 
@@ -87,7 +88,8 @@ class SpatialHelper:
     # only the keys
     def insert_docs(self, num_of_docs, prefix, extra_values={},
                     wait_for_persistence=True, return_docs=False):
-        moxi = MemcachedClientHelper.proxy_client(self.master, self.bucket)
+        rest = RestConnection(self.master)
+        smart = VBucketAwareMemcached(rest, self.bucket)
         doc_names = []
         for i in range(0, num_of_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
@@ -104,14 +106,13 @@ class SpatialHelper:
             fail_count = 0
             while True:
                 try:
-                    moxi.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value))
                     break
                 except MemcachedError as e:
                     fail_count += 1
                     if (e.status == 133 or e.status == 132) and fail_count < 60:
                         if i == 0:
-                            self.log.error("moxi not fully restarted, "
-                                           "waiting 5 seconds. error {0}"
+                            self.log.error("waiting 5 seconds. error {0}"
                                            .format(e))
                             time.sleep(5)
                         else:
