@@ -63,7 +63,7 @@ class cbcollectRunner(object):
                             % self.server.ip)
         remote_client.disconnect()
 
-if __name__ == "__main__":
+def main():
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p', [])
         for o, a in opts:
@@ -98,3 +98,6 @@ if __name__ == "__main__":
         remote_thread.join(120)
         if remote_thread.isAlive():
             raise Exception("cbcollect_info hung on remote node")
+
+if __name__ == "__main__":
+    main()
