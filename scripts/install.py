@@ -619,7 +619,7 @@ def check_build(input):
 params = {"ini": "resources/jenkins/fusion.ini",
           "product": "ms", "version": "1.7.1r-31", "amazon": "false"}
 
-if __name__ == "__main__":
+def main():
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
         for o, a in opts:
@@ -655,3 +655,7 @@ if __name__ == "__main__":
             if not success:
                 print "some nodes were not install successfully!"
                 sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
