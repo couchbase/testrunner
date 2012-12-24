@@ -316,10 +316,19 @@ class BaseTestCase(unittest.TestCase):
         else:
             self.cluster.create_view(server, design_doc_name, None, bucket, timeout)
 
-    def make_default_views(self, prefix, count, is_dev_ddoc=False):
+    def make_default_views(self, prefix, count, is_dev_ddoc=False, different_map=False):
         ref_view = self.default_view
         ref_view.name = (prefix, ref_view.name)[prefix is None]
-        return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
+        if different_map:
+            views = []
+            for i in xrange(count):
+                views.append(View(ref_view.name + str(i),
+                                  'function (doc, meta) {'
+                                  'emit(meta.id, "emitted_value%s");}' % str(i),
+                                  None, is_dev_ddoc))
+            return views
+        else:
+            return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
 
     def _load_doc_data_all_buckets(self, data_op="create", batch_size=1000, gen_load=None):
         #initialize the template for document generator
