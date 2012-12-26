@@ -98,7 +98,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
             else:
                 abbr_product = "mb"
             remote.download_binary_in_win(older_build.url, abbr_product, initial_version)
-            remote.membase_install_win(older_build, initial_version)
+            remote.install_server_win(older_build, initial_version)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
             rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
             bucket_data = {}
@@ -432,7 +432,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 abbr_product = "mb"
             remote.download_binary_in_win(older_build.url, abbr_product, initial_version)
             #now let's install ?
-            remote.membase_install_win(older_build, initial_version)
+            remote.install_server_win(older_build, initial_version)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
             rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
@@ -548,8 +548,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 else:
                     abbr_product = "cb"
                 remote.download_binary_in_win(appropriate_build.url, abbr_product, version)
-                remote.membase_install_win(appropriate_build, version)
-             #   remote.membase_install_win(appropriate_build)
+                remote.install_server_win(appropriate_build, version)
                 RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
                 time.sleep(TIMEOUT_SECS)
                 rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)

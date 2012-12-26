@@ -13,28 +13,28 @@ class InstallerHelper(object):
     @staticmethod
     # this helper will install membase server build on the given ip
     # or throws a detailed exception for the failure
-    def install_membase(ip,username,key_location,build):
-        connection = RemoteMachineShellConnection(ip = ip,
-                                                  username = username,
-                                                  pkey_location = key_location)
-        remote_client = RemoteMachineShellConnection(ip = ip,
-                                                     pkey_location = self.get_pkey())
+    def install_membase(ip, username, key_location, build):
+        connection = RemoteMachineShellConnection(ip=ip,
+                                                  username=username,
+                                                  pkey_location=key_location)
+        remote_client = RemoteMachineShellConnection(ip=ip,
+                                                     pkey_location=self.get_pkey())
         downloaded = connection.download_build(build)
         if not downloaded:
             raise BuildException(build)
         connection.membase_uninstall()
-        remote_client.membase_install(build)
+        remote_client.install_server(build)
         #TODO: we should poll the 8091 port until it is up and running
         log.info('wait 5 seconds for membase server to start')
         time.sleep(5)
-        rest = RestConnection(ip = ip,username = 'Administrator',
-                              password = 'password')
+        rest = RestConnection(ip=ip, username='Administrator',
+                              password='password')
         #try this max for 2 minutes
         start_time = time.time()
         cluster_initialized = False
         while time.time() < (start_time + (2 * 60)):
             try:
-                rest.init_cluster(username = 'Administrator',password = 'password')
+                rest.init_cluster(username='Administrator', password='password')
                 cluster_initialized = True
             except ServerUnavailableException:
                 log.error("error happened while initializing the cluster @ {0}".format(ip))
@@ -66,7 +66,7 @@ class MembaseInstallationException(Exception):
         #dictionary mostly
         self.parameters = dict()
 
-    def __init__(self,message,type,parameters):
+    def __init__(self, message, type, parameters):
         self._message = message
         self.type = type
         #you can embed the params values here
@@ -80,7 +80,7 @@ class MembaseInstallationException(Exception):
         return string
 
 class UnauthorizedException(MembaseInstallationException):
-    def __init__(self,username='',password=''):
+    def __init__(self, username='', password=''):
         self._message = 'user not logged in'
         self.parameters = dict()
         self.parameters['username'] = username
@@ -89,7 +89,7 @@ class UnauthorizedException(MembaseInstallationException):
 
 
 class BuildException(MembaseInstallationException):
-    def __init__(self,build):
+    def __init__(self, build):
         self.parameters = dict()
         self.parameters['build'] = build
         self.type = MembaseInstallationExceptionTypes.BUILD_ERROR

@@ -266,13 +266,13 @@ class MembaseServerInstaller(Installer):
         if type == "windows":
             build = self.build_url(params)
             remote_client.download_binary_in_win(build.url, params["product"], params["version"])
-            remote_client.membase_install_win(build, params["version"])
+            remote_client.install_server_win(build, params["version"])
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
                 log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
             path = server.data_path or '/tmp'
-            remote_client.membase_install(build, path=path, vbuckets=vbuckets)
+            remote_client.install_server(build, path=path, vbuckets=vbuckets)
             ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
             if not ready:
                 log.error("membase-server did not start...")
@@ -301,7 +301,7 @@ PRAGMA synchronous = NORMAL;""")
         downloaded = remote_client.download_build(build)
         if not downloaded:
             log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        remote_client.membase_install(build, False)
+        remote_client.install_server(build, False)
 
 
 class CouchbaseServerInstaller(Installer):
@@ -403,14 +403,14 @@ class CouchbaseServerInstaller(Installer):
         if type == "windows":
             build = self.build_url(params)
             remote_client.download_binary_in_win(build.url, params["product"], params["version"])
-            remote_client.membase_install_win(build, params["version"])
+            remote_client.install_server_win(build, params["version"])
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
                 log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
             #TODO: need separate methods in remote_util for couchbase and membase install
             path = server.data_path or '/tmp'
-            remote_client.membase_install(build, path=path, vbuckets=vbuckets)
+            remote_client.install_server(build, path=path, vbuckets=vbuckets)
             log.info('wait 5 seconds for membase server to start')
             time.sleep(5)
         if "rest_vbuckets" in params:
@@ -439,7 +439,7 @@ PRAGMA synchronous = NORMAL;""")
         downloaded = remote_client.download_build(build)
         if not downloaded:
             log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        remote_client.membase_install(build, False)
+        remote_client.install_server(build, False)
 
 
 class CouchbaseSingleServerInstaller(Installer):
@@ -658,9 +658,9 @@ def main():
         success = True
         for server in input.servers:
             success &= RemoteMachineShellConnection(server).is_couchbase_installed()
-            if not success:
-                print "some nodes were not install successfully!"
-                sys.exit(1)
+        if not success:
+            print "some nodes were not install successfully!"
+            sys.exit(1)
 
 
 if __name__ == "__main__":

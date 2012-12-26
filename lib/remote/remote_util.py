@@ -692,15 +692,16 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
                 self.log_command_output(output, error)
 
-    def membase_install(self, build, startserver=True, path='/tmp', vbuckets=None):
-        is_membase = False
-        is_couchbase = False
+    def install_server(self, build, startserver=True, path='/tmp', vbuckets=None):
+        server_type = None
         if build.name.lower().find("membase") != -1:
-            is_membase = True
+            server_type = 'membase'
+            abbr_product = "mb"
         elif build.name.lower().find("couchbase") != -1:
-            is_couchbase = True
-        if not is_membase and not is_couchbase:
-            raise Exception("its not a membase or couchbase ?")
+            server_type = 'couchbase'
+            abbr_product = "cb"
+        else:
+            raise Exception("its not a membase or couchbase?")
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
         if info.type.lower() == 'windows':
@@ -709,11 +710,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             self.terminate_processes(info, win_processes)
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             self.log_command_output(output, error)
-            if is_membase:
-                self.wait_till_file_added("/cygdrive/c/Program Files/Membase/Server/", 'VERSION.txt',
-                                          timeout_in_seconds=600)
-            else:
-                self.wait_till_file_added("/cygdrive/c/Program Files/Couchbase/Server/", 'VERSION.txt',
+            self.wait_till_file_added("/cygdrive/c/Program Files/{0}/Server/".format(server_type.title()), 'VERSION.txt',
                                           timeout_in_seconds=600)
         elif info.deliverable_type in ["rpm", "deb"]:
             if startserver and vbuckets == None:
@@ -727,41 +724,29 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             elif info.deliverable_type == 'deb':
                 output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
                 self.log_command_output(output, error)
-            if is_membase:
-                output, error = self.execute_command('/opt/membase/bin/mbenable_core_dumps.sh  {0}'.format(path))
+            output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
+                                    format(server_type, abbr_product, path))
+            self.log_command_output(output, error)
+
+            if vbuckets:
+                output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export {0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
+                                    format(server_type.upper(), vbuckets, server_type))
                 self.log_command_output(output, error)
-            else:
-                output, error = self.execute_command('/opt/couchbase/bin/cbenable_core_dumps.sh  {0}'.format(path))
+            if startserver:
+                output, error = self.execute_command('/etc/init.d/{0}-server start'.format(server_type))
                 self.log_command_output(output, error)
 
-            if vbuckets and is_couchbase:
-                output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export COUCHBASE_NUM_VBUCKETS={0}/' /opt/couchbase/etc/couchbase_init.d".format(vbuckets))
-                self.log_command_output(output, error)
-
-            if vbuckets and is_membase:
-                output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export MEMBASE_NUM_VBUCKETS={0}/' /opt/membase/etc/membase_init.d".format(vbuckets))
-                self.log_command_output(output, error)
-
-            if startserver and is_membase:
-                output, error = self.execute_command('/etc/init.d/membase-server start')
-                self.log_command_output(output, error)
-            elif startserver and is_couchbase:
-                output, error = self.execute_command('/etc/init.d/couchbase-server start')
-                self.log_command_output(output, error)
-
-
-    def membase_install_win(self, build, version, startserver=True):
-        is_membase = False
-        is_couchbase = False
-        abbr_product = ""
+    def install_server_win(self, build, version, startserver=True):
+        remote_path = None
         if build.name.lower().find("membase") != -1:
-            is_membase = True
+            remote_path = testconstants.WIN_MB_PATH
             abbr_product = "mb"
         elif build.name.lower().find("couchbase") != -1:
-            is_couchbase = True
+            remote_path = testconstants.WIN_CB_PATH
             abbr_product = "cb"
-        if not is_membase and not is_couchbase:
-            raise Exception("its not a membase or couchbase ?")
+
+        if remote_path is None:
+            raise Exception("its not a membase or couchbase?")
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
         if info.type.lower() == 'windows':
@@ -778,10 +763,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             # run task schedule to install Membase server
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             self.log_command_output(output, error)
-            if is_membase:
-                self.wait_till_file_added(testconstants.WIN_MB_PATH, "VERSION.txt", timeout_in_seconds=600)
-            else:
-                self.wait_till_file_added(testconstants.WIN_CB_PATH, "VERSION.txt", timeout_in_seconds=600)
+            self.wait_till_file_added(remote_path, "VERSION.txt", timeout_in_seconds=600)
             log.info('wait 30 seconds for server to start up completely')
             time.sleep(30)
 
@@ -934,7 +916,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 build_name = build_name.rstrip() + ".exe"
                 log.info('Check if {0} is in tmp directory'.format(build_name))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
-                if not exist:   # if not exist in tmp dir, start to download that verion build
+                if not exist: # if not exist in tmp dir, start to download that verion build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
                     downloaded = self.download_binary_in_win(build.url, product, short_version)
                     if downloaded:
@@ -1004,7 +986,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             build_name = build_name.rstrip() + ".exe"
             log.info('Check if {0} is in tmp directory'.format(build_name))
             exist = self.file_exists("/cygdrive/c/tmp/", build_name)
-            if not exist:   # if not exist in tmp dir, start to download that verion build
+            if not exist: # if not exist in tmp dir, start to download that verion build
                 build = query.find_build(builds, name, ex_type, info.architecture_type, rm_version)
                 downloaded = self.download_binary_in_win(build.url, product, rm_version)
                 if downloaded:
@@ -1059,7 +1041,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 build_name = build_name.rstrip() + ".exe"
                 log.info('Check if {0} is in tmp directory'.format(build_name))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
-                if not exist:   # if not exist in tmp dir, start to download that verion build
+                if not exist: # if not exist in tmp dir, start to download that verion build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
                     downloaded = self.download_binary_in_win(build.url, product, short_version)
                     if downloaded:

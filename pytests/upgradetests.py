@@ -107,7 +107,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         remote.stop_couchbase()
         remote.download_build(older_build)
         #now let's install ?
-        remote.membase_install(older_build)
+        remote.install_server(older_build)
         rest = RestConnection(server)
         RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
         rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
@@ -617,7 +617,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             remote.stop_couchbase()
             remote.download_build(older_build)
             #now let's install ?
-            remote.membase_install(older_build)
+            remote.install_server(older_build)
             rest = RestConnection(server)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
             rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
@@ -739,7 +739,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 if not initial_version.startswith('1.8.0'):
                     remote.membase_uninstall()
                     remote.couchbase_uninstall()
-                    remote.membase_install(appropriate_build)
+                    remote.install_server(appropriate_build)
                 else:
                     remote.membase_upgrade(appropriate_build)
 
