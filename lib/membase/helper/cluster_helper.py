@@ -386,11 +386,12 @@ class ClusterOperationHelper(object):
             c.close()
 
     @staticmethod
-    def change_erlang_async(servers, value=16):
-        """Change the number of async internal erlang threads
-           Identified with +A param
+    def change_erlang_threads_values(servers, sync_threads=True, num_threads='16:16'):
+        """Change the the type of sync erlang threads and its value
+           sync_threads=True means sync threads +S with default threads number equal 16:16
+           sync_threads=False means async threads: +A 16, for instance
 
-        Default: 16
+        Default: +S 16:16
         """
         log = logger.Logger.get_logger()
         for server in servers:
@@ -398,11 +399,15 @@ class ClusterOperationHelper(object):
             product = "membase"
             if sh.is_couchbase_installed():
                 product = "couchbase"
-            command = "sed -i 's/+A .*/+A %s \\\/g' /opt/%s/bin/%s-server" % (value, product, product)
+
+            sync_type = sync_threads and "S" or "A"
+
+            command = "sed -i 's/+[A,S] .*/+%s %s \\\/g' /opt/%s/bin/%s-server" % \
+                 (sync_type, num_threads, product, product)
             o, r = sh.execute_command(command)
             sh.log_command_output(o, r)
-            msg = "modified erlang +A to %s for server %s"
-            log.info(msg % (value, server.ip))
+            msg = "modified erlang +%s to %s for server %s"
+            log.info(msg % (sync_type, num_threads, server.ip))
 
     @staticmethod
     def set_erlang_schedulers(servers, value="16:16"):

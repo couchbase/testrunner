@@ -41,7 +41,9 @@ Available keys:
  standalone=false        Install without cluster management
  toy=                    Install a toy build
  vbuckets=               The number of vbuckets in the server installation.
- erlang_threads=         Number of erlang threads (+A param) (default=16)
+ sync_threads=True       Sync or acync threads(+S or +A)
+ erlang_threads=         Number of erlang threads (default=16:16 for +S type)
+
 
 Examples:
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
@@ -356,11 +358,15 @@ class CouchbaseServerInstaller(Installer):
                                                            mem_req_tap_env)
                 #TODO: Make it work with windows
                 if "erlang_threads" in params:
-                    erlang_threads = params.get('erlang_threads', testconstants.NUM_ERLANG_THREADS)
+                    num_threads = params.get('erlang_threads', testconstants.NUM_ERLANG_THREADS)
                     # Stop couchbase-server
                     ClusterOperationHelper.stop_cluster([server])
-                    # Change num erlang threads
-                    ClusterOperationHelper.change_erlang_async([server], erlang_threads)
+                    if "sync_threads" in params or ':' in num_threads:
+                        sync_threads = params.get('sync_threads', True)
+                    else:
+                        sync_threads = False
+                    # Change type of threads(sync/async) and num erlang threads
+                    ClusterOperationHelper.change_erlang_threads_values([server], sync_threads, num_threads)
                     # Start couchbase-server
                     ClusterOperationHelper.start_cluster([server])
                 if "erlang_gc_level" in params:
