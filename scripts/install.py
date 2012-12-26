@@ -9,6 +9,7 @@ import sys
 from threading import Thread
 from datetime import datetime
 import socket
+import Queue
 
 sys.path = [".", "lib"] + sys.path
 import testconstants
@@ -228,7 +229,6 @@ class MembaseServerInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-#        log = logger.new_logger("Installer")
         start_time = time.time()
         cluster_initialized = False
         server = params["server"]
@@ -252,9 +252,13 @@ class MembaseServerInstaller(Installer):
         if not cluster_initialized:
             raise Exception("unable to initialize membase node")
 
-    def install(self, params):
-#        log = logger.new_logger("Installer")
-        build = self.build_url(params)
+    def install(self, params, queue=None):
+        try:
+            build = self.build_url(params)
+        except Exception, e:
+            if queue:
+                queue.put(False)
+            raise e
         remote_client = RemoteMachineShellConnection(params["server"])
         info = remote_client.extract_remote_info()
         type = info.type.lower()
@@ -266,18 +270,21 @@ class MembaseServerInstaller(Installer):
         if type == "windows":
             build = self.build_url(params)
             remote_client.download_binary_in_win(build.url, params["product"], params["version"])
-            remote_client.install_server_win(build, params["version"])
+            success &= remote_client.install_server_win(build, params["version"])
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
                 log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
             path = server.data_path or '/tmp'
-            remote_client.install_server(build, path=path, vbuckets=vbuckets)
+            success &= remote_client.install_server(build, path=path, vbuckets=vbuckets)
             ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
             if not ready:
                 log.error("membase-server did not start...")
             log.info('wait 5 seconds for membase server to start')
             time.sleep(5)
+        if queue:
+            queue.put(success)
+        return success
 
 
 class MembaseServerStandaloneInstaller(Installer):
@@ -285,7 +292,6 @@ class MembaseServerStandaloneInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-#        log = logger.new_logger("Installer")
         remote_client = RemoteMachineShellConnection(params["server"])
         remote_client.create_directory("/opt/membase/var/lib/membase/data")
         remote_client.execute_command("chown membase:membase /opt/membase/var/lib/membase/data")
@@ -294,14 +300,21 @@ PRAGMA synchronous = NORMAL;""")
         remote_client.execute_command('/opt/membase/bin/memcached -d -v -c 80000 -p 11211 -E /opt/membase/lib/memcached/ep.so -r -e "tap_idle_timeout=10;dbname=/opt/membase/var/lib/membase/data/default;ht_size=12582917;min_data_age=0;queue_age_cap=900;initfile=/tmp/init.sql;vb0=true" -u membase > /tmp/memcache.log </dev/null 2>&1')
         time.sleep(5)
 
-    def install(self, params):
-#        log = logger.new_logger("Installer")
-        build = self.build_url(params)
+    def install(self, params, queue=None):
+        try:
+            build = self.build_url(params)
+        except Exception, e:
+            if queue:
+                queue.put(False)
+            raise e
         remote_client = RemoteMachineShellConnection(params["server"])
         downloaded = remote_client.download_build(build)
         if not downloaded:
             log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        remote_client.install_server(build, False)
+        success = remote_client.install_server(build, False)
+        if queue:
+            queue.put(success)
+        return success
 
 
 class CouchbaseServerInstaller(Installer):
@@ -389,9 +402,13 @@ class CouchbaseServerInstaller(Installer):
         if not cluster_initialized:
             raise Exception("unable to initialize couchbase node")
 
-    def install(self, params):
-#        log = logger.new_logger("Installer")
-        build = self.build_url(params)
+    def install(self, params, queue=None):
+        try:
+            build = self.build_url(params)
+        except Exception, e:
+            if queue:
+                queue.put(False)
+            raise e
         remote_client = RemoteMachineShellConnection(params["server"])
         info = remote_client.extract_remote_info()
         type = info.type.lower()
@@ -401,21 +418,23 @@ class CouchbaseServerInstaller(Installer):
         else:
             vbuckets = None
         if type == "windows":
-            build = self.build_url(params)
             remote_client.download_binary_in_win(build.url, params["product"], params["version"])
-            remote_client.install_server_win(build, params["version"])
+            success = remote_client.install_server_win(build, params["version"])
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
                 log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
             #TODO: need separate methods in remote_util for couchbase and membase install
             path = server.data_path or '/tmp'
-            remote_client.install_server(build, path=path, vbuckets=vbuckets)
+            success = remote_client.install_server(build, path=path, vbuckets=vbuckets)
             log.info('wait 5 seconds for membase server to start')
             time.sleep(5)
         if "rest_vbuckets" in params:
             rest_vbuckets = int(params["rest_vbuckets"])
             ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
+        if queue:
+            queue.put(success)
+        return success
 
 
 class CouchbaseServerStandaloneInstaller(Installer):
@@ -423,7 +442,6 @@ class CouchbaseServerStandaloneInstaller(Installer):
         Installer.__init__(self)
 
     def initialize(self, params):
-#        log = logger.new_logger("Installer")
         remote_client = RemoteMachineShellConnection(params["server"])
         remote_client.create_directory("/opt/couchbase/var/lib/membase/data")
         remote_client.execute_command("chown couchbase:couchbase /opt/couchbase/var/lib/membase/data")
@@ -432,33 +450,46 @@ PRAGMA synchronous = NORMAL;""")
         remote_client.execute_command('/opt/couchbase/bin/memcached -d -v -c 80000 -p 11211 -E /opt/couchbase/lib/memcached/ep.so -r -e "dbname=/opt/couchbase/var/lib/membase/data/default;ht_size=12582917;min_data_age=0;queue_age_cap=900;initfile=/tmp/init.sql;vb0=true" -u couchbase > /tmp/memcache.log </dev/null 2>&1')
         time.sleep(5)
 
-    def install(self, params):
-#        log = logger.new_logger("Installer")
-        build = self.build_url(params)
+    def install(self, params, queue=None):
+        try:
+            build = self.build_url(params)
+        except Exception, e:
+            if queue:
+                queue.put(False)
+            raise e
         remote_client = RemoteMachineShellConnection(params["server"])
         downloaded = remote_client.download_build(build)
         if not downloaded:
             log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        remote_client.install_server(build, False)
+        success = remote_client.install_server(build, False)
+        if queue:
+            queue.put(success)
+        return success
 
 
 class CouchbaseSingleServerInstaller(Installer):
     def __init__(self):
         Installer.__init__(self)
 
-    def install(self, params):
-#        log = logger.new_logger("CouchbaseSingleServerInstaller")
-        build = self.build_url(params)
+    def install(self, params, queue=None):
+        try:
+            build = self.build_url(params)
+        except Exception, e:
+            if queue:
+                queue.put(False)
+            raise e
         remote_client = RemoteMachineShellConnection(params["server"])
         downloaded = remote_client.download_build(build)
         if not downloaded:
             log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        remote_client.couchbase_single_install(build)
+        success = remote_client.couchbase_single_install(build)
         log.info('wait 5 seconds for couchbase-single server to start')
         time.sleep(5)
+        if queue:
+            queue.put(success)
+        return success
 
     def initialize(self, params):
-#        log = logger.new_logger("CouchbaseSingleServerInstaller")
         start_time = time.time()
         server = params["server"]
         remote_client = RemoteMachineShellConnection(params["server"])
@@ -549,10 +580,10 @@ class MongoInstaller(Installer):
             sys.exit()
 
 class InstallerJob(object):
-    def sequential_install(self, params):
+    def sequential_install(self, servers, params):
         installers = []
 
-        for server in input.servers:
+        for server in servers:
             _params = copy.deepcopy(params)
             _params["server"] = server
             installers.append((installer_factory(_params), _params))
@@ -563,21 +594,24 @@ class InstallerJob(object):
                 print "uninstall succeeded"
             except Exception as ex:
                 print "unable to complete the uninstallation: ", ex
-
+        success = True
         for installer, _params in installers:
             try:
-                installer.install(_params)
+                success &= installer.install(_params)
                 try:
                     installer.initialize(_params)
                 except Exception as ex:
                     print "unable to initialize the server after successful installation", ex
             except Exception as ex:
                 print "unable to complete the installation: ", ex
+        return success
 
     def parallel_install(self, servers, params):
         uninstall_threads = []
         install_threads = []
         initializer_threads = []
+        queue = Queue.Queue()
+        success = True
         for server in servers:
             _params = copy.deepcopy(params)
             _params["server"] = server
@@ -586,7 +620,7 @@ class InstallerJob(object):
                        args=(_params,))
             i_t = Thread(target=installer_factory(params).install,
                        name="installer-thread-{0}".format(server.ip),
-                       args=(_params,))
+                       args=(_params, queue))
             init_t = Thread(target=installer_factory(params).initialize,
                        name="initializer-thread-{0}".format(server.ip),
                        args=(_params,))
@@ -603,15 +637,20 @@ class InstallerJob(object):
         for t in install_threads:
             t.join()
             print "thread {0} finished".format(t.name)
+        while not queue.empty():
+            success &= queue.get()
+        if not success:
+            print "installation failed. initializer threads were skipped"
+            return success
         for t in initializer_threads:
             t.start()
         for t in initializer_threads:
             t.join()
             print "thread {0} finished".format(t.name)
+        return success
 
 
 def check_build(input):
-#        log = logger.new_logger("Get build")
         _params = copy.deepcopy(input.test_params)
         _params["server"] = input.servers[0]
         installer = installer_factory(_params)
@@ -649,18 +688,18 @@ def main():
     if "parallel" in input.test_params:
         # workaround for a python2.6 bug of using strptime with threads
         datetime.strptime("30 Nov 00", "%d %b %y")
-        InstallerJob().parallel_install(input.servers, input.test_params)
+        success = InstallerJob().parallel_install(input.servers, input.test_params)
     else:
-        InstallerJob().sequential_install(input.test_params)
-
+        success = InstallerJob().sequential_install(input.servers, input.test_params)
+    if not success:
+        sys.exit("some nodes were not install successfully!")
     if "product" in input.test_params and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
         print "verify installation..."
         success = True
         for server in input.servers:
             success &= RemoteMachineShellConnection(server).is_couchbase_installed()
         if not success:
-            print "some nodes were not install successfully!"
-            sys.exit(1)
+            sys.exit("some nodes were not install successfully!")
 
 
 if __name__ == "__main__":

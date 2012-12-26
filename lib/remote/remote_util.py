@@ -646,10 +646,12 @@ class RemoteMachineShellConnection:
 
     def couchbase_single_install(self, build):
         is_couchbase_single = False
+        success = True
+        track_words = ("warning", "error", "fail")
         if build.name.lower().find("couchbase-single") != -1:
             is_couchbase_single = True
         if not is_couchbase_single:
-            raise Exception("its not a couchbase-single ?")
+            raise Exception("its not a couchbase-single?")
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
         type = info.type.lower()
@@ -680,20 +682,22 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             output, error = self.execute_command(install_command)
             self.log_command_output(output, error)
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
-            self.log_command_output(output, error)
+            success &= self.log_command_output(output, error, track_words)
             self.wait_till_file_added("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
                                           timeout_in_seconds=600)
         elif info.deliverable_type in ["rpm", "deb"]:
+            log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
             if info.deliverable_type == 'rpm':
-                log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
                 output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
-                self.log_command_output(output, error)
             elif info.deliverable_type == 'deb':
                 output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
-                self.log_command_output(output, error)
+            success &= self.log_command_output(output, error, track_words)
+        return success
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None):
         server_type = None
+        success = True
+        track_words = ("warning", "error", "fail")
         if build.name.lower().find("membase") != -1:
             server_type = 'membase'
             abbr_product = "mb"
@@ -709,7 +713,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                              "firefox.*", "WerFault.*", "iexplore.*"]
             self.terminate_processes(info, win_processes)
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
-            self.log_command_output(output, error)
+            success &= self.log_command_output(output, error, track_words)
             self.wait_till_file_added("/cygdrive/c/Program Files/{0}/Server/".format(server_type.title()), 'VERSION.txt',
                                           timeout_in_seconds=600)
         elif info.deliverable_type in ["rpm", "deb"]:
@@ -717,27 +721,30 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 environment = ""
             else:
                 environment = "INSTALL_DONT_START_SERVER=1 "
+            log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
             if info.deliverable_type == 'rpm':
-                log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
                 output, error = self.execute_command('{0}rpm -i /tmp/{1}'.format(environment, build.name))
-                self.log_command_output(output, error)
             elif info.deliverable_type == 'deb':
                 output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
-                self.log_command_output(output, error)
+            success &= self.log_command_output(output, error, track_words)
+
             output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
                                     format(server_type, abbr_product, path))
-            self.log_command_output(output, error)
+            success &= self.log_command_output(output, error, track_words)
 
             if vbuckets:
                 output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export {0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
-                                    format(server_type.upper(), vbuckets, server_type))
-                self.log_command_output(output, error)
+                                                    format(server_type.upper(), vbuckets, server_type))
+                success &= self.log_command_output(output, error, track_words)
             if startserver:
                 output, error = self.execute_command('/etc/init.d/{0}-server start'.format(server_type))
-                self.log_command_output(output, error)
+                success &= self.log_command_output(output, error, track_words)
+
+        return success
 
     def install_server_win(self, build, version, startserver=True):
         remote_path = None
+        track_words = ("warning", "error", "fail")
         if build.name.lower().find("membase") != -1:
             remote_path = testconstants.WIN_MB_PATH
             abbr_product = "mb"
@@ -762,10 +769,11 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             time.sleep(5)
             # run task schedule to install Membase server
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
-            self.log_command_output(output, error)
+            success &= self.log_command_output(output, error, track_words)
             self.wait_till_file_added(remote_path, "VERSION.txt", timeout_in_seconds=600)
             log.info('wait 30 seconds for server to start up completely')
             time.sleep(30)
+            return succeed
 
 
     def wait_till_file_deleted(self, remotepath, filename, timeout_in_seconds=180):
@@ -1084,11 +1092,21 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             if not save_upgrade_config:
                 self.remove_folders(linux_folders)
 
-    def log_command_output(self, output, error):
+    def log_command_output(self, output, error, track_words=()):
+        #success means that there are no track_words in the output
+        #and there are no errors at all, if track_words is not empty
+        #if track_words=(), the result is not important, and we return True
+        success = True
         for line in error:
             log.error(line)
+            if not track_words:
+                success = False
         for line in output:
             log.info(line)
+            if any(s.lower() in line.lower() for s in track_words):
+                success = False
+                log.error('something wrong happened!!!')
+        return success
 
     def execute_command(self, command, info=None, debug=True):
 
