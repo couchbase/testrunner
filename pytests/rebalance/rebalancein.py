@@ -161,10 +161,15 @@ class RebalanceInTests(RebalanceBaseTest):
 
     added reproducer for MB-6683"""
     def rebalance_in_with_queries(self):
+
+
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
+
         num_views = self.input.param("num_views", 5)
         is_dev_ddoc = self.input.param("is_dev_ddoc", True)
         reproducer = self.input.param("reproducer", False)
-        iterations_to_try = (1, 10)[reproducer]
+        num_tries = self.input.param("num_tries", 10)
+        iterations_to_try = (1, num_tries)[reproducer]
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
 
@@ -205,20 +210,25 @@ class RebalanceInTests(RebalanceBaseTest):
         for bucket in self.buckets:
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
         for i in xrange(iterations_to_try):
-            servs_in = self.servers[1:self.nodes_in + 1]
+            servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
             rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
             time.sleep(self.wait_timeout / 5)
+
             #see that the result of view queries are the same as expected during the test
             for bucket in self.buckets:
-               self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
-            #verify view queries results after rebalancing
+                self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
+
             rebalance.result()
+
+            #verify view queries results after rebalancing
             for bucket in self.buckets:
                 self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
-            self.verify_cluster_stats(self.servers[:self.nodes_in + 1])
+
+            self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
             if reproducer:
-                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_in + 1], [], servs_in)
+                rebalance = self.cluster.async_rebalance(self.servers, [], servs_in)
                 rebalance.result()
+                time.sleep(self.wait_timeout)
 
     """Rebalances nodes into a cluster incremental during view queries.
 

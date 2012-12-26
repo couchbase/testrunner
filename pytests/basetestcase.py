@@ -63,14 +63,17 @@ class BaseTestCase(unittest.TestCase):
             if not self.input.param("skip_cleanup", True) or self.case_number == 1:
                 self.tearDown()
                 self.cluster = Cluster()
+
+            self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers)
+
             if str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1:
                 # rebalance all nodes into the cluster before each test
                 self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
             elif self.nodes_init > 1:
                 self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
-            self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
-                                            self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers)
+
             if self.dgm_run:
                 self.quota = 256
             if self.total_buckets > 0:
