@@ -307,9 +307,13 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _replication_stat_keeper(self, arg, node):
         while not self._end_replication_flag == 1:
+            if node in self._clusters_dic[0]:
+                consider_node = self.src_master
+            elif node in self._clusters_dic[1]:
+                consider_node = self.dest_master
             if arg == "replication_data_replicated":
-                rest = RestConnection(node)
-                for the_bucket in self._get_cluster_buckets(node):
+                rest = RestConnection(consider_node)
+                for the_bucket in self._get_cluster_buckets(consider_node):
                     stats = rest.fetch_bucket_stats(bucket=the_bucket.name)["op"]["samples"]
                     _x_ = stats[arg][-1]
                     if _x_ > 0:
@@ -320,8 +324,8 @@ class XDCRBaseTest(unittest.TestCase):
                             self._local_replication_rate[node][the_bucket.name] = []
                         self._local_replication_rate[node][the_bucket.name].append((float)(_x_) / (_y_ - self._start_replication_time[the_bucket.name]).seconds)
             elif arg == "xdc_ops":
-                rest = RestConnection(node)
-                for the_bucket in self._get_cluster_buckets(node):
+                rest = RestConnection(consider_node)
+                for the_bucket in self._get_cluster_buckets(consider_node):
                     stats = rest.fetch_bucket_stats(bucket=the_bucket.name)["op"]["samples"]
                     _x_ = stats[arg][-1]
                     if _x_ > 0:
@@ -331,13 +335,13 @@ class XDCRBaseTest(unittest.TestCase):
                             self._xdc_replication_ops[node][the_bucket.name] = []
                         self._xdc_replication_ops[node][the_bucket.name].append((float)(_x_))
             elif arg == "data_replicated":
-                rest1 = RestConnection(node)
-                if node == self.src_master:
+                rest1 = RestConnection(consider_node)
+                if consider_node == self.src_master:
                     rest2 = RestConnection(self.dest_master)
                 else:
                     rest2 = RestConnection(self.src_master)
                 dest_uuid = rest2.get_pools_info()["uuid"]
-                for the_bucket in self._get_cluster_buckets(node):
+                for the_bucket in self._get_cluster_buckets(consider_node):
                     argument = "{0}/{1}/{2}/{3}/{4}".format("replications", dest_uuid, the_bucket.name, the_bucket.name, arg)
                     stats = rest1.fetch_bucket_stats(bucket=the_bucket.name)["op"]["samples"]
                     _x_ = stats[argument][-1]
