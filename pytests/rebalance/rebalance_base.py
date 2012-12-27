@@ -30,18 +30,3 @@ class RebalanceBaseTest(BaseTestCase):
 
     def tearDown(self):
         super(RebalanceBaseTest, self).tearDown()
-
-    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120, bucket="default", expected_rows=None):
-        tasks = []
-        if expected_rows is None:
-            expected_rows = self.num_items
-        for i in xrange(num_views):
-            tasks.append(self.cluster.async_query_view(self.servers[0], prefix + ddoc_name, self.default_view_name + str(i), query, expected_rows, bucket))
-        try:
-            for task in tasks:
-                task.result(wait_time)
-        except Exception as e:
-            print e;
-            for task in tasks:
-                task.cancel()
-            raise Exception("unable to get expected results for view queries during {0} sec".format(wait_time))

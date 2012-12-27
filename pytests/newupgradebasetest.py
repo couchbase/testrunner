@@ -27,10 +27,18 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.rest = RestConnection(self.master)
         self.rest_helper = RestHelper(self.rest)
         self.sleep_time = 10
+        self.ddocs = []
         self.data_size = self.input.param('data_size', 1024)
         self.op_types = self.input.param('op_types', 'bucket')
         self.item_flag = self.input.param('item_flag', 4042322160)
         self.expire_time = self.input.param('expire_time', 0)
+        self.default_view_name = "upgrade-test-view"
+        self.ddocs_num = self.input.param("ddocs-num", 0)
+        self.view_num = self.input.param("view-per-ddoc", 2)
+        self.is_dev_ddoc = self.input.param("is-dev-ddoc", False)
+        self.during_ops = None
+        if "during-ops" in self.input.test_params:
+            self.during_ops = self.input.param("during-ops", None).split(",")
         if self.initial_version.startswith("1.6") or self.initial_version.startswith("1.7"):
             self.product = 'membase-server'
         else:
@@ -125,3 +133,80 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.log.info("bucket info :- %s" % bucketinfo)
         self.verify_cluster_stats(servers, max_verify=self.max_verify, \
                                   timeout=self.wait_timeout * 50)
+
+        if self.ddocs:
+            query = {"connectionTimeout" : 60000}
+            expected_rows = self.num_items
+            if self.max_verify:
+                expected_rows = self.max_verify
+                query["limit"] = expected_rows
+            if self.input.param("wait_expiration", False):
+                expected_rows = 0
+            for bucket in self.buckets:
+                for ddoc in self.ddocs:
+                    prefix = ("", "dev_")[ddoc.views[0].dev_view]
+                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
+                                                wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
+                                                retry_time=10)
+        if self.input.param("update_notifications", True):
+            if self.rest.get_notifications() != self.input.param("update_notifications", True):
+                self.log.error("update notifications settings wasn't saved")
+        if self.input.param("autofailover_timeout", None):
+            if self.rest.get_autofailover_settings() != self.input.param("autofailover_timeout", None):
+                self.log.error("autofailover settings wasn't saved")
+
+    def change_settings(self):
+        rest = RestConnection(self.master)
+        if self.input.param("update_notifications", True):
+            rest.update_notifications(self.input.param("update_notifications", True))
+        if self.input.param("autofailover_timeout", None):
+            rest.update_autofailover_settings(True,
+                                              self.input.param("autofailover_timeout", None))
+        if self.input.param("autofailover_alerts", None):
+            sender = 'couchbase@localhost'
+            recipient = 'root@localhost'
+            user = pwd = Automation
+            rest.enable_autofailover_alerts(self, recipient, sender, user, pwd)
+        if self.input.param("autocompaction", 50):
+            rest.set_auto_compaction(viewFragmntThresholdPercentage=
+                                     self.input.param("autocompaction", 50))
+
+    def warm_up_node(self):
+        warmup_node = self.servers[-1]
+        shell = RemoteMachineShellConnection(warmup_node)
+        shell.stop_couchbase()
+        time.sleep(20)
+        shell.start_couchbase()
+        shell.disconnect()
+
+    def start_index(self):
+        if self.ddocs:
+            query = {"connectionTimeout" : 60000}
+            for bucket in self.buckets:
+                for ddoc in self.ddocs:
+                    prefix = ("", "dev_")[ddoc.views[0].dev_view]
+                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
+                                                expected_rows=0)
+
+    def failover(self):
+        rest = RestConnection(self.master)
+        nodes = rest.node_statuses()
+        nodes = [node for node in nodes
+                if node.ip != self.master.ip or node.port != self.master.port]
+        self.failover_node = nodes[0].id
+        rest.fail_over(self.failover_node)
+
+    def add_back(self):
+        rest = RestConnection(self.master)
+        rest.add_back_node(self.failover_node)
+
+    def create_ddocs_and_views(self):
+        self.default_view = View(self.default_view_name, None, None)
+        for bucket in self.buckets:
+            for i in xrange(ddocs_num):
+                views = self.make_default_views(self.default_view_name, self.view_num,
+                                               self.is_dev_ddoc, different_map=True)
+                ddoc = DesignDocument(self.default_view_name + str(i), views)
+                self.ddocs.append(ddoc)
+                for view in views:
+                    self.cluster.create_view(self.master, ddoc.name, [], bucket=bucket.name)

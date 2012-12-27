@@ -1652,6 +1652,24 @@ class RestConnection(object):
             raise BucketFlushFailed(self.ip, bucket_name)
         log.info("Flush for bucket '%s' was triggered" % bucket_name)
 
+    def update_notifications(self, enable):
+        api = self.baseUrl + 'settings/stats'
+        params = urllib.urlencode({'sendStats' : enable})
+        log.info('settings/stats params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
+
+    def get_notifications(self):
+        api = self.baseUrl + 'settings/stats'
+
+        status, content, header = self._http_request(api)
+
+        json_parsed = json.loads(content)
+
+        if status:
+            return json_parsed["sendStats"]
+        return None
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):

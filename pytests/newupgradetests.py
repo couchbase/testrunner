@@ -51,12 +51,39 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self._wait_for_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
             self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
             self._verify_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
+        if self.ddocs:
+            query = {}
+            query["connectionTimeout"] = 60000;
+            expected_rows = self.num_items
+            if self.max_verify:
+                expected_rows = self.max_verify
+                query["limit"] = expected_rows
+            if self.input.param("wait_expiration", False):
+                expected_rows = 0
+            query["stale"] = "false"
+            for bucket in self.buckets:
+                for ddoc in self.ddocs:
+                    prefix = ("", "dev_")[ddoc.views[0].dev_view]
+                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
+                                                wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
+                                                retry_time=10)
+        if self.input.param("update_notifications", True):
+            if self.rest.get_notifications() != self.input.param("update_notifications", True):
+                self.log.error("update notifications settings wasn't saved")
+        if self.input.param("autofailover_timeout", None):
+            if self.rest.get_autofailover_settings() != self.input.param("autofailover_timeout", None):
+                self.log.error("autofailover settings wasn't saved")
 
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.initial_num_servers])
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
         self.operations(multi_nodes=True)
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
         time.sleep(self.sleep_time)
+        if self.during_ops:
+            for opn in self.during_ops:
+                getattr(self, opn)()
         for upgrade_version in self.upgrade_versions:
             for server in self.servers[:self.initial_num_servers]:
                 remote = RemoteMachineShellConnection(server)
@@ -104,19 +131,50 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.assertTrue(node.storage[0].path, data_path)
                 self.assertTrue(node.storage[0].index_path, index_path)
 
-
-
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.initial_num_servers])
         self.operations(multi_nodes=True)
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
         time.sleep(self.sleep_time)
         self.initial_version = self.upgrade_versions[0]
         self.product = 'couchbase-server'
         self._install(self.servers[self.initial_num_servers:self.num_servers])
         self.log.info("Installation of new version is done. Wait for %s sec for rebalance" % (self.sleep_time))
         time.sleep(self.sleep_time)
+        if self.during_ops:
+            for opn in self.during_ops:
+                getattr(self, opn)()
+        self.online_upgrade()
+        time.sleep(self.sleep_time)
+        self._verify_upgrade_rebalance_in_out()
 
+    def online_upgrade_incremental(self):
+        self._install(self.servers)
+        self.operations(multi_nodes=True)
+        self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+        time.sleep(self.sleep_time)
+        for server in self.servers[1:]:
+            self.cluster.rebalance(self.servers, [], [server])
+            self.initial_version = self.upgrade_versions[0]
+            self.product = 'couchbase-server'
+            self._install([server])
+            self.log.info("Installation of new version is done. Wait for %s sec for rebalance" % (self.sleep_time))
+            time.sleep(self.sleep_time)
+            self.cluster.rebalance(self.servers, [server], [])
+            self.log.info("Rebalanced in upgraded nodes")
+            time.sleep(self.sleep_time)
+            self._verify_upgrade_rebalance_in_out()
+        self.master = self.servers[1]
+        self.cluster.rebalance(self.servers[:self.num_servers], [], [self.servers[0]])
+        self.log.info("Rebalanced out all old version nodes")
+        time.sleep(self.sleep_time)
+        self._verify_upgrade_rebalance_in_out()
+
+    def online_upgrade(self):
         servers_in = self.servers[self.initial_num_servers:self.num_servers]
         self.cluster.rebalance(self.servers[:self.initial_num_servers], servers_in, [])
         self.log.info("Rebalance in all 2.0 Nodes")
@@ -134,9 +192,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         servers_out = self.servers[:self.initial_num_servers]
         self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
-        self.log.info("Rebalance out all old version nodes")
+        self.log.info("Rebalanced out all old version nodes")
         time.sleep(self.sleep_time)
-        self._verify_upgrade_rebalance_in_out()
 
     def online_upgrade_swap_rebalance(self):
         self._install(self.servers[:self.initial_num_servers])

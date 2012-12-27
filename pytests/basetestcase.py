@@ -405,7 +405,6 @@ class BaseTestCase(unittest.TestCase):
          self.log.info("killed ??  {0} ".format(killed))
          _mc.close()
 
-
     def _restart_memcache(self):
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
@@ -430,3 +429,21 @@ class BaseTestCase(unittest.TestCase):
                     time.sleep(1)
             if not memcached_restarted:
                 self.fail("memcached did not start %s:%s" % (server.ip, server.port))
+
+    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120,
+                               bucket="default", expected_rows=None, retry_time=2):
+        tasks = []
+        if expected_rows is None:
+            expected_rows = self.num_items
+        for i in xrange(num_views):
+            tasks.append(self.cluster.async_query_view(self.servers[0], prefix + ddoc_name,
+                                                       self.default_view_name + str(i), query,
+                                                       expected_rows, bucket, retry_time))
+        try:
+            for task in tasks:
+                task.result(wait_time)
+        except Exception as e:
+            print e;
+            for task in tasks:
+                task.cancel()
+            raise Exception("unable to get expected results for view queries during {0} sec".format(wait_time))
