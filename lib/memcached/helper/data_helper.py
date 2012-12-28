@@ -936,11 +936,6 @@ class VBucketAwareMemcached(object):
                 if errors:
                     self.log.error(list(set(str(error) for error in errors)), exc_info=1)
                     raise errors[0]
-            mc = self.memcacheds[server_str]
-            errors = self._setMulti_rec(mc, exp, flags, keyval, pause_sec, timeout_sec, self._setMulti_seq)
-            if errors:
-                self.log.error(errors, exc_info=1)
-                raise errors[0]
 
 
     def _setMulti_parallel(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5):
