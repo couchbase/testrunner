@@ -54,8 +54,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.initial_num_servers])
-        self.operations(multi_nodes=True)
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
+        self.operations(multi_nodes=True)
         time.sleep(self.sleep_time)
         for upgrade_version in self.upgrade_versions:
             for server in self.servers[:self.initial_num_servers]:
@@ -78,8 +78,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             server.data_path = data_path
             server.index_path = index_path
         self._install(self.servers)
-        self.operations(multi_nodes=True)
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
+        self.operations(multi_nodes=True)
         time.sleep(self.sleep_time)
         for upgrade_version in self.upgrade_versions:
             for server in self.servers[:self.initial_num_servers]:
