@@ -38,25 +38,25 @@ class MemcachedClientHelper(object):
     # value_sizes {10:0.1,20:0.2:40:0.8}
 
     @staticmethod
-    def create_threads(servers = None,
-                       name = 'default',
-                       ram_load_ratio = -1,
-                       number_of_items = -1,
-                       value_size_distribution = None,
-                       number_of_threads = 50,
-                       override_vBucketId = -1,
-                       write_only = False,
-                       moxi = True,
-                       async_write = False,
-                       delete_ratio = 0,
-                       expiry_ratio = 0):
+    def create_threads(servers=None,
+                       name='default',
+                       ram_load_ratio= -1,
+                       number_of_items= -1,
+                       value_size_distribution=None,
+                       number_of_threads=50,
+                       override_vBucketId= -1,
+                       write_only=False,
+                       moxi=True,
+                       async_write=False,
+                       delete_ratio=0,
+                       expiry_ratio=0):
         log = logger.Logger.get_logger()
         if not servers:
-            raise MemcachedClientHelperExcetion(errorcode = 'invalid_argument',
-                                                message = "servers is not set")
+            raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
+                                                message="servers is not set")
         if ram_load_ratio < 0 and number_of_items < 0:
-            raise MemcachedClientHelperExcetion(errorcode = 'invalid_argument',
-                                                message = "ram_load_ratio or number_of_items must be specified")
+            raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
+                                                message="ram_load_ratio or number_of_items must be specified")
         if not value_size_distribution:
             value_size_distribution = {16: 0.25, 128: 0.25, 512: 0.25, 1024: 0.25}
 
@@ -92,38 +92,38 @@ class MemcachedClientHelper(object):
         threads = []
         for i in range(0, int(number_of_threads)):
             # choose one of the servers random
-            thread = WorkerThread(serverInfo = MemcachedClientHelper.random_pick(servers),
-                                  name = name,
-                                  values_list = list,
-                                  override_vBucketId = override_vBucketId,
-                                  write_only = write_only,
-                                  moxi = moxi,
-                                  async_write = async_write,
-                                  delete_ratio = delete_ratio,
-                                  expiry_ratio = expiry_ratio)
+            thread = WorkerThread(serverInfo=MemcachedClientHelper.random_pick(servers),
+                                  name=name,
+                                  values_list=list,
+                                  override_vBucketId=override_vBucketId,
+                                  write_only=write_only,
+                                  moxi=moxi,
+                                  async_write=async_write,
+                                  delete_ratio=delete_ratio,
+                                  expiry_ratio=expiry_ratio)
             threads.append(thread)
 
         return threads
 
     @staticmethod
-    def create_threads_for_load_bucket(serverInfo = None,
-                                       name = 'default',
-                                       ram_load_ratio = -1,
-                                       number_of_items = -1,
-                                       value_size_distribution = None,
-                                       number_of_threads = 50,
-                                       override_vBucketId = -1,
-                                       write_only = False,
-                                       moxi = True,
-                                       delete_ratio = 0,
-                                       expiry_ratio = 0):
+    def create_threads_for_load_bucket(serverInfo=None,
+                                       name='default',
+                                       ram_load_ratio= -1,
+                                       number_of_items= -1,
+                                       value_size_distribution=None,
+                                       number_of_threads=50,
+                                       override_vBucketId= -1,
+                                       write_only=False,
+                                       moxi=True,
+                                       delete_ratio=0,
+                                       expiry_ratio=0):
         log = logger.Logger.get_logger()
         if not serverInfo:
-            raise MemcachedClientHelperExcetion(errorcode = 'invalid_argument',
-                                                message = "serverInfo is not set")
+            raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
+                                                message="serverInfo is not set")
         if ram_load_ratio < 0 and number_of_items < 0:
-            raise MemcachedClientHelperExcetion(errorcode = 'invalid_argument',
-                                                message = "ram_load_ratio or number_of_items must be specified")
+            raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
+                                                message="ram_load_ratio or number_of_items must be specified")
         if not value_size_distribution:
             value_size_distribution = {16: 0.33, 128: 0.33, 1024: 0.33}
 
@@ -155,30 +155,30 @@ class MemcachedClientHelper(object):
 
         threads = []
         for i in range(0, int(number_of_threads)):
-            thread = WorkerThread(serverInfo = serverInfo,
-                                  name = name,
-                                  values_list = list,
-                                  override_vBucketId = override_vBucketId,
-                                  write_only = write_only,
-                                  moxi = moxi,
-                                  delete_ratio = delete_ratio,
-                                  expiry_ratio = expiry_ratio)
+            thread = WorkerThread(serverInfo=serverInfo,
+                                  name=name,
+                                  values_list=list,
+                                  override_vBucketId=override_vBucketId,
+                                  write_only=write_only,
+                                  moxi=moxi,
+                                  delete_ratio=delete_ratio,
+                                  expiry_ratio=expiry_ratio)
             threads.append(thread)
 
         return threads
 
     @staticmethod
-    def load_bucket_and_return_the_keys(servers = None,
-                                        name = 'default',
-                                        ram_load_ratio = -1,
-                                        number_of_items = -1,
-                                        value_size_distribution = None,
-                                        number_of_threads = 50,
-                                        override_vBucketId = -1,
-                                        write_only = False,
-                                        moxi = True,
-                                        delete_ratio = 0,
-                                        expiry_ratio = 0):
+    def load_bucket_and_return_the_keys(servers=None,
+                                        name='default',
+                                        ram_load_ratio= -1,
+                                        number_of_items= -1,
+                                        value_size_distribution=None,
+                                        number_of_threads=50,
+                                        override_vBucketId= -1,
+                                        write_only=False,
+                                        moxi=True,
+                                        delete_ratio=0,
+                                        expiry_ratio=0):
         inserted_keys = []
         rejected_keys = []
         log = logger.Logger.get_logger()
@@ -189,10 +189,10 @@ class MemcachedClientHelper(object):
                                                        value_size_distribution,
                                                        number_of_threads,
                                                        override_vBucketId,
-                                                       write_only = write_only,
-                                                       moxi = moxi,
-                                                       delete_ratio = delete_ratio,
-                                                       expiry_ratio = expiry_ratio)
+                                                       write_only=write_only,
+                                                       moxi=moxi,
+                                                       delete_ratio=delete_ratio,
+                                                       expiry_ratio=expiry_ratio)
 
         # we can start them!
         for thread in threads:
@@ -221,14 +221,14 @@ class MemcachedClientHelper(object):
 
     @staticmethod
     def load_bucket(servers,
-                    name = 'default',
-                    ram_load_ratio = -1,
-                    number_of_items = -1,
-                    value_size_distribution = None,
-                    number_of_threads = 50,
-                    override_vBucketId = -1,
-                    write_only = False,
-                    moxi = True):
+                    name='default',
+                    ram_load_ratio= -1,
+                    number_of_items= -1,
+                    value_size_distribution=None,
+                    number_of_threads=50,
+                    override_vBucketId= -1,
+                    write_only=False,
+                    moxi=True):
         inserted_keys_count = 0
         rejected_keys_count = 0
         log = logger.Logger.get_logger()
@@ -268,7 +268,7 @@ class MemcachedClientHelper(object):
         return None
 
     @staticmethod
-    def direct_client(server, bucket, timeout = 30):
+    def direct_client(server, bucket, timeout=30):
         log = logger.Logger.get_logger()
         rest = RestConnection(server)
         node = None
@@ -290,9 +290,9 @@ class MemcachedClientHelper(object):
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vBuckets = RestConnection(server).get_vbuckets(bucket)
         if isinstance(server, dict):
-            client = MemcachedClient(server["ip"], node.memcached, timeout = timeout)
+            client = MemcachedClient(server["ip"], node.memcached, timeout=timeout)
         else:
-            client = MemcachedClient(server.ip, node.memcached, timeout = timeout)
+            client = MemcachedClient(server.ip, node.memcached, timeout=timeout)
         client.vbucket_count = len(vBuckets)
         bucket_info = rest.get_bucket(bucket)
         # todo raise exception for not bucket_info
@@ -301,7 +301,7 @@ class MemcachedClientHelper(object):
         return client
 
     @staticmethod
-    def proxy_client(server, bucket, timeout = 30, force_ascii = False):
+    def proxy_client(server, bucket, timeout=30, force_ascii=False):
         # for this bucket on this node what is the proxy ?
         rest = RestConnection(server)
         log = logger.Logger.get_logger()
@@ -320,15 +320,15 @@ class MemcachedClientHelper(object):
             if ascii:
                 log = logger.Logger.get_logger()
                 log.info("creating ascii client {0}:{1} {2}".format(server.ip, bucket_info.port, bucket))
-                client = MemcachedAsciiClient(server.ip, bucket_info.port, timeout = timeout)
+                client = MemcachedAsciiClient(server.ip, bucket_info.port, timeout=timeout)
             else:
                 log = logger.Logger.get_logger()
                 if isinstance(server, dict):
                     log.info("creating proxy client {0}:{1} {2}".format(server["ip"], node.moxi, bucket))
-                    client = MemcachedClient(server["ip"], node.moxi, timeout = timeout)
+                    client = MemcachedClient(server["ip"], node.moxi, timeout=timeout)
                 else:
                     log.info("creating proxy client {0}:{1} {2}".format(server.ip, node.moxi, bucket))
-                    client = MemcachedClient(server.ip, node.moxi, timeout = timeout)
+                    client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
                 client.vbucket_count = len(vBuckets)
                 if bucket_info.authType == "sasl":
                     client.sasl_auth_plain(bucket_info.name.encode('ascii'),
@@ -388,7 +388,7 @@ class MutationThread(threading.Thread):
                  keys,
                  op,
                  seed,
-                 name = 'default'):
+                 name='default'):
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
@@ -449,14 +449,14 @@ class WorkerThread(threading.Thread):
                  serverInfo,
                  name,
                  values_list,
-                 ignore_how_many_errors = 5000,
-                 override_vBucketId = -1,
-                 terminate_in_minutes = 120,
-                 write_only = False,
-                 moxi = True,
-                 async_write = False,
-                 delete_ratio = 0,
-                 expiry_ratio = 0):
+                 ignore_how_many_errors=5000,
+                 override_vBucketId= -1,
+                 terminate_in_minutes=120,
+                 write_only=False,
+                 moxi=True,
+                 async_write=False,
+                 delete_ratio=0,
+                 expiry_ratio=0):
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
@@ -534,7 +534,7 @@ class WorkerThread(threading.Thread):
         # let's print out some status every 5 minutes..
 
         if not self.write_only:
-            self.reader = Process(target = start_reader_process, args = (self.info, self._value_list_copy, self.queue))
+            self.reader = Process(target=start_reader_process, args=(self.info, self._value_list_copy, self.queue))
             self.reader.start()
         start_time = time.time()
         last_reported = start_time
@@ -701,7 +701,7 @@ class WorkerThread(threading.Thread):
 
 
 class VBucketAwareMemcached(object):
-    def __init__(self, rest, bucket, info = None):
+    def __init__(self, rest, bucket, info=None):
         self.log = logger.Logger.get_logger()
         self.info = info
         self.bucket = bucket
@@ -713,7 +713,7 @@ class VBucketAwareMemcached(object):
         self.rest = rest
         self.reset(rest)
 
-    def reset(self, rest = None):
+    def reset(self, rest=None):
         if not rest:
             self.rest = RestConnection(self.info)
         m, v, r = self.request_map(self.rest , self.bucket)
@@ -722,7 +722,7 @@ class VBucketAwareMemcached(object):
         self.vBucketMapReplica = r
 
     def reset_vbuckets(self, rest, vbucketids_set):
-        forward_map = rest.get_bucket(self.bucket, num_attempt = 2).forward_map
+        forward_map = rest.get_bucket(self.bucket, num_attempt=2).forward_map
         if not forward_map:
             self.reset(rest)
             forward_map = rest.get_vbuckets(self.bucket)
@@ -797,7 +797,7 @@ class VBucketAwareMemcached(object):
                 raise ex
 
 
-    def memcached(self, key, replica_index = None):
+    def memcached(self, key, replica_index=None):
         vBucketId = self._get_vBucket_id(key)
         if replica_index is None:
             return self.memcached_for_vbucket(vBucketId)
@@ -813,7 +813,7 @@ class VBucketAwareMemcached(object):
             raise Exception(msg.format(self.vBucketMap[vBucketId]))
         return self.memcacheds[self.vBucketMap[vBucketId]]
 
-    def memcached_for_replica_vbucket(self, vBucketId, replica_index = 0):
+    def memcached_for_replica_vbucket(self, vBucketId, replica_index=0):
         if vBucketId not in self.vBucketMapReplica:
             msg = "replica vbucket map does not have an entry for vb : {0}"
             raise Exception(msg.format(vBucketId))
@@ -910,7 +910,7 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
 
-    def setMulti(self, exp, flags, key_val_dic, pause_sec = 1, timeout_sec = 5, parallel = False):
+    def setMulti(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5, parallel=False):
         if parallel:
             try:
                 import concurrent.futures
@@ -922,7 +922,7 @@ class VBucketAwareMemcached(object):
             self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec)
 
 
-    def _setMulti_seq(self, exp, flags, key_val_dic, pause_sec = 1, timeout_sec = 5):
+    def _setMulti_seq(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5):
         # set keys in their respective vbuckets and identify the server for each vBucketId
         server_keyval = self._get_server_keyval_dic(key_val_dic)
         # get memcached client against each server and multi set
@@ -939,17 +939,17 @@ class VBucketAwareMemcached(object):
             mc = self.memcacheds[server_str]
             errors = self._setMulti_rec(mc, exp, flags, keyval, pause_sec, timeout_sec, self._setMulti_seq)
             if errors:
-                self.log.error(errors, exc_info = 1)
+                self.log.error(errors, exc_info=1)
                 raise errors[0]
 
 
-    def _setMulti_parallel(self, exp, flags, key_val_dic, pause_sec = 1, timeout_sec = 5):
+    def _setMulti_parallel(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5):
         # set keys in their respective vbuckets and identify the server for each vBucketId
         server_keyval = self._get_server_keyval_dic(key_val_dic)
         # get memcached client against each server and multi set
         tasks = []
         import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor(max_workers = len(server_keyval)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(server_keyval)) as executor:
             for server_str , keyval in server_keyval.items() :
                 mc = self.memcacheds[server_str]
                 tasks.append(executor.submit(self._setMulti_rec, mc, exp, flags, keyval, pause_sec, timeout_sec, self._setMulti_parallel))
@@ -962,7 +962,7 @@ class VBucketAwareMemcached(object):
                 errors.extend(future.result())
 
             if errors:
-                self.log.error(errors, exc_info = 1)
+                self.log.error(errors, exc_info=1)
                 raise errors[0]
 
     def _setMulti_rec(self, memcached_client, exp, flags, keyval, pause, timeout, rec_caller_fn):
@@ -975,15 +975,15 @@ class VBucketAwareMemcached(object):
             else:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
-                rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Start all over again for these key vals.
-                return []  # Note: If used for async,too many recursive threads could get spwan here.
+                rec_caller_fn(exp, flags, keyval, pause, timeout - pause) # Start all over again for these key vals.
+                return [] # Note: If used for async,too many recursive threads could get spwan here.
         except BaseException as error:
             if timeout <= 0:
                 return [error]
             else:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
-                rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Please refer above for comments.
+                rec_caller_fn(exp, flags, keyval, pause, timeout - pause) # Please refer above for comments.
                 return []
         except EOFError as error:
             if "Got empty data (remote died?)" in error.message or \
@@ -1008,7 +1008,7 @@ class VBucketAwareMemcached(object):
         return server_keyval
 
 
-    def getMulti(self, keys_lst, pause_sec = 1, timeout_sec = 5, parallel = True):
+    def getMulti(self, keys_lst, pause_sec=1, timeout_sec=5, parallel=True):
         if parallel:
             try:
                 import concurrent.futures
@@ -1020,10 +1020,10 @@ class VBucketAwareMemcached(object):
             return self._getMulti_seq(keys_lst, pause_sec, timeout_sec)
 
 
-    def _getMulti_seq(self, keys_lst, pause_sec = 1, timeout_sec = 5):
-        server_keys = self._get_server_keys_dic(keys_lst)  # set keys in their respective vbuckets and identify the server for each vBucketId
+    def _getMulti_seq(self, keys_lst, pause_sec=1, timeout_sec=5):
+        server_keys = self._get_server_keys_dic(keys_lst) # set keys in their respective vbuckets and identify the server for each vBucketId
         keys_vals = {}
-        for server_str , keys in server_keys.items() :  # get memcached client against each server and multi get
+        for server_str , keys in server_keys.items() : # get memcached client against each server and multi get
             mc = self.memcacheds[server_str]
             keys_vals.update(self._getMulti_from_mc(mc, keys, pause_sec, timeout_sec, self._getMulti_seq))
         if len(keys_lst) != len(keys_vals):
@@ -1031,11 +1031,11 @@ class VBucketAwareMemcached(object):
         return keys_vals
 
 
-    def _getMulti_parallel(self, keys_lst, pause_sec = 1, timeout_sec = 5):
+    def _getMulti_parallel(self, keys_lst, pause_sec=1, timeout_sec=5):
         server_keys = self._get_server_keys_dic(keys_lst)
         tasks = []
         import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor(max_workers = len(server_keys)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(server_keys)) as executor:
             for server_str , keys in server_keys.items() :
                 mc = self.memcacheds[server_str]
                 tasks.append(executor.submit(self._getMulti_from_mc , mc, keys, pause_sec, timeout_sec, self._getMulti_parallel))
@@ -1138,13 +1138,13 @@ class VBucketAwareMemcached(object):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
 
 class KVStoreAwareSmartClient(VBucketAwareMemcached):
-    def __init__(self, rest, bucket, kv_store = None, info = None, store_enabled = True):
+    def __init__(self, rest, bucket, kv_store=None, info=None, store_enabled=True):
         VBucketAwareMemcached.__init__(self, rest, bucket, info)
         self.kv_store = kv_store or ClientKeyValueStore()
         self.store_enabled = store_enabled
         self._rlock = threading.Lock()
 
-    def set(self, key, value, ttl = -1):
+    def set(self, key, value, ttl= -1):
         self._rlock.acquire()
         try:
             if ttl >= 0:
@@ -1372,7 +1372,7 @@ def start_reader_process(info, keyset, queue):
 
 
 class GeneratedDocuments(object):
-    def __init__(self, items, kv_template, options = dict(size = 1024)):
+    def __init__(self, items, kv_template, options=dict(size=1024)):
         self._items = items
         self._kv_template = kv_template
         self._options = options
@@ -1419,7 +1419,7 @@ class GeneratedDocuments(object):
 class DocumentGenerator(object):
     # will loop over all values in props and replace ${prefix} with ${i}
     @staticmethod
-    def make_docs(items, kv_template, options = dict(size = 1024, seed = str(uuid.uuid4()))):
+    def make_docs(items, kv_template, options=dict(size=1024, seed=str(uuid.uuid4()))):
         return GeneratedDocuments(items, kv_template, options)
 
     @staticmethod
@@ -1431,7 +1431,7 @@ class DocumentGenerator(object):
         return (pattern * (size / len(pattern))) + pattern[0:(size % len(pattern))]
 
     @staticmethod
-    def get_doc_generators(count, kv_template = None, seed = None, sizes = None):
+    def get_doc_generators(count, kv_template=None, seed=None, sizes=None):
 
         seed = seed or str(uuid.uuid4())[0:7]
         sizes = sizes or [128]
@@ -1452,16 +1452,16 @@ class DocumentGenerator(object):
 
     @staticmethod
     def get_doc_generators_by_load_ratio(rest,
-                                         bucket = 'default',
-                                         ram_load_ratio = 1,
-                                         value_size_distribution = None,
-                                         seed = None):
+                                         bucket='default',
+                                         ram_load_ratio=1,
+                                         value_size_distribution=None,
+                                         seed=None):
 
         log = logger.Logger.get_logger()
 
         if ram_load_ratio < 0 :
-            raise MemcachedClientHelperExcetion(errorcode = 'invalid_argument',
-                                                message = "ram_load_ratio")
+            raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
+                                                message="ram_load_ratio")
         if not value_size_distribution:
             value_size_distribution = {16: 0.25, 128: 0.25, 512: 0.25, 1024: 0.25}
 
@@ -1503,8 +1503,8 @@ class DocumentGenerator(object):
 
 class LoadWithMcsoda(object):
 
-    def __init__(self, master, num_docs, prefix = '', bucket = 'default', user = 'Administrator',
-                 password = '', protocol = 'membase-binary', port = 11211):
+    def __init__(self, master, num_docs, prefix='', bucket='default', user='Administrator',
+                 password='', protocol='membase-binary', port=11211):
 
         rest = RestConnection(master)
         self.bucket = bucket
@@ -1562,7 +1562,7 @@ class LoadWithMcsoda(object):
 
     def load_data(self):
         cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.user, \
-            self.pswd, ctl = self.ctl, bucket = self.bucket)
+            self.pswd, ctl=self.ctl, bucket=self.bucket)
         return cur
 
     def load_stop(self):
