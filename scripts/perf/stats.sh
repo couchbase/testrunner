@@ -5,6 +5,6 @@ num_clients=`grep total_clients ${test_conf} | awk -F"=" '{print $2}'`
 
 for f in final.*.json
 do
-    ./bin/post-perf-data -n http://10.5.2.41:5984 -d eperf -i $f
+    ./bin/post_perf_data -n http://10.5.2.41:5984 -d eperf -i $f
 done
 rm -rf final.*.json
