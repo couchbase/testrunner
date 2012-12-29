@@ -2,28 +2,24 @@ Prerequisites
 -------------
 
 * Python 2.6 or 2.7
-* pip
+* pip or easy_install
 
 Dependencies
 ------------
 
-Bootstrap:
-
-    pip install zc.buildout
-
-Common:
+General:
 
     pip install paramiko
 
-EC2:
-
     pip install boto
+
+Buildout:
+
+    pip install zc.buildout
 
 Performance tests:
 
     pip install couchdbkit
-
-    pip install pymongo
 
 Documentation:
 
@@ -58,8 +54,8 @@ Usage
                             Test name (multiple -t options add more tests) e.g -t
                             performance.perf.DiskDrainRate
 
-Bootstrap
----------
+Buildout
+--------
 
 Initiate buildout directory structure, create sandbox, build packages and scripts, fetch dependencies, and etc.:
 
