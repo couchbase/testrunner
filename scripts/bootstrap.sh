@@ -1,4 +1,3 @@
 #!/bin/sh
-easy_install zc.buildout
-buildout bootstrap
-./bin/buildout &> /dev/null
+easy_install -U zc.buildout
+buildout &> /dev/null

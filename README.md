@@ -61,13 +61,9 @@ Usage
 Bootstrap
 ---------
 
-Initiate buildout directory structure:
+Initiate buildout directory structure, create sandbox, build packages and scripts, fetch dependencies, and etc.:
 
-    buildout bootstrap
-
-Create sandbox, build packages and scripts, fetch dependencies, and etc.:
-
-    ./bin/buildout
+    buildout
 
 You can execute testrunner now:
 
