@@ -47,6 +47,7 @@ class BaseTestCase(unittest.TestCase):
 
             self.num_replicas = self.input.param("replicas", 1)
             self.num_items = self.input.param("items", 1000)
+            self.value_size = self.input.param("value_size", 512)
             self.dgm_run = self.input.param("dgm_run", False)
             #max items number to verify in ValidateDataTask, None - verify all
             self.max_verify = self.input.param("max_verify", None)

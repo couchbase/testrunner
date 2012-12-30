@@ -3,10 +3,9 @@ import time
 import testconstants
 import gc
 from basetestcase import BaseTestCase
-from membase.api.rest_client import RestConnection, Bucket, RestHelper
+from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.documentgenerator import BlobGenerator
-from mc_bin_client import MemcachedError
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 
@@ -28,8 +27,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.rest_helper = RestHelper(self.rest)
         self.sleep_time = 10
         self.ddocs = []
-        self.data_size = self.input.param('data_size', 1024)
-        self.op_types = self.input.param('op_types', 'bucket')
         self.item_flag = self.input.param('item_flag', 4042322160)
         self.expire_time = self.input.param('expire_time', 0)
         self.default_view_name = "upgrade-test-view"
@@ -70,28 +67,12 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.buckets = []
         gc.collect()
         self._bucket_creation()
-        if self.op_types == "data":
-            self._load_data_all_buckets("create")
-            if multi_nodes:
-                self._wait_for_stats_all_buckets(self.servers[:self.initial_num_servers])
-            else:
-                self._wait_for_stats_all_buckets([self.master])
-
-    def _load_data_all_buckets(self, op_type='create', start=0):
-        loaded = False
-        count = 0
-        gen_load = BlobGenerator('upgrade-', 'upgrade-', self.data_size, start=start, end=self.num_items)
-        while not loaded and count < 60:
-            try :
-                self._load_all_buckets(self.master, gen_load, op_type, self.expire_time, 1,
-                                       self.item_flag, True, batch_size=1000, pause_secs=5, timeout_secs=180)
-                loaded = True
-            except MemcachedError as error:
-                if error.status == 134:
-                    loaded = False
-                    self.log.error("Memcached error 134, wait for 5 seconds and then try again")
-                    count += 1
-                    time.sleep(self.sleep_time)
+        gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen_load, "create", 0)
+        if multi_nodes:
+            self._wait_for_stats_all_buckets(self.servers[:self.initial_num_servers])
+        else:
+            self._wait_for_stats_all_buckets([self.master])
 
     def _get_build(self, server, version, remote, is_amazon=False):
         info = remote.extract_remote_info()
@@ -124,13 +105,10 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def verification(self, servers):
         for bucket in self.buckets:
-            if self.rest_helper.bucket_exists(bucket.name):
-                continue
-            else:
+            if not self.rest_helper.bucket_exists(bucket.name):
                 raise Exception("bucket:- %s not found" % bucket.name)
-            if self.op_types == "bucket":
-                bucketinfo = self.rest.get_bucket(bucket.name)
-                self.log.info("bucket info :- %s" % bucketinfo)
+            bucketinfo = self.rest.get_bucket(bucket.name)
+            self.log.info("bucket info :- %s" % bucketinfo)
         self.verify_cluster_stats(servers, max_verify=self.max_verify, \
                                   timeout=self.wait_timeout * 50)
 

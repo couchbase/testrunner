@@ -2,7 +2,7 @@ import time
 from threading import Thread
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, Bucket, RestHelper
+from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
@@ -34,45 +34,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def tearDown(self):
         super(MultiNodesUpgradeTests, self).tearDown()
-
-    def _verify_upgrade_rebalance_in_out(self):
-        self.master = self.servers[self.initial_num_servers]
-        self.rest = RestConnection(self.master)
-        self.rest_helper = RestHelper(self.rest)
-        for bucket in self.buckets:
-            if self.rest_helper.bucket_exists(bucket.name):
-                continue
-            else:
-                raise Exception("bucket:- %s not found" % bucket.name)
-        if self.op_types == "bucket":
-            bucketinfo = self.rest.get_bucket(bucket.name)
-            self.log.info("bucket info :- %s" % bucketinfo)
-        if self.op_types == "data":
-            self._wait_for_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
-            self._verify_all_buckets(self.master, 1, self.wait_timeout * 50, self.max_verify, True, 1)
-            self._verify_stats_all_buckets(self.servers[self.initial_num_servers : self.num_servers])
-        if self.ddocs:
-            query = {}
-            query["connectionTimeout"] = 60000;
-            expected_rows = self.num_items
-            if self.max_verify:
-                expected_rows = self.max_verify
-                query["limit"] = expected_rows
-            if self.input.param("wait_expiration", False):
-                expected_rows = 0
-            query["stale"] = "false"
-            for bucket in self.buckets:
-                for ddoc in self.ddocs:
-                    prefix = ("", "dev_")[ddoc.views[0].dev_view]
-                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
-                                                wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
-                                                retry_time=10)
-        if self.input.param("update_notifications", True):
-            if self.rest.get_notifications() != self.input.param("update_notifications", True):
-                self.log.error("update notifications settings wasn't saved")
-        if self.input.param("autofailover_timeout", None):
-            if self.rest.get_autofailover_settings() != self.input.param("autofailover_timeout", None):
-                self.log.error("autofailover settings wasn't saved")
 
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.initial_num_servers])
@@ -148,7 +109,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 getattr(self, opn)()
         self.online_upgrade()
         time.sleep(self.sleep_time)
-        self._verify_upgrade_rebalance_in_out()
+        self.verification(self.servers[self.initial_num_servers : self.num_servers])
 
     def online_upgrade_incremental(self):
         self._install(self.servers)
@@ -167,12 +128,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.cluster.rebalance(self.servers, [server], [])
             self.log.info("Rebalanced in upgraded nodes")
             time.sleep(self.sleep_time)
-            self._verify_upgrade_rebalance_in_out()
+            self.verification(self.servers[self.initial_num_servers : self.num_servers])
         self.master = self.servers[1]
         self.cluster.rebalance(self.servers[:self.num_servers], [], [self.servers[0]])
         self.log.info("Rebalanced out all old version nodes")
         time.sleep(self.sleep_time)
-        self._verify_upgrade_rebalance_in_out()
+        self.verification(self.servers[self.initial_num_servers : self.num_servers])
 
     def online_upgrade(self):
         servers_in = self.servers[self.initial_num_servers:self.num_servers]
@@ -231,5 +192,4 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
             if not FIND_MASTER:
                 raise Exception("After rebalance in 2.0 nodes, 2.0 doesn't become the master ")
-
-        self._verify_upgrade_rebalance_in_out()
+        self.verification(self.servers[self.initial_num_servers : self.num_servers])
