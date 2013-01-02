@@ -69,6 +69,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
         self.operations(multi_nodes=True)
         time.sleep(self.sleep_time)
+        if self.ddocs_num and not self.input.param('extra_verification', False):
+            self.create_ddocs_and_views()
         for upgrade_version in self.upgrade_versions:
             for server in self.servers[:self.initial_num_servers]:
                 remote = RemoteMachineShellConnection(server)
@@ -91,6 +93,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 node = rest.get_nodes_self()
                 self.assertTrue(node.storage[0].path, data_path)
                 self.assertTrue(node.storage[0].index_path, index_path)
+        if self.input.param('extra_verification', False):
+            self._create_sasl_buckets(self.master, "sasl_new")
+            self._create_standard_buckets(self.master, "standard_new")
+            if self.ddocs_num:
+                self.create_ddocs_and_views()
+            self.verification(self.servers[:self.initial_num_servers])
 
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.initial_num_servers])
