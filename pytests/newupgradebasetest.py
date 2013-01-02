@@ -23,8 +23,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             upgrade_path = upgrade_path.split(",")
         self.upgrade_versions = upgrade_path + self.upgrade_versions
         self.rest_settings = self.input.membase_settings
-        self.rest = RestConnection(self.master)
-        self.rest_helper = RestHelper(self.rest)
+        self.rest = None
+        self.rest_helper = None
         self.sleep_time = 10
         self.ddocs = []
         self.item_flag = self.input.param('item_flag', 4042322160)
@@ -58,6 +58,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if not success:
                     self.log.info("some nodes were not install successfully!")
                     sys.exit(1)
+        if self.rest is None:
+            self.rest = RestConnection(self.master)
+            self.rest_helper = RestHelper(self.rest)
+
 
     def operations(self, multi_nodes=False):
         if multi_nodes:
@@ -66,6 +70,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
         self.buckets = []
         gc.collect()
+        self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self._bucket_creation()
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
@@ -99,7 +104,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
         remote.disconnect()
         if not self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
-            self.fail("node {0}:{1} is not running agter upgrade".format(server.ip, server.port))
+            self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
         self.rest.init_cluster_port(self.rest_settings.rest_username, self.rest_settings.rest_password)
         time.sleep(self.sleep_time)
 
