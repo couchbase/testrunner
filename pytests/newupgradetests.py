@@ -46,14 +46,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for opn in self.during_ops:
                 getattr(self, opn)()
         num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
-        stoped_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
+        upgrade_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
         for upgrade_version in self.upgrade_versions:
-            for server in stoped_nodes:
+            for server in upgrade_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
                 time.sleep(self.sleep_time)
                 remote.disconnect()
-            for server in self.servers[:self.nodes_init]:
+            for server in upgrade_nodes:
                 self._upgrade(upgrade_version, server)
                 time.sleep(self.sleep_time)
             time.sleep(self.expire_time)
@@ -96,6 +96,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.assertTrue(node.storage[0].path, data_path)
                 self.assertTrue(node.storage[0].index_path, index_path)
         if self.input.param('extra_verification', False):
+            self.bucket_size = 100
             self._create_sasl_buckets(self.master, "sasl_new")
             self._create_standard_buckets(self.master, "standard_new")
             if self.ddocs_num:
