@@ -35,6 +35,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def tearDown(self):
         super(MultiNodesUpgradeTests, self).tearDown()
 
+    def _async_update(self, upgrade_version, servers):
+        upgrade_threads = []
+        for server in servers:
+            upgrade_thread = Thread(target=self._upgrade,
+                                    name="upgrade_thread" + server.ip,
+                                    args=(upgrade_version, server))
+            upgrade_threads.append(upgrade_thread)
+            upgrade_thread.start()
+        return upgrade_threads
+
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.nodes_init])
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
@@ -57,6 +67,39 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self._upgrade(upgrade_version, server)
                 time.sleep(self.sleep_time)
             time.sleep(self.expire_time)
+            self.verification(self.servers[:self.nodes_init])
+
+    def offline_cluster_upgrade_and_reboot(self):
+        self._install(self.servers[:self.nodes_init])
+        self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
+        self.operations(multi_nodes=True)
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+        time.sleep(self.sleep_time)
+        if self.during_ops:
+            for opn in self.during_ops:
+                getattr(self, opn)()
+        num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
+        stoped_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
+        for upgrade_version in self.upgrade_versions:
+
+            for server in stoped_nodes:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.disconnect()
+            time.sleep(self.sleep_time)
+            upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            for server in stoped_nodes:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.disconnect()
+            for server in stoped_nodes:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.disconnect()
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(stoped_nodes, self)
             self.verification(self.servers[:self.nodes_init])
 
     def offline_cluster_upgrade_non_default_path(self):
