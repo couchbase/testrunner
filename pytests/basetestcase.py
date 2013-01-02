@@ -9,18 +9,10 @@ from couchbase.document import View
 from couchbase.documentgenerator import DocumentGenerator
 from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection, Bucket
-from memcached.helper.kvstore import KVStore
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
-try:
-    import logging
-    logging.config.fileConfig("scripts.logging.conf")
-    self.log = logging.getLogger()
-except:
-     pass
-
 
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
