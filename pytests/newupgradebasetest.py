@@ -61,7 +61,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def operations(self, multi_nodes=False):
         if multi_nodes:
-            servers_in = [self.servers[i + 1] for i in range(self.initial_num_servers - 1)]
+            servers_in = [self.servers[i + 1] for i in range(self.nodes_init - 1)]
             self.cluster.rebalance(self.servers[:1], servers_in, [])
         self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
         self.buckets = []
@@ -70,7 +70,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
         if multi_nodes:
-            self._wait_for_stats_all_buckets(self.servers[:self.initial_num_servers])
+            self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
         else:
             self._wait_for_stats_all_buckets([self.master])
 
