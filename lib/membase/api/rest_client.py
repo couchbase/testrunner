@@ -36,7 +36,7 @@ class RestHelper(object):
                     log.warn("server {0}:{1} status is {2}".format(self.rest.ip, self.rest.port, status.status))
             except ServerUnavailableException:
                 log.error("server {0}:{1} is unavailable".format(self.rest.ip, self.rest.port))
-                time.sleep(1)
+            time.sleep(1)
         msg = 'unable to connect to the node {0} even after waiting {1} seconds'
         log.error(msg.format(self.rest.ip, timeout_in_seconds))
         return False
@@ -97,7 +97,7 @@ class RestHelper(object):
             if vBuckets:
                 return True
             if isinstance(vBuckets, tuple):
-               return True  # es vbucket format
+               return True # es vbucket format
             else:
                 time.sleep(0.5)
         msg = 'vbucket map is not ready for bucket {0} after waiting {1} seconds'
