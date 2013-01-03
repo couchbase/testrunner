@@ -36,6 +36,8 @@ class BaseTestCase(unittest.TestCase):
             self.num_servers = self.input.param("servers", len(self.servers))
             #initial number of items in the cluster
             self.nodes_init = self.input.param("nodes_init", 1)
+            self.nodes_in = self.input.param("nodes_in", 1)
+            self.nodes_out = self.input.param("nodes_out", 1)
 
             self.num_replicas = self.input.param("replicas", 1)
             self.num_items = self.input.param("items", 1000)

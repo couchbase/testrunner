@@ -3,6 +3,7 @@ from threading import Thread
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
+from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
@@ -72,7 +73,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def offline_cluster_upgrade_and_reboot(self):
         self._install(self.servers[:self.nodes_init])
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
-        self.operations(multi_nodes=True)
+        self.operations(self.servers[:self.nodes_init])
         if self.ddocs_num:
             self.create_ddocs_and_views()
         time.sleep(self.sleep_time)
@@ -101,6 +102,37 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 remote.disconnect()
             ClusterOperationHelper.wait_for_ns_servers_or_assert(stoped_nodes, self)
             self.verification(self.servers[:self.nodes_init])
+
+    def offline_cluster_upgrade_and_rebalance(self):
+        num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
+        stoped_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
+        servs_out = self.servers[self.nodes_init - num_stoped_nodes - self.nodes_out :self.nodes_init - num_stoped_nodes]
+        servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        self._install(self.servers)
+        self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
+        self.operations(self.servers[:self.nodes_init])
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+        time.sleep(self.sleep_time)
+        if self.during_ops:
+            for opn in self.during_ops:
+                getattr(self, opn)()
+        for upgrade_version in self.upgrade_versions:
+
+            for server in stoped_nodes:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.disconnect()
+            upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
+            try:
+                self.cluster.rebalance(self.servers[:self.nodes_init], servs_in, servs_out)
+            except RebalanceFailedException:
+                self.log.info("rebalance failed as expected")
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(stoped_nodes, self)
+            self.cluster.rebalance(self.servers[:self.nodes_init], [], servs_out)
+            self.verification(list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out)))
 
     def offline_cluster_upgrade_non_default_path(self):
         num_nodes_with_not_default = self.input.param('num_nodes_with_not_default', 1)

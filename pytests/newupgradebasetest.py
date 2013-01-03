@@ -73,7 +73,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def operations(self, servers):
         if len(servers) > 1:
-            self.cluster.rebalance(self.servers[0], servers[1:], [])
+            self.cluster.rebalance([servers[0]], servers[1:], [])
         self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
                                             self.maxParallelIndexers, self.maxParallelReplicaIndexers)
