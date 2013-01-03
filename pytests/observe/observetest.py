@@ -6,7 +6,7 @@ from mc_bin_client import MemcachedError
 from couchbase.documentgenerator import BlobGenerator
 from datetime import datetime, timedelta
 from couchbase.document import View
-from mx.DateTime.mxDateTime.mxDateTime_Python import DateTimeDelta
+# from mx.DateTime.mxDateTime.mxDateTime_Python import DateTimeDelta
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.cluster_helper import  ClusterOperationHelper
 
