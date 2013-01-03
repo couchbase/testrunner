@@ -161,7 +161,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                                      self.input.param("autocompaction", 50))
 
     def warm_up_node(self):
-        warmup_node = self.servers[-1]
+        warmup_node = self.servers[:self.nodes_init][-1]
         shell = RemoteMachineShellConnection(warmup_node)
         shell.stop_couchbase()
         time.sleep(20)

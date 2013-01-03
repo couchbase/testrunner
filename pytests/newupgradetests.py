@@ -64,9 +64,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 remote.stop_server()
                 time.sleep(self.sleep_time)
                 remote.disconnect()
-            for server in upgrade_nodes:
-                self._upgrade(upgrade_version, server)
-                time.sleep(self.sleep_time)
+            upgrade_threads = self._async_update(upgrade_version, upgrade_nodes)
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
             time.sleep(self.expire_time)
             self.verification(self.servers[:self.nodes_init])
 
@@ -83,7 +83,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
         stoped_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
         for upgrade_version in self.upgrade_versions:
-
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
