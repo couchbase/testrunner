@@ -5,6 +5,7 @@ import gc
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
+from couchbase.document import DesignDocument, View
 from couchbase.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
@@ -84,6 +85,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
         self._wait_for_stats_all_buckets(servers)
+        self.change_settings()
 
     def _get_build(self, server, version, remote, is_amazon=False):
         info = remote.extract_remote_info()
@@ -117,9 +119,9 @@ class NewUpgradeBaseTest(BaseTestCase):
     def verification(self, servers):
         for bucket in self.buckets:
             if not self.rest_helper.bucket_exists(bucket.name):
-                raise Exception("bucket:- %s not found" % bucket.name)
+                raise Exception("bucket: %s not found" % bucket.name)
             bucketinfo = self.rest.get_bucket(bucket.name)
-            self.log.info("bucket info :- %s" % bucketinfo)
+            self.log.info("bucket info : %s" % bucketinfo)
         self.verify_cluster_stats(servers, max_verify=self.max_verify, \
                                   timeout=self.wait_timeout * 50)
 
@@ -137,27 +139,28 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
                                                 wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
                                                 retry_time=10)
-        if self.input.param("update_notifications", True):
+        if "update_notifications" in self.input.test_params:
             if self.rest.get_notifications() != self.input.param("update_notifications", True):
-                self.log.error("update notifications settings wasn't saved")
-        if self.input.param("autofailover_timeout", None):
-            if self.rest.get_autofailover_settings() != self.input.param("autofailover_timeout", None):
-                self.log.error("autofailover settings wasn't saved")
+                self.fail("update notifications settings wasn't saved")
+        if "autofailover_timeout" in self.input.test_params:
+            if self.rest.get_autofailover_settings()["timeout"] != self.input.param("autofailover_timeout", None):
+                self.fail("autofailover settings wasn't saved")
+        if "autofailover_alerts" in self.input.test_params:
+            alerts = self.get_alerts_settings()
+        if "autocompaction" in self.input.test_params:
+            bucket_info = self.cluster_status()
+
+
 
     def change_settings(self):
-        rest = RestConnection(self.master)
-        if self.input.param("update_notifications", True):
-            rest.update_notifications(self.input.param("update_notifications", True))
-        if self.input.param("autofailover_timeout", None):
-            rest.update_autofailover_settings(True,
-                                              self.input.param("autofailover_timeout", None))
-        if self.input.param("autofailover_alerts", None):
-            sender = 'couchbase@localhost'
-            recipient = 'root@localhost'
-            user = pwd = Automation
-            rest.enable_autofailover_alerts(self, recipient, sender, user, pwd)
-        if self.input.param("autocompaction", 50):
-            rest.set_auto_compaction(viewFragmntThresholdPercentage=
+        if "update_notifications" in self.input.test_params:
+            self.rest.update_notifications(str(self.input.param("update_notifications", 'true')).lower())
+        if "autofailover_timeout" in self.input.test_params:
+            self.rest.update_autofailover_settings(True, self.input.param("autofailover_timeout", None))
+        if "autofailover_alerts" in self.input.test_params:
+            self.rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd')
+        if "autocompaction" in self.input.test_params:
+            self.rest.set_auto_compaction(viewFragmntThresholdPercentage=
                                      self.input.param("autocompaction", 50))
 
     def warm_up_node(self):
@@ -174,8 +177,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             for bucket in self.buckets:
                 for ddoc in self.ddocs:
                     prefix = ("", "dev_")[ddoc.views[0].dev_view]
-                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
-                                                expected_rows=0)
+                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket)
 
     def failover(self):
         rest = RestConnection(self.master)
@@ -192,10 +194,10 @@ class NewUpgradeBaseTest(BaseTestCase):
     def create_ddocs_and_views(self):
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
-            for i in xrange(ddocs_num):
+            for i in xrange(self.ddocs_num):
                 views = self.make_default_views(self.default_view_name, self.view_num,
                                                self.is_dev_ddoc, different_map=True)
                 ddoc = DesignDocument(self.default_view_name + str(i), views)
                 self.ddocs.append(ddoc)
                 for view in views:
-                    self.cluster.create_view(self.master, ddoc.name, [], bucket=bucket.name)
+                    self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket.name)

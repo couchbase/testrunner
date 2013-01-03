@@ -231,6 +231,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         FIND_MASTER = False
         for new_server in servers_in:
             if content.find(new_server.ip) >= 0:
+                self.master = new_server
+                self.rest = RestConnection(self.master)
+                self.rest_helper = RestHelper(self.rest)
                 FIND_MASTER = True
                 self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
         if not FIND_MASTER:
