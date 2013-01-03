@@ -320,7 +320,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
 
-        self._wait_for_stats_all_buckets(servs_init[:self.nodes_init - self.nodes_out], ep_queue_size=self.num_items_without_persistence)
+        self._wait_for_stats_all_buckets(servs_init[:self.nodes_init - self.nodes_out], \
+                                         ep_queue_size=self.num_items_without_persistence * 0.9, ep_queue_size_cond='>')
         self._wait_for_stats_all_buckets(servs_in)
         self._verify_all_buckets(self.master, timeout=None)
         self._verify_stats_all_buckets(result_nodes)
