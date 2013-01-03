@@ -1373,7 +1373,7 @@ class RestConnection(object):
         return status
 
 
-    def enable_autofailover_alerts(self, recipients, sender, email_username, email_password, email_host='localhost', email_port=25, email_encrypt='false', alerts='auto_failover_node,auto_failover_maximum_reached'):
+    def set_alerts_settings(self, recipients, sender, email_username, email_password, email_host='localhost', email_port=25, email_encrypt='false', alerts='auto_failover_node,auto_failover_maximum_reached'):
         api = self.baseUrl + 'settings/alerts'
         params = urllib.urlencode({'enabled': 'true',
                                    'recipients': recipients,
@@ -1389,8 +1389,16 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def get_alerts_settings(self):
+        api = self.baseUrl + 'settings/alerts'
+        status, content, header = self._http_request(api, headers=self._create_capi_headers())
+        json_parsed = json.loads(content)
 
-    def disable_autofailover_alerts(self):
+        if not status:
+            raise Exception("unable to get autofailover alerts settings")
+        return json_parsed
+
+    def disable_alerts(self):
         api = self.baseUrl + 'settings/alerts'
         params = urllib.urlencode({'enabled': 'false'})
         log.info('settings/alerts params : {0}'.format(params))
