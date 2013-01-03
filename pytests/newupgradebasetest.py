@@ -42,6 +42,14 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.product = 'couchbase-server'
 
     def tearDown(self):
+        #cleanup only nodes that are in cluster
+        #not all servers have been installed
+        nodes = self.rest.get_nodes()
+        temp = []
+        for server in self.servers:
+            if server.ip in [node.ip for node in nodes]:
+                temp.append(server)
+        self.servers = temp
         super(NewUpgradeBaseTest, self).tearDown()
 
     def _install(self, servers):
@@ -63,21 +71,19 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.rest_helper = RestHelper(self.rest)
 
 
-    def operations(self, multi_nodes=False):
-        if multi_nodes:
-            servers_in = [self.servers[i + 1] for i in range(self.nodes_init - 1)]
-            self.cluster.rebalance(self.servers[:1], servers_in, [])
-        self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view)
+    def operations(self, servers):
+        if len(servers) > 1:
+            self.cluster.rebalance(self.servers[0], servers[1:], [])
+        self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers)
         self.buckets = []
         gc.collect()
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self._bucket_creation()
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
-        if multi_nodes:
-            self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        else:
-            self._wait_for_stats_all_buckets([self.master])
+        self._wait_for_stats_all_buckets(servers)
 
     def _get_build(self, server, version, remote, is_amazon=False):
         info = remote.extract_remote_info()

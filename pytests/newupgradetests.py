@@ -14,7 +14,7 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
 
     def test_upgrade(self):
         self._install([self.master])
-        self.operations()
+        self.operations([self.master])
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         time.sleep(self.sleep_time)
         for upgrade_version in self.upgrade_versions:
@@ -38,7 +38,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.nodes_init])
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
-        self.operations(multi_nodes=True)
+        self.operations(self.servers[:self.nodes_init])
         if self.ddocs_num:
             self.create_ddocs_and_views()
         time.sleep(self.sleep_time)
@@ -67,9 +67,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         for server in servers_with_not_default:
             server.data_path = data_path
             server.index_path = index_path
-        self._install(self.servers)
+        self._install(self.servers[:self.nodes_init])
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
-        self.operations(multi_nodes=True)
+        self.operations(self.servers[:self.nodes_init])
         time.sleep(self.sleep_time)
         if self.ddocs_num and not self.input.param('extra_verification', False):
             self.create_ddocs_and_views()
@@ -105,8 +105,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.nodes_init])
-        self.operations(multi_nodes=True)
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
+        self.operations(self.servers[:self.nodes_init])
         if self.ddocs_num:
             self.create_ddocs_and_views()
         time.sleep(self.sleep_time)
@@ -124,7 +124,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def online_upgrade_incremental(self):
         self._install(self.servers)
-        self.operations(multi_nodes=True)
+        self.operations(self.servers)
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         if self.ddocs_num:
             self.create_ddocs_and_views()
@@ -169,8 +169,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def online_upgrade_swap_rebalance(self):
         self._install(self.servers[:self.nodes_init])
-        self.operations(multi_nodes=True)
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
+        self.operations(self.servers[:self.nodes_init])
         time.sleep(self.sleep_time)
         self.initial_version = self.upgrade_versions[0]
         self.product = 'couchbase-server'
