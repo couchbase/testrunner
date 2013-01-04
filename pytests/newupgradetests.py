@@ -70,10 +70,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             time.sleep(self.expire_time)
             if self.during_ops:
                 if "add_back_failover" in self.during_ops:
-                    getattr(self, add_back_failover)()
+                    getattr(self, 'add_back_failover')()
                     rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                 elif "failover" in self.during_ops:
-                    getattr(self, failover)()
+                    getattr(self, 'failover')()
                     self.cluster.failover(self.servers[:self.nodes_init], [self.failover_node])
             self.verification(self.servers[:self.nodes_init])
 
