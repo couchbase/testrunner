@@ -195,7 +195,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
         nodes = [node for node in nodes
-                if node.ip != self.master.ip or node.port != self.master.port]
+                if node.ip != self.master.ip or str(node.port) != self.master.port]
         self.failover_node = nodes[0].id
         rest.fail_over(self.failover_node)
 
