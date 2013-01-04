@@ -1391,7 +1391,7 @@ class RestConnection(object):
 
     def get_alerts_settings(self):
         api = self.baseUrl + 'settings/alerts'
-        status, content, header = self._http_request(api, headers=self._create_capi_headers())
+        status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
 
         if not status:

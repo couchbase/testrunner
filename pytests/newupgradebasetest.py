@@ -143,12 +143,24 @@ class NewUpgradeBaseTest(BaseTestCase):
             if self.rest.get_notifications() != self.input.param("update_notifications", True):
                 self.fail("update notifications settings wasn't saved")
         if "autofailover_timeout" in self.input.test_params:
-            if self.rest.get_autofailover_settings()["timeout"] != self.input.param("autofailover_timeout", None):
+            if self.rest.get_autofailover_settings().timeout != self.input.param("autofailover_timeout", None):
                 self.fail("autofailover settings wasn't saved")
         if "autofailover_alerts" in self.input.test_params:
-            alerts = self.get_alerts_settings()
+            alerts = self.rest.get_alerts_settings()
+            if alerts["recipients"] != ['couchbase@localhost']:
+                self.fail("recipients value wasn't saved")
+            if alerts["sender"] != 'root@localhost':
+                self.fail("sender value wasn't saved")
+            if alerts["emailServer"]["user"] != 'user':
+                self.fail("email_username value wasn't saved")
+            if alerts["emailServer"]["pass"] != '':
+                self.fail("email_password should be empty for security")
         if "autocompaction" in self.input.test_params:
-            bucket_info = self.cluster_status()
+            cluster_status = self.rest.cluster_status()
+            if cluster_status["autoCompactionSettings"]["viewFragmentationThreshold"]\
+                             ["percentage"] != self.input.param("autocompaction", 50):
+                    self.fail("autocompaction settings weren't saved")
+
 
 
 
