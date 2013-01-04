@@ -286,6 +286,7 @@ class RemoteMachineShellConnection:
 
     def download_binary(self, url, deliverable_type, filename):
         info = self.extract_remote_info()
+        self.disable_firewall()
         if info.type.lower() == 'windows':
             self.execute_command('taskkill /F /T /IM msiexec32.exe', info)
             self.execute_command('taskkill /F /T /IM msiexec.exe')
@@ -295,7 +296,6 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T /IM iexplore.*')
             self.execute_command('taskkill /F /T /IM WerFault.*')
             self.execute_command('taskkill /F /T /IM memcached.exe')
-            self.disable_firewall()
             output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
             self.log_command_output(output, error)
             output, error = self.execute_command(
@@ -317,7 +317,6 @@ class RemoteMachineShellConnection:
             log.info('comparing md5 sum and downloading if needed')
             output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
             self.log_command_output(output, error)
-            self.disable_firewall()
             #check if the file exists there now ?
             return self.file_exists('/tmp', filename)
             #for linux environment we can just
