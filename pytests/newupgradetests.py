@@ -2,7 +2,7 @@ import time
 from threading import Thread
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 
@@ -276,6 +276,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             FIND_MASTER = False
             for new_server in new_servers:
                 if content.find(new_server.ip) >= 0:
+                    self.master = new_server
+                    self.rest = RestConnection(self.master)
+                    self.rest_helper = RestHelper(self.rest)
                     FIND_MASTER = True
                     self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
             if not FIND_MASTER:
