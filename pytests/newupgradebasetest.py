@@ -113,7 +113,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         remote.disconnect()
         if not self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
             self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
-        self.rest.init_cluster_port(self.rest_settings.rest_username, self.rest_settings.rest_password)
+        self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
         time.sleep(self.sleep_time)
 
     def verification(self, servers):

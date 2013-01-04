@@ -662,9 +662,9 @@ class RestConnection(object):
             time.sleep(1)
 
 
-    def init_cluster(self, username='Administrator', password='password'):
+    def init_cluster(self, username='Administrator', password='password', port='8091'):
         api = self.baseUrl + 'settings/web'
-        params = urllib.urlencode({'port': "8091",
+        params = urllib.urlencode({'port': port,
                                    'username': username,
                                    'password': password})
 
@@ -672,19 +672,6 @@ class RestConnection(object):
 
         status, content, header = self._http_request(api, 'POST', params)
         return status
-
-
-    def init_cluster_port(self, username='Administrator', password='password'):
-        api = self.baseUrl + 'settings/web'
-        params = urllib.urlencode({'port': '8091',
-                                   'username': username,
-                                   'password': password})
-
-        log.info('settings/web params : {0}'.format(params))
-
-        status, content, header = self._http_request(api, 'POST', params)
-        return status
-
 
     def init_cluster_memoryQuota(self, username='Administrator',
                                  password='password',

@@ -23,7 +23,7 @@ def _get_build(master, version, is_amazon=False):
     log.info("finding build {0} for machine {1}".format(version, master))
     result = re.search('r', version)
     product = 'membase-server-enterprise'
-    if re.search('1.8',version):
+    if re.search('1.8', version):
         product = 'couchbase-server-enterprise'
 
     if result is None and not version.startswith("1.8.1"):
@@ -51,7 +51,7 @@ def _create_load_multiple_bucket(self, server, bucket_data, howmany=2):
         self.assertTrue(ready, "wait_for_memcached failed")
         #let's insert some data
         distribution = {2 * 1024: 0.5, 20: 0.5}
-        bucket_data[bucket.name]["inserted_keys"], bucket_data[bucket.name]["reject_keys"] =\
+        bucket_data[bucket.name]["inserted_keys"], bucket_data[bucket.name]["reject_keys"] = \
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[server], name=bucket.name,
                                                               ram_load_ratio=2.0,
                                                               number_of_threads=2,
@@ -76,7 +76,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         servers = input.servers
         server = servers[0]
         is_amazon = False
-        if input.test_params.get('amazon',False):
+        if input.test_params.get('amazon', False):
             is_amazon = True
         remote = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
@@ -100,7 +100,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
             remote.download_binary_in_win(older_build.url, abbr_product, initial_version)
             remote.membase_install_win(older_build, initial_version)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
-            rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+            rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
             bucket_data = {}
             if initialize_cluster:
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
@@ -119,7 +119,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
 
             pools_info = rest.get_pools_info()
 
-            rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+            rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
             time.sleep(TIMEOUT_SECS)
             # verify admin_creds still set
 
@@ -321,11 +321,11 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_one_4(self):
-        upgrade_path = ['1.7.0', '1.7.1.1','1.7.2']
+        upgrade_path = ['1.7.0', '1.7.1.1', '1.7.2']
         self._install_and_upgrade('1.6.5.4', True, True, True, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_all_4(self):
-        upgrade_path = ['1.7.0', '1.7.1.1','1.7.2']
+        upgrade_path = ['1.7.0', '1.7.1.1', '1.7.2']
         self._install_and_upgrade('1.6.5.4', True, True, False, 10, False, upgrade_path)
 
     def test_multiple_version_upgrade_start_one_2(self):
@@ -396,7 +396,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                              create_buckets=False,
                              insert_data=False,
                              start_upgraded_first=True,
-                             load_ratio=-1,
+                             load_ratio= -1,
                              roll_upgrade=False,
                              upgrade_path=[]):
         node_upgrade_path = []
@@ -411,7 +411,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
         rest_settings = input.membase_settings
         servers = input.servers
         is_amazon = False
-        if input.test_params.get('amazon',False):
+        if input.test_params.get('amazon', False):
             is_amazon = True
 
         # install older build on all nodes
@@ -434,7 +434,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             #now let's install ?
             remote.membase_install_win(older_build, initial_version)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
-            rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+            rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             remote.disconnect()
 
@@ -552,7 +552,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
              #   remote.membase_install_win(appropriate_build)
                 RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
                 time.sleep(TIMEOUT_SECS)
-                rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+                rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 remote.disconnect()
 
@@ -606,7 +606,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             load_ratio = 0.1
         distribution = {1024: 0.5, 20: 0.5}
         #TODO: with write_only = False, sometimes the load hangs, debug this
-        inserted_keys, rejected_keys =\
+        inserted_keys, rejected_keys = \
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
                                                               ram_load_ratio=load_ratio,
                                                               number_of_threads=1,

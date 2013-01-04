@@ -110,7 +110,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
         remote.membase_install(older_build)
         rest = RestConnection(server)
         RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
-        rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+        rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
         bucket_data = {}
         if initialize_cluster:
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
@@ -128,7 +128,7 @@ class SingleNodeUpgradeTests(unittest.TestCase):
 
         pools_info = rest.get_pools_info()
 
-        rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+        rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
         time.sleep(TIMEOUT_SECS)
         #verify admin_creds still set
 
@@ -620,7 +620,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
             remote.membase_install(older_build)
             rest = RestConnection(server)
             RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
-            rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+            rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
             remote.disconnect()
 
@@ -746,7 +746,7 @@ class MultipleNodeUpgradeTests(unittest.TestCase):
                 RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
                 log.info("sleep for 10 seconds to wait for membase-server to start...")
                 time.sleep(TIMEOUT_SECS)
-                rest.init_cluster_port(rest_settings.rest_username, rest_settings.rest_password)
+                rest.init_cluster(rest_settings.rest_username, rest_settings.rest_password)
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
                 remote.disconnect()
 
