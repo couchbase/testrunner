@@ -199,7 +199,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.failover_node = nodes[0].id
         rest.fail_over(self.failover_node)
 
-    def add_back(self):
+    def add_back_failover(self):
         rest = RestConnection(self.master)
         rest.add_back_node(self.failover_node)
 
