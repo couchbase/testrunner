@@ -25,7 +25,7 @@ class BaseTestCase(unittest.TestCase):
         self.pre_warmup_stats = {}
         try:
             self.wait_timeout = self.input.param("wait_timeout", 60)
-            #number of case that is performed from testrunner( increment each time)
+            # number of case that is performed from testrunner( increment each time)
             self.case_number = self.input.param("case_number", 0)
             self.default_bucket = self.input.param("default_bucket", True)
             if self.default_bucket:
@@ -34,7 +34,7 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets
             self.num_servers = self.input.param("servers", len(self.servers))
-            #initial number of items in the cluster
+            # initial number of items in the cluster
             self.nodes_init = self.input.param("nodes_init", 1)
             self.nodes_in = self.input.param("nodes_in", 1)
             self.nodes_out = self.input.param("nodes_out", 1)
@@ -43,9 +43,9 @@ class BaseTestCase(unittest.TestCase):
             self.num_items = self.input.param("items", 1000)
             self.value_size = self.input.param("value_size", 512)
             self.dgm_run = self.input.param("dgm_run", False)
-            #max items number to verify in ValidateDataTask, None - verify all
+            # max items number to verify in ValidateDataTask, None - verify all
             self.max_verify = self.input.param("max_verify", None)
-            #we don't change consistent_view on server by default
+            # we don't change consistent_view on server by default
             self.disabled_consistent_view = self.input.param("disabled_consistent_view", None)
             self.rebalanceIndexWaitingDisabled = self.input.param("rebalanceIndexWaitingDisabled", None)
             self.rebalanceIndexPausingDisabled = self.input.param("rebalanceIndexPausingDisabled", None)
@@ -53,19 +53,19 @@ class BaseTestCase(unittest.TestCase):
             self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                           .format(self.case_number, self._testMethodName))
-            #avoid any cluster operations in setup for new upgrade tests
+            # avoid any cluster operations in setup for new upgrade tests
             if str(self.__class__).find('newupgradetests') != -1:
                 self.cluster = Cluster()
                 self.log.info("any cluster operation in setup will be skipped")
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
                 return
-            #avoid clean up if the previous test has been tear down
+            # avoid clean up if the previous test has been tear down
             if not self.input.param("skip_cleanup", True) or self.case_number == 1:
                 self.tearDown()
                 self.cluster = Cluster()
             if str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1:
-                #rebalance all nodes into the cluster before each test
+                # rebalance all nodes into the cluster before each test
                 self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
             elif self.nodes_init > 1:
                 self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
@@ -101,7 +101,7 @@ class BaseTestCase(unittest.TestCase):
                     if rest._rebalance_progress_status() == 'running':
                         self.log.warning("rebalancing is still running, test should be verified")
                         stopped = rest.stop_rebalance()
-                        self.assertTrue(stopped, msg="unable to stop rebalance")
+                        self.assertTrue(stopped, msg = "unable to stop rebalance")
                     BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
                     ClusterOperationHelper.cleanup_cluster(self.servers)
                     time.sleep(10)
@@ -109,7 +109,7 @@ class BaseTestCase(unittest.TestCase):
                     self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             finally:
-                #stop all existing task manager threads
+                # stop all existing task manager threads
                 self.cluster.shutdown()
                 self._log_finish(self)
 
@@ -129,8 +129,8 @@ class BaseTestCase(unittest.TestCase):
         except:
             pass
 
-    def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
-                          rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None):
+    def _initialize_nodes(self, cluster, servers, disabled_consistent_view = None, rebalanceIndexWaitingDisabled = None,
+                          rebalanceIndexPausingDisabled = None, maxParallelIndexers = None, maxParallelReplicaIndexers = None):
         quota = 0
         init_tasks = []
         for server in servers:
@@ -145,14 +145,14 @@ class BaseTestCase(unittest.TestCase):
     def _bucket_creation(self):
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+            self.buckets.append(Bucket(name = "default", authType = "sasl", saslPassword = "",
+                                           num_replicas = self.num_replicas, bucket_size = self.bucket_size))
 
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
 
-    def _get_bucket_size(self, quota, num_buckets, ratio=2.0 / 3.0):
+    def _get_bucket_size(self, quota, num_buckets, ratio = 2.0 / 3.0):
         ip = self.servers[0]
         for server in self.servers:
             if server.ip == ip:
@@ -167,8 +167,8 @@ class BaseTestCase(unittest.TestCase):
                                                                       'password',
                                                                       self.bucket_size,
                                                                       self.num_replicas))
-            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword='password',
-                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size));
+            self.buckets.append(Bucket(name = name, authType = "sasl", saslPassword = 'password',
+                                       num_replicas = self.num_replicas, bucket_size = self.bucket_size));
         for task in bucket_tasks:
             task.result()
 
@@ -181,8 +181,8 @@ class BaseTestCase(unittest.TestCase):
                                                                           self.bucket_size,
                                                                           self.num_replicas))
 
-            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
-                                       bucket_size=self.bucket_size, port=11214 + i));
+            self.buckets.append(Bucket(name = name, authType = None, saslPassword = None, num_replicas = self.num_replicas,
+                                       bucket_size = self.bucket_size, port = 11214 + i));
         for task in bucket_tasks:
             task.result()
 
@@ -233,7 +233,7 @@ class BaseTestCase(unittest.TestCase):
     Returns:
         A list of all of the tasks created.
     """
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store = 1, flag = 0, only_store_hash = True, batch_size = 1, pause_secs = 1, timeout_secs = 30):
         tasks = []
         for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
@@ -251,7 +251,7 @@ class BaseTestCase(unittest.TestCase):
         exp - The expiration for the items if updated or created (int)
         kv_store - The index of the bucket's kv_store to use. (int)
     """
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
+    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store = 1, flag = 0, only_store_hash = True, batch_size = 1000, pause_secs = 1, timeout_secs = 30):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
@@ -268,8 +268,8 @@ class BaseTestCase(unittest.TestCase):
         ep_queue_size_cond - condition for comparing (str)
         timeout - Waiting the end of the thread. (str)
     """
-    def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, ep_flusher_todo=0, \
-                                     ep_queue_size_cond='==', timeout=360):
+    def _wait_for_stats_all_buckets(self, servers, ep_queue_size = 0, ep_flusher_todo = 0, \
+                                     ep_queue_size_cond = '==', timeout = 360):
         tasks = []
         for server in servers:
             for bucket in self.buckets:
@@ -290,7 +290,7 @@ class BaseTestCase(unittest.TestCase):
         kv_store - The kv store index to check. (int)
         timeout - Waiting the end of the thread. (str)
     """
-    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1000):
+    def _verify_all_buckets(self, server, kv_store = 1, timeout = 180, max_verify = None, only_store_hash = True, batch_size = 1000):
         tasks = []
         for bucket in self.buckets:
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
@@ -298,7 +298,7 @@ class BaseTestCase(unittest.TestCase):
             task.result(timeout)
 
 
-    def disable_compaction(self, server=None, bucket="default"):
+    def disable_compaction(self, server = None, bucket = "default"):
 
         server = server or self.servers[0]
         new_config = {"viewFragmntThresholdPercentage" : None,
@@ -307,7 +307,7 @@ class BaseTestCase(unittest.TestCase):
                       "viewFragmntThreshold" : None}
         self.cluster.modify_fragmentation_config(server, new_config, bucket)
 
-    def async_create_views(self, server, design_doc_name, views, bucket="default", with_query=True):
+    def async_create_views(self, server, design_doc_name, views, bucket = "default", with_query = True):
         tasks = []
         if len(views):
             for view in views:
@@ -318,14 +318,14 @@ class BaseTestCase(unittest.TestCase):
             tasks.append(t_)
         return tasks
 
-    def create_views(self, server, design_doc_name, views, bucket="default", timeout=None):
+    def create_views(self, server, design_doc_name, views, bucket = "default", timeout = None):
         if len(views):
             for view in views:
                 self.cluster.create_view(server, design_doc_name, view, bucket, timeout)
         else:
             self.cluster.create_view(server, design_doc_name, None, bucket, timeout)
 
-    def make_default_views(self, prefix, count, is_dev_ddoc=False, different_map=False):
+    def make_default_views(self, prefix, count, is_dev_ddoc = False, different_map = False):
         ref_view = self.default_view
         ref_view.name = (prefix, ref_view.name)[prefix is None]
         if different_map:
@@ -339,35 +339,35 @@ class BaseTestCase(unittest.TestCase):
         else:
             return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
 
-    def _load_doc_data_all_buckets(self, data_op="create", batch_size=1000, gen_load=None):
-        #initialize the template for document generator
+    def _load_doc_data_all_buckets(self, data_op = "create", batch_size = 1000, gen_load = None):
+        # initialize the template for document generator
         age = range(5)
         first = ['james', 'sharon']
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
         if gen_load is None:
-            gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
+            gen_load = DocumentGenerator('test_docs', template, age, first, start = 0, end = self.num_items)
 
         self.log.info("%s %s documents..." % (data_op, self.num_items))
-        self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size=batch_size)
+        self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size = batch_size)
         return gen_load
 
-    def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None):
+    def verify_cluster_stats(self, servers = None, master = None, max_verify = None, timeout = None):
         if servers is None:
             servers = self.servers
         if master is None:
             master = self.master
         if max_verify is None:
             max_verify = self.max_verify
-        self._wait_for_stats_all_buckets(servers, timeout=timeout)
-        self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify)
+        self._wait_for_stats_all_buckets(servers, timeout = timeout)
+        self._verify_all_buckets(master, timeout = timeout, max_verify = max_verify)
         self._verify_stats_all_buckets(servers)
-        #verify that curr_items_tot corresponds to sum of curr_items from all nodes
+        # verify that curr_items_tot corresponds to sum of curr_items from all nodes
         verified = True
         for bucket in self.buckets:
             verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
         self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
 
-    def _stats_befor_warmup(self):
+    def _stats_befor_warmup(self, bucket_name):
         if not self.access_log:
             self.stat_str = ""
         else:
@@ -375,7 +375,7 @@ class BaseTestCase(unittest.TestCase):
         self.stats_monitor = self.input.param("stats_monitor", "curr_items_tot")
         self.stats_monitor = self.stats_monitor.split(";")
         for server in self.servers[:self.nodes_init]:
-            mc_conn = MemcachedClientHelper.direct_client(server, self.bucket_name, self.timeout)
+            mc_conn = MemcachedClientHelper.direct_client(server, bucket_name, self.timeout)
             self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)] = {}
             for stat_to_monitor in self.stats_monitor:
                 self.pre_warmup_stats["%s:%s" % (server.ip, server.port)][stat_to_monitor] = mc_conn.stats(self.stat_str)[stat_to_monitor]
@@ -384,7 +384,7 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("memcached %s:%s has %s value %s" % (server.ip, server.port, stat_to_monitor , mc_conn.stats(self.stat_str)[stat_to_monitor]))
             mc_conn.close()
 
-    def _kill_nodes(self, nodes):
+    def _kill_nodes(self, nodes, bucket_name):
         is_partial = self.input.param("is_partial", "True")
         _nodes = []
         if len(self.servers) > 1 :
@@ -399,7 +399,7 @@ class BaseTestCase(unittest.TestCase):
         for node in _nodes:
          _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
                   "password": self.servers[0].rest_password}
-         _mc = MemcachedClientHelper.direct_client(_node, self.bucket_name)
+         _mc = MemcachedClientHelper.direct_client(_node, bucket_name)
          self.log.info("restarted the node %s:%s" % (node.ip, node.port))
          pid = _mc.stats()["pid"]
          node_rest = RestConnection(_node)
@@ -409,19 +409,20 @@ class BaseTestCase(unittest.TestCase):
          self.log.info("killed ??  {0} ".format(killed))
          _mc.close()
 
-    def _restart_memcache(self):
+    def _restart_memcache(self, bucket_name):
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
-        self._kill_nodes(nodes)
+        self._kill_nodes(nodes, bucket_name)
         start = time.time()
         memcached_restarted = False
         for server in self.servers[:self.nodes_init]:
             mc = None
             while time.time() - start < 60:
                 try:
-                    mc = MemcachedClientHelper.direct_client(server, self.bucket_name)
+                    mc = MemcachedClientHelper.direct_client(server, bucket_name)
                     stats = mc.stats()
                     new_uptime = int(stats["uptime"])
+                    self.log.info("warmutime%s:%s" % (new_uptime, self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["uptime"]))
                     if new_uptime < self.pre_warmup_stats["%s:%s" % (server.ip, server.port)]["uptime"]:
                         self.log.info("memcached restarted...")
                         memcached_restarted = True
@@ -434,8 +435,8 @@ class BaseTestCase(unittest.TestCase):
             if not memcached_restarted:
                 self.fail("memcached did not start %s:%s" % (server.ip, server.port))
 
-    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120,
-                               bucket="default", expected_rows=None, retry_time=2):
+    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time = 120,
+                               bucket = "default", expected_rows = None, retry_time = 2):
         tasks = []
         if expected_rows is None:
             expected_rows = self.num_items

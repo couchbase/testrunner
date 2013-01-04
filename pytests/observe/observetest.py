@@ -6,7 +6,6 @@ from mc_bin_client import MemcachedError
 from couchbase.documentgenerator import BlobGenerator
 from datetime import datetime, timedelta
 from couchbase.document import View
-# from mx.DateTime.mxDateTime.mxDateTime_Python import DateTimeDelta
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.cluster_helper import  ClusterOperationHelper
 
@@ -234,8 +233,8 @@ class ObserveTests(BaseTestCase):
      self.log.info("Nodes in cluster: %s" % self.servers[:self.nodes_init])
      for bucket in self.buckets:
          RebalanceHelper.wait_for_persistence(self.master, bucket)
-     self._stats_befor_warmup()
-     self._restart_memcache()
-     for bucket in self.buckets:
-      ClusterOperationHelper._wait_warmup_completed(self, self.servers[:self.nodes_init], bucket.name)
-     self._run_observe()
+         self._stats_befor_warmup(bucket.name)
+         self._restart_memcache(bucket.name)
+     # for bucket in self.buckets:
+         ClusterOperationHelper._wait_warmup_completed(self, self.servers[:self.nodes_init], bucket.name)
+         self._run_observe()
