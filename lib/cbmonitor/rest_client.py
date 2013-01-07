@@ -24,11 +24,13 @@ class CbmonitorClient(RestConnection):
         self.password = ''
         self.baseUrl = 'http://%s:%s/' % (hostname, port)
 
-    def post_results(self, build, metrics):
+    def post_results(self, build, testcase, env, metrics):
         """Post litmus test result to cbmonitor dashboard
 
-        build: build version, e.g: 2.0.0-1723-rel-enterprise
-        metrics: metric and value pairs, e.g: {reb time-s: 120, latency-ms: 39}
+        build -- build version (e.g., '2.0.0-1723-rel-enterprise')
+        testcase -- testcase (e.g: 'lucky6')
+        env -- test enviornment (e.g, 'terra')
+        metrics: metric and value pairs, e.g: {Rebalance time, sec: 120, latency-ms: 39}
         """
         if not build or not metrics:
             logging.error("invalid param build or metrics")
@@ -42,7 +44,7 @@ class CbmonitorClient(RestConnection):
                      % (metrics, build))
         api = self.baseUrl + 'litmus/post/'
 
-        params = [('build', build)]
+        params = [('build', build), ('testcase', testcase), ('env', env)]
         params += reduce(lambda x, y: x + y,
                          map(lambda (k, v): [('metric', k), ('value', v)],
                          metrics.iteritems()))

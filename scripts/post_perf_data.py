@@ -45,9 +45,9 @@ def post_to_cbm(input_json):
         return
 
     try:
-        name, phase = input_json["name"].split(".")
+        testcase, phase = input_json["name"].split(".")
     except ValueError:
-        log.error("invalid spec name %s" % input_json["name"])
+        log.error("invalid testcase %s" % input_json["name"])
         return
 
     if phase != "loop":
@@ -55,30 +55,26 @@ def post_to_cbm(input_json):
         return
 
     if "cluster_name" in input_json["info"]:
-        cluster_name = input_json["info"]['cluster_name']
+        env = input_json["info"]['cluster_name']
     else:
-        cluster_name = "unknown"
+        env = "unknown"
 
-    rs = {}
+    metrics = {}
     if "reb_dur" in input_json["info"]:
-        rs[("[%s:%s] Rebalance Time, s" % (cluster_name, name))] = \
-            int(input_json["info"]["reb_dur"])
+        metrics["Rebalance Time, s"] = int(input_json["info"]["reb_dur"])
     else:
         if "latency-get-90th-avg" in input_json["info"]:
-            rs[("[%s:%s] 90th Get Latency, us" % (cluster_name, name))] =\
-                int(input_json["info"]["latency-get-90th-avg"])
+            metrics["90th Get Latency, us"] = int(input_json["info"]["latency-get-90th-avg"])
 
         if "latency-set-90th-avg" in input_json["info"]:
-            rs[("[%s:%s] 90th Set Latency, us" % (cluster_name, name))] =\
-                int(input_json["info"]["latency-set-90th-avg"])
+            metrics["90th Set Latency, us"] = int(input_json["info"]["latency-set-90th-avg"])
 
         if "latency-query-90th-avg" in input_json["info"]:
-            rs[("[%s:%s] 90th Query Latency, us" % (cluster_name, name))] =\
-                int(input_json["info"]["latency-query-90th-avg"])
+            metrics["90th Query Latency, us"] = int(input_json["info"]["latency-query-90th-avg"])
 
     client = CbmonitorClient(input_json["info"]["cbm-host"],
                              input_json["info"]["cbm-port"])
-    client.post_results(input_json["buildinfo"]["version"], rs)
+    client.post_results(input_json["buildinfo"]["version"], testcase, env, metrics)
 
 
 def main():
