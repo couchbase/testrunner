@@ -141,6 +141,9 @@ class EsRestConnection(RestConnection):
 
         return docs
 
+    def fetch_bucket_stats(self, bucket='default', zoom='minute'):
+
+        return { "op" : { "samples" : { "xdc_ops" : [0] } } }
 
     def start_replication(self, *args, **kwargs):
         return "es",self.ip
