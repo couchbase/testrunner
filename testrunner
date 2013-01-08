@@ -70,6 +70,8 @@ def parse_args(argv):
         parser.print_help()
     else:
         test_params['ini'] = options.ini
+        if not os.path.exists(options.ini):
+            sys.exit("ini file {0} was not found".format(options.ini))
 
     test_params['cluster_name'] = splitext(os.path.basename(options.ini))[0]
 
