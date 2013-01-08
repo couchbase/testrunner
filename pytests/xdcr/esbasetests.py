@@ -87,24 +87,29 @@ class ESReplicationBaseTest(object):
         es_rest = RestConnection(dest_server)
         buckets = self.xd_ref._get_cluster_buckets(src_server)
         for bucket in buckets:
-            mc = MemcachedClientHelper.direct_client(src_server, bucket)
-            cb_valid, cb_deleted = bucket.kvs[kv_store].key_set()
+            all_cb_docs = cb_rest.all_docs(bucket.name)
             es_valid = es_rest.all_docs()
 
-            # compare revision ids of documents
-            for row in es_valid[:verification_count]:
-                key = str(row['meta']['id'])
-                rev_id = row['meta']['rev']
-                seqno_dest = int(rev_id[:rev_id.rfind('-')])
+            # represent doc lists from couchbase and elastic search in following format
+            # [  (id, rev), (id, rev) ... ]
+            cb_id_rev_list = self.get_cb_id_rev_list(all_cb_docs)
+            es_id_rev_list = self.get_es_id_rev_list(es_valid)
 
+            # verify each (id, rev) pair returned from couchbase exists in elastic search
+            for cb_id_rev_pair in cb_id_rev_list:
                 try:
-                    _, flags_src, exp_src, seqno_src, cas_src = mc.getMeta(key)
+                    es_id_rev_pair = es_id_rev_list[es_id_rev_list.index(cb_id_rev_pair)]
+                    if cb_id_rev_pair != es_id_rev_pair:
+                        self.xd_ref.fail("ES document %s has invalid revid (%s). Couchbase revid (%s). bucket (%s)" %\
+                                            (es_id_rev_pair, cb_id_rev_pair, bucket.name))
+                except ValueError:
+                    self.xd_ref.fail("Error during verification:  %s does not exist in ES index %s" % (cb_id_rev_pair, bucket.name))
 
-                    if int(seqno_src) != seqno_dest:
-                        self.xd_ref.fail("Document %s has invalid seqno (%s) expected (%s)" %\
-                                        (key, seqno_src, seqno_dest))
-                except MemcachedError as e:
-                    self.xd_ref.fail("Error during verification.  Index contains invalid key: %s" % key)
+    def get_cb_id_rev_list(self, docs):
+        return [(row['id'],row['value']['rev']) for row in docs['rows']]
+
+    def get_es_id_rev_list(self, docs):
+        return [(row['doc']['_id'],row['meta']['rev']) for row in docs]
 
 
     def _verify_es_values(self, src_server, dest_server, kv_store = 1, verification_count = 1000):
