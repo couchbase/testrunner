@@ -73,11 +73,9 @@ class RestHelper(object):
             log.info('rebalance reached >{0}% in {1} seconds '.format(progress, duration))
             return True
 
-
     def is_cluster_rebalanced(self):
         #get the nodes and verify that all the nodes.status are healthy
         return self.rest.rebalance_statuses()
-
 
     #this method will rebalance the cluster by passing the remote_node as
     #ejected node
@@ -104,7 +102,6 @@ class RestHelper(object):
         log.info(msg.format(bucket, timeout_in_seconds))
         return False
 
-
     def bucket_exists(self, bucket):
         try:
             buckets = self.rest.get_buckets()
@@ -117,7 +114,6 @@ class RestHelper(object):
             return False
         except Exception:
             return False
-
 
     def wait_for_node_status(self, node, expected_status, timeout_in_seconds):
         status_reached = False
@@ -136,31 +132,6 @@ class RestHelper(object):
         log.info('node {0} status_reached : {1}'.format(node.id, status_reached))
         return status_reached
 
-
-    def wait_for_replication(self, timeout_in_seconds=120):
-        wait_count = 0
-        end_time = time.time() + timeout_in_seconds
-        while time.time() <= end_time:
-            if self.all_nodes_replicated():
-                break
-            wait_count += 1
-            if wait_count == 10:
-                log.info('replication state : {0}'.format(self.all_nodes_replicated(debug=True)))
-                wait_count = 0
-            time.sleep(5)
-        log.info('replication state : {0}'.format(self.all_nodes_replicated()))
-        return self.all_nodes_replicated()
-
-
-    def all_nodes_replicated(self, debug=False):
-        replicated = True
-        nodes = self.rest.node_statuses()
-        for node in nodes:
-            if debug:
-                log.info("node {0} replication state : {1}".format(node.id, node.replication))
-            if node.replication != 1.0:
-                replicated = False
-        return replicated
 
 class RestConnection(object):
 
@@ -222,7 +193,6 @@ class RestConnection(object):
                     return
             raise Exception("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
-
     def __init__(self, serverInfo):
         #serverInfo can be a json object
         if isinstance(serverInfo, dict):
@@ -268,7 +238,6 @@ class RestConnection(object):
                     return
             raise Exception("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
-
     def is_cluster_mixed(self):
             http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
             if http_res == u'unknown pool':
@@ -293,18 +262,15 @@ class RestConnection(object):
 
     def active_tasks(self):
         api = self.capiBaseUrl + "_active_tasks"
-
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
             json_parsed = json.loads(content)
         except ValueError:
             return ""
-
         return json_parsed
 
     def ns_server_tasks(self):
         api = self.baseUrl + 'pools/default/tasks'
-
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_headers())
             return json.loads(content)
@@ -379,10 +345,8 @@ class RestConnection(object):
 
     def get_ddoc(self, bucket, ddoc_name):
         status, json, meta = self._get_design_doc(bucket, ddoc_name)
-
         if not status:
             raise ReadDocumentException(ddoc_name, json)
-
         return json, meta
 
     #the same as Preview a Random Document on UI
@@ -390,70 +354,48 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/buckets/%s/localRandomKey' % (bucket)
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
-
         if not status:
             raise Exception("unable to get random document/key for bucket %s" % (bucket))
         return json_parsed
 
-
     def run_view(self, bucket, view, name):
         api = self.capiBaseUrl + '/%s/_design/%s/_view/%s' % (bucket, view, name)
-
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
-
         json_parsed = json.loads(content)
-
         if not status:
             raise Exception("unable to create view")
-
         return json_parsed
-
 
     def delete_view(self, bucket, view):
         status, json = self._delete_design_doc(bucket, view)
-
         if not status:
             raise Exception("unable to delete the view")
-
         return json
-
 
     def spatial_results(self, bucket, spatial, params, limit=100):
         status, json = self._index_results(bucket, "spatial", spatial,
                                            params, limit)
-
         if not status:
             raise Exception("unable to obtain spatial view results")
-
         return json
-
 
     def create_spatial(self, bucket, spatial, function):
         status, json = self._create_design_doc(bucket, spatial, function)
-
         if status == False:
             raise Exception("unable to create spatial view")
-
         return json
-
 
     def get_spatial(self, bucket, spatial):
         status, json, meta = self._get_design_doc(bucket, spatial)
-
         if not status:
             raise Exception("unable to get the spatial view definition")
-
         return json, meta
-
 
     def delete_spatial(self, bucket, spatial):
         status, json = self._delete_design_doc(bucket, spatial)
-
         if not status:
             raise Exception("unable to delete the spatial view")
-
         return json
-
 
     # type_ is "view" or "spatial"
     def _index_results(self, bucket, type_, ddoc_name, params, limit, timeout=120,
@@ -484,34 +426,26 @@ class RestConnection(object):
 
         log.info("index query url: {0}".format(api))
         status, content, header = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
-
         json_parsed = json.loads(content)
-
         return status, json_parsed
 
     def all_docs(self, bucket, params={}, limit=None, timeout=120):
         api = self.capiBaseUrl + '/{0}/_all_docs?{1}'.format(bucket, urllib.urlencode(params))
         log.info("query all_docs url: {0}".format(api))
-
         status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                              timeout=timeout)
-
         if not status:
             raise Exception("unable to obtain all docs")
-
         return  json.loads(content)
 
 
     def get_couch_doc(self, doc_id, bucket="default", timeout=120):
         """ use couchBase uri to retrieve document from a bucket """
-
         api = self.capiBaseUrl + '/%s/%s' % (bucket, doc_id)
         status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                              timeout=timeout)
-
         if not status:
             raise ReadDocumentException(doc_id, content)
-
         return  json.loads(content)
 
     def _create_design_doc(self, bucket, name, function):
@@ -520,7 +454,6 @@ class RestConnection(object):
             api, 'PUT', function, headers=self._create_capi_headers())
         json_parsed = json.loads(content)
         return status, json_parsed
-
 
     def _get_design_doc(self, bucket, name):
         api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
@@ -543,21 +476,16 @@ class RestConnection(object):
         status, design_doc, meta = self._get_design_doc(bucket, name)
         if not status:
             raise Exception("unable to find for deletion design document")
-
         api = self.capiBaseUrl + '/%s/_design/%s' % (bucket, name)
         if isinstance(bucket, Bucket):
             api = self.capiBaseUrl + '/%s/_design/%s' % (bucket.name, name)
-
         if isinstance(bucket, Bucket) and bucket.authType == "sasl" and bucket.name != "default":
             status, content, header = self._http_request(api, 'DELETE', headers=self._create_capi_headers_with_auth(
                                                 username=bucket.name, password=bucket.saslPassword))
         else:
             status, content, header = self._http_request(api, 'DELETE', headers=self._create_capi_headers())
-
         json_parsed = json.loads(content)
-
         return status, json_parsed
-
 
     def spatial_compaction(self, bucket, design_name):
         api = self.capiBaseUrl + '/%s/_design/%s/_spatial/_compact' % (bucket, design_name)
@@ -570,9 +498,7 @@ class RestConnection(object):
                                                 username=bucket.name, password=bucket.saslPassword))
         else:
             status, content, header = self._http_request(api, 'POST', headers=self._create_capi_headers())
-
         json_parsed = json.loads(content)
-
         return status, json_parsed
 
     # Make a _design/_info request
@@ -593,7 +519,6 @@ class RestConnection(object):
             headers = self._create_capi_headers()
             status, content, header = self._http_request(api, 'GET',
                                                          headers=headers)
-
         if not status:
             raise SetViewInfoNotFound(design_name, content)
         json_parsed = json.loads(content)
@@ -603,14 +528,10 @@ class RestConnection(object):
     def spatial_info(self, bucket, design_name):
         api = self.capiBaseUrl + \
             '/%s/_design/%s/_spatial/_info' % (bucket, design_name)
-
         status, content, header = self._http_request(
             api, 'GET', headers=self._create_capi_headers())
-
         json_parsed = json.loads(content)
-
         return status, json_parsed
-
 
     def _create_capi_headers(self):
         return {'Content-Type': 'application/json',
@@ -629,11 +550,9 @@ class RestConnection(object):
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
 
-
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
         if not headers:
             headers = self._create_headers()
-
         end_time = time.time() + timeout
         while True:
             try:
@@ -661,15 +580,12 @@ class RestConnection(object):
                     raise ServerUnavailableException(ip=self.ip)
             time.sleep(1)
 
-
     def init_cluster(self, username='Administrator', password='password', port='8091'):
         api = self.baseUrl + 'settings/web'
         params = urllib.urlencode({'port': port,
                                    'username': username,
                                    'password': password})
-
         log.info('settings/web params : {0}'.format(params))
-
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
@@ -680,9 +596,7 @@ class RestConnection(object):
         params = urllib.urlencode({'memoryQuota': memoryQuota,
                                    'username': username,
                                    'password': password})
-
         log.info('pools/default params : {0}'.format(params))
-
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
@@ -695,7 +609,6 @@ class RestConnection(object):
                                    'username': username,
                                    'password': password,
                                    'name':name})
-
         status, content, header = self._http_request(api, 'POST', params)
         #sample response :
         # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
@@ -705,7 +618,6 @@ class RestConnection(object):
         else:
             log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'add cluster' failed")
-
         return remoteCluster
 
     def get_remote_clusters(self):
@@ -717,14 +629,11 @@ class RestConnection(object):
             remote_clusters = json.loads(content)
         return remote_clusters
 
-
     def remove_all_remote_clusters(self):
         remote_clusters = self.get_remote_clusters()
         for remote_cluster in remote_clusters:
             if remote_cluster["deleted"] == False:
                 self.remove_remote_cluster(remote_cluster["name"])
-
-
 
     def remove_remote_cluster(self, name):
         #example : name:two
@@ -740,7 +649,6 @@ class RestConnection(object):
         else:
             log.error("failed to remove remote cluster: status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'remove cluster' failed")
-
         return json_parsed
 
 
@@ -756,7 +664,6 @@ class RestConnection(object):
                                    'toBucket': toBucket,
                                    'fromBucket': fromBucket,
                                    'toCluster':toCluster})
-
         status, content, header = self._http_request(api, 'POST', params)
         #respone : {"database":"http://127.0.0.1:9500/_replicator",
         # "id": "replication_id"}
@@ -767,7 +674,6 @@ class RestConnection(object):
             log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
             raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
 
-
     def get_replications(self):
         replications = []
         api = self.capiBaseUrl + '_replicator/_design/_replicator_info/_view/infos?group_level=1'
@@ -777,7 +683,6 @@ class RestConnection(object):
             replications = json.loads(content)["rows"]
         return replications
 
-
     def remove_all_replications(self):
         replications = self.get_replications()
         for replication in replications:
@@ -786,7 +691,6 @@ class RestConnection(object):
 
     def stop_replication(self, database, rep_id):
         self._http_request(database + "/{0}".format(rep_id), 'DELETE', None, self._create_capi_headers())
-
 
     #params serverIp : the server to add to this cluster
     #raises exceptions when
@@ -803,9 +707,7 @@ class RestConnection(object):
         params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
                                    'user': user,
                                    'password': password})
-
         status, content, header = self._http_request(api, 'POST', params)
-
         if status:
             json_parsed = json.loads(content)
             otpNodeId = json_parsed['otpNode']
@@ -831,14 +733,11 @@ class RestConnection(object):
         if not otpNode:
             log.error('otpNode parameter required')
             return False
-
         api = self.baseUrl + 'controller/ejectNode'
         params = urllib.urlencode({'otpNode': otpNode,
                                    'user': user,
                                    'password': password})
-
         status, content, header = self._http_request(api, 'POST', params)
-
         if status:
             log.info('ejectNode successful')
         else:
@@ -854,53 +753,41 @@ class RestConnection(object):
         if otpNode is None:
             log.error('otpNode parameter required')
             return False
-
         api = self.baseUrl + 'controller/failOver'
         params = urllib.urlencode({'otpNode': otpNode})
-
         status, content, header = self._http_request(api, 'POST', params)
-
         if status:
             log.info('fail_over successful')
         else:
             log.error('fail_over error : {0}'.format(content))
             raise FailoverFailedException(content)
-
         return status
 
     def add_back_node(self, otpNode=None):
         if otpNode is None:
             log.error('otpNode parameter required')
             return False
-
         api = self.baseUrl + 'controller/reAddNode'
         params = urllib.urlencode({'otpNode': otpNode})
-
         status, content, header = self._http_request(api, 'POST', params)
-
         if status:
             log.info('add_back_node successful')
         else:
             log.error('add_back_node error : {0}'.format(content))
             raise InvalidArgumentException('controller/reAddNode',
                                            parameters=params)
-
         return status
 
     def rebalance(self, otpNodes, ejectedNodes):
         knownNodes = ','.join(otpNodes)
         ejectedNodesString = ','.join(ejectedNodes)
-
         params = urllib.urlencode({'knownNodes': knownNodes,
                                    'ejectedNodes': ejectedNodesString,
                                    'user': self.username,
                                    'password': self.password})
         log.info('rebalance params : {0}'.format(params))
-
         api = self.baseUrl + "controller/rebalance"
-
         status, content, header = self._http_request(api, 'POST', params)
-
         if status:
             log.info('rebalance operation started')
         else:
@@ -908,7 +795,6 @@ class RestConnection(object):
             #extract the error
             raise InvalidArgumentException('controller/rebalance',
                                            parameters=params)
-
         return status
 
     def diag_eval(self, code):
@@ -916,7 +802,6 @@ class RestConnection(object):
         status, content, header = self._http_request(api, "POST", code)
         log.info("/diag/eval status: {0} content: {1} command: {2}".format(status, content, code))
         return status, content
-
 
     def monitorRebalance(self, stop_if_loop=False):
         start = time.time()
@@ -945,7 +830,6 @@ class RestConnection(object):
                     return False
             #sleep for 2 seconds
             time.sleep(2)
-
         if progress < 0:
             log.error("rebalance progress code : {0}".format(progress))
             return False
@@ -962,9 +846,7 @@ class RestConnection(object):
 
     def _rebalance_progress_status(self):
         api = self.baseUrl + "pools/default/rebalanceProgress"
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
         if status:
             if "status" in json_parsed:
@@ -975,9 +857,7 @@ class RestConnection(object):
     def _rebalance_progress(self):
         avg_percentage = -1
         api = self.baseUrl + "pools/default/rebalanceProgress"
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
         if status:
             if "status" in json_parsed:
@@ -1003,7 +883,6 @@ class RestConnection(object):
                     avg_percentage = 100
         else:
             avg_percentage = -100
-
         return avg_percentage
 
 
@@ -1012,48 +891,33 @@ class RestConnection(object):
     def rebalance_statuses(self):
         rebalanced = None
         api = self.baseUrl + 'pools/rebalanceStatuses'
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             rebalanced = json_parsed['balanced']
-
         return rebalanced
-
 
     def log_client_error(self, post):
         api = self.baseUrl + 'logClientError'
-
         status, content, header = self._http_request(api, 'POST', post)
-
         if not status:
             log.error('unable to logClientError')
-
 
     #returns node data for this host
     def get_nodes_self(self, timeout=120):
         node = None
         api = self.baseUrl + 'nodes/self'
-
         status, content, header = self._http_request(api, timeout=timeout)
-
         if status:
             json_parsed = json.loads(content)
             node = RestParser().parse_get_nodes_response(json_parsed)
-
         return node
-
 
     def node_statuses(self, timeout=120):
         nodes = []
         api = self.baseUrl + 'nodeStatuses'
-
         status, content, header = self._http_request(api, timeout=timeout)
-
         json_parsed = json.loads(content)
-
         if status:
             for key in json_parsed:
                 #each key contain node info
@@ -1066,107 +930,76 @@ class RestConnection(object):
                 node.port = int(key[key.rfind(":") + 1:])
                 node.replication = value['replication']
                 nodes.append(node)
-
         return nodes
-
 
     def cluster_status(self):
         parsed = {}
         api = self.baseUrl + 'pools/default'
-
         status, content, header = self._http_request(api)
-
         if status:
             parsed = json.loads(content)
         return parsed
 
-
     def get_pools_info(self):
         parsed = {}
         api = self.baseUrl + 'pools'
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             parsed = json_parsed
-
         return parsed
-
 
     def get_pools(self):
         version = None
         api = self.baseUrl + 'pools'
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             version = MembaseServerVersion(json_parsed['implementationVersion'], json_parsed['componentsVersion'])
-
         return version
-
 
     def get_buckets(self):
         #get all the buckets
         buckets = []
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets/')
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             for item in json_parsed:
                 bucketInfo = RestParser().parse_get_bucket_json(item)
                 buckets.append(bucketInfo)
-
         return buckets
 
     def get_bucket_stats_for_node(self, bucket='default', node=None):
         if not node:
             log.error('node_ip not specified')
             return None
-
         stats = {}
         api = "{0}{1}{2}{3}{4}:{5}{6}".format(self.baseUrl, 'pools/default/buckets/',
                                      bucket, "/nodes/", node.ip, node.port, "/stats")
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             op = json_parsed["op"]
             samples = op["samples"]
             for stat_name in samples:
                 stats[stat_name] = samples[stat_name][-1]
-
         return stats
 
     def fetch_bucket_stats(self, bucket='default', zoom='minute'):
         """Return deserialized buckets stats.
-
         Keyword argument:
         bucket -- bucket name
         zoom -- stats zoom level (minute | hour | day | week | month | year)
         """
-
         api = self.baseUrl + 'pools/default/buckets/{0}/stats?zoom={1}'.format(bucket, zoom)
-
         status, content, header = self._http_request(api)
-
         return json.loads(content)
 
     def fetch_system_stats(self):
         """Return deserialized system stats."""
-
         api = self.baseUrl + 'pools/default/'
-
         status, content, header = self._http_request(api)
-
         return json.loads(content)
 
     def get_xdc_queue_size(self, bucket):
@@ -1178,11 +1011,8 @@ class RestConnection(object):
     def get_nodes(self):
         nodes = []
         api = self.baseUrl + 'pools/default'
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             if "nodes" in json_parsed:
                 for json_node in json_parsed["nodes"]:
@@ -1196,18 +1026,14 @@ class RestConnection(object):
                         nodes.append(node)
                     else:
                         log.info("Node {0} not part of cluster {1}".format(node.ip, node.clusterMembership))
-
         return nodes
 
 
     def get_bucket_stats(self, bucket='default'):
         stats = {}
         api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             op = json_parsed["op"]
             samples = op["samples"]
@@ -1216,25 +1042,20 @@ class RestConnection(object):
                     last_sample = len(samples[stat_name]) - 1
                     if last_sample:
                         stats[stat_name] = samples[stat_name][last_sample]
-
         return stats
 
     def get_bucket_json(self, bucket='default'):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
-
         status, content, header = self._http_request(api)
         if not status:
             raise GetBucketInfoFailed(bucket, content)
-
         return json.loads(content)
 
     def get_bucket(self, bucket='default', num_attempt=1, timeout=1):
         bucketInfo = None
-
         api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
-
         status, content, header = self._http_request(api)
         num = 1
         while not status and num_attempt > num:
@@ -1246,7 +1067,6 @@ class RestConnection(object):
             bucketInfo = RestParser().parse_get_bucket_response(content)
         return bucketInfo
 
-
     def get_vbuckets(self, bucket='default'):
         b = self.get_bucket(bucket)
         return None if not b else b.vbuckets
@@ -1255,10 +1075,8 @@ class RestConnection(object):
         api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '%s%s%s' % s (self.baseUrl, 'pools/default/buckets/', bucket.name)
-
         status, content, header = self._http_request(api, 'DELETE')
         return status
-
 
     # figure out the proxy port
     def create_bucket(self, bucket='',
@@ -1283,7 +1101,6 @@ class RestConnection(object):
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
                                        'flushEnabled': flushEnabled})
-
         elif authType == 'none':
             params = urllib.urlencode({'name': bucket,
                                        'ramQuotaMB': ramQuotaMB,
@@ -1293,7 +1110,6 @@ class RestConnection(object):
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
                                        'flushEnabled': flushEnabled})
-
         elif authType == 'sasl':
             params = urllib.urlencode({'name': bucket,
                                        'ramQuotaMB': ramQuotaMB,
@@ -1304,40 +1120,27 @@ class RestConnection(object):
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
                                        'flushEnabled': flushEnabled})
-
-
-
         log.info("{0} with param: {1}".format(api, params))
-
         create_start_time = time.time()
         status, content, header = self._http_request(api, 'POST', params)
-
         if not status:
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
-
         create_time = time.time() - create_start_time
         log.info("{0} seconds to create bucket {1}".format(create_time, bucket))
-
         return status
-
 
     #return AutoFailoverSettings
     def get_autofailover_settings(self):
         settings = None
         api = self.baseUrl + 'settings/autoFailover'
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             settings = AutoFailoverSettings()
             settings.enabled = json_parsed["enabled"]
             settings.count = json_parsed["count"]
             settings.timeout = json_parsed["timeout"]
-
         return settings
-
 
     def update_autofailover_settings(self, enabled, timeout):
         if enabled:
@@ -1348,17 +1151,13 @@ class RestConnection(object):
                                        'timeout': timeout})
         api = self.baseUrl + 'settings/autoFailover'
         log.info('settings/autoFailover params : {0}'.format(params))
-
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-
     def reset_autofailover(self):
         api = self.baseUrl + 'settings/autoFailover/resetCount'
-
         status, content, header = self._http_request(api, 'POST', '')
         return status
-
 
     def set_alerts_settings(self, recipients, sender, email_username, email_password, email_host='localhost', email_port=25, email_encrypt='false', alerts='auto_failover_node,auto_failover_maximum_reached'):
         api = self.baseUrl + 'settings/alerts'
@@ -1372,7 +1171,6 @@ class RestConnection(object):
                                    'emailEncrypt': email_encrypt,
                                    'alerts': alerts})
         log.info('settings/alerts params : {0}'.format(params))
-
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
@@ -1380,7 +1178,6 @@ class RestConnection(object):
         api = self.baseUrl + 'settings/alerts'
         status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
-
         if not status:
             raise Exception("unable to get autofailover alerts settings")
         return json_parsed
@@ -1389,16 +1186,12 @@ class RestConnection(object):
         api = self.baseUrl + 'settings/alerts'
         params = urllib.urlencode({'enabled': 'false'})
         log.info('settings/alerts params : {0}'.format(params))
-
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-
     def stop_rebalance(self, wait_timeout=10):
         api = self.baseUrl + '/controller/stopRebalance'
-
         status, content, header = self._http_request(api, 'POST')
-
         if status:
             for i in xrange(wait_timeout):
                 if self._rebalance_progress_status() == 'running':
@@ -1423,7 +1216,6 @@ class RestConnection(object):
         if paths:
             params = urllib.urlencode(paths)
             log.info('/nodes/self/controller/settings params : {0}'.format(params))
-
             status, content, header = self._http_request(api, 'POST', params)
             if status:
                 log.info("Setting data_path: {0}: status {1}".format(data_path, status))
@@ -1527,7 +1319,6 @@ class RestConnection(object):
                  format(count))
         return status
 
-
     def set_mc_threads(self, mc_threads=4):
         """
         Change number of memcached threads and restart the cluster
@@ -1603,12 +1394,10 @@ class RestConnection(object):
         """
 
         api = self.baseUrl + 'diag/eval'
-
         request_body = 'rpc:eval_everywhere(erlang, apply, [fun () -> \
                         [ale:set_loglevel(L, {0}) || L <- \
                         [ns_server, couchdb, user, menelaus, ns_doctor, stats, \
                         rebalance, cluster, views, stderr]] end, []]).'.format(loglevel)
-
         return self._http_request(api=api, method='POST', params=request_body,
                                   headers=self._create_headers())
 
@@ -1618,14 +1407,11 @@ class RestConnection(object):
         cmd = 'ns_config:set({{couchdb, {{{0}, {1}}}}}, {2}).'.format(section,
                                                                       option,
                                                                       value)
-
         return self.diag_eval(cmd)
 
     def get_alerts(self):
         api = self.baseUrl + "pools/default/"
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
         if status:
             if "alerts" in json_parsed:
@@ -1634,14 +1420,11 @@ class RestConnection(object):
             return None
 
     def flush_bucket(self, bucket="default"):
-
         if isinstance(bucket, Bucket):
             bucket_name = bucket.name
         else:
             bucket_name = bucket
-
         api = self.baseUrl + "pools/default/buckets/%s/controller/doFlush" % (bucket_name)
-
         status, content, header = self._http_request(api, 'POST')
         if not status:
             raise BucketFlushFailed(self.ip, bucket_name)
@@ -1656,11 +1439,8 @@ class RestConnection(object):
 
     def get_notifications(self):
         api = self.baseUrl + 'settings/stats'
-
         status, content, header = self._http_request(api)
-
         json_parsed = json.loads(content)
-
         if status:
             return json_parsed["sendStats"]
         return None
@@ -1800,6 +1580,7 @@ class vBucket(object):
         self.replica = []
         self.id = -1
 
+
 class RestParser(object):
     def parse_get_nodes_response(self, parsed):
         node = Node()
@@ -1863,11 +1644,9 @@ class RestParser(object):
                 node.memcached = ports["direct"]
         return node
 
-
     def parse_get_bucket_response(self, response):
         parsed = json.loads(response)
         return self.parse_get_bucket_json(parsed)
-
 
     def parse_get_bucket_json(self, parsed):
         bucket = Bucket()
