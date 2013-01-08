@@ -52,10 +52,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(self.servers[:self.nodes_init])
         if self.ddocs_num:
             self.create_ddocs_and_views()
-        time.sleep(self.sleep_time)
         if self.during_ops:
             for opn in self.during_ops:
-                getattr(self, opn)()
+                if opn != 'add_back_failover':
+                    getattr(self, opn)()
+        time.sleep(self.sleep_time)
         num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
         upgrade_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
         for upgrade_version in self.upgrade_versions:
@@ -71,10 +72,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if self.during_ops:
                 if "add_back_failover" in self.during_ops:
                     getattr(self, 'add_back_failover')()
-                    rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+                    self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                 elif "failover" in self.during_ops:
-                    getattr(self, 'failover')()
-                    self.cluster.failover(self.servers[:self.nodes_init], [self.failover_node])
+                    self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
             self.verification(self.servers[:self.nodes_init])
 
     def offline_cluster_upgrade_and_reboot(self):
@@ -178,8 +178,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.assertTrue(node.storage[0].index_path, index_path)
         if self.input.param('extra_verification', False):
             self.bucket_size = 100
-            self._create_sasl_buckets(self.master, "sasl_new")
-            self._create_standard_buckets(self.master, "standard_new")
+            self._create_sasl_buckets(self.master, 1)
+            self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
                 self.create_ddocs_and_views()
             self.verification(self.servers[:self.nodes_init])

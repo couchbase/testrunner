@@ -196,12 +196,12 @@ class NewUpgradeBaseTest(BaseTestCase):
         nodes = rest.node_statuses()
         nodes = [node for node in nodes
                 if node.ip != self.master.ip or str(node.port) != self.master.port]
-        self.failover_node = nodes[0].id
-        rest.fail_over(self.failover_node)
+        self.failover_node = nodes[0]
+        rest.fail_over(self.failover_node.id)
 
     def add_back_failover(self):
         rest = RestConnection(self.master)
-        rest.add_back_node(self.failover_node)
+        rest.add_back_node(self.failover_node.id)
 
     def create_ddocs_and_views(self):
         self.default_view = View(self.default_view_name, None, None)
