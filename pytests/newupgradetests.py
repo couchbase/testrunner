@@ -56,7 +56,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for opn in self.during_ops:
                 if opn != 'add_back_failover':
                     getattr(self, opn)()
-        time.sleep(self.sleep_time)
         num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
         upgrade_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
         for upgrade_version in self.upgrade_versions:
@@ -75,6 +74,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                 elif "failover" in self.during_ops:
                     self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+                    rem = [server for server in self.servers[:self.nodes_init]
+                         if self.failover_node.ip == server.ip and str(self.failover_node.port) == server.port]
+                    self.verification(list(set(self.servers[:self.nodes_init]) - set(rem)))
+                    return
             self.verification(self.servers[:self.nodes_init])
 
     def offline_cluster_upgrade_and_reboot(self):
