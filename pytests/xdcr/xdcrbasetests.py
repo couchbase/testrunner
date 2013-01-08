@@ -503,13 +503,17 @@ class XDCRBaseTest(unittest.TestCase):
     def _get_cluster_buckets(self, master_server):
         rest = RestConnection(master_server)
         master_id = rest.get_nodes_self().id
-        #verify if node_ids were changed for cluster_run
-        for bucket in self._buckets:
-            if ("127.0.0.1" in bucket.master_id and "127.0.0.1" not in master_id) or \
-               ("localhost" in bucket.master_id and "localhost" not in master_id):
-                new_ip = master_id[master_id.index("@") + 1:]
-                bucket.master_id = bucket.master_id.replace("127.0.0.1", new_ip).\
-                replace("localhost", new_ip)
+
+        if master_id.find('es') != 0:
+
+            #verify if node_ids were changed for cluster_run
+            for bucket in self._buckets:
+                if ("127.0.0.1" in bucket.master_id and "127.0.0.1" not in master_id) or \
+                   ("localhost" in bucket.master_id and "localhost" not in master_id):
+                    new_ip = master_id[master_id.index("@") + 1:]
+                    bucket.master_id = bucket.master_id.replace("127.0.0.1", new_ip).\
+                    replace("localhost", new_ip)
+
         return [bucket for bucket in self._buckets if bucket.master_id == master_id]
 
 

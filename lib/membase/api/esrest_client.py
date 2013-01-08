@@ -203,7 +203,7 @@ class ESNode(Node):
     def __init__(self, info):
         super(ESNode, self).__init__()
         self.hostname = info['hostname']
-        self.id = "es@"+info['name']
         self.ip, self.port = parse_addr(info["couchbase_address"])
         self.tr_ip, self.tr_port = parse_addr(info["transport_address"])
         self.ht_ip, self.ht_port = parse_addr(info["http_address"])
+        self.id = "es@"+self.ip
