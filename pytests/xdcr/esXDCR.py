@@ -11,7 +11,8 @@ import time
 class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
     def setUp(self):
         super(ESKVTests, self).setUp()
-        self.verify_dest_added(self)
+        self.setup_xd_ref(self)
+        self.verify_dest_added()
         self.setup_doc_gens()
 
     def tearDown(self):

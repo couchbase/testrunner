@@ -12,6 +12,9 @@ class ESReplicationBaseTest(object):
 
     xd_ref = None
 
+    def setup_xd_ref(self, xd_ref):
+        self.xd_ref = self
+
     def verify_es_results(self, verify_src = False, verification_count = 1000):
 
         xd_ref = self.xd_ref
@@ -127,8 +130,7 @@ class ESReplicationBaseTest(object):
                 except MemcachedError as e:
                     self.xd_ref.fail("Error during verification.  Index contains invalid key: %s" % key)
 
-    def verify_dest_added(self, xd_ref):
-        self.xd_ref = xd_ref
+    def verify_dest_added(self):
         src_master = self.xd_ref.src_master
         dest_master = self.xd_ref.dest_master
         rest = RestConnection(src_master)
@@ -138,8 +140,6 @@ class ESReplicationBaseTest(object):
         # and that it's status is correct
         for clusterInfo in remoteClusters:
             if clusterInfo['deleted'] == False:
-                ip, port = clusterInfo['hostname'].split(':')
-                if ip == dest_master.ip and port == dest_master.port:
-                    return
+                return
 
-        xd_ref.fail("Failed to setup replication to remote cluster %s " % dest_master)
+        self.xd_ref.fail("Failed to setup replication to remote cluster %s " % dest_master)
