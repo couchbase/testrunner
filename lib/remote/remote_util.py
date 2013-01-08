@@ -8,6 +8,7 @@ import logging
 import logger
 from builds.build_query import BuildQuery
 import testconstants
+from testconstants import WIN_REGISTER_ID
 from membase.api.rest_client import RestConnection, RestHelper
 
 
@@ -503,11 +504,45 @@ class RemoteMachineShellConnection:
         else:
             raise KeyError("can not find windows_info file")
 
+    # Need to add new windows register ID in testconstant file when
+    # new couchbase server version comes out.
+    def create_windows_capture_file(self, task, product, version):
+        src_path = "resources/windows/automation"
+        des_path = "/cygdrive/c/automation"
+
+        # remove dot in version (like 2.0.0 ==> 200)
+        reg_version = version[0:5:2]
+        reg_id = WIN_REGISTER_ID[reg_version]
+
+        if product == "cb":
+            if task == "install":
+                template_file = "cb-install.wct"
+                file = "cb-install.iss"
+            elif task == "uninstall":
+                template_file = "cb-uninstall.wct"
+                file = "cb-uninstall.iss"
+
+        # create in/uninstall file from windows capture template (wct) file
+        full_src_path_template = os.path.join(src_path, template_file)
+        full_src_path = os.path.join(src_path, file)
+        full_des_path = os.path.join(des_path, file)
+
+        f1 = open(full_src_path_template, 'r')
+        f2 = open(full_src_path, 'w')
+        # replace ####### with reg ID to install/uninstall
+        for line in f1:
+            f2.write(line.replace("#######", reg_id))
+        f1.close()
+        f2.close()
+        self.copy_file_local_to_remote(full_src_path, full_des_path)
+        # remove capture file from source after copy to destination
+        os.remove(full_src_path)
+
     # this function used to modify bat file to run task schedule in windows
     def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
-        releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1"]
+        releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1", "1.7.2"]
 
         product_version = ""
         if   "2.1.0" in version:
@@ -534,14 +569,19 @@ class RemoteMachineShellConnection:
 
         try:
             f = sftp.open(found, 'w')
-            log.info('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
-                                                       version, name, product_version, task))
-            name = name.rstrip()
-            version = version.rstrip()
-            f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
-                                                      version, name, product_version, task))
-            log.info('Successful write to {0}'.format(found))
-            sftp.close()
+            if product_version in releases_version:
+                log.info("write cb_version_install/uninstall.iss format")
+                name = name.rstrip()
+                version = version.rstrip()
+                f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
+                                                          version, name, product_version, task))
+                log.info('Successful write to {0}'.format(found))
+                sftp.close()
+            else:
+                log.info("write cb-install/uninstall.iss format")
+                f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{0}-{2}.iss'.format(name,
+                                                                                 version, task))
+
         except IOError:
             log.error('Can not write build name file to bat file {0}'.format(found))
 
@@ -768,6 +808,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             # build = self.build_url(params)
             self.create_multiple_dir(dir_paths)
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+            self.create_windows_capture_file(task, abbr_product, version)
             self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
             self.stop_schedule_tasks()
             log.info('sleep for 5 seconds before running task schedule install me')
@@ -941,6 +982,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
                 self.stop_couchbase()
                 # modify bat file to run uninstall schedule task
+                self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule uninstall')
