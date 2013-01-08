@@ -212,4 +212,4 @@ class NewUpgradeBaseTest(BaseTestCase):
                 ddoc = DesignDocument(self.default_view_name + str(i), views)
                 self.ddocs.append(ddoc)
                 for view in views:
-                    self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket.name)
+                    self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket)
