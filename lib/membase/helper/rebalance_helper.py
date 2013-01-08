@@ -744,7 +744,7 @@ class RebalanceHelper():
         nodes = rest.node_statuses()
         picked = []
         for node_for_stat in nodes:
-            if node_for_stat.id.find('127.0.0.1') == -1 and node_for_stat.id.find(master.ip) == -1:
+            if node_for_stat.ip != master.ip or  str(node_for_stat.port) != master.port :
                 picked.append(node_for_stat)
                 if len(picked) == howmany:
                     break

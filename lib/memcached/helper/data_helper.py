@@ -1531,8 +1531,8 @@ class DocumentGenerator(object):
 
 class LoadWithMcsoda(object):
 
-    def __init__(self, master, num_docs, prefix='', bucket='default', user='Administrator',
-                 password='', protocol='membase-binary', port=11211):
+    def __init__(self, master, num_docs, prefix='', bucket='default', rest_user='Administrator',
+                 rest_password="password", protocol='membase-binary', port=11211):
 
         rest = RestConnection(master)
         self.bucket = bucket
@@ -1564,8 +1564,8 @@ class LoadWithMcsoda(object):
         }
 
         self.protocol = protocol
-        self.user = user
-        self.pswd = password
+        self.rest_user = rest_user
+        self.rest_password = rest_password
 
         if protocol == 'membase-binary':
             self.host_port = "{0}:{1}:{2}".format(master.ip, master.port, port)
@@ -1589,8 +1589,8 @@ class LoadWithMcsoda(object):
         return self.cfg
 
     def load_data(self):
-        cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.user, \
-            self.pswd, ctl=self.ctl, bucket=self.bucket)
+        cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.rest_user, \
+            self.rest_password, ctl=self.ctl, bucket=self.bucket)
         return cur
 
     def load_stop(self):

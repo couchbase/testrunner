@@ -19,10 +19,16 @@ class SwapRebalanceBase(unittest.TestCase):
     @staticmethod
     def common_setup(self):
         self.log = logger.Logger.get_logger()
+        self.cluster_run = False
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
+        if len(set([server.ip for server in self.servers])) == 1:
+            ip = rest.get_nodes_self().ip
+            for server in self.servers:
+                server.ip = ip
+            self.cluster_run = True
         self.case_number = self.input.param("case_number", 0)
 
         # Clear the state from Previous invalid run
@@ -38,7 +44,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.cluster_helper = Cluster()
         # Initialize test params
         self.replica = self.input.param("replica", 1)
-        self.keys_count = self.input.param("keys-count", 100000)
+        self.keys_count = self.input.param("keys-count", 1000)
         self.load_ratio = self.input.param("load-ratio", 1)
         self.ratio_expiry = self.input.param("ratio-expiry", 0.03)
         self.ratio_deletes = self.input.param("ratio-deletes", 0.13)
@@ -163,7 +169,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for bucket in rest.get_buckets():
             loader = dict()
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, bucket=bucket.name,
-                password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
+                                rest_password=master.rest_password, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["exit-after-creates"] = 1
             loader["mcsoda"].cfg["json"] = 0
             loader["thread"] = Thread(target=loader["mcsoda"].load_data, name='mcloader_' + bucket.name)
@@ -180,7 +186,7 @@ class SwapRebalanceBase(unittest.TestCase):
         for bucket in rest.get_buckets():
             loader = dict()
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count / 2, bucket=bucket.name,
-                    password=bucket.saslPassword, prefix=str(bucket.name), port=8091)
+                    rest_password=master.rest_password, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
             loader["mcsoda"].cfg["ratio-creates"] = 0.5
@@ -224,7 +230,7 @@ class SwapRebalanceBase(unittest.TestCase):
         nodes = rest.get_nodes()
         for server in test.servers:
             for node in nodes:
-                if node.ip == server.ip:
+                if node.ip == server.ip and node.port == server.port:
                     servers_in_cluster.append(server)
         RebalanceHelper.wait_for_replication(servers_in_cluster, test.cluster_helper)
         SwapRebalanceBase.items_verification(test, master)
@@ -272,7 +278,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         new_swap_servers = self.servers[num_initial_servers:num_initial_servers + self.num_swap]
         for server in new_swap_servers:
-            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip)
+            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
 
@@ -362,7 +368,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         new_swap_servers = self.servers[num_initial_servers:num_initial_servers + self.num_swap]
         for server in new_swap_servers:
-            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip)
+            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
 
@@ -387,21 +393,24 @@ class SwapRebalanceBase(unittest.TestCase):
             self.fail("rebalance failed even before killing memcached")
         bucket = rest.get_buckets()[0].name
         pid = None
-        if self.swap_orchestrator:
+        if self.swap_orchestrator and not self.cluster_run:
             # get PID via remote connection if master is a new node
             shell = RemoteMachineShellConnection(master)
             o, _ = shell.execute_command("ps -eo comm,pid | awk '$1 == \"memcached\" { print $2 }'")
             pid = o[0]
             shell.disconnect()
         else:
-            for i in xrange(2):
+            times = 2
+            if self.cluster_run:
+                times = 20
+            for i in xrange(times):
                 try:
                     _mc = MemcachedClientHelper.direct_client(master, bucket)
                     pid = _mc.stats()["pid"]
                     break
                 except EOFError as e:
                     self.log.error("{0}.Retry in 2 sec".format(e))
-                    SwapRebalanceBase.sleep(self, 1)
+                    SwapRebalanceBase.sleep(self, 2)
         if pid is None:
             self.fail("impossible to get a PID")
         command = "os:cmd(\"kill -9 {0} \")".format(pid)
@@ -462,9 +471,14 @@ class SwapRebalanceBase(unittest.TestCase):
         # List of servers that will not be failed over
         not_failed_over = []
         for server in self.servers:
-            if server.ip not in [node.ip for node in toBeEjectedNodes]:
-                not_failed_over.append(server)
-                self.log.info("Node %s not failed over" % server.ip)
+            if self.cluster_run:
+                if server.port not in [node.port for node in toBeEjectedNodes]:
+                    not_failed_over.append(server)
+                    self.log.info("Node {0}:{1} not failed over".format(server.ip, server.port))
+            else:
+                if server.ip not in [node.ip for node in toBeEjectedNodes]:
+                    not_failed_over.append(server)
+                    self.log.info("Node {0}:{1} not failed over".format(server.ip, server.port))
 
         if self.fail_orchestrator:
             status, content = ClusterOperationHelper.find_orchestrator(master)
@@ -504,16 +518,19 @@ class SwapRebalanceBase(unittest.TestCase):
         # Given the optNode, find ip
         add_back_servers = []
         nodes = rest.get_nodes()
-        for server in [node.ip for node in nodes]:
-            if isinstance(server, unicode):
+        for server in nodes:
+            if isinstance(server.ip, unicode):
                 add_back_servers.append(server)
         final_add_back_servers = []
         for server in self.servers:
-            if server.ip not in add_back_servers:
-                final_add_back_servers.append(server)
-
+            if self.cluster_run:
+                if server.port not in [serv.port for serv in add_back_servers]:
+                    final_add_back_servers.append(server)
+            else:
+                if server.ip not in [serv.ip for serv in add_back_servers]:
+                    final_add_back_servers.append(server)
         for server in final_add_back_servers:
-            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip)
+            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
 
@@ -565,7 +582,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         new_swap_servers = self.servers[num_initial_servers:num_initial_servers + self.failover_factor]
         for server in new_swap_servers:
-            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip)
+            otpNode = rest.add_node(creds.rest_username, creds.rest_password, server.ip, server.port)
             msg = "unable to add node {0} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip))
 
