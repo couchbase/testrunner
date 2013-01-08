@@ -267,7 +267,7 @@ class RebalanceHelper():
                 else:
                     time.sleep(2)
             except StatsUnavailableException:
-                log.info("unable to retrieve stats for any node. returning true")
+                log.error("unable to retrieve stats for any node! Print taps ​​for all nodes:")
                 break
         if not verified:
             rest = RestConnection(master)
@@ -296,7 +296,7 @@ class RebalanceHelper():
         for node_for_stat in nodes_for_stats:
             try:
                 client = MemcachedClientHelper.direct_client(node_for_stat, bucket)
-                log.info("getting tap stats.. for {0}".format(node_for_stat.ip))
+                log.info("getting tap stats... for {0}".format(node_for_stat.ip))
                 tap_stats = client.stats('tap')
                 if tap_stats:
                     RebalanceHelper.log_interesting_taps(node_for_stat, tap_stats, log)
