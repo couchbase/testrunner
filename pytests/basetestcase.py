@@ -101,7 +101,7 @@ class BaseTestCase(unittest.TestCase):
                     if rest._rebalance_progress_status() == 'running':
                         self.log.warning("rebalancing is still running, test should be verified")
                         stopped = rest.stop_rebalance()
-                        self.assertTrue(stopped, msg = "unable to stop rebalance")
+                        self.assertTrue(stopped, msg="unable to stop rebalance")
                     BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
                     ClusterOperationHelper.cleanup_cluster(self.servers)
                     time.sleep(10)
@@ -129,8 +129,8 @@ class BaseTestCase(unittest.TestCase):
         except:
             pass
 
-    def _initialize_nodes(self, cluster, servers, disabled_consistent_view = None, rebalanceIndexWaitingDisabled = None,
-                          rebalanceIndexPausingDisabled = None, maxParallelIndexers = None, maxParallelReplicaIndexers = None):
+    def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
+                          rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None):
         quota = 0
         init_tasks = []
         for server in servers:
@@ -145,14 +145,14 @@ class BaseTestCase(unittest.TestCase):
     def _bucket_creation(self):
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-            self.buckets.append(Bucket(name = "default", authType = "sasl", saslPassword = "",
-                                           num_replicas = self.num_replicas, bucket_size = self.bucket_size))
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
 
-    def _get_bucket_size(self, quota, num_buckets, ratio = 2.0 / 3.0):
+    def _get_bucket_size(self, quota, num_buckets, ratio=2.0 / 3.0):
         ip = self.servers[0]
         for server in self.servers:
             if server.ip == ip:
@@ -167,8 +167,8 @@ class BaseTestCase(unittest.TestCase):
                                                                       'password',
                                                                       self.bucket_size,
                                                                       self.num_replicas))
-            self.buckets.append(Bucket(name = name, authType = "sasl", saslPassword = 'password',
-                                       num_replicas = self.num_replicas, bucket_size = self.bucket_size));
+            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword='password',
+                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size));
         for task in bucket_tasks:
             task.result()
 
@@ -181,8 +181,8 @@ class BaseTestCase(unittest.TestCase):
                                                                           self.bucket_size,
                                                                           self.num_replicas))
 
-            self.buckets.append(Bucket(name = name, authType = None, saslPassword = None, num_replicas = self.num_replicas,
-                                       bucket_size = self.bucket_size, port = 11214 + i));
+            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
+                                       bucket_size=self.bucket_size, port=11214 + i));
         for task in bucket_tasks:
             task.result()
 
@@ -195,7 +195,7 @@ class BaseTestCase(unittest.TestCase):
             task.result()
         self.buckets = []
 
-    def _verify_stats_all_buckets(self, servers):
+    def _verify_stats_all_buckets(self, servers, wait_time=60):
         stats_tasks = []
         for bucket in self.buckets:
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
@@ -214,10 +214,14 @@ class BaseTestCase(unittest.TestCase):
                                    'vb_replica_curr_items', '==', items * available_replicas))
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                                    'curr_items_tot', '==', items * (available_replicas + 1)))
-
-        for task in stats_tasks:
-            task.result(60)
-
+        try:
+            for task in stats_tasks:
+                task.result(wait_time)
+        except Exception as e:
+            print e;
+            for task in stats_tasks:
+                task.cancel()
+            raise Exception("unable to get expected stats during {0} sec".format(wait_time))
 
     """Asynchronously applys load generation to all bucekts in the cluster.
  bucket.name, gen,
@@ -233,7 +237,7 @@ class BaseTestCase(unittest.TestCase):
     Returns:
         A list of all of the tasks created.
     """
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store = 1, flag = 0, only_store_hash = True, batch_size = 1, pause_secs = 1, timeout_secs = 30):
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
         tasks = []
         for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
@@ -251,7 +255,7 @@ class BaseTestCase(unittest.TestCase):
         exp - The expiration for the items if updated or created (int)
         kv_store - The index of the bucket's kv_store to use. (int)
     """
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store = 1, flag = 0, only_store_hash = True, batch_size = 1000, pause_secs = 1, timeout_secs = 30):
+    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
@@ -268,8 +272,8 @@ class BaseTestCase(unittest.TestCase):
         ep_queue_size_cond - condition for comparing (str)
         timeout - Waiting the end of the thread. (str)
     """
-    def _wait_for_stats_all_buckets(self, servers, ep_queue_size = 0, ep_flusher_todo = 0, \
-                                     ep_queue_size_cond = '==', timeout = 360):
+    def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, ep_flusher_todo=0, \
+                                     ep_queue_size_cond='==', timeout=360):
         tasks = []
         for server in servers:
             for bucket in self.buckets:
@@ -290,7 +294,7 @@ class BaseTestCase(unittest.TestCase):
         kv_store - The kv store index to check. (int)
         timeout - Waiting the end of the thread. (str)
     """
-    def _verify_all_buckets(self, server, kv_store = 1, timeout = 180, max_verify = None, only_store_hash = True, batch_size = 1000):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1000):
         tasks = []
         for bucket in self.buckets:
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
@@ -298,7 +302,7 @@ class BaseTestCase(unittest.TestCase):
             task.result(timeout)
 
 
-    def disable_compaction(self, server = None, bucket = "default"):
+    def disable_compaction(self, server=None, bucket="default"):
 
         server = server or self.servers[0]
         new_config = {"viewFragmntThresholdPercentage" : None,
@@ -307,7 +311,7 @@ class BaseTestCase(unittest.TestCase):
                       "viewFragmntThreshold" : None}
         self.cluster.modify_fragmentation_config(server, new_config, bucket)
 
-    def async_create_views(self, server, design_doc_name, views, bucket = "default", with_query = True):
+    def async_create_views(self, server, design_doc_name, views, bucket="default", with_query=True):
         tasks = []
         if len(views):
             for view in views:
@@ -318,14 +322,14 @@ class BaseTestCase(unittest.TestCase):
             tasks.append(t_)
         return tasks
 
-    def create_views(self, server, design_doc_name, views, bucket = "default", timeout = None):
+    def create_views(self, server, design_doc_name, views, bucket="default", timeout=None):
         if len(views):
             for view in views:
                 self.cluster.create_view(server, design_doc_name, view, bucket, timeout)
         else:
             self.cluster.create_view(server, design_doc_name, None, bucket, timeout)
 
-    def make_default_views(self, prefix, count, is_dev_ddoc = False, different_map = False):
+    def make_default_views(self, prefix, count, is_dev_ddoc=False, different_map=False):
         ref_view = self.default_view
         ref_view.name = (prefix, ref_view.name)[prefix is None]
         if different_map:
@@ -339,27 +343,27 @@ class BaseTestCase(unittest.TestCase):
         else:
             return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
 
-    def _load_doc_data_all_buckets(self, data_op = "create", batch_size = 1000, gen_load = None):
+    def _load_doc_data_all_buckets(self, data_op="create", batch_size=1000, gen_load=None):
         # initialize the template for document generator
         age = range(5)
         first = ['james', 'sharon']
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
         if gen_load is None:
-            gen_load = DocumentGenerator('test_docs', template, age, first, start = 0, end = self.num_items)
+            gen_load = DocumentGenerator('test_docs', template, age, first, start=0, end=self.num_items)
 
         self.log.info("%s %s documents..." % (data_op, self.num_items))
-        self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size = batch_size)
+        self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size=batch_size)
         return gen_load
 
-    def verify_cluster_stats(self, servers = None, master = None, max_verify = None, timeout = None):
+    def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None):
         if servers is None:
             servers = self.servers
         if master is None:
             master = self.master
         if max_verify is None:
             max_verify = self.max_verify
-        self._wait_for_stats_all_buckets(servers, timeout = timeout)
-        self._verify_all_buckets(master, timeout = timeout, max_verify = max_verify)
+        self._wait_for_stats_all_buckets(servers, timeout=timeout)
+        self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify)
         self._verify_stats_all_buckets(servers)
         # verify that curr_items_tot corresponds to sum of curr_items from all nodes
         verified = True
@@ -435,8 +439,8 @@ class BaseTestCase(unittest.TestCase):
             if not memcached_restarted:
                 self.fail("memcached did not start %s:%s" % (server.ip, server.port))
 
-    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time = 120,
-                               bucket = "default", expected_rows = None, retry_time = 2):
+    def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120,
+                               bucket="default", expected_rows=None, retry_time=2):
         tasks = []
         if expected_rows is None:
             expected_rows = self.num_items
