@@ -479,6 +479,7 @@ class RebalanceTests(EVPerfClient):
         view_gen = ViewGen()
         views = self.param("views", None)
         if views is not None:
+            views = [int(v) for v in views]
             ddocs = view_gen.generate_ddocs(views)
         elif self.parami('ddocs', 1) == 1:
             ddocs = view_gen.generate_ddocs([1])
