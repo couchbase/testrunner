@@ -267,7 +267,7 @@ class RebalanceHelper():
                 else:
                     time.sleep(2)
             except StatsUnavailableException:
-                log.error("unable to retrieve stats for any node! Print taps ​​for all nodes:")
+                log.error("unable to retrieve stats for any node! Print taps for all nodes:")
                 break
         if not verified:
             rest = RestConnection(master)
