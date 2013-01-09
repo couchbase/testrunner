@@ -4,6 +4,7 @@ import testconstants
 import gc
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.document import DesignDocument, View
 from couchbase.documentgenerator import BlobGenerator
@@ -182,6 +183,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         time.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([warmup_node], self)
 
     def start_index(self):
         if self.ddocs:
