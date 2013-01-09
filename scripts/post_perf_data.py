@@ -62,6 +62,8 @@ def post_to_cbm(input_json):
     metrics = {}
     if "reb_dur" in input_json["info"]:
         metrics["Rebalance Time, s"] = int(input_json["info"]["reb_dur"])
+    elif testcase.startswith("reb"):
+        metrics["Rebalance Time, s"] = 0
     else:
         if "latency-get-90th-avg" in input_json["info"]:
             metrics["90th Get Latency, us"] = int(input_json["info"]["latency-get-90th-avg"])
