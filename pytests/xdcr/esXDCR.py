@@ -43,7 +43,7 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
             DocumentGenerator('es_xdcr_docs', template, ordering,
                                sites1, start=delete_start, end=self._num_items)
 
-
+        self.gen_blob = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
 
     def _async_modify_data(self):
         tasks = []
@@ -71,6 +71,25 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
     def test_plugin_connect(self):
         pass
+
+    def test_multi_bucket_doctypes_with_async_ops(self):
+
+        bucket_idx = 0
+        buckets = self._get_cluster_buckets(self.src_master)
+
+        tasks = []
+        for bucket in buckets:
+            if bucket_idx % 2 == 0:
+
+                t = self._async_load_bucket(bucket, self.src_master, self.gen_create, "create", 0)
+                tasks.append(t)
+            else:
+                t = self._async_load_bucket(bucket, self.src_master, self.gen_blob, "create", 0)
+                tasks.append(t)
+            bucket_idx = bucket_idx + 1
+
+        for task in tasks:
+            task.result()
 
     #overriding xdcr verify results method for specific es verification
     def verify_results(self, verify_src=False):

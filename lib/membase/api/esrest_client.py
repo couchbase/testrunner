@@ -42,7 +42,7 @@ class EsRestConnection(RestConnection):
 
             #vBucketServerMap
             bucketStats = BucketStats()
-            bucketStats.itemCount = stats['total']['docs']['count']
+            bucketStats.itemCount = stats['primaries']['docs']['count']
             bucket.stats = bucketStats
             buckets.append(bucket)
             bucket.master_id = "es@"+self.ip
