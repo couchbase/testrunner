@@ -489,16 +489,16 @@ class RebalanceTests(EVPerfClient):
             sys.exit('Only 1 or 8 ddocs supported.')
 
         # Load phase
-        if self.parami('load_phase', 1):
+        if self.parami('load_phase', 0):
             num_nodes = self.parami('num_nodes', PerfDefaults.num_nodes)
             self.load_phase(num_nodes)
 
         # Index phase
-        if self.parami('index_phase', 1):
+        if self.parami('index_phase', 0):
             self.index_phase(ddocs)
 
         # Access phase
-        if self.parami('access_phase', 1):
+        if self.parami('access_phase', 0):
             if self.param('rebalance', 'out') == 'out':
                 RebalanceHelper.rebalance_out(servers=self.input.servers,
                                               how_many=1, monitor=True)
