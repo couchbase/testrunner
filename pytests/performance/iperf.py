@@ -461,7 +461,7 @@ class RebalanceTests(EVPerfClient):
             rc.set_reb_cons_view(disable=True)
 
         # rebalance_moves_per_second setup
-        rmps = self.parami('rebalance_moves_per_second', 1)
+        rmps = self.parami('rebalance_moves_per_node', 1)
         cmd = 'ns_config:set(rebalance_moves_per_node, {0}).'.format(rmps)
         rc.diag_eval(cmd)
 
@@ -477,7 +477,10 @@ class RebalanceTests(EVPerfClient):
 
         # Customize number of design docs
         view_gen = ViewGen()
-        if self.parami('ddocs', 1) == 1:
+        views = self.param("views", None)
+        if views is not None:
+            ddocs = view_gen.generate_ddocs(views)
+        elif self.parami('ddocs', 1) == 1:
             ddocs = view_gen.generate_ddocs([1])
         elif self.parami('ddocs', 1) == 8:
             ddocs = view_gen.generate_ddocs([1, 1, 1, 1, 1, 1, 1, 1])
