@@ -101,83 +101,92 @@ class ObserveTests(BaseTestCase):
         return None
 
     def _create_multi_set_batch(self):
-     key_val = {}
-     keys = ["observe%s" % (i) for i in xrange(self.num_items)]
-     for key in keys:
-      key_val[key] = "multiset"
-     return key_val
+        key_val = {}
+        keys = ["observe%s" % (i) for i in xrange(self.num_items)]
+        for key in keys:
+            key_val[key] = "multiset"
+        return key_val
 
     def _run_observe(self):
-     tasks = []
-     query_set = "true"
-     persisted = 0
-     for bucket in self.buckets:
-         self.cluster.create_view(
-                     self.master, self.default_design_doc, self.default_view,
-                     bucket , self.wait_timeout * 2)
-         client = VBucketAwareMemcached(RestConnection(self.master), bucket)
-         self.max_time = timedelta(microseconds = 0)
-         if self.mutate_by == "multi_set":
-          key_val = self._create_multi_set_batch()
-          client.setMulti(0, 0, key_val)
+        tasks = []
+        query_set = "true"
+        persisted = 0
+        mutated = False
+        count = 0
+        for bucket in self.buckets:
+            self.cluster.create_view(self.master, self.default_design_doc,
+                                      self.default_view, bucket , self.wait_timeout * 2)
+            client = VBucketAwareMemcached(RestConnection(self.master), bucket)
+            self.max_time = timedelta(microseconds = 0)
+            if self.mutate_by == "multi_set":
+                key_val = self._create_multi_set_batch()
+                client.setMulti(0, 0, key_val)
+            keys = ["observe%s" % (i) for i in xrange(self.num_items)]
+            for key in keys:
+                mutated = False
+                while not mutated and count < 60:
+                    try:
+                        if self.mutate_by == "set":
+                            # client.memcached(key).set(key, 0, 0, "set")
+                            client.set(key, 0, 0, "setvalue")
+                        elif self.mutate_by == "append":
+                            client.memcached(key).append(key, "append")
+                        elif self.mutate_by == "prepend" :
+                            client.memcached(key).prepend(key, "prepend")
+                        elif self.mutate_by == "incr":
+                            client.memcached(key).incr(key, 1)
+                        elif self.mutate_by == "decr":
+                            client.memcached(key).decr(key)
+                        mutated = True
+                        t_start = datetime.now()
+                    except MemcachedError as error:
+                        if error.status == 134:
+                            loaded = False
+                            self.log.error("Memcached error 134, wait for 5 seconds and then try again")
+                            count += 1
+                            time.sleep(5)
+                while persisted == 0:
+                    opaque, rep_time, persist_time, persisted, cas = client.observe(key)
+                t_end = datetime.now()
+                self.log.info("##########key:-%s################" % (key))
+                self.log.info("Persisted:- %s" % (persisted))
+                self.log.info("Persist_Time:- %s" % (rep_time))
+                self.log.info("Time2:- %s" % (t_end - t_start))
+                if self.max_time <= (t_end - t_start):
+                    self.max_time = (t_end - t_start)
+                    self.log.info("Max Time taken for observe is :- %s" % self.max_time)
+                    self.log.info("Cas Value:- %s" % (cas))
+            query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
+            self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
+            self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, bucket))
+            # check whether observe has to run with delete and delete parallel with observe or not
+            if len (self.observe_with) > 0 :
+                if self.observe_with == "delete" :
+                    self.log.info("Deleting 0- %s number of items" % (self.num_items / 2))
+                    self._load_doc_data_all_buckets('delete', 0, self.num_items / 2)
+                    query_set = "true"
+                elif self.observe_with == "delete_parallel":
+                    self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items / 2))
+                    tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items / 2)
+                    query_set = "false"
+                for key in keys:
+                    opaque, rep_time, persist_time, persisted, cas = client.memcached(key).observe(key)
+                    self.log.info("##########key:-%s################" % (key))
+                    self.log.info("Persisted:- %s" % (persisted))
+                if self.observe_with == "delete_parallel":
+                    for task in tasks:
+                        task.result()
+                # verify the persistence of data by querying view
+                stale = self.input.param("stale", "ok")
+                if stale == "ok" :
+                    query = {"stale" : "ok", "full_set" : query_set, "connection_timeout" : 60000}
+                    self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
 
-         keys = ["observe%s" % (i) for i in xrange(self.num_items)]
-         for key in keys:
-             if self.mutate_by == "set":
-              # client.memcached(key).set(key, 0, 0, "set")
-              client.set(key, 0, 0, "setvalue")
-             elif self.mutate_by == "append":
-              client.memcached(key).append(key, "append")
-             elif self.mutate_by == "prepend" :
-              client.memcached(key).prepend(key, "prepend")
-             elif self.mutate_by == "incr":
-              client.memcached(key).incr(key, 1)
-             elif self.mutate_by == "decr":
-              client.memcached(key).decr(key)
-             t_start = datetime.now()
-             while persisted == 0:
-                 opaque, rep_time, persist_time, persisted, cas = client.observe(key)
-             t_end = datetime.now()
-             self.log.info("##########key:-%s################" % (key))
-             self.log.info("Persisted:- %s" % (persisted))
-             self.log.info("Persist_Time:- %s" % (rep_time))
-             self.log.info("Time2:- %s" % (t_end - t_start))
-             if self.max_time <= (t_end - t_start):
-              self.max_time = (t_end - t_start)
-              self.log.info("Max Time taken for observe is :- %s" % self.max_time)
-             self.log.info("Cas Value:- %s" % (cas))
+                query = {"stale" : "false", "full_set" : query_set, "connection_timeout" : 60000}
+                self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
+                self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, self.default_bucket_name))
 
-         query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
-         self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
-         self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, bucket))
-         # check whether observe has to run with delete and delete parallel with observe or not
-         if len (self.observe_with) > 0 :
-             if self.observe_with == "delete" :
-                 self.log.info("Deleting 0- %s number of items" % (self.num_items / 2))
-                 self._load_doc_data_all_buckets('delete', 0, self.num_items / 2)
-                 query_set = "true"
-             elif self.observe_with == "delete_parallel":
-                 self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items / 2))
-                 tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items / 2)
-                 query_set = "false"
-             for key in keys:
-                 opaque, rep_time, persist_time, persisted, cas = client.memcached(key).observe(key)
-                 self.log.info("##########key:-%s################" % (key))
-                 self.log.info("Persisted:- %s" % (persisted))
-             if self.observe_with == "delete_parallel":
-              for task in tasks:
-               task.result()
-             # verify the persistence of data by querying view
-             stale = self.input.param("stale", "ok")
-             if stale == "ok" :
-                 query = {"stale" : "ok", "full_set" : query_set, "connection_timeout" : 60000}
-                 self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
-
-             query = {"stale" : "false", "full_set" : query_set, "connection_timeout" : 60000}
-             self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
-             self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, self.default_bucket_name))
-
-    """test_observe_basic_data_load_delete will test observer basic scenario
+        """test_observe_basic_data_load_delete will test observer basic scenario
        i) Loading data and then run observe
        ii) deleting data then run observe
        iii) deleting data parallel with observe in parallel
@@ -186,55 +195,51 @@ class ObserveTests(BaseTestCase):
         self._load_doc_data_all_buckets('create', 0, self.num_items)
         # Persist all the loaded data item
         for bucket in self.buckets:
-         RebalanceHelper.wait_for_persistence(self.master, bucket)
-        rebalance = self.input.param("rebalance", "no")
-        # client = VBucketAwareMemcached(RestConnection(self.master), self.buckets[0])
-        # if self.mutate_by == "multi_set":
-          # key_val = self._create_multi_set_batch()
-          # client.setMulti(0, 0, key_val)
-        if rebalance == "in":
-         self.servs_in = [self.servers[len(self.servers) - 1]]
-         rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in , [])
-         self._run_observe()
-         rebalance.result()
-        elif rebalance == "out":
-         self.servs_out = [self.servers[self.nodes_init - 1]]
-         rebalance = self.cluster.async_rebalance(self.servers[:1], [] , self.servs_out)
-         self._run_observe()
-         rebalance.result()
-        else:
-         self._run_observe()
+            RebalanceHelper.wait_for_persistence(self.master, bucket)
+            rebalance = self.input.param("rebalance", "no")
+            if rebalance == "in":
+                self.servs_in = [self.servers[len(self.servers) - 1]]
+                rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in , [])
+                self._run_observe()
+                rebalance.result()
+            elif rebalance == "out":
+                self.servs_out = [self.servers[self.nodes_init - 1]]
+                rebalance = self.cluster.async_rebalance(self.servers[:1], [] , self.servs_out)
+                self._run_observe()
+                rebalance.result()
+            else:
+                self._run_observe()
 
 
     def test_observe_with_replication(self):
         self._load_doc_data_all_buckets('create', 0, self.num_items)
         if self.observe_with == "delete" :
-         self.log.info("Deleting 0- %s number of items" % (self.num_items / 2))
-         self._load_doc_data_all_buckets('delete', 0, self.num_items / 2)
-         query_set = "true"
+            self.log.info("Deleting 0- %s number of items" % (self.num_items / 2))
+            self._load_doc_data_all_buckets('delete', 0, self.num_items / 2)
+            query_set = "true"
         elif self.observe_with == "delete_parallel":
-          self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items / 2))
-          tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items / 2)
-          query_set = "false"
+            self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items / 2))
+            tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items / 2)
+            query_set = "false"
         keys = ["observe%s" % (i) for i in xrange(self.num_items)]
         self.key_count = 0
         self.max_time = 0
         self.client = VBucketAwareMemcached(RestConnection(self.master), self.default_bucket_name)
         for key in keys:
-         self.key_count = self.key_count + 1
-         self.block_for_replication(key, 0, 1)
+            self.key_count = self.key_count + 1
+            self.block_for_replication(key, 0, 1)
         if self.observe_with == "delete_parallel":
-         for task in tasks:
-          task.result()
+            for task in tasks:
+                task.result()
 
     def test_observe_with_warmup(self):
-     self._load_doc_data_all_buckets('create', 0, self.num_items)
-     # Persist all the loaded data item
-     self.log.info("Nodes in cluster: %s" % self.servers[:self.nodes_init])
-     for bucket in self.buckets:
-         RebalanceHelper.wait_for_persistence(self.master, bucket)
-         self._stats_befor_warmup(bucket.name)
-         self._restart_memcache(bucket.name)
-     # for bucket in self.buckets:
-         ClusterOperationHelper._wait_warmup_completed(self, self.servers[:self.nodes_init], bucket.name)
-         self._run_observe()
+        self._load_doc_data_all_buckets('create', 0, self.num_items)
+        # Persist all the loaded data item
+        self.log.info("Nodes in cluster: %s" % self.servers[:self.nodes_init])
+        for bucket in self.buckets:
+            RebalanceHelper.wait_for_persistence(self.master, bucket)
+            self._stats_befor_warmup(bucket.name)
+            self._restart_memcache(bucket.name)
+            # for bucket in self.buckets:
+            ClusterOperationHelper._wait_warmup_completed(self, self.servers[:self.nodes_init], bucket.name)
+            self._run_observe()
