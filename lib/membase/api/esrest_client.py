@@ -1,24 +1,35 @@
 from membase.api.rest_client import RestConnection, Bucket, BucketStats, OtpNode, Node
+from remote.remote_util import RemoteMachineShellConnection
+from TestInput import TestInputSingleton
 import pyes
+import logger
+import time
+
+log = logger.Logger.get_logger()
 
 class EsRestConnection(RestConnection):
     def __init__(self, serverInfo, proto = "http"):
         #serverInfo can be a json object
+        #only connect pyes to master es node
+        #in the case that other nodes are taken down
+        #because http requests will fail
+        # TODO: dynamic master node detection
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
-            self.port = serverInfo["port"]
+            self.port = 9091 #serverInfo["port"]
         else:
             self.ip = serverInfo.ip
             self.username = serverInfo.rest_username
             self.password = serverInfo.rest_password
-            self.port = serverInfo.port
+            self.port = 9091 # serverInfo.port
 
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = self.baseUrl
         http_port = str(int(self.port) + 109)
         self.conn = pyes.ES((proto,self.ip,http_port))
+        self.test_params = TestInputSingleton.input
 
     def get_index_stats(self):
         return pyes.index_stats()
@@ -98,16 +109,14 @@ class EsRestConnection(RestConnection):
             otp_node.replication = None
             otp_nodes.append(node)
 
-        # for now only return master node
-        # to prevent automation from trying
-        # to rebalance
-        return [otp_nodes[0]]
+        return otp_nodes
 
 
     def get_nodes_self(self, timeout=120):
 
         for node in self.get_nodes():
-            if node.port == int(self.port):
+            # force to return master node
+            if node.port == 9091:
                 return node
 
         return
@@ -122,11 +131,29 @@ class EsRestConnection(RestConnection):
 
         for node_key in nodes:
             nodeInfo = nodes[node_key]
+            ex_params = self.get_node_params(nodeInfo)
+            nodeInfo.update({'ssh_password' : ex_params.ssh_password,
+                             'ssh_username' : ex_params.ssh_username})
+            nodeInfo['key'] = node_key
             node = ESNode(nodeInfo)
             node.status = status
             es_nodes.append(node)
 
         return es_nodes
+
+    def get_node_params(self, info):
+        ip, port = parse_addr(info["couchbase_address"])
+        clusters = self.test_params.clusters
+        master_node = None
+        for _id in clusters:
+            for node in clusters[_id]:
+                if node.ip == ip and int(node.port) == port:
+                    return node
+                if int(node.port) == 9091:
+                    master_node = node
+
+        # use params from master node
+        return master_node
 
     def all_docs(self, keys_only = False):
 
@@ -154,8 +181,50 @@ class EsRestConnection(RestConnection):
     def get_vbuckets(self, *args, **kwargs):
         return ()
 
-    def add_node(self, *args, **kwargs):
-        #TODO: add es nodes
+    def add_node(self, user='', password='', remoteIp='', port='8091'):
+        new_node = self.get_nodes_self()
+        new_node.ip = remoteIp
+        new_node.port = port
+
+        self.start_es_node(new_node)
+
+    def start_es_node(self, node):
+
+        rmc = RemoteMachineShellConnection(node)
+
+        # define es exec path if not in $PATH environment
+        es_bin = 'elasticsearch'
+        if 'es_bin' in TestInputSingleton.input.test_params:
+            es_bin = TestInputSingleton.input.test_params['es_bin']
+
+
+        # connect to remote node
+        log.info('Starting node: %s:%s' % (node.ip, node.port))
+        shell=rmc._ssh_client.invoke_shell()
+
+        # start es service
+        shell.send(es_bin+' \n')
+        while not shell.recv_ready():
+            time.sleep(2)
+
+        rc = shell.recv(1024)
+        log.info(rc)
+
+        # wait for new node
+        tries = 0
+        while tries < 5:
+            for cluster_node in self.get_nodes():
+                if cluster_node.ip == node.ip and cluster_node.port == int(node.port):
+                    return
+                else:
+                    log.info('Waiting for new node to appear')
+                    time.sleep(5)
+                    tries = tries + 1
+
+        raise Exception("failed to add node to cluster: %s:%s" % (node.ip,node.port))
+
+    def log_client_error(self, post):
+        # cannot post req errors to 9091
         pass
 
     def vbucket_map_ready(self, *args, **kwargs):
@@ -183,9 +252,81 @@ class EsRestConnection(RestConnection):
         pass
 
     def rebalance(self, otpNodes, ejectedNodes):
+        # shutdown ejected nodes
+        # wait for shards to be rebalanced
+
+        nodesToShutdown = \
+            [node for node in self.get_nodes() if node.id in ejectedNodes]
+
+        for node in nodesToShutdown:
+            self.eject_node(node)
+
+    def eject_node(self, node):
+        api = "http://%s:%s/_cluster/nodes/%s/_shutdown" % (node.ip, node.ht_port, node.key)
+        status, content, header = self._http_request(api, 'POST', '')
+        if status:
+            log.info('ejected node: '+node.id)
+        else:
+            raise Exception("failed to eject node: "+node.id)
+
+    def log_client_error(self, post):
+        # cannot post req errors to 9091
         pass
 
+    def vbucket_map_ready(self, *args, **kwargs):
+        return True
+
+    def init_cluster(self, *args, **kwargs):
+        pass
+
+    def init_cluster_memoryQuota(self, *args, **kwargs):
+        pass
+
+    def set_reb_cons_view(self, *args, **kwargs):
+        pass
+
+    def set_reb_index_waiting(self, *args, **kwargs):
+        pass
+
+    def set_rebalance_index_pausing(self, *args, **kwargs):
+        pass
+
+    def set_max_parallel_indexers(self, *args, **kwargs):
+        pass
+
+    def set_max_parallel_replica_indexers(self, *args, **kwargs):
+        pass
+
+    def rebalance(self, otpNodes, ejectedNodes):
+        # shutdown ejected nodes
+        # wait for shards to be rebalanced
+
+        nodesToShutdown = \
+            [node for node in self.get_nodes() if node.id in ejectedNodes]
+
+        for node in nodesToShutdown:
+            self.eject_node(node)
+
+    def eject_node(self, node):
+        api = "http://%s:%s/_cluster/nodes/%s/_shutdown" % (node.ip, node.ht_port, node.key)
+        status, content, header = self._http_request(api, 'POST', '')
+        if status:
+            log.info('ejected node: '+node.id)
+        else:
+            log.error('rebalance operation failed: {0}'.format(content))
+
+
+    def monitorRebalance(self, stop_if_loop=False):
+        # since removed nodes are shutdown use master node for monitoring
+        return self.get_nodes_self()
+
+    def get_pools_info(self):
+        return {'pools' : []}
+
     def add_remote_cluster(self, *args, **kwargs):
+
+        # detect 2:1 mapping and do spectial cluster add
+        # otherwise run super method
         pass
 
     def remove_all_remote_clusters(self):
@@ -203,7 +344,15 @@ class ESNode(Node):
     def __init__(self, info):
         super(ESNode, self).__init__()
         self.hostname = info['hostname']
+        self.key = str(info['key'])
         self.ip, self.port = parse_addr(info["couchbase_address"])
         self.tr_ip, self.tr_port = parse_addr(info["transport_address"])
         self.ht_ip, self.ht_port = parse_addr(info["http_address"])
-        self.id = "es@"+self.ip
+        name = str(info['name']).replace(' ','')
+        self.id = "es_%s@%s" % (name, self.ip)
+
+        self.ssh_username = info['ssh_username']
+        self.ssh_password = info['ssh_password']
+        self.ssh_key = ''
+
+
