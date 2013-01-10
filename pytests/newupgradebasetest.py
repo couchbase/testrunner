@@ -2,6 +2,7 @@ import re
 import time
 import testconstants
 import gc
+import sys
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
