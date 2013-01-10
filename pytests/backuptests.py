@@ -116,7 +116,8 @@ class BackupRestoreTests(unittest.TestCase):
 
         if not single_node:
             rest = RestConnection(self.master)
-            self.assertTrue(RestHelper(rest).wait_for_replication(180), msg="replication did not complete")
+            self.assertTrue(RebalanceHelper.wait_for_replication(rest.get_nodes(), timeout=180),
+                            msg="replication did not complete")
 
         self.log.info("Sleep {0} seconds after data load".format(delay_after_data_load))
         ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_queue_size', 0)

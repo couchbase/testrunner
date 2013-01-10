@@ -107,9 +107,8 @@ class RebalanceBaseTest(unittest.TestCase):
         for bucket in buckets:
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 30, bucket.name)
         if len(nodes) / (1.0 + replica) >= 1:
-            final_replication_state = RestHelper(rest).wait_for_replication(300)
-            msg = "replication state after waiting for up to 5 minutes : {0}"
-            test.log.info(msg.format(final_replication_state))
+            test.assertTrue(RebalanceHelper.wait_for_replication(rest.get_nodes(), timeout=300),
+                            msg="replication did not complete after 5 minutes")
             #run expiry_pager on all nodes before doing the replication verification
             for bucket in buckets:
                 ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 30, bucket.name)
@@ -400,10 +399,6 @@ class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
     def do_kv_and_replica_verification(master, task_manager, bucket_data, replica, self, failed_over=False,):
         rest = RestConnection(master)
-
-        final_replication_state = RestHelper(rest).wait_for_replication(300)
-        msg = "replication state after waiting for up to 5 minutes : {0}"
-        self.log.info(msg.format(final_replication_state))
 
         RebalanceBaseTest.replication_verification(master, bucket_data, replica, self, failed_over=failed_over)
 

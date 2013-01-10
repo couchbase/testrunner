@@ -1,5 +1,6 @@
 from random import shuffle
 import logger
+from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -35,7 +36,7 @@ class FailoverHelper(object):
             self.log.info("will fail over node : {0}".format(f.id))
 
         if len(nodes) / (1 + howmany) >= 1:
-            self.test.assertTrue(RestHelper(rest).wait_for_replication(900),
+            self.test.assertTrue(RebalanceHelper.wait_for_replication(rest.get_nodes(), timeout=900),
                             msg="replication did not finish after 15 minutes")
             for f in failed:
                 self._stop_server(f)

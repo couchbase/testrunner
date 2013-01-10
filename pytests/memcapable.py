@@ -72,7 +72,7 @@ class MemcapableTestBase(object):
                 else:
                     self.test.fail('FAILED.  Value is set to {0};  and when run get {1}'.format(v, get_v))
 
-    # Instead of checking the value before incrementing, 
+    # Instead of checking the value before incrementing,
     # you can simply ADD it instead before incrementing each time.
     # If it's already there, your ADD is ignored, and if it's not there, it's set.
     def incr_test(self, key, exp, flags, value, incr_amt, decr_amt, incr_time):
@@ -617,8 +617,8 @@ class GetrTests(unittest.TestCase):
             vprefix = "mutated"
             self._load_items(item_count=item_count, expiration=expiration, prefix=prefix, vprefix=vprefix)
 
-        self.assertTrue(RestHelper(self.rest).wait_for_replication(180),
-                        msg="replication did not complete")
+        self.assertTrue(RebalanceHelper.wait_for_replication(self.rest.get_nodes(), timeout=180),
+                            msg="replication did not complete")
 
         if eject:
             self._eject_items(item_count=item_count, prefix=prefix)

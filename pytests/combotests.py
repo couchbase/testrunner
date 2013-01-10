@@ -113,7 +113,7 @@ class ComboTests(unittest.TestCase):
         for thread in threads:
             thread.terminate_in_minutes = 24 * 60
             thread.start()
-        while time.time() < ( start_time + 60 * timeout):
+        while time.time() < (start_time + 60 * timeout):
             #rebalance out step nodes
             #let's add some items ?
             nodes = rest.node_statuses()
@@ -128,7 +128,7 @@ class ComboTests(unittest.TestCase):
             else:
                 self.log.info("all nodes already joined the clustr")
             time.sleep(240)
-            RestHelper(rest).wait_for_replication(600)
+            RebalanceHelper.wait_for_replication(rest.get_nodes())
             #dont rebalance out if there are not too many nodes
             if len(nodes) >= (3.0 / 4.0 * len(self._servers)):
                 nodes = rest.node_statuses()

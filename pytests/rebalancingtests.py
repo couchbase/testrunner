@@ -64,9 +64,8 @@ class RebalanceBaseTest(unittest.TestCase):
         test.log.info("expect {0} / {1} replication ? {2}".format(len(nodes),
             (1.0 + replica), len(nodes) / (1.0 + replica)))
         if len(nodes) / (1.0 + replica) >= 1:
-            final_replication_state = RestHelper(rest).wait_for_replication(300)
-            msg = "replication state after waiting for up to 5 minutes : {0}"
-            test.log.info(msg.format(final_replication_state))
+            test.assertTrue(RebalanceHelper.wait_for_replication(rest.get_nodes(), timeout=300),
+                            msg="replication did not complete after 5 minutes")
             #run expiry_pager on all nodes before doing the replication verification
             for bucket in buckets:
                 ClusterOperationHelper.set_expiry_pager_sleep_time(master, bucket.name)

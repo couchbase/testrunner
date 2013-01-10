@@ -222,7 +222,7 @@ class ReplicationTests(unittest.TestCase):
         self._verify_minimum_requirement(number_of_replicas)
         self._cleanup_cluster()
         self.log.info('cluster is setup')
-        bucket_name =\
+        bucket_name = \
         'replica-{0}-ram-{1}-{2}'.format(number_of_replicas,
                                          fill_ram_percentage,
                                          uuid.uuid4())
@@ -231,7 +231,7 @@ class ReplicationTests(unittest.TestCase):
         distribution = RebalanceBaseTest.get_distribution(fill_ram_percentage)
         self.add_nodes_and_rebalance()
         self.log.info('loading more data into the bucket')
-        inserted_keys, rejected_keys =\
+        inserted_keys, rejected_keys = \
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
                                                               name=self.bucket_name,
                                                               ram_load_ratio=fill_ram_percentage,
@@ -245,8 +245,8 @@ class ReplicationTests(unittest.TestCase):
         self.log.info('verifying keys now...._20')
         self._verify_data('20')
         rest = RestConnection(self.servers[0])
-        self.assertTrue(RestHelper(rest).wait_for_replication(180),
-                        msg="replication did not complete")
+        self.assertTrue(RebalanceHelper.wait_for_replication(rest.get_nodes(), timeout=180),
+                            msg="replication did not complete after 3 minutes")
         replicated = RebalanceHelper.wait_till_total_numbers_match(master, self.bucket_name, 300)
         self.assertTrue(replicated, msg="replication was completed but sum(curr_items) dont match the curr_items_total")
         self.log.info('updating all keys by appending _30 to each value')

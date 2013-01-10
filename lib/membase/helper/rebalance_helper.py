@@ -1,6 +1,7 @@
 from random import shuffle
 import time
 import logger
+from couchbase.cluster import Cluster
 from membase.api.exception import StatsUnavailableException, \
     ServerAlreadyJoinedException, RebalanceFailedException, \
     FailoverFailedException, InvalidArgumentException, ServerSelfJoinException, \
@@ -74,19 +75,29 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
-    def wait_for_replication(servers, cluster_helper, timeout=600):
+    def wait_for_replication(servers, cluster_helper=None, timeout=600):
+        if cluster_helper is None:
+            cluster = Cluster()
+        else:
+            cluster = cluster_helper
         tasks = []
         rest = RestConnection(servers[0])
         buckets = rest.get_buckets()
         for server in servers:
             for bucket in buckets:
                 for server_repl in list(set(servers) - set([server])):
-                    tasks.append(cluster_helper.async_wait_for_stats([server], bucket, 'tap',
+                    tasks.append(cluster.async_wait_for_stats([server], bucket, 'tap',
                                    'eq_tapq:replication_ns_1@' + server_repl.ip + ':idle', '==', 'true'))
-                    tasks.append(cluster_helper.async_wait_for_stats([server], bucket, 'tap',
+                    tasks.append(cluster.async_wait_for_stats([server], bucket, 'tap',
                                    'eq_tapq:replication_ns_1@' + server_repl.ip + ':backfill_completed', '==', 'true'))
-        for task in tasks:
-            task.result(timeout)
+        try:
+            for task in tasks:
+                task.result(timeout)
+        finally:
+            if cluster_helper is None:
+                # stop all newly created task manager threads
+                cluster.shutdown()
+            return True
 
     @staticmethod
     #bucket is a json object that contains name,port,password
@@ -129,7 +140,7 @@ class RebalanceHelper():
                         time.sleep(2)
             except:
                 log.info("unable to collect stats from server {0}".format(master))
-                verified = True #TODO: throw ex and assume caller catches
+                verified = True  #TODO: throw ex and assume caller catches
                 break
 
         return verified
