@@ -738,7 +738,13 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 success &= self.log_command_output(output, error, track_words)
             if startserver:
                 output, error = self.execute_command('/etc/init.d/{0}-server start'.format(server_type))
-                success &= self.log_command_output(output, error, track_words)
+
+                if build.product_version.startswith("1.") and build.deliverable_type == "deb":
+                    # skip error '* Failed to start couchbase-server' for 1.* builds(MB-7288)
+                    log.warn("Error '* Failed to start couchbase-server' for 1.* builds will be skipped")
+                    self.log_command_output(output, error, track_words)
+                else:
+                    success &= self.log_command_output(output, error, track_words)
 
         return success
 
@@ -924,7 +930,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 build_name = build_name.rstrip() + ".exe"
                 log.info('Check if {0} is in tmp directory'.format(build_name))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
-                if not exist: # if not exist in tmp dir, start to download that verion build
+                if not exist:  # if not exist in tmp dir, start to download that version build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
                     downloaded = self.download_binary_in_win(build.url, product, short_version)
                     if downloaded:
@@ -994,7 +1000,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             build_name = build_name.rstrip() + ".exe"
             log.info('Check if {0} is in tmp directory'.format(build_name))
             exist = self.file_exists("/cygdrive/c/tmp/", build_name)
-            if not exist: # if not exist in tmp dir, start to download that verion build
+            if not exist:  # if not exist in tmp dir, start to download that version build
                 build = query.find_build(builds, name, ex_type, info.architecture_type, rm_version)
                 downloaded = self.download_binary_in_win(build.url, product, rm_version)
                 if downloaded:
@@ -1049,7 +1055,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 build_name = build_name.rstrip() + ".exe"
                 log.info('Check if {0} is in tmp directory'.format(build_name))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
-                if not exist: # if not exist in tmp dir, start to download that verion build
+                if not exist:  # if not exist in tmp dir, start to download that version build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
                     downloaded = self.download_binary_in_win(build.url, product, short_version)
                     if downloaded:
