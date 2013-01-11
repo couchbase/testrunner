@@ -414,6 +414,8 @@ class RebalanceTests(EVPerfClient):
         """
         if not self.parami('access_phase', 0):
             return
+        else:
+            self.log.info("started rebalance thread")
 
         self.shutdown_event = Event()
         time.sleep(3600)
@@ -428,6 +430,7 @@ class RebalanceTests(EVPerfClient):
             sync=True)
 
         time.sleep(3600)
+        self.log.info("trigerring shutdown event")
         self.shutdown_event.set()
 
     def test_alk_rebalance(self):
