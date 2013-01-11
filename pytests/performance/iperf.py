@@ -190,9 +190,7 @@ class PerfWrapper(object):
     def rebalance(test):
         @functools.wraps(test)
         def wrapper(self, *args, **kargs):
-            """Trigger cluster rebalance (in and out) when ~half of queries or
-            create operations reached the goal.
-            """
+            """Start parallel rebalancer thread"""
             t = threading.Thread(target=self.rebalance)
             t.daemon = True
             if 'XRebalanceTests' in self.id():
