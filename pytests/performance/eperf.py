@@ -551,6 +551,16 @@ class EPerfMaster(perf.PerfBase):
             else:
                 prefix = ''
 
+            # Optionally start rebalancer thread
+            if self.is_leader and hasattr(self, "rebalance"):
+                t = threading.Thread(target=self.rebalance, name="rebalancer")
+                t.daemon = True
+                if hasattr(self, "get_region"):
+                    if self.get_region() == 'east':
+                        t.start()  # rebalance only one cluster
+                else:
+                    t.start()
+
             self.loop(num_ops=0,
                       num_items=items,
                       max_items=items + max_creates + 1,
