@@ -6,12 +6,11 @@ import datetime
 from celery.task.control import revoke
 import testcfg as cfg
 from cache import ObjCacher, CacheHelper
-from cache import ObjCacher, CacheHelper
+from seriesly import Seriesly
 from rabbit_helper import PersistedMQ
 from app.workload_manager import Workload, sysTestRunner
 from app.query import QueryWorkload
 from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance
-
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
@@ -96,12 +95,13 @@ def launchSystest(testMsg):
     phases = testMsg['phases']
     keys = phases.keys()
     keys.sort()
+    seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
 
     for phase_key in keys:
 
         # run phase
         phase = testMsg['phases'][phase_key]
-
+        seriesly.event.append({str(phase_key): {str(phase['name']): str(time.time()), 'run_id': name+ '-' + desc}})
         phase_status = runPhase(name, phase)
 
         if phase_status == False:
