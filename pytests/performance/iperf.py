@@ -191,7 +191,7 @@ class PerfWrapper(object):
         @functools.wraps(test)
         def wrapper(self, *args, **kargs):
             """Start parallel rebalancer thread"""
-            t = threading.Thread(target=self.rebalance)
+            t = threading.Thread(target=self.rebalance, name="rebalancer")
             t.daemon = True
             if 'XRebalanceTests' in self.id():
                 if XPerfTests.get_region() == 'east':
