@@ -223,3 +223,12 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.ddocs.append(ddoc)
                 for view in views:
                     self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket)
+
+    def delete_data(self, servers, paths_to_delete):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            for path in paths_to_delete:
+                output, error = shell.execute_command("rm -rf {0}".format(path))
+                shell.log_command_output(output, error)
+                #shell._ssh_client.open_sftp().rmdir(path)
+            shell.disconnect()

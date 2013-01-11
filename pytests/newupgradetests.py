@@ -151,10 +151,15 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         num_nodes_with_not_default = self.input.param('num_nodes_with_not_default', 1)
         data_path = self.input.param('data_path', '/tmp/data').replace('|', "/")
         index_path = self.input.param('index_path', data_path).replace('|', "/")
+        num_nodes_remove_data = self.input.param('num_nodes_remove_data', 0)
         servers_with_not_default = self.servers[:num_nodes_with_not_default]
         for server in servers_with_not_default:
             server.data_path = data_path
             server.index_path = index_path
+            shell = RemoteMachineShellConnection(server)
+            for path in set([data_path, index_path]):
+                shell.create_directory(path)
+            shell.disconnect()
         self._install(self.servers[:self.nodes_init])
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
         self.operations(self.servers[:self.nodes_init])
@@ -167,6 +172,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 remote.stop_server()
                 time.sleep(self.sleep_time)
                 remote.disconnect()
+            #remove data for nodes with non default data paths
+            tmp = min(num_nodes_with_not_default, num_nodes_remove_data)
+            self.delete_data(self.servers[:tmp], [data_path, index_path])
+            #remove data for nodes with default data paths
+            self.delete_data(self.servers[tmp: max(tmp, num_nodes_remove_data)], ["/opt/couchbase/var/lib/couchbase/data"])
+
             upgrade_threads = []
             for server in self.servers[:self.nodes_init]:
                 upgrade_thread = Thread(target=self._upgrade,
@@ -183,13 +194,19 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 node = rest.get_nodes_self()
                 self.assertTrue(node.storage[0].path, data_path)
                 self.assertTrue(node.storage[0].index_path, index_path)
+        if num_nodes_remove_data:
+            for bucket in self.buckets:
+                if self.rest_helper.bucket_exists(bucket):
+                    raise Exception("bucket: %s still exists" % bucket.name)
+            self.buckets = []
+
         if self.input.param('extra_verification', False):
             self.bucket_size = 100
             self._create_sasl_buckets(self.master, 1)
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
                 self.create_ddocs_and_views()
-            self.verification(self.servers[:self.nodes_init])
+        self.verification(self.servers[:self.nodes_init])
 
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.nodes_init])
