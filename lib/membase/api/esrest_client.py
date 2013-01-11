@@ -27,8 +27,9 @@ class EsRestConnection(RestConnection):
 
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = self.baseUrl
-        http_port = str(int(self.port) + 109)
-        self.conn = pyes.ES((proto,self.ip,http_port))
+        self.http_port = str(int(self.port) + 109)
+        self.proto = proto
+        self.conn = pyes.ES((self.proto,self.ip,self.http_port))
         self.test_params = TestInputSingleton.input
 
     def get_index_stats(self):
@@ -74,6 +75,10 @@ class EsRestConnection(RestConnection):
         return self.conn.indices.exists_index(name)
 
     def create_index(self, name):
+
+        if self.conn.indices.exists_index(name):
+            self.delete_index(name)
+
         self.conn.indices.create_index(name)
         return self.conn.indices.exists_index(name)
 
@@ -155,10 +160,22 @@ class EsRestConnection(RestConnection):
         # use params from master node
         return master_node
 
-    def all_docs(self, keys_only = False):
+    def search_term(self, key, indices=["default"]):
+        result = None
+        params = {"term":{"_id":key}}
+        query = pyes.Search(params)
+        row = self.conn.search(query, indices = indices)
+        if row.total > 0:
+           result = row[0]
+        return result
+
+    def term_exists(self, key, indices=["default"]):
+        return self.search_term(key, indices = indices) is not None
+
+    def all_docs(self, keys_only = False, indices=["default"],size=10000):
 
         query = pyes.Search({'match_all' : {}})
-        rows = self.conn.search(query)
+        rows = self.conn.search(query, indices=indices, size=size)
         docs = []
 
         for row in rows:
@@ -212,7 +229,7 @@ class EsRestConnection(RestConnection):
 
         # wait for new node
         tries = 0
-        while tries < 5:
+        while tries < 10:
             for cluster_node in self.get_nodes():
                 if cluster_node.ip == node.ip and cluster_node.port == int(node.port):
                     return
@@ -343,16 +360,18 @@ def parse_addr(addr):
 class ESNode(Node):
     def __init__(self, info):
         super(ESNode, self).__init__()
-        self.hostname = info['hostname']
         self.key = str(info['key'])
         self.ip, self.port = parse_addr(info["couchbase_address"])
         self.tr_ip, self.tr_port = parse_addr(info["transport_address"])
-        self.ht_ip, self.ht_port = parse_addr(info["http_address"])
-        name = str(info['name']).replace(' ','')
+
+        if 'http_address' in info:
+            self.ht_ip, self.ht_port = parse_addr(info["http_address"])
+
+        # truncate after space, or comma
+        name = str(info['name'][:info['name'].find(' ')])
+        name = name[:name.find(',')]
         self.id = "es_%s@%s" % (name, self.ip)
 
         self.ssh_username = info['ssh_username']
         self.ssh_password = info['ssh_password']
         self.ssh_key = ''
-
-

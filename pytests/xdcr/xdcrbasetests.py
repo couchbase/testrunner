@@ -635,6 +635,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.fail("Mismatches on Meta Information on xdcr-replicated items!")
 
     def verify_results(self, verify_src=False):
+
         # Checking replication at destination clusters
         dest_key_index = 1
         for key in self.ord_keys[1:]:
@@ -642,9 +643,9 @@ class XDCRBaseTest(unittest.TestCase):
                 break
             dest_key = self.ord_keys[dest_key_index]
             self.dest_nodes = self._clusters_dic[dest_key]
-
             self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
             dest_key_index += 1
+
 
     def wait_warmup_completed(self, warmupnodes, bucket_names=["default"]):
         if isinstance(bucket_names, str):

@@ -1,5 +1,5 @@
 from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.data_helper import VBucketAwareMemcached
 from mc_bin_client import MemcachedError
 import time
 import json
@@ -12,12 +12,22 @@ class ESReplicationBaseTest(object):
 
     xd_ref = None
 
-    def setup_xd_ref(self, xd_ref):
-        self.xd_ref = self
+    def setup_es_params(self, xd_ref):
 
-    def verify_es_results(self, verify_src = False, verification_count = 1000):
+        self.xd_ref = xd_ref
+        self._es_in = xd_ref._input.param("es_in", False)
+        self._cb_in = xd_ref._input.param("cb_in", False)
+        self._es_out = xd_ref._input.param("es_out", False)
+        self._cb_out = xd_ref._input.param("cb_out", False)
+        self._es_swap = xd_ref._input.param("es_swap", False)
+        self._cb_swap = xd_ref._input.param("cb_swap", False)
+        self._cb_failover = xd_ref._input.param("cb_failover", False)
+
+
+    def verify_es_results(self, verify_src = False, verification_count = 10000):
 
         xd_ref = self.xd_ref
+        rest = RestConnection(self.src_nodes[0])
 
         # Checking replication at destination clusters
         dest_key_index = 1
@@ -27,22 +37,25 @@ class ESReplicationBaseTest(object):
             dest_key = xd_ref.ord_keys[dest_key_index]
             dest_nodes = xd_ref._clusters_dic[dest_key]
 
-            self.verify_es_stats(xd_ref.src_nodes,
+            src_nodes = rest.get_nodes()
+            self.verify_es_stats(src_nodes,
                                  dest_nodes,
                                  verify_src,
                                  verification_count)
             dest_key_index += 1
 
 
-    def verify_es_stats(self, src_nodes, dest_nodes, verify_src = False, verification_count = 1000):
+    def verify_es_stats(self, src_nodes, dest_nodes, verify_src = False, verification_count = 10000):
         xd_ref = self.xd_ref
 
+        # prepare for verification
         xd_ref._wait_for_stats_all_buckets(src_nodes)
 
         xd_ref._expiry_pager(src_nodes[0])
         if verify_src:
             xd_ref._verify_stats_all_buckets(src_nodes)
 
+        self.xd_ref._log.info("Verifing couchbase to elasticsearch replication")
         self.verify_es_num_docs(src_nodes[0], dest_nodes[0], verification_count = verification_count)
 
         if xd_ref._doc_ops is not None:
@@ -57,53 +70,93 @@ class ESReplicationBaseTest(object):
 
 
 
-    def verify_es_num_docs(self, src_server, dest_server, kv_store = 1, retry = 5, verification_count = 1000):
+    def verify_es_num_docs(self, src_server, dest_server, kv_store = 1, retry = 10, verification_count = 10000):
         cb_rest = RestConnection(src_server)
         es_rest = RestConnection(dest_server)
         buckets = self.xd_ref._get_cluster_buckets(src_server)
+        wait = 20
         for bucket in buckets:
-            cb_valid, cb_deleted = bucket.kvs[kv_store].key_set()
+            all_cb_docs = cb_rest.all_docs(bucket.name)
+            cb_valid = [str(row['id']) for row in all_cb_docs['rows']]
             cb_num_items = cb_rest.get_bucket_stats(bucket.name)['curr_items']
             es_num_items = es_rest.get_bucket(bucket.name).stats.itemCount
-            while retry > 0 and cb_num_items != es_num_items:
-                self.xd_ref._log.info("elasticsearch items %s, expected: %s....retry" %\
-                                     (es_num_items, cb_num_items))
-                time.sleep(20)
+            _retry = retry
+            while _retry > 0 and cb_num_items != es_num_items:
+                self.xd_ref._log.info("elasticsearch items %s, expected: %s....retry after %s seconds" %\
+                                     (es_num_items, cb_num_items, wait))
+                time.sleep(wait)
+                last_es_items = es_num_items
                 es_num_items = es_rest.get_bucket(bucket.name).stats.itemCount
+                if es_num_items == last_es_items:
+                    _retry = _retry - 1
+                    # if index doesn't change reduce retry count
+                elif es_num_items <= last_es_items:
+                    self.xd_ref._log.info("%s items removed from index " % (es_num_items - last_es_items))
+                    _retry = retry
+                elif es_num_items >= last_es_items:
+                    self.xd_ref._log.info("%s items added to index" % (es_num_items - last_es_items))
+                    _retry = retry
+
+
 
             if es_num_items != cb_num_items:
                 self.xd_ref.fail("Error: Couchbase has %s docs, ElasticSearch has %s docs " %\
                                 (cb_num_items, es_num_items))
 
             # query for all es keys
-            es_valid = es_rest.all_docs(keys_only=True)
-            for _id in es_valid[:verification_count]:  # match at most 1k keys
-                if _id not in cb_valid:
-                    self.xd_ref.fail("Document %s Missing from ES Index" % _id)
+            es_valid = es_rest.all_docs(keys_only=True,indices=[bucket.name], size = cb_num_items)
+
+            if len(es_valid) != cb_num_items:
+                self.xd_ref._log.info("WARNING: Couchbase has %s docs, ElasticSearch all_docs returned %s docs " %\
+                                     (cb_num_items, len(es_valid)))
+            for _id in cb_valid[:verification_count]:  # match at most 10k keys
+                if _id not in es_valid:
+                    # document missing from all_docs query do manual term search
+                    if es_rest.term_exists(_id, indices=[bucket.name]) == False:
+                        self.xd_ref.fail("Document %s Missing from ES Index (%s)" % (_id, bucket.name))
+
+            self.xd_ref._log.info("Verified couchbase bucket (%s) replicated (%s) docs to elasticSearch with matching keys" %\
+                                 (bucket.name, cb_num_items))
 
 
-    def _verify_es_revIds(self, src_server, dest_server, kv_store = 1, verification_count = 1000):
+    def _verify_es_revIds(self, src_server, dest_server, kv_store = 1, verification_count = 10000):
         cb_rest = RestConnection(src_server)
         es_rest = RestConnection(dest_server)
         buckets = self.xd_ref._get_cluster_buckets(src_server)
         for bucket in buckets:
-            all_cb_docs = cb_rest.all_docs(bucket.name)
-            es_valid = es_rest.all_docs()
 
-            # represent doc lists from couchbase and elastic search in following format
+            # retrieve all docs from couchbase and es
+            # then represent doc lists from couchbase
+            # and elastic search in following format
             # [  (id, rev), (id, rev) ... ]
+            all_cb_docs = cb_rest.all_docs(bucket.name)
             cb_id_rev_list = self.get_cb_id_rev_list(all_cb_docs)
+
+            es_valid = es_rest.all_docs(indices=[bucket.name], size = len(cb_id_rev_list))
             es_id_rev_list = self.get_es_id_rev_list(es_valid)
 
             # verify each (id, rev) pair returned from couchbase exists in elastic search
             for cb_id_rev_pair in cb_id_rev_list:
+
                 try:
-                    es_id_rev_pair = es_id_rev_list[es_id_rev_list.index(cb_id_rev_pair)]
+                    # lookup es document with matching _id and revid
+                    # if no exception thrown then doc was properly indexed
+                    es_list_pos = es_id_rev_list.index(cb_id_rev_pair)
+                except ValueError:
+
+                    # attempt manual lookup by search term
+                    es_doc = es_rest.search_term(cb_id_rev_pair[0], indices = [bucket.name])
+                    if es_doc is None:
+                        self.xd_ref.fail("Error during verification:  %s does not exist in ES index %s" % (cb_id_rev_pair, bucket.name))
+
+                    # compare
+                    es_id_rev_pair = (es_doc['meta']['id'], es_doc['meta']['id'])
                     if cb_id_rev_pair != es_id_rev_pair:
                         self.xd_ref.fail("ES document %s has invalid revid (%s). Couchbase revid (%s). bucket (%s)" %\
-                                            (es_id_rev_pair, cb_id_rev_pair, bucket.name))
-                except ValueError:
-                    self.xd_ref.fail("Error during verification:  %s does not exist in ES index %s" % (cb_id_rev_pair, bucket.name))
+                                        (es_id_rev_pair, cb_id_rev_pair, bucket.name))
+
+            self.xd_ref._log.info("Verified doc rev-ids in couchbase bucket (%s) match meta rev-ids elastic search" %\
+                                 (bucket.name))
 
     def get_cb_id_rev_list(self, docs):
         return [(row['id'],row['value']['rev']) for row in docs['rows']]
@@ -112,16 +165,15 @@ class ESReplicationBaseTest(object):
         return [(row['doc']['_id'],row['meta']['rev']) for row in docs]
 
 
-    def _verify_es_values(self, src_server, dest_server, kv_store = 1, verification_count = 1000):
+    def _verify_es_values(self, src_server, dest_server, kv_store = 1, verification_count = 10000):
         cb_rest = RestConnection(src_server)
         es_rest = RestConnection(dest_server)
         buckets = self.xd_ref._get_cluster_buckets(src_server)
         for bucket in buckets:
-            mc = MemcachedClientHelper.direct_client(src_server, bucket)
-            cb_valid, cb_deleted = bucket.kvs[kv_store].key_set()
-            es_valid = es_rest.all_docs()
+            mc = VBucketAwareMemcached(cb_rest, bucket)
+            es_valid = es_rest.all_docs(indices=[bucket.name], size=verification_count)
 
-            # compare values of documents
+            # compare values of es documents to documents in couchbase
             for row in es_valid[:verification_count]:
                 key = str(row['meta']['id'])
 
@@ -134,6 +186,9 @@ class ESReplicationBaseTest(object):
                                         (key, val_src, val_dest))
                 except MemcachedError as e:
                     self.xd_ref.fail("Error during verification.  Index contains invalid key: %s" % key)
+
+            self.xd_ref._log.info("Verified doc values in couchbase bucket (%s) match values in elastic search" %\
+                                 (bucket.name))
 
     def verify_dest_added(self):
         src_master = self.xd_ref.src_master

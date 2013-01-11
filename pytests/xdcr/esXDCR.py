@@ -8,15 +8,15 @@ from random import randrange
 import time
 
 #Assumption that at least 2 nodes on every cluster
-class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
+class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
     def setUp(self):
-        super(ESKVTests, self).setUp()
-        self.setup_xd_ref(self)
+        super(ESTests, self).setUp()
+        self.setup_es_params(self)
         self.verify_dest_added()
         self.setup_doc_gens()
 
     def tearDown(self):
-        super(ESKVTests, self).tearDown()
+        super(ESTests, self).tearDown()
 
     def setup_doc_gens(self):
         # create json doc generators
@@ -59,14 +59,23 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
             if "read" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "read", 0))
+        return tasks
+
+    def modify_data(self):
+        tasks = self._async_modify_data()
         for task in tasks:
             task.result()
+
+
+    #overriding xdcr verify results method for specific es verification
+    def verify_results(self, verify_src=False):
+        self.verify_es_results(verify_src)
 
     """Testing Unidirectional load( Loading only at source) Verifying whether ES/XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
     def load_with_async_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self._async_modify_data()
+        self.modify_data()
         self.verify_results()
 
     def test_plugin_connect(self):
@@ -89,9 +98,109 @@ class ESKVTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
             bucket_idx = bucket_idx + 1
 
         for task in tasks:
-            task.result()
+           task.result()
 
-    #overriding xdcr verify results method for specific es verification
-    def verify_results(self, verify_src=False):
-        self.verify_es_results(verify_src)
+    """Test coverage for elasticsearch and couchbase topology changes during data loading"""
+    def test_topology(self):
+
+        availableESNodes = self.dest_nodes[1:]
+        availableCBNodes = self.src_nodes[1:]
+
+        if self._es_in:
+            task = self._async_rebalance(self.dest_nodes, [], availableESNodes)
+            availableESNodes = []
+
+        if self._cb_in:
+            tasks = self._async_rebalance(self.src_nodes, [], availableCBNodes)
+            [task.result() for task in tasks]
+            availableCBNodes = []
+
+        # load data
+        tasks = \
+            self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
+
+
+        # peform initial rebalances
+        if self._es_out or self._es_swap:
+            availableESNodes = self._first_level_rebalance_out(self.dest_nodes,
+                                                               availableESNodes,
+                                                               monitor = False)
+        elif self._es_in:
+            availableESNodes = self._first_level_rebalance_in(self.dest_nodes,
+                                                              monitor = False)
+
+        if self._cb_out or self._cb_swap:
+            availableCBNodes = self._first_level_rebalance_out(self.src_nodes,
+                                                               availableCBNodes,
+                                                               self._cb_failover)
+        elif self._cb_in:
+            availableCBNodes = self._first_level_rebalance_in(self.src_nodes)
+
+        # wait for initial data loading and load some more data
+        [task.result() for task in tasks]
+        tasks = self._async_modify_data()
+
+        # add/remove remaining nodes
+        if self._es_out or self._es_swap:
+            self._second_level_rebalance_out(self.dest_nodes,
+                                             availableESNodes,
+                                             self._es_swap,
+                                             monitor = False)
+        elif self._es_in:
+            self._second_level_rebalance_in(self.dest_nodes, monitor = False)
+
+        if self._cb_out or self._cb_swap:
+            self._second_level_rebalance_out(self.src_nodes,
+                                             availableCBNodes,
+                                             self._cb_swap)
+        elif self._cb_in:
+            self._second_level_rebalance_in(self.src_nodes)
+
+	    # wait for secondary data loading tasks and verify results
+        [task.result() for task in tasks]
+        self.verify_results()
+
+    def _first_level_rebalance_out(self, param_nodes,
+                                   available_nodes,
+                                   do_failover = False,
+                                   monitor = True):
+
+        nodes_out = available_nodes[:1]
+        if do_failover:
+            self._cluster_helper.failover(param_nodes, nodes_out)
+
+        tasks = self._async_rebalance(param_nodes, [], nodes_out)
+        if monitor:
+            [task.result() for task in tasks]
+        return available_nodes[1:]
+
+    def _first_level_rebalance_in(self, param_nodes,
+                                  monitor = True):
+        nodes_in = []
+        if len(param_nodes) > 1:
+            nodes_in = [param_nodes[1]]
+            tasks = self._async_rebalance(param_nodes, nodes_in, [])
+            if monitor:
+                [task.result() for task in tasks]
+
+        return nodes_in
+
+    def _second_level_rebalance_out(self, param_nodes,
+                                    available_nodes,
+                                    do_swap = False,
+                                    monitor = True):
+        if len(available_nodes) > 1:
+            nodes_in = []
+            if do_swap:
+                nodes_in = [param_nodes[1]]
+            tasks = self._async_rebalance(param_nodes, nodes_in, available_nodes)
+            if monitor:
+                [task.result() for task in tasks]
+
+    def _second_level_rebalance_in(self, param_nodes, monitor = True):
+        if len(param_nodes) > 2:
+            nodes_in = param_nodes[2:]
+            tasks = self._async_rebalance(param_nodes, nodes_in, [])
+            if monitor:
+                [task.result() for task in tasks]
 
