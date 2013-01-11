@@ -418,7 +418,7 @@ class RebalanceTests(EVPerfClient):
             self.log.info("started rebalance thread")
 
         self.shutdown_event = Event()
-        time.sleep(3600)
+        time.sleep(self.parami("rebalance_after", 3600))
 
         self.delayed_rebalance(
             num_nodes=self.parami("num_nodes_after",
@@ -429,7 +429,7 @@ class RebalanceTests(EVPerfClient):
             reb_mode=self.parami("reb_mode", PerfDefaults.reb_mode),
             sync=True)
 
-        time.sleep(3600)
+        time.sleep(self.parami("shutdown_after", 3600))
         self.log.info("trigerring shutdown event")
         self.shutdown_event.set()
 
