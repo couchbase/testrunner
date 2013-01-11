@@ -419,6 +419,9 @@ class RebalanceTests(EVPerfClient):
         """Trigger cluster rebalance (in, out, swap) after 1 hour. Stop the
         test once rebalance completed (with 1 hour delay).
         """
+        if not self.parami('access_phase', 0):
+            return
+
         self.shutdown_event = Event()
         time.sleep(3600)
 
