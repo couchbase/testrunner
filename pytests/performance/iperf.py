@@ -3,6 +3,7 @@ import json
 import time
 import socket
 import functools
+import threading
 from multiprocessing import Process, Event
 from multiprocessing.sharedctypes import Value
 from collections import defaultdict
@@ -192,19 +193,14 @@ class PerfWrapper(object):
             """Trigger cluster rebalance (in and out) when ~half of queries or
             create operations reached the goal.
             """
-            total_clients = self.parami('total_clients', 1)
-            rebalance_after = self.parami('rebalance_after', 0) / total_clients
-            if self.parami('fg_max_ops', 0):
-                self.level_callbacks = [('cur-queries', rebalance_after,
-                                         self.latched_rebalance)]
-            else:
-                self.level_callbacks = [('cur-creates', rebalance_after,
-                                         self.latched_rebalance)]
+            t = threading.Thread(target=self.rebalance)
+            t.daemon = True
             if 'XRebalanceTests' in self.id():
-                if XPerfTests.get_region() == 'west':
-                    self.level_callbacks = []  # rebalance only one cluster
+                if XPerfTests.get_region() == 'east':
+                    t.start()  # rebalance only one cluster
                 return test(self, *args, **kargs)
             else:
+                t.start()
                 return PerfWrapper.multiply(test)(self, *args, **kargs)
         return wrapper
 
@@ -418,6 +414,25 @@ class RebalanceTests(EVPerfClient):
     def test_mixed_rebalance(self):
         """Mixed read/write test w/o views"""
         super(RebalanceTests, self).test_eperf_mixed()
+
+    def rebalance(self):
+        """Trigger cluster rebalance (in, out, swap) after 1 hour. Stop the
+        test once rebalance completed (with 1 hour delay).
+        """
+        self.shutdown_event = Event()
+        time.sleep(3600)
+
+        self.delayed_rebalance(
+            num_nodes=self.parami("num_nodes_after",
+                                  PerfDefaults.num_nodes_after),
+            delay_seconds=1,
+            max_retries=self.parami("reb_max_retries",
+                                    PerfDefaults.reb_max_retries),
+            reb_mode=self.parami("reb_mode", PerfDefaults.reb_mode),
+            sync=True)
+
+        time.sleep(3600)
+        self.shutdown_event.set()
 
     def test_alk_rebalance(self):
         """Alk's specification.
