@@ -1612,7 +1612,7 @@ class ViewQueryTests(unittest.TestCase):
         data_set.load(self, data_set.views[0])
         data_set.query_verify_value(self)
 
-    def test_employee_dataset_query_different_bucke_types(self):
+    def test_employee_dataset_query_different_bucket_types(self):
         '''
         Test uses employee data set:
             -documents are structured as {"name": name<string>,
