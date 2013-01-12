@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -ex
 num_clients=`grep total_clients ${test_conf} | awk -F"=" '{print $2}'`
 
 ./bin/do_cluster -i ${ini_file} -c ${test_conf} -p num_clients=$num_clients tearDown
