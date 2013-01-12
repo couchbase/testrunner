@@ -3,7 +3,6 @@ import json
 import time
 import socket
 import functools
-import threading
 from multiprocessing import Process, Event
 from multiprocessing.sharedctypes import Value
 from collections import defaultdict
@@ -191,6 +190,7 @@ class PerfWrapper(object):
         @functools.wraps(test)
         def wrapper(self, *args, **kargs):
             """Start parallel rebalancer thread"""
+            self.shutdown_event = Event()
             if 'XRebalanceTests' in self.id():
                 return test(self, *args, **kargs)
             else:
@@ -417,7 +417,6 @@ class RebalanceTests(EVPerfClient):
         else:
             self.log.info("started rebalance thread")
 
-        self.shutdown_event = Event()
         time.sleep(self.parami("rebalance_after", 3600))
 
         self.delayed_rebalance(
