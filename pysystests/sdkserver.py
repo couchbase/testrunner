@@ -340,7 +340,7 @@ def _random_string(length):
     return ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(length))
 
 def _int_float_str_gen(_str):
-    if _str.startswith("$int"):
+    if type(_str)==str and _str.startswith("$int"):
         _val = _str[4:]
         _n_ = 0
         if _val=="":
@@ -354,7 +354,7 @@ def _int_float_str_gen(_str):
         _x_ = pow(10, _n_)
         _temp_ = _str.replace("$int{0}".format(_n_),str(random.randint(0,1000000) % _x_))
         return int(_temp_)
-    elif _str.startswith("$flo"):
+    elif type(_str)==str and _str.startswith("$flo"):
         _val = _str[4:]
         _n_ = 0
         if _val=="":
@@ -368,7 +368,7 @@ def _int_float_str_gen(_str):
         _x_ = pow(10, _n_)
         _temp_ = _str.replace("$flo{0}".format(_n_),str((random.random()*1000000) % _x_))
         return float(_temp_)
-    elif _str.startswith("$str"):
+    elif type(_str)==str and _str.startswith("$str"):
         _val = _str[4:]
         _n_ = 0
         j = 0
