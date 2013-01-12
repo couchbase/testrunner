@@ -196,19 +196,19 @@ class ObserveTests(BaseTestCase):
         # Persist all the loaded data item
         for bucket in self.buckets:
             RebalanceHelper.wait_for_persistence(self.master, bucket)
-            rebalance = self.input.param("rebalance", "no")
-            if rebalance == "in":
-                self.servs_in = [self.servers[len(self.servers) - 1]]
-                rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in , [])
-                self._run_observe()
-                rebalance.result()
-            elif rebalance == "out":
-                self.servs_out = [self.servers[self.nodes_init - 1]]
-                rebalance = self.cluster.async_rebalance(self.servers[:1], [] , self.servs_out)
-                self._run_observe()
-                rebalance.result()
-            else:
-                self._run_observe()
+        rebalance = self.input.param("rebalance", "no")
+        if rebalance == "in":
+            self.servs_in = [self.servers[len(self.servers) - 1]]
+            rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in , [])
+            self._run_observe()
+            rebalance.result()
+        elif rebalance == "out":
+            self.servs_out = [self.servers[self.nodes_init - 1]]
+            rebalance = self.cluster.async_rebalance(self.servers[:1], [] , self.servs_out)
+            self._run_observe()
+            rebalance.result()
+        else:
+            self._run_observe()
 
 
     def test_observe_with_replication(self):
