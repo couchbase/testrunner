@@ -45,14 +45,21 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.product = 'couchbase-server'
 
     def tearDown(self):
-        #cleanup only nodes that are in cluster
-        #not all servers have been installed
-        nodes = self.rest.get_nodes()
-        temp = []
-        for server in self.servers:
-            if server.ip in [node.ip for node in nodes]:
-                temp.append(server)
-        self.servers = temp
+        try:
+            #cleanup only nodes that are in cluster
+            #not all servers have been installed
+            if self.rest is None:
+                self.rest = RestConnection(self.master)
+                self.rest_helper = RestHelper(self.rest)
+            nodes = self.rest.get_nodes()
+            temp = []
+            for server in self.servers:
+                if server.ip in [node.ip for node in nodes]:
+                    temp.append(server)
+            self.servers = temp
+        except Exception, e:
+            self.cluster.shutdown()
+            self.fail(e)
         super(NewUpgradeBaseTest, self).tearDown()
 
     def _install(self, servers):
