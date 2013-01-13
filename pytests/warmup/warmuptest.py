@@ -7,6 +7,7 @@ from memcached.helper.kvstore import KVStore
 from mc_bin_client import MemcachedError
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase.documentgenerator import BlobGenerator
+from remote.remote_util import RemoteMachineShellConnection
 
 class WarmUpTests(BaseTestCase):
     def setUp(self):
@@ -55,7 +56,7 @@ class WarmUpTests(BaseTestCase):
             self.stat_str = "warmup"
         self.stats_monitor = self.input.param("stats_monitor", "ep_warmup_key_count")
         self.stats_monitor = self.stats_monitor.split(";")
-        for server in self.servers:
+        for server in self.nodes_server:
             mc_conn = MemcachedClientHelper.direct_client(server, self.bucket_name, self.timeout)
             self.pre_warmup_stats["{0}:{1}".format(server.ip, server.port)] = {}
             for stat_to_monitor in self.stats_monitor:
@@ -82,20 +83,33 @@ class WarmUpTests(BaseTestCase):
             _mc = MemcachedClientHelper.direct_client(_node, self.bucket_name)
             self.log.info("restarted the node %s:%s" % (node.ip, node.port))
             pid = _mc.stats()["pid"]
-            node_rest = RestConnection(_node)
-            command = "os:cmd(\"kill -9 {0} \")".format(pid)
-            self.log.info(command)
-            killed = node_rest.diag_eval(command)
-            self.log.info("killed ??  {0} ".format(killed))
             _mc.close()
+            node_rest = RestConnection(_node)
+            for _server in self.servers:
+                if _server.ip == node.ip:
+                    self.log.info("Returned Server index %s" % _server)
+                    shell = RemoteMachineShellConnection(_server)
+                    break
+
+            info = shell.extract_remote_info()
+            os_type = info.type.lower()
+            if os_type == 'windows':
+                shell.terminate_process(info, 'memcached.exe')
+                self.log.info("killed ??  node %s " % node.ip)
+                # command = "taskkill /F /T /IM memcached.exe*"
+            else:
+                command = "os:cmd(\"kill -9 {0} \")".format(pid)
+                self.log.info(command)
+                killed = node_rest.diag_eval(command)
+                self.log.info("killed ??  {0} ".format(killed))
 
     def _restart_memcache(self):
-        rest = RestConnection(self.servers[0])
+        rest = RestConnection(self.nodes_server[0])
         nodes = rest.node_statuses()
         self._kill_nodes(nodes)
         start = time.time()
         memcached_restarted = False
-        for server in self.servers:
+        for server in self.nodes_server:
             mc = None
             while time.time() - start < 60:
                 try:
@@ -129,10 +143,10 @@ class WarmUpTests(BaseTestCase):
 
     def _warmup(self):
         warmed_up = False
-        for server in self.servers:
+        for server in self.nodes_server:
             mc = MemcachedClientHelper.direct_client(server, self.bucket_name)
             start = time.time()
-            if server == self.servers[0]:
+            if server == self.nodes_server[0]:
                 wait_time = 300
             else:
                 wait_time = 60
@@ -220,7 +234,8 @@ class WarmUpTests(BaseTestCase):
         threshold_reached = False
         self.num_items = self.input.param("items", 10000)
         self._load_doc_data_all_buckets('create')
-        #load items till reached threshold or mem-ratio is less than resident ratio threshold
+
+        # load items till reached threshold or mem-ratio is less than resident ratio threshold
         while not threshold_reached :
             mem_used = int(mc.stats()["mem_used"])
             if mem_used < threshold or int(mc.stats()["vb_active_perc_mem_resident"]) >= active_resident_threshold:
@@ -231,23 +246,23 @@ class WarmUpTests(BaseTestCase):
             else:
                 threshold_reached = True
                 self.log.info("DGM state achieved!!!!")
-        #parallel load of data
+        # parallel load of data
         items = self.num_items
         self.num_items += 10000
         tasks = self._async_load_doc_data_all_buckets('create', items)
-        #wait for draining of data before restart and warm up
+        # wait for draining of data before restart and warm up
         rest = RestConnection(self.servers[0])
-        self.servers = rest.get_nodes()
-        self._wait_for_stats_all_buckets(self.servers)
+        self.nodes_server = rest.get_nodes()
+        self._wait_for_stats_all_buckets(self.nodes_server)
         self._stats_befor_warmup()
         for task in tasks:
             task.result()
-        #If warmup is done through access log then run access scanner
+        # If warmup is done through access log then run access scanner
         if self.access_log :
             scanner_runs = int(mc.stats()["ep_num_access_scanner_runs"])
             self.log.info("setting access scanner time %s minutes" % access_log_time)
             self.log.info("current access scanner run is %s" % scanner_runs)
-            ClusterOperationHelper.flushctl_set(self.servers[0], "alog_sleep_time", access_log_time , self.bucket_name)
+            ClusterOperationHelper.flushctl_set(self.nodes_server[0], "alog_sleep_time", access_log_time , self.bucket_name)
             if not self._wait_for_access_run(access_log_time, scanner_runs, mc):
                 self.fail("Not able to create access log within %s" % access_log_time)
         self._restart_memcache()
@@ -259,11 +274,11 @@ class WarmUpTests(BaseTestCase):
     def test_warmup_with_expiration(self):
         self.num_items = self.input.param("items", 1000)
         expiry = self.input.param("expiry", 120)
-        self._load_doc_data_all_buckets('create', expiry=expiry)
-        #wait for draining of data before restart and warm up
+        self._load_doc_data_all_buckets('create', expiry = expiry)
+        # wait for draining of data before restart and warm up
         rest = RestConnection(self.servers[0])
-        self.servers = rest.get_nodes()
-        self._wait_for_stats_all_buckets(self.servers)
+        self.nodes_server = rest.get_nodes()
+        self._wait_for_stats_all_buckets(self.nodes_server)
         self._stats_befor_warmup()
         time.sleep(120)
         self._restart_memcache()
