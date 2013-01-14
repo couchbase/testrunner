@@ -78,7 +78,7 @@ class XDCRBaseTest(unittest.TestCase):
             self._xdc_replication_ops = {}
             self._xdc_replication_rate = {}
             self._start_replication_time = {}
-            self._end_replication_flag = 0
+
             ##
             self._log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
                 .format(self._case_number, self._testMethodName))
@@ -208,6 +208,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._buckets = []
 
         self._default_bucket = self._input.param("default_bucket", True)
+        self._end_replication_flag = self._input.param("end_replication_flag", 0)
 
         """
         ENTER: sasl_buckets=[no.] or standard_buckets=[no.]
