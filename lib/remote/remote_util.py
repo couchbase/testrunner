@@ -600,8 +600,7 @@ class RemoteMachineShellConnection:
                 command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/membase/var/lib/membase/config {0}'.format(install_command)
             else:
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
-
-        output, error = self.execute_command(command, info)
+        output, error = self.execute_command(command, info, use_channel=True)
         self.log_command_output(output, error)
 
     def membase_upgrade_win(self, architecture, windows_name, version, initial_version=''):
@@ -1114,7 +1113,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 log.error('something wrong happened!!!')
         return success
 
-    def execute_command(self, command, info=None, debug=True):
+    def execute_command(self, command, info=None, debug=True, use_channel=False):
 
         info = info or getattr(self, "info", None)
         if info is None:
@@ -1127,15 +1126,15 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if self.use_sudo :
             command = "sudo " + command
 
-        return self.execute_command_raw(command, debug=debug)
+        return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
 
-    def execute_command_raw(self, command, debug=True):
+    def execute_command_raw(self, command, debug=True, use_channel=False):
         if debug:
             log.info("running command.raw  {0}".format(command))
         output = []
         error = []
         temp = ''
-        if self.use_sudo:
+        if self.use_sudo or use_channel:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()
             stdin = channel.makefile('wb')
@@ -1149,7 +1148,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             channel.close()
         else:
             stdin, stdout, stderro = self._ssh_client.exec_command(command)
-
         stdin.close()
 
         for line in stdout.read().splitlines():
