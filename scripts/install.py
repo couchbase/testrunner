@@ -39,7 +39,6 @@ Available keys:
  product=cb|mb           Used to specify couchbase or membase.
  version=SHORT_VERSION   Example: "2.0.0r-71".
  parallel=false          Useful when you're installing a cluster.
- standalone=false        Install without cluster management
  toy=                    Install a toy build
  vbuckets=               The number of vbuckets in the server installation.
  sync_threads=True       Sync or acync threads(+S or +A)
@@ -73,15 +72,9 @@ def installer_factory(params):
     mongo_alias = ["mongo"]
 
     if params["product"] in mb_alias:
-        if "standalone" in params:
-            return MembaseServerStandaloneInstaller()
-        else:
-            return MembaseServerInstaller()
+        return MembaseServerInstaller()
     elif params["product"] in cb_alias:
-        if "standalone" in params:
-            return CouchbaseServerStandaloneInstaller()
-        else:
-            return CouchbaseServerInstaller()
+        return CouchbaseServerInstaller()
     elif params["product"] in css_alias:
         return CouchbaseSingleServerInstaller()
     elif params["product"] in mongo_alias:
@@ -287,36 +280,6 @@ class MembaseServerInstaller(Installer):
         return success
 
 
-class MembaseServerStandaloneInstaller(Installer):
-    def __init__(self):
-        Installer.__init__(self)
-
-    def initialize(self, params):
-        remote_client = RemoteMachineShellConnection(params["server"])
-        remote_client.create_directory("/opt/membase/var/lib/membase/data")
-        remote_client.execute_command("chown membase:membase /opt/membase/var/lib/membase/data")
-        remote_client.create_file("/tmp/init.sql", """PRAGMA journal_mode = TRUNCATE;
-PRAGMA synchronous = NORMAL;""")
-        remote_client.execute_command('/opt/membase/bin/memcached -d -v -c 80000 -p 11211 -E /opt/membase/lib/memcached/ep.so -r -e "tap_idle_timeout=10;dbname=/opt/membase/var/lib/membase/data/default;ht_size=12582917;min_data_age=0;queue_age_cap=900;initfile=/tmp/init.sql;vb0=true" -u membase > /tmp/memcache.log </dev/null 2>&1')
-        time.sleep(5)
-
-    def install(self, params, queue=None):
-        try:
-            build = self.build_url(params)
-        except Exception, e:
-            if queue:
-                queue.put(False)
-            raise e
-        remote_client = RemoteMachineShellConnection(params["server"])
-        downloaded = remote_client.download_build(build)
-        if not downloaded:
-            log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        success = remote_client.install_server(build, False)
-        if queue:
-            queue.put(success)
-        return success
-
-
 class CouchbaseServerInstaller(Installer):
     def __init__(self):
         Installer.__init__(self)
@@ -432,36 +395,6 @@ class CouchbaseServerInstaller(Installer):
         if "rest_vbuckets" in params:
             rest_vbuckets = int(params["rest_vbuckets"])
             ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
-        if queue:
-            queue.put(success)
-        return success
-
-
-class CouchbaseServerStandaloneInstaller(Installer):
-    def __init__(self):
-        Installer.__init__(self)
-
-    def initialize(self, params):
-        remote_client = RemoteMachineShellConnection(params["server"])
-        remote_client.create_directory("/opt/couchbase/var/lib/membase/data")
-        remote_client.execute_command("chown couchbase:couchbase /opt/couchbase/var/lib/membase/data")
-        remote_client.create_file("/tmp/init.sql", """PRAGMA journal_mode = TRUNCATE;
-PRAGMA synchronous = NORMAL;""")
-        remote_client.execute_command('/opt/couchbase/bin/memcached -d -v -c 80000 -p 11211 -E /opt/couchbase/lib/memcached/ep.so -r -e "dbname=/opt/couchbase/var/lib/membase/data/default;ht_size=12582917;min_data_age=0;queue_age_cap=900;initfile=/tmp/init.sql;vb0=true" -u couchbase > /tmp/memcache.log </dev/null 2>&1')
-        time.sleep(5)
-
-    def install(self, params, queue=None):
-        try:
-            build = self.build_url(params)
-        except Exception, e:
-            if queue:
-                queue.put(False)
-            raise e
-        remote_client = RemoteMachineShellConnection(params["server"])
-        downloaded = remote_client.download_build(build)
-        if not downloaded:
-            log.error(downloaded, 'unable to download binaries : {0}'.format(build.url))
-        success = remote_client.install_server(build, False)
         if queue:
             queue.put(success)
         return success
