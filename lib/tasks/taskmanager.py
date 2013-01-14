@@ -5,11 +5,13 @@ from threading import Thread
 from tasks.task import Task
 
 class TaskManager(Thread):
-    def __init__(self):
+    def __init__(self, thread_name=None):
         Thread.__init__(self)
         self.readyq = Queue.Queue()
         self.sleepq = Queue.Queue()
         self.running = True
+        if thread_name is not None:
+            self.name = thread_name
 
     def schedule(self, task, sleep_time=0):
         if not isinstance(task, Task):

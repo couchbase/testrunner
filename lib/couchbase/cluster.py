@@ -13,7 +13,7 @@ class Cluster(object):
     """An API for interacting with Couchbase clusters"""
 
     def __init__(self):
-        self.task_manager = TaskManager()
+        self.task_manager = TaskManager("Cluster_Thread")
         self.task_manager.start()
 
     def async_create_default_bucket(self, server, size, replicas=1):
