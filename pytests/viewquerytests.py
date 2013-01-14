@@ -490,7 +490,7 @@ class ViewQueryTests(unittest.TestCase):
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
         data_set.add_all_docs_queries()
-        self._query_test_init(data_set, False)
+        self._query_test_init(data_set, True)
 
         # rebalance_in and verify loaded data
         ViewBaseTests._begin_rebalance_in(self, howmany=num_nodes_to_add + 1)
@@ -523,7 +523,7 @@ class ViewQueryTests(unittest.TestCase):
             data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
             data_set.add_all_docs_queries()
-            self._query_test_init(data_set, False)
+            self._query_test_init(data_set, True)
 
             master = self.servers[0]
             RebalanceHelper.wait_for_persistence(master, "default")
@@ -578,7 +578,7 @@ class ViewQueryTests(unittest.TestCase):
             data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
             data_set.add_all_docs_queries()
-            self._query_test_init(data_set, False)
+            self._query_test_init(data_set, True)
 
             servers=self.servers;
 
@@ -645,7 +645,7 @@ class ViewQueryTests(unittest.TestCase):
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_all_docs_queries()
-        self._query_test_init(data_set, False)
+        self._query_test_init(data_set, True)
 
         master = self.servers[0]
         RebalanceHelper.wait_for_persistence(master, "default")
@@ -701,7 +701,7 @@ class ViewQueryTests(unittest.TestCase):
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_all_docs_queries()
-        self._query_test_init(data_set, False)
+        self._query_test_init(data_set, True)
 
         master = self.servers[0]
         RebalanceHelper.wait_for_persistence(master, "default")
@@ -1962,7 +1962,14 @@ class QueryView:
                                 result_count_stats[num_keys] += 1
                         if num_keys != expected_num_docs:
                             if num_keys > expected_num_docs:
-                                break
+                                key_failures = QueryHelper.verify_query_keys(rest, query,
+                                                                         results, self.bucket,
+                                                                         num_verified_docs, limit=limit)
+                                msg = "unable to retrieve expected results: {0}".format(key_failures)
+                                tc.assertEquals(len(key_failures), 0, msg)
+                                raise Exception("After {0} attemps \
+                                                expected number of items is {1}, but is {2}"
+                                                .format(attempt, num_keys, expected_num_docs))
                             else:
                                 ViewBaseTests._wait_for_indexer_ddoc(tc, rest, view_name)
 
