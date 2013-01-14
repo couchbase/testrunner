@@ -982,12 +982,11 @@ class AppendTests(unittest.TestCase):
                 msg = "initial mem_used {0}, current mem_used {1} , delta : {2} , expected delta : {3} , increase percentage {4}"
                 self.log.info(
                     msg.format(initial_mem_used, stats["mem_used"], delta, expected_delta, delta / expected_delta))
-                #                if delta > (1.2 * expected_delta):
-                #                    self.fail("too much memory..")
-
-                #            for key in keys:
-                #                self.onenodemc.delete(key)
-
+                if delta > (1.2 * expected_delta):
+                    self.fail("too much memory..")
+                for key in keys:
+                    self.onenodemc.delete(key)
+            self.log.info   ("iteration #{0} completed".format(i))
 
     def tearDown(self):
         self.shutdown_load_data = True
