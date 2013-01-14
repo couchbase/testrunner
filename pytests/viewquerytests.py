@@ -1612,6 +1612,11 @@ class ViewQueryTests(unittest.TestCase):
         data_set.load(self, data_set.views[0])
         data_set.query_verify_value(self)
 
+    def test_flags_docs_queries(self):
+        data_set = FlagsDataSet(self._rconn(),self.num_docs)
+        data_set.load(self, data_set.views[0])
+        data_set.query_verify_value(self)
+
     def test_employee_dataset_query_different_bucket_types(self):
         '''
         Test uses employee data set:
@@ -3191,6 +3196,47 @@ class ExpirationDataSet:
                 tc.assertTrue(row['value'] in xrange(self.expire_millis -200, self.expire_millis + 200),
                                   "Expiration should be %s, but actual is %s" %\
                                    (self.expire_millis, row['value']))
+
+class FlagsDataSet:
+    def __init__(self, rest, num_docs = 10000, bucket = "default", item_flag=4042322160):
+        self.num_docs = num_docs
+        self.bucket = bucket
+        self.rest = rest
+        self.views = self.create_views(rest)
+        self.name = "flags_dataset"
+        self.kv_store = None
+        self.docs_set = []
+        self.item_flag = item_flag
+
+    def create_views(self, rest):
+        view_fn = 'function (doc, meta) {if(doc.age !== undefined) { emit(doc.age, meta.flags);}}'
+        return [QueryView(self.rest, self.num_docs, fn_str = view_fn)]
+
+    def load(self, tc, view):
+        try:
+            docs = ViewBaseTests._load_docs(tc, self.num_docs, 'fl_',
+                                            bucket=self.bucket, flag=self.item_flag)
+            return docs
+        except Exception as ex:
+            view.results.addError(tc, sys.exc_info())
+            tc.log.error("At least one of load data threads is crashed: {0}".format(ex))
+            tc.thread_crashed.set()
+            raise ex
+        finally:
+            if not tc.thread_stopped.is_set():
+                tc.thread_stopped.set()
+
+    def query_verify_value(self,tc):
+        for view in self.views:
+            #query view
+            results = ViewBaseTests._get_view_results(tc, self.rest, self.bucket, view.name,
+                                                      extra_params={"stale" : "false"})
+            tc.assertEquals(len(results.get(u'rows', 0)), view.index_size,
+                              "Returned number of items is incorrect")
+            for row in results.get(u'rows',0):
+                tc.assertTrue(row['value'] == self.item_flag,
+                                  "Flag should be %s, but actual is %s" %\
+                                   (self.item_flag, row['value']))
 
 class DataLoadHelper:
     @staticmethod
