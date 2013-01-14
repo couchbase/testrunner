@@ -55,7 +55,6 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             # avoid any cluster operations in setup for new upgrade tests
             if str(self.__class__).find('newupgradetests') != -1:
-                self.cluster = Cluster()
                 self.log.info("any cluster operation in setup will be skipped")
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
