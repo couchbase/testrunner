@@ -789,6 +789,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
 
     def install_server_win(self, build, version, startserver=True):
         remote_path = None
+        success = True
         track_words = ("warning", "error", "fail")
         if build.name.lower().find("membase") != -1:
             remote_path = testconstants.WIN_MB_PATH
