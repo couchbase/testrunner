@@ -311,8 +311,14 @@ if __name__ == "__main__":
         TestInputSingleton.input.test_params["case_number"] = case_number
         print "Test Input params:"
         pprint(TestInputSingleton.input.test_params)
-        suite = unittest.TestLoader().loadTestsFromName(name)
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
+        try:
+            suite = unittest.TestLoader().loadTestsFromName(name)
+        except AttributeError as e:
+            print "Test {0} was not found: {1}".format(name, e)
+            result = unittest.TextTestRunner(verbosity=2)._makeResult()
+            result.errors = [(name, e.message)]
+        else:
+            result = unittest.TextTestRunner(verbosity=2).run(suite)
         time_taken = time.time() - start_time
 
         # Concat params to test name
