@@ -194,7 +194,7 @@ class BaseTestCase(unittest.TestCase):
             task.result()
         self.buckets = []
 
-    def _verify_stats_all_buckets(self, servers, wait_time=60):
+    def _verify_stats_all_buckets(self, servers, timeout=60):
         stats_tasks = []
         for bucket in self.buckets:
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
@@ -215,12 +215,12 @@ class BaseTestCase(unittest.TestCase):
                                    'curr_items_tot', '==', items * (available_replicas + 1)))
         try:
             for task in stats_tasks:
-                task.result(wait_time)
+                task.result(timeout)
         except Exception as e:
             print e;
             for task in stats_tasks:
                 task.cancel()
-            raise Exception("unable to get expected stats during {0} sec".format(wait_time))
+            raise Exception("unable to get expected stats during {0} sec".format(timeout))
 
     """Asynchronously applys load generation to all bucekts in the cluster.
  bucket.name, gen,
@@ -364,7 +364,7 @@ class BaseTestCase(unittest.TestCase):
         self._wait_for_stats_all_buckets(servers, timeout=timeout)
         if check_items:
             self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify)
-            self._verify_stats_all_buckets(servers)
+            self._verify_stats_all_buckets(servers, timeout=timeout)
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
             verified = True
             for bucket in self.buckets:
