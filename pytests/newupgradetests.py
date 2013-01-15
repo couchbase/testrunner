@@ -64,7 +64,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 remote.stop_server()
                 time.sleep(self.sleep_time)
                 if self.input.param('remove_config_files', False):
-                    for file in ['manifest.txt', 'manifest.xml','VERSION.txt']:
+                    for file in ['manifest.txt', 'manifest.xml', 'VERSION.txt']:
                         output, error = remote.execute_command("rm -rf /opt/couchbase/{0}".format(file))
                         remote.log_command_output(output, error)
                 remote.disconnect()
@@ -108,10 +108,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
-                remote.disconnect()
-            for server in stoped_nodes:
-                remote = RemoteMachineShellConnection(server)
-                remote.stop_server()
+                time.sleep(5)
+                remote.start_couchbase()
                 remote.disconnect()
             ClusterOperationHelper.wait_for_ns_servers_or_assert(stoped_nodes, self)
             self.verification(self.servers[:self.nodes_init])
