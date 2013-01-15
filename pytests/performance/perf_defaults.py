@@ -20,9 +20,9 @@ class PerfDefaults:
     mc_threads              =    4
     sched_delays            =    0
     erlang_schedulers       =    ""
-    mem_high_wat            =    75          # percentage
-    mem_low_wat             =    60          # percentage
-    mutation_mem_threshold  =    90          # percentage, tmp oom threshold
+    mem_high_wat            =    85          # percentage
+    mem_low_wat             =    75          # percentage
+    mutation_mem_threshold  =    95          # percentage, tmp oom threshold
 
     # publish results to cbmonitor dashboard
     cbm                     =    0
