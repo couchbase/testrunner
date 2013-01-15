@@ -283,6 +283,9 @@ class RestConnection(object):
 
     def create_ddoc(self, design_doc_name, bucket, views, options=None):
         design_doc = DesignDocument(design_doc_name, views, options=options)
+        if design_doc.name.find('/') != -1:
+            design_doc.name = design_doc.name.replace('/', '%2f')
+            design_doc.id = '_design/{0}'.format(design_doc.name)
         return self.create_design_document(bucket, design_doc)
 
     def create_design_document(self, bucket, design_doc):
@@ -310,6 +313,10 @@ class RestConnection(object):
         return json.loads(content)
 
     def _query(self, design_doc_name, view_name, bucket, view_type, query, timeout):
+        if design_doc_name.find('/') != -1:
+            design_doc_name = design_doc_name.replace('/', '%2f')
+        if view_name.find('/') != -1:
+            view_name = view_name.replace('/', '%2f')
         api = self.capiBaseUrl + '%s/_design/%s/_%s/%s?%s' % (bucket,
                                                design_doc_name, view_type,
                                                view_name,

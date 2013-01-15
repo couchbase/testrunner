@@ -1,27 +1,28 @@
-import uuid
-import logger
-import time
-import unittest
-import json
-import sys
-import copy
-import random
-import types
-import math
-import datetime
-from threading import Thread, Event
+from TestInput import TestInputSingleton
+from autocompaction import AutoCompactionTests
+from couchbase.cluster import Cluster
 from couchbase.document import View
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
-from viewtests import ViewBaseTests
-from memcached.helper.data_helper import VBucketAwareMemcached, DocumentGenerator, KVStoreAwareSmartClient
 from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from old_tasks import task, taskmanager
+from memcached.helper.data_helper import VBucketAwareMemcached, \
+    DocumentGenerator, KVStoreAwareSmartClient
 from memcached.helper.old_kvstore import ClientKeyValueStore
-from TestInput import TestInputSingleton
-from couchbase.cluster import Cluster
+from old_tasks import task, taskmanager
 from remote.remote_util import RemoteMachineShellConnection
-from autocompaction import AutoCompactionTests
+from threading import Thread, Event
+from viewtests import ViewBaseTests
+import copy
+import datetime
+import json
+import logger
+import math
+import random
+import sys
+import time
+import types
+import unittest
+import uuid
 
 class StoppableThread(Thread):
     """Thread class with a stop() method. The thread itself has to check
@@ -132,6 +133,19 @@ class ViewQueryTests(unittest.TestCase):
         data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit)
         data_set.add_startkey_endkey_queries()
         self._query_test_init(data_set)
+
+    def test_reproduce_mb_7193_queries(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Based on MB-7193
+        '''
+        ddoc_name = 'ddoc/test'
+        data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit,
+                                 name_ddoc=ddoc_name)
+        data_set.add_startkey_endkey_queries()
+        data_set.load(self, data_set.views[0], True)
+        self._query_all_views(data_set.views, limit=data_set.limit)
 
     def test_simple_dataset_all_queries(self):
         '''
@@ -2835,10 +2849,11 @@ class EmployeeDataSet:
 
 
 class SimpleDataSet:
-    def __init__(self, rest, num_docs, limit = None, reduce_fn=None, bucket='default'):
+    def __init__(self, rest, num_docs, limit = None, reduce_fn=None, bucket='default',
+                 name_ddoc=None):
         self.num_docs = num_docs
+        self.name = name_ddoc
         self.views = self.create_views(rest,reduce = reduce_fn)
-        self.name = "simple_dataset"
         self.kv_store = ClientKeyValueStore()
         self.kv_template = {"name": "doc-${prefix}-${seed}-", "age": "${prefix}"}
         self.limit = limit
@@ -2847,7 +2862,7 @@ class SimpleDataSet:
 
     def create_views(self, rest, reduce=None):
         view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
-        return [QueryView(rest, self.num_docs, fn_str=view_fn, reduce_fn=reduce)]
+        return [QueryView(rest, self.num_docs, fn_str=view_fn, reduce_fn=reduce, name=self.name)]
 
     def load(self, tc, view, verify_docs_loaded = True):
         try:
