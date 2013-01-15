@@ -65,10 +65,15 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
                 time.sleep(self.sleep_time)
-                if self.input.param('remove_config_files', False):
+                if self.input.param('remove_manifest_files', False):
                     for file in ['manifest.txt', 'manifest.xml', 'VERSION.txt,']:
                         output, error = remote.execute_command("rm -rf /opt/couchbase/{0}".format(file))
                         remote.log_command_output(output, error)
+                if self.input.param('remove_config_files', False):
+                    for file in ['config', 'couchbase-server.node', 'ip', 'couchbase-server.cookie']:
+                        output, error = remote.execute_command("rm -rf /opt/couchbase/var/lib/couchbase/{0}".format(file))
+                        remote.log_command_output(output, error)
+                    self.buckets = []
                 remote.disconnect()
             upgrade_threads = self._async_update(upgrade_version, upgrade_nodes)
             for upgrade_thread in upgrade_threads:
