@@ -113,17 +113,24 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         return appropriate_build
 
-    def _upgrade(self, upgrade_version, server):
-        remote = RemoteMachineShellConnection(server)
-        appropriate_build = self._get_build(server, upgrade_version, remote)
-        self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
-        remote.download_build(appropriate_build)
-        remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
-        remote.disconnect()
-        if not self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
-            self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
-        self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
-        time.sleep(self.sleep_time)
+    def _upgrade(self, upgrade_version, server, queue=None):
+        try:
+            remote = RemoteMachineShellConnection(server)
+            appropriate_build = self._get_build(server, upgrade_version, remote)
+            self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
+            remote.download_build(appropriate_build)
+            remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
+            remote.disconnect()
+            if not self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
+                self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
+            self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
+            time.sleep(self.sleep_time)
+        except Exception:
+            if queue is not None:
+                queue.put(False)
+                raise e
+        if queue is not None:
+            queue.put(True)
 
     def verification(self, servers):
         for bucket in self.buckets:

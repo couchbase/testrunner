@@ -1,3 +1,4 @@
+import Queue
 import time
 from threading import Thread
 from newupgradebasetest import NewUpgradeBaseTest
@@ -32,6 +33,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
         super(MultiNodesUpgradeTests, self).setUp()
         self.nodes_init = self.input.param('nodes_init', 2)
+        self.queue = Queue.Queue()
 
     def tearDown(self):
         super(MultiNodesUpgradeTests, self).tearDown()
@@ -41,7 +43,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         for server in servers:
             upgrade_thread = Thread(target=self._upgrade,
                                     name="upgrade_thread" + server.ip,
-                                    args=(upgrade_version, server))
+                                    args=(upgrade_version, server, self.queue))
             upgrade_threads.append(upgrade_thread)
             upgrade_thread.start()
         return upgrade_threads
@@ -64,13 +66,18 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 remote.stop_server()
                 time.sleep(self.sleep_time)
                 if self.input.param('remove_config_files', False):
-                    for file in ['manifest.txt', 'manifest.xml', 'VERSION.txt']:
+                    for file in ['manifest.txt', 'manifest.xml', 'VERSION.txt,']:
                         output, error = remote.execute_command("rm -rf /opt/couchbase/{0}".format(file))
                         remote.log_command_output(output, error)
                 remote.disconnect()
             upgrade_threads = self._async_update(upgrade_version, upgrade_nodes)
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
             time.sleep(self.expire_time)
             if self.during_ops:
                 if "add_back_failover" in self.during_ops:
