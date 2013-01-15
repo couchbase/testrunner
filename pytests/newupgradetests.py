@@ -204,7 +204,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
                 self.create_ddocs_and_views()
-        self.verification(self.servers[:self.nodes_init])
+        self.verification(self.servers[:self.nodes_init], check_items=not num_nodes_remove_data)
 
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.nodes_init])

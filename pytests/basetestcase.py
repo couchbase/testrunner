@@ -354,7 +354,7 @@ class BaseTestCase(unittest.TestCase):
         self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size=batch_size)
         return gen_load
 
-    def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None):
+    def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True):
         if servers is None:
             servers = self.servers
         if master is None:
@@ -362,13 +362,16 @@ class BaseTestCase(unittest.TestCase):
         if max_verify is None:
             max_verify = self.max_verify
         self._wait_for_stats_all_buckets(servers, timeout=timeout)
-        self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify)
-        self._verify_stats_all_buckets(servers)
-        # verify that curr_items_tot corresponds to sum of curr_items from all nodes
-        verified = True
-        for bucket in self.buckets:
-            verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
-        self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
+        if check_items:
+            self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify)
+            self._verify_stats_all_buckets(servers)
+            # verify that curr_items_tot corresponds to sum of curr_items from all nodes
+            verified = True
+            for bucket in self.buckets:
+                verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
+            self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
+        else:
+            self.log.warn("verification of items was omitted")
 
     def _stats_befor_warmup(self, bucket_name):
         if not self.access_log:
