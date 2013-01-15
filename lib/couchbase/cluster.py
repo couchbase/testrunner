@@ -285,7 +285,7 @@ class Cluster(object):
     def shutdown(self, force=False):
         self.task_manager.shutdown(force)
 
-    def async_create_view(self, server, design_doc_name, view, bucket="default", with_query=True):
+    def async_create_view(self, server, design_doc_name, view, bucket="default", with_query=True, check_replication=False):
         """Asynchronously creates a views in a design doc
 
         Parameters:
@@ -297,11 +297,11 @@ class Cluster(object):
 
         Returns:
             ViewCreateTask - A task future that is a handle to the scheduled task."""
-        _task = ViewCreateTask(server, design_doc_name, view, bucket, with_query)
+        _task = ViewCreateTask(server, design_doc_name, view, bucket, with_query, check_replication)
         self.task_manager.schedule(_task)
         return _task
 
-    def create_view(self, server, design_doc_name, view, bucket="default", timeout=None, with_query=True):
+    def create_view(self, server, design_doc_name, view, bucket="default", timeout=None, with_query=True, check_replication=False):
         """Synchronously creates a views in a design doc
 
         Parameters:
@@ -313,7 +313,7 @@ class Cluster(object):
 
         Returns:
             string - revision number of design doc."""
-        _task = self.async_create_view(server, design_doc_name, view, bucket, with_query)
+        _task = self.async_create_view(server, design_doc_name, view, bucket, with_query, check_replication)
         return _task.result(timeout)
 
     def async_delete_view(self, server, design_doc_name, view, bucket="default"):

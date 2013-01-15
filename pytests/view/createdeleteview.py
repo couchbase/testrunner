@@ -67,7 +67,10 @@ class CreateDeleteViewTests(ViewBaseTest):
     Returns:
         None"""
 
-    def _execute_ddoc_ops(self, ddoc_op_type, test_with_view, num_ddocs, num_views_per_ddoc, prefix_ddoc="dev_ddoc", prefix_view="views", start_pos_for_mutation=0, bucket="default"):
+    def _execute_ddoc_ops(self, ddoc_op_type, test_with_view, num_ddocs,
+                          num_views_per_ddoc, prefix_ddoc="dev_ddoc",
+                          prefix_view="views", start_pos_for_mutation=0,
+                          bucket="default", check_replication=True):
         if ddoc_op_type == "create":
             self.log.info("Processing Create DDoc Operation On Bucket {0}".format(bucket))
             #if there are ddocs already, add to that else start with an empty map
@@ -80,7 +83,7 @@ class CreateDeleteViewTests(ViewBaseTest):
                     #create view objects as per num_views_per_ddoc
                     view_list = self.make_default_views(prefix_view, num_views_per_ddoc)
                 #create view in the database
-                self.create_views(self.master, design_doc_name, view_list, bucket, self.wait_timeout * 2)
+                self.create_views(self.master, design_doc_name, view_list, bucket, self.wait_timeout * 2, check_replication=check_replication)
                 #store the created views in internal dictionary
                 ddoc_view_map[design_doc_name] = view_list
             #store the ddoc-view dict per bucket
@@ -99,10 +102,10 @@ class CreateDeleteViewTests(ViewBaseTest):
                         for view_count in xrange(num_views_per_ddoc):
                             #create new View object to be updated
                             updated_view = View(view_list[start_pos_for_mutation + view_count].name, self.updated_map_func, None, False)
-                            self.cluster.create_view(self.master, ddoc_name, updated_view, bucket, self.wait_timeout * 2)
+                            self.cluster.create_view(self.master, ddoc_name, updated_view, bucket, self.wait_timeout * 2, check_replication=check_replication)
                     else:
                         #update the existing design doc(rev gets updated with this call)
-                        self.cluster.create_view(self.master, ddoc_name, None, bucket, self.wait_timeout * 2)
+                        self.cluster.create_view(self.master, ddoc_name, None, bucket, self.wait_timeout * 2, check_replication=check_replication)
                     ddoc_map_loop_cnt += 1
         elif ddoc_op_type == "delete":
             self.log.info("Processing Delete DDoc Operation On Bucket {0}".format(bucket))
@@ -147,7 +150,10 @@ class CreateDeleteViewTests(ViewBaseTest):
     Returns:
         A list of task futures that is a handle to the scheduled task."""
 
-    def _async_execute_ddoc_ops(self, ddoc_op_type, test_with_view, num_ddocs, num_views_per_ddoc, prefix_ddoc="dev_ddoc", prefix_view="views", start_pos_for_mutation=0, bucket="default"):
+    def _async_execute_ddoc_ops(self, ddoc_op_type, test_with_view, num_ddocs,
+                                num_views_per_ddoc, prefix_ddoc="dev_ddoc",
+                                prefix_view="views", start_pos_for_mutation=0,
+                                bucket="default", check_replication=True):
         if ddoc_op_type == "create":
             self.log.info("Processing Create DDoc Operation On Bucket {0}".format(bucket))
             tasks = []
@@ -161,7 +167,7 @@ class CreateDeleteViewTests(ViewBaseTest):
                     #create view objects as per num_views_per_ddoc
                     view_list = self.make_default_views(prefix_view, num_views_per_ddoc)
                 #create view in the database
-                tasks = self.async_create_views(self.master, design_doc_name, view_list, bucket)
+                tasks = self.async_create_views(self.master, design_doc_name, view_list, bucket, check_replication=check_replication)
                 #store the created views in internal dictionary
                 ddoc_view_map[design_doc_name] = view_list
             #store the ddoc-view dict per bucket
@@ -182,11 +188,11 @@ class CreateDeleteViewTests(ViewBaseTest):
                         for view_count in xrange(num_views_per_ddoc):
                             #create new View object to be updated
                             updated_view = View(view_list[start_pos_for_mutation + view_count].name, self.updated_map_func, None, False)
-                            t_ = self.cluster.async_create_view(self.master, ddoc_name, updated_view, bucket)
+                            t_ = self.cluster.async_create_view(self.master, ddoc_name, updated_view, bucket, check_replication=check_replication)
                             tasks.append(t_)
                     else:
                         #update the existing design doc(rev gets updated with this call)
-                        t_ = self.cluster.async_create_view(self.master, ddoc_name, None, bucket)
+                        t_ = self.cluster.async_create_view(self.master, ddoc_name, None, bucket, check_replication=check_replication)
                         tasks.append(t_)
                     ddoc_map_loop_cnt += 1
             return tasks

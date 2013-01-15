@@ -1011,7 +1011,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                 self.set_exception(error)
 
 class ViewCreateTask(Task):
-    def __init__(self, server, design_doc_name, view, bucket="default", with_query=True):
+    def __init__(self, server, design_doc_name, view, bucket="default", with_query=True, check_replication=False):
         Task.__init__(self, "create_view_task")
         self.server = server
         self.bucket = bucket
@@ -1022,6 +1022,7 @@ class ViewCreateTask(Task):
         self.design_doc_name = prefix + design_doc_name
         self.ddoc_rev_no = 0
         self.with_query = with_query
+        self.check_replication = check_replication
         self.rest = RestConnection(self.server)
 
     def execute(self, task_manager):
@@ -1099,6 +1100,10 @@ class ViewCreateTask(Task):
                 self.set_result(self.ddoc_rev_no)
             else:
                 self.set_exception(Exception("failed to update design document"))
+
+            if self.check_replication:
+                self._check_ddoc_replication_on_nodes()
+
         except QueryViewException as e:
             if e.message.find('not_found') or e.message.find('view_undefined') > -1:
                 task_manager.schedule(self, 2)
@@ -1133,6 +1138,53 @@ class ViewCreateTask(Task):
 
     def _parse_revision(self, rev_string):
         return int(rev_string.split('-')[0])
+
+    def _check_ddoc_replication_on_nodes(self):
+
+        nodes = self.rest.node_statuses()
+        retry_count = 3
+
+        #nothing to check if there is only 1 node
+        if len(nodes) <= 1:
+            return
+
+        for node in nodes:
+            server_info = {"ip" : node.ip,
+                       "port" : node.port,
+                       "username" : self.rest.username,
+                       "password" : self.rest.password}
+
+            for count in xrange(retry_count):
+                try:
+                    rest_node = RestConnection(server_info)
+                    content, meta = rest_node.get_ddoc(self.bucket, self.design_doc_name)
+                    new_rev_id = self._parse_revision(meta['rev'])
+                    if new_rev_id == self.ddoc_rev_no:
+                        break
+                    else:
+                        self.log.info("Design Doc {0} version is not updated on node {1}:{2}. Retrying.".format(self.design_doc_name, node.ip, node.port))
+                        time.sleep(2)
+                except ReadDocumentException as e:
+                    if(count < retry_count):
+                        self.log.info("Design Doc {0} not yet available on node {1}:{2}. Retrying.".format(self.design_doc_name, node.ip, node.port))
+                        time.sleep(2)
+                    else:
+                        self.log.error("Design Doc {0} failed to replicate on node {1}:{2}".format(self.design_doc_name, node.ip, node.port))
+                        self.set_exception(e)
+                        self.state = FINISHED
+                        break
+                except Exception as e:
+                    if(count < retry_count):
+                        self.log.info("Unexpected Exception Caught. Retrying.")
+                        time.sleep(2)
+                    else:
+                        self.log.error("Unexpected Exception Caught")
+                        self.set_exception(e)
+                        self.state = FINISHED
+                        break
+            else:
+                self.set_exception(Exception("Design Doc {0} version mismatch on node {1}:{2}".format(self.design_doc_name, node.ip, node.port)))
+
 
 class ViewDeleteTask(Task):
     def __init__(self, server, design_doc_name, view, bucket="default"):

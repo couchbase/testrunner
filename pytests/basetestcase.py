@@ -310,23 +310,23 @@ class BaseTestCase(unittest.TestCase):
                       "viewFragmntThreshold" : None}
         self.cluster.modify_fragmentation_config(server, new_config, bucket)
 
-    def async_create_views(self, server, design_doc_name, views, bucket="default", with_query=True):
+    def async_create_views(self, server, design_doc_name, views, bucket="default", with_query=True, check_replication=False):
         tasks = []
         if len(views):
             for view in views:
-                t_ = self.cluster.async_create_view(server, design_doc_name, view, bucket, with_query)
+                t_ = self.cluster.async_create_view(server, design_doc_name, view, bucket, with_query, check_replication=check_replication)
                 tasks.append(t_)
         else:
-            t_ = self.cluster.async_create_view(server, design_doc_name, None, bucket, with_query)
+            t_ = self.cluster.async_create_view(server, design_doc_name, None, bucket, with_query, check_replication=check_replication)
             tasks.append(t_)
         return tasks
 
-    def create_views(self, server, design_doc_name, views, bucket="default", timeout=None):
+    def create_views(self, server, design_doc_name, views, bucket="default", timeout=None, check_replication=False):
         if len(views):
             for view in views:
-                self.cluster.create_view(server, design_doc_name, view, bucket, timeout)
+                self.cluster.create_view(server, design_doc_name, view, bucket, timeout, check_replication=check_replication)
         else:
-            self.cluster.create_view(server, design_doc_name, None, bucket, timeout)
+            self.cluster.create_view(server, design_doc_name, None, bucket, timeout, check_replication=check_replication)
 
     def make_default_views(self, prefix, count, is_dev_ddoc=False, different_map=False):
         ref_view = self.default_view
@@ -361,6 +361,7 @@ class BaseTestCase(unittest.TestCase):
             master = self.master
         if max_verify is None:
             max_verify = self.max_verify
+
         self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120))
         if check_items:
             self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify)
@@ -445,7 +446,7 @@ class BaseTestCase(unittest.TestCase):
                                bucket="default", expected_rows=None, retry_time=2, server=None):
         tasks = []
         if server is None:
-            server=self.master
+            server = self.master
         if expected_rows is None:
             expected_rows = self.num_items
         for i in xrange(num_views):
