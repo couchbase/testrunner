@@ -536,7 +536,7 @@ class RemoteMachineShellConnection:
         f2.close()
         self.copy_file_local_to_remote(full_src_path, full_des_path)
         # remove capture file from source after copy to destination
-        os.remove(full_src_path)
+        #os.remove(full_src_path)
 
     # this function used to modify bat file to run task schedule in windows
     def modify_bat_file(self, remote_path, file_name, name, version, task):
@@ -820,7 +820,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             self.wait_till_file_added(remote_path, "VERSION.txt", timeout_in_seconds=600)
             log.info('wait 30 seconds for server to start up completely')
             time.sleep(30)
-            return succeed
+            return success
 
 
     def wait_till_file_deleted(self, remotepath, filename, timeout_in_seconds=180):
