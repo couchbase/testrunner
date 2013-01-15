@@ -1,7 +1,7 @@
 #!/bin/sh -ex
 echo "Collecting btree stats..."
 hostname=`awk -F: '/\[servers\]/ { getline; print $0 }' ${ini_file} | cut -c 3-`
-./bin/btrc -n $hostname:8091
+./bin/btrc -n $hostname:8091 -c btree_stats
 
 echo "Collecting server info..."
 ./bin/collect_server_info -i ${ini_file} > /dev/null
