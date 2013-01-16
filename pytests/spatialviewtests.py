@@ -275,27 +275,25 @@ class SpatialViewsTests(BaseTestCase):
             ddocs.append(DesignDocument(self.default_ddoc_name + str(i), non_spatial_views, spatial_views=views))
         return ddocs
 
-    def create_ddocs(self, ddocs):
+    def create_ddocs(self, ddocs, bucket=None):
+        bucket_views = bucket or self.buckets[0]
         for ddoc in ddocs:
             if not (ddoc.views or ddoc.spatial_views):
-                self.cluster.create_view(self.master, ddoc.name, [], bucket=self.bucket_name)
+                self.cluster.create_view(self.master, ddoc.name, [], bucket=bucket_views)
             for view in ddoc.views:
-                self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+                self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket_views)
             for view in ddoc.spatial_views:
-                self.cluster.create_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+                self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket_views)
 
-    def delete_views(self, ddocs, views=[], spatial_views=[]):
+    def delete_views(self, ddocs, views=[], spatial_views=[], bucket=None):
+        bucket_views = bucket or self.buckets[0]
+        vs = views or ddoc.views
+        sp_vs = spatial_views or ddoc.spatial_views
         for ddoc in ddocs:
-            if views or spatial_views:
-                for view in views:
-                    self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
-                for view in spatial_views:
-                    self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
-            else:
-                for view in ddoc.views:
-                    self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
-                for view in ddoc.spatial_views:
-                    self.cluster.delete_view(self.master, ddoc.name, view, bucket=self.bucket_name)
+            for view in vs:
+                self.cluster.delete_view(self.master, ddoc.name, view, bucket=bucket_views)
+            for view in sp_vs:
+                self.cluster.delete_view(self.master, ddoc.name, view, bucket=bucket_views)
 
     def perform_ddoc_ops(self, ddocs):
         try:
