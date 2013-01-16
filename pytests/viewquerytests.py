@@ -148,6 +148,24 @@ class ViewQueryTests(unittest.TestCase):
         data_set.load(self, data_set.views[0], True)
         self._query_all_views(data_set.views, limit=data_set.limit)
 
+    def test_simple_dataset_startkey_endkey_non_json_queries(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(different combinations of
+               stratkey. endkey, descending, inclusive_end, parameters with non-json char)
+        '''
+        symbols = [u"\xf1", u"\xe1", u"\xfc", u"\xbf", u"\xf1", u"\xe1", u"\xfc",
+                   u"\xbf", u"\uffff"]
+        data_set = SimpleDataSet(self._rconn(), self.num_docs, limit=self.limit,
+                                 json_case=True)
+        doc_names = data_set.load(self, data_set.views[0], True)
+        for symbol in symbols:
+            data_set.add_startkey_endkey_non_json_queries(doc_names, symbol)
+            self._query_all_views(data_set.views, limit=data_set.limit)
+
     def test_simple_dataset_all_queries(self):
         '''
         Test uses simple data set:
@@ -2870,9 +2888,10 @@ class EmployeeDataSet:
 
 class SimpleDataSet:
     def __init__(self, rest, num_docs, limit = None, reduce_fn=None, bucket='default',
-                 name_ddoc=None):
+                 name_ddoc=None, json_case=False):
         self.num_docs = num_docs
         self.name = name_ddoc
+        self.json_case = json_case
         self.views = self.create_views(rest,reduce = reduce_fn)
         self.kv_store = ClientKeyValueStore()
         self.kv_template = {"name": "doc-${prefix}-${seed}-", "age": "${prefix}"}
@@ -2882,6 +2901,8 @@ class SimpleDataSet:
 
     def create_views(self, rest, reduce=None):
         view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
+        if self.json_case:
+            view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.name, doc.age);}}'
         return [QueryView(rest, self.num_docs, fn_str=view_fn, reduce_fn=reduce, name=self.name)]
 
     def load(self, tc, view, verify_docs_loaded = True):
@@ -2972,6 +2993,32 @@ class SimpleDataSet:
                                              "inclusive_end" : "false"}, end_key),
                                  QueryHelper({"start_key" : start_key},
                                              view.index_size - start_key)]
+
+    def add_startkey_endkey_non_json_queries(self, doc_names, symbol, views=None,
+                                             limit=None):
+        if views is None:
+            views = self.views
+
+        for view in views:
+            view.queries = list()
+            start_key = '"%s"' % doc_names[len(doc_names)/2]
+            end_key = '"%s"' % (doc_names[len(doc_names)/2] + symbol)
+
+            view.queries += [QueryHelper({"start_key" : end_key,
+                                           "end_key" : start_key,
+                                           "descending" : "true"},
+                                          1),
+                             QueryHelper({"end_key" : end_key},
+                                         len(doc_names)/2 + 1),
+                             QueryHelper({"end_key" : end_key,
+                                          "inclusive_end" : "false"},
+                                         len(doc_names)/2 + 1),
+                             QueryHelper({"start_key" : start_key},
+                                         len(doc_names)/2)]
+            if limit:
+                for q in view.queries:
+                    q["limit"] = limit
+                    q.expected_num_docs = min(q.expected_num_docs, limit)
 
     def add_stale_queries(self, views = None, limit= None, stale_param=None):
         if views is None:
