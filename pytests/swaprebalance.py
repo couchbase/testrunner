@@ -9,9 +9,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import LoadWithMcsoda
-from couchbase.stats_tools import StatsCommon
 from threading import Thread
-from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.exception import RebalanceFailedException
