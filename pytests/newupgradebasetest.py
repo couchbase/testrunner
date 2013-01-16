@@ -136,14 +136,14 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
-    def verification(self, servers):
+    def verification(self, servers, check_items=True):
         for bucket in self.buckets:
             if not self.rest_helper.bucket_exists(bucket.name):
                 raise Exception("bucket: %s not found" % bucket.name)
             bucketinfo = self.rest.get_bucket(bucket.name)
             self.log.info("bucket info : %s" % bucketinfo)
         self.verify_cluster_stats(servers, max_verify=self.max_verify, \
-                                  timeout=self.wait_timeout * 50)
+                                  timeout=self.wait_timeout * 50, check_items=check_items)
 
         if self.ddocs:
             query = {"connectionTimeout" : 60000}
