@@ -14,6 +14,7 @@ from threading import Thread
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
 from memcached.helper.data_helper import MemcachedClientHelper
+from membase.api.exception import RebalanceFailedException
 
 class SwapRebalanceBase(unittest.TestCase):
 
@@ -373,58 +374,52 @@ class SwapRebalanceBase(unittest.TestCase):
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
             ejectedNodes=optNodesIds)
 
-        # Rebalance is failed at 20%, 40% and 60% completion
-        for i in [1, 2, 3]:
-            expected_progress = 20 * i
-            self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(expected_progress))
-            RestHelper(rest).rebalance_reached(expected_progress)
-            bucket = rest.get_buckets()[0].name
-            pid = None
-            if self.swap_orchestrator:
-                # get PID via remote connection if master is a new node
-                shell = RemoteMachineShellConnection(master)
-                o, _ = shell.execute_command("ps -eo comm,pid | awk '$1 == \"memcached\" { print $2 }'")
-                pid = o[0]
-                shell.disconnect()
-            else:
-                for i in xrange(2):
-                    try:
-                        _mc = MemcachedClientHelper.direct_client(master, bucket)
-                        pid = _mc.stats()["pid"]
-                        break
-                    except EOFError as e:
-                        self.log.error("{0}.Retry in 2 sec".format(e))
-                        time.sleep(1)
-            if pid is None:
-                self.fail("impossible to get a PID")
-            command = "os:cmd(\"kill -9 {0} \")".format(pid)
-            self.log.info(command)
-            killed = rest.diag_eval(command)
-            self.log.info("killed {0}:{1}??  {2} ".format(master.ip, master.port, killed))
-            self.log.info("sleep for 10 sec after kill memcached")
-            time.sleep(10)
-            # we can't get stats for new node when rebalance falls
-            if not self.swap_orchestrator:
-                ClusterOperationHelper._wait_warmup_completed(self, [master], bucket, wait_time=600)
-            i = 0
-            #we expect that rebalance will be failed
-            while rest._rebalance_progress_status() == "running" and i < 60:
-                self.log.info("rebalance progress: {0}".format(rest._rebalance_progress()))
-                time.sleep(1)
-                i += 1
-            self.log.info("rebalance progress status:{0}".format(rest._rebalance_progress_status()))
-            if rest._rebalance_progress_status() == "running":
-                self.log.info("rebalance is still running even after restarting memcached")
-                continue
+        self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(self.percentage_progress))
+        RestHelper(rest).rebalance_reached(self.percentage_progress)
+        bucket = rest.get_buckets()[0].name
+        pid = None
+        if self.swap_orchestrator:
+            # get PID via remote connection if master is a new node
+            shell = RemoteMachineShellConnection(master)
+            o, _ = shell.execute_command("ps -eo comm,pid | awk '$1 == \"memcached\" { print $2 }'")
+            pid = o[0]
+            shell.disconnect()
+        else:
+            for i in xrange(2):
+                try:
+                    _mc = MemcachedClientHelper.direct_client(master, bucket)
+                    pid = _mc.stats()["pid"]
+                    break
+                except EOFError as e:
+                    self.log.error("{0}.Retry in 2 sec".format(e))
+                    time.sleep(1)
+        if pid is None:
+            self.fail("impossible to get a PID")
+        command = "os:cmd(\"kill -9 {0} \")".format(pid)
+        self.log.info(command)
+        killed = rest.diag_eval(command)
+        self.log.info("killed {0}:{1}??  {2} ".format(master.ip, master.port, killed))
+        self.log.info("sleep for 10 sec after kill memcached")
+        time.sleep(10)
+        # we can't get stats for new node when rebalance falls
+        if not self.swap_orchestrator:
+            ClusterOperationHelper._wait_warmup_completed(self, [master], bucket, wait_time=600)
+        i = 0
+        #we expect that rebalance will be failed
+        try:
+            rest.monitorRebalance()
+        except RebalanceFailedException:
+            #retry rebalance if it failed
+            self.log.warn("Rebalance failed but it's expected")
+            self.assertFalse(RestHelper(rest).is_cluster_rebalanced(), msg="cluster need rebalance")
             knownNodes = rest.node_statuses();
             self.log.info("nodes are still in cluster: {0}".format([(node.ip, node.port) for node in knownNodes]))
             ejectedNodes = list(set(optNodesIds) & set([node.id for node in knownNodes]))
-            rest.rebalance(otpNodes=[node.id for node in knownNodes],
-                ejectedNodes=ejectedNodes)
-
-        self.assertTrue(rest.monitorRebalance(),
-            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
-
+            rest.rebalance(otpNodes=[node.id for node in knownNodes], ejectedNodes=ejectedNodes)
+            self.assertTrue(rest.monitorRebalance(),
+                            msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
+        else:
+            self.log.info("rebalance completed successfully")
         SwapRebalanceBase.verification_phase(self, master)
 
     @staticmethod
@@ -608,6 +603,7 @@ class SwapRebalanceFailedTests(unittest.TestCase):
         SwapRebalanceBase.common_tearDown(self)
 
     def test_failed_swap_rebalance(self):
+        self.percentage_progress = self.input.param("percentage_progress", 50)
         SwapRebalanceBase._common_test_body_failed_swap_rebalance(self)
 
     # Not cluster_run friendly, yet
