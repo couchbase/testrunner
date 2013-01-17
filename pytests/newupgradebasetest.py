@@ -129,7 +129,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
             self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             time.sleep(self.sleep_time)
-        except Exception:
+        except Exception, e:
             if queue is not None:
                 queue.put(False)
                 raise e
