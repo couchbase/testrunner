@@ -198,7 +198,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
             time.sleep(self.expire_time)
-            self.verification(self.servers[:self.nodes_init])
             for server in servers_with_not_default:
                 rest = RestConnection(server)
                 node = rest.get_nodes_self()
