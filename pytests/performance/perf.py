@@ -817,6 +817,8 @@ class PerfBase(unittest.TestCase):
                 retries += 1
                 time.sleep(delay_seconds)
         sc.reb_stats(start_time, end_time - start_time)
+        if self.parami("master_events", PerfDefaults.master_events):
+            print self.rest.diag_master_events()
 
     def delayed_rebalance(self, num_nodes, delay_seconds=10,
                           max_retries=PerfDefaults.reb_max_retries,

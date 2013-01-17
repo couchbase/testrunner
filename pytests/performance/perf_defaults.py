@@ -82,6 +82,7 @@ class PerfDefaults:
     mcsoda_heartbeat        =    0        # health check heartbeat message for mcsoda. 0: no heartbeat, ~: in sec
     mcsoda_max_ops_sec      =    0        # max ops per seconds for mcsoda
     mcsoda_fg_stats_ops     =    1000     # fg ops threshold to persist latency stats
+    master_events           =    0        # print out master events after rebalance, 1: enabled, 0: disabled
     num_value_samples       =    100      # number of value samples (in memory, use large number with caution)
     nru_freq                =    1440     # NRU access scanner running freqency, in minutes
     nru_wait                =    300      # time to wait for access scanner to finish, in seconds

@@ -803,6 +803,12 @@ class RestConnection(object):
         log.info("/diag/eval status: {0} content: {1} command: {2}".format(status, content, code))
         return status, content
 
+    def diag_master_events(self):
+        api = '{0}{1}'.format(self.baseUrl, 'diag/masterEvents?o=1')
+        status, content, header = self._http_request(api, "GET")
+        log.info("diag/masterEvents?o=1 status: {0} content: {1}".format(status, content))
+        return status, content
+
     def monitorRebalance(self, stop_if_loop=False):
         start = time.time()
         progress = 0
