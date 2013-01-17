@@ -257,6 +257,11 @@ class ViewQueryTests(unittest.TestCase):
         data_set.load(self, data_set.views[0])
         RebalanceHelper.wait_for_persistence(self.servers[0], data_set.bucket)
 
+        for view in data_set.views:
+            # run queries to create indexes
+            self.cluster.query_view(self.servers[0], view.name, view.name,
+                                    {"connectionTimeout" : 60000})
+
         data_set.add_stale_queries(stale_param="ok")
         data_set.preload_matching_query_keys()
 
