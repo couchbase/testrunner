@@ -1000,6 +1000,10 @@ class EPerfMaster(perf.PerfBase):
         self.gated_start(self.input.clients)
         view_gen = ViewGen()
         views = self.param("views", None)
+        if self.parami("disabled_updates", 0):
+            options = {"updateMinChanges": 0, "replicaUpdateMinChanges": 0}
+        else:
+            options = None
         try:
             if isinstance(views, str):
                 views = eval(views)
@@ -1009,7 +1013,7 @@ class EPerfMaster(perf.PerfBase):
                 views = [int(v) for v in views]
             else:
                 raise TypeError
-            ddocs = view_gen.generate_ddocs(views)
+            ddocs = view_gen.generate_ddocs(views, options)
         except (SyntaxError, TypeError):
             self.log.error("Wrong or missing views parameter")
             sys.exit()
