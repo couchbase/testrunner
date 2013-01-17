@@ -361,10 +361,10 @@ class BaseTestCase(unittest.TestCase):
             master = self.master
         if max_verify is None:
             max_verify = self.max_verify
-        self._wait_for_stats_all_buckets(servers, timeout=timeout)
+        self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120))
         if check_items:
             self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify)
-            self._verify_stats_all_buckets(servers, timeout=timeout)
+            self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
             verified = True
             for bucket in self.buckets:
