@@ -320,6 +320,8 @@ class SpatialViewQueriesTests(BaseTestCase):
 
     def setUp(self):
         super(SpatialViewQueriesTests, self).setUp()
+        self.thread_crashed = Event()
+        self.thread_stopped = Event()
         self.skip_rebalance = self.input.param("skip_rebalance", False)
         self.use_dev_views = self.input.param("use-dev-views", False)
         self.all_view_one_ddoc = self.input.param("all-view-one-ddoc", False)
@@ -356,6 +358,22 @@ class SpatialViewQueriesTests(BaseTestCase):
                self.fail("Unexpected error appeared during run %s" % ex)
         if error:
             self.fail("Expected error '%s' didn't appear" % error)
+
+    def test_add_spatial_view_queries_threads(self):
+        diff_nodes = self.input.param("diff-nodes", False)
+        query_threads = []
+        for i in xrange(len(self.servers)):
+            node = (self.master, self.servers[i])[diff_nodes]
+            self.query_and_verify_result(self.docs, self.params, node=node)
+            q_thread = Thread(target=self.query_and_verify_result,
+                                   name="query_thread" + str(i),
+                                   args=([self.docs, self.params, node]))
+            query_threads.append(q_thread)
+            q_thread.start()
+        for q_thread in query_threads:
+            q_thread.join()
+        if self.thread_crashed.is_set():
+            self.fail("Error occured during run")
 
     def test_view_queries_during_rebalance(self):
         start_cluster = self.input.param('start-cluster', 1)
@@ -444,18 +462,26 @@ class SpatialViewQueriesTests(BaseTestCase):
         return current_params
 
     def query_and_verify_result(self, doc_inserted, params, node=None):
-        rest = RestConnection(self.master)
-        if node:
-            rest = RestConnection(node)
-        expected_ddocs = self.helper.generate_matching_docs(doc_inserted, params)
-        for ddoc in self.ddocs:
-            for view in ddoc.spatial_views:
-                result_ddocs = self.helper.query_view(rest, ddoc, view,
-                                                      bucket=self.bucket_name,
-                                                      extra_params=params,
-                                                      num_expected=len(expected_ddocs),
-                                                      num_tries=20)
-                self.helper.verify_matching_keys(expected_ddocs, result_ddocs)
+        try:
+            rest = RestConnection(self.master)
+            if node:
+                rest = RestConnection(node)
+            expected_ddocs = self.helper.generate_matching_docs(doc_inserted, params)
+            for ddoc in self.ddocs:
+                for view in ddoc.spatial_views:
+                    result_ddocs = self.helper.query_view(rest, ddoc, view,
+                                                          bucket=self.bucket_name,
+                                                          extra_params=params,
+                                                          num_expected=len(expected_ddocs),
+                                                          num_tries=20)
+                    self.helper.verify_matching_keys(expected_ddocs, result_ddocs)
+        except Exception as ex:
+            self.thread_crashed.set()
+            self.log.error("****ERROR***** \n At least one of threads is crashed: %s" % (ex))
+            raise ex
+        finally:
+            if not self.thread_stopped.is_set():
+                self.thread_stopped.set()
 
 class SpatialViewTests(unittest.TestCase):
     def setUp(self):
