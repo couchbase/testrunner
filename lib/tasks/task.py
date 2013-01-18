@@ -464,7 +464,7 @@ class GenericLoadingTask(Thread, Task):
             if self.only_store_hash:
                  value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
-        except Exception as error:
+        except BaseException as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -478,7 +478,7 @@ class GenericLoadingTask(Thread, Task):
             else:
                 self.state = FINISHED
                 self.set_exception(error)
-        except Exception as error:
+        except BaseException as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -612,7 +612,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
                     del key_val[key]
                     continue
                 try:
-                    value = key_val[key] # new updated value, however it is not their in orginal code "LoadDocumentsTask"
+                    value = key_val[key]  # new updated value, however it is not their in orginal code "LoadDocumentsTask"
                     value_json = json.loads(value)
                     value_json['mutated'] += 1
                     value = json.dumps(value_json)
@@ -1383,13 +1383,13 @@ class MonitorActiveTask(Task):
     def __init__(self, server, type, target_value, wait_progress=100, num_iterations=100, wait_task=True):
         Task.__init__(self, "monitor_active_task")
         self.server = server
-        self.type = type # indexer or bucket_compaction
+        self.type = type  # indexer or bucket_compaction
         self.target_key = ""
         if self.type == "indexer":
             self.target_key = "design_documents"
             if target_value.lower() in ['true', 'false']:
                 #track initial_build indexer task
-                self.target_key="initial_build"
+                self.target_key = "initial_build"
         elif self.type == "bucket_compaction":
             self.target_key = "original_target"
         elif self.type == "view_compaction":
@@ -1958,7 +1958,7 @@ class ViewQueryVerificationTask(Task):
     def check(self, task_manager):
         err_infos = []
         rc_status = {"passed" : False,
-                     "errors" : err_infos} # array of dicts with keys 'msg' and 'details'
+                     "errors" : err_infos}  # array of dicts with keys 'msg' and 'details'
 
         # create verification id lists
         expected_ids = [row['id'] for row in self.expected_rows]
