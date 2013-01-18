@@ -3,17 +3,28 @@ import uuid
 import logger
 
 from membase.helper.spatial_helper import SpatialHelper
+from basetestcase import BaseTestCase
 
 
-class SpatialCompactionTests(unittest.TestCase):
+class SpatialCompactionTests(BaseTestCase):
     def setUp(self):
-        self.log = logger.Logger.get_logger()
-        self.helper = SpatialHelper(self, "default")
-        self.helper.setup_cluster()
-
+        super(SpatialCompactionTests, self).setUp()
+        self.start_cluster = self.input.param('start-cluster', len(self.servers))
+        self.servers_in = self.input.param('servers_in', 0)
+        self.servers_out = self.input.param('servers_out', 0)
+        self.bucket_name = "default"
+        if self.standard_buckets:
+            self.bucket_name = "standard_bucket0"
+        if self.sasl_buckets:
+            self.bucket_name = "bucket0"
+        self.helper = SpatialHelper(self, self.bucket_name)
+        if self.start_cluster > 1:
+            rebalance = self.cluster.async_rebalance(self.servers[:1],
+                                                     self.servers[1:start_cluster], [])
+            rebalance.result()
 
     def tearDown(self):
-        self.helper.cleanup_cluster()
+        super(SpatialCompactionTests, self).tearDown()
 
 
     def test_spatial_compaction(self):
@@ -34,6 +45,14 @@ class SpatialCompactionTests(unittest.TestCase):
         status, info = self.helper.info(design_name)
         disk_size = info["spatial_index"]["disk_size"]
 
+        if self.servers_in or self.servers_out:
+            servs_in = servs_out = []
+            if self.servers_in:
+                servs_in = self.servers[self.start_cluster:self.servers_in + 1]
+            if self.servers_out:
+                servs_out = self.servers[-self.servers_out:]
+            rebalance = self.cluster.async_rebalance(self.servers, servs_in, servs_out)
+
         # Do the compaction
         self.helper.compact(design_name)
 
@@ -44,3 +63,5 @@ class SpatialCompactionTests(unittest.TestCase):
                         "pre compaction size ({1})."
                         .format(info["spatial_index"]["disk_size"],
                                 disk_size))
+        if self.servers_in or self.servers_out:
+            rebalance.result()
