@@ -806,8 +806,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             if startserver:
                 output, error = self.execute_command('/etc/init.d/{0}-server start'.format(server_type))
 
-                if build.product_version.startswith("1.") and build.deliverable_type == "deb":
-                    # skip error '* Failed to start couchbase-server' for 1.* builds(MB-7288)
+                if (build.product_version.startswith("1.") or build.product_version.startswith("2.0.0"))\
+                        and build.deliverable_type == "deb":
+                    # skip error '* Failed to start couchbase-server' for 1.* & 2.0.0 builds(MB-7288)
+                    # fix in 2.0.1 branch Change-Id: I850ad9424e295bbbb79ede701495b018b5dfbd51
                     log.warn("Error '* Failed to start couchbase-server' for 1.* builds will be skipped")
                     self.log_command_output(output, error, track_words)
                 else:
