@@ -275,6 +275,11 @@ class ViewQueryTests(unittest.TestCase):
             # run queries to create indexes
             self.cluster.query_view(self.servers[0], view.name, view.name,
                                     {"connectionTimeout" : 60000})
+            active_task = self.cluster.async_monitor_active_task(self.servers[0],
+                                                                 "indexer",
+                                                                 "_design/" + view.name,
+                                                                 wait_task=False)
+            active_task.result()
 
         data_set.add_stale_queries(stale_param="ok")
         data_set.preload_matching_query_keys()
