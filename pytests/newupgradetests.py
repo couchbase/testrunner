@@ -6,6 +6,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import VBucketAwareMemcached
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
@@ -52,8 +53,17 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self._install(self.servers[:self.nodes_init])
         self.log.info("Installation done going to sleep for %s sec", self.sleep_time)
         self.operations(self.servers[:self.nodes_init])
+        seqno_expected = 1
         if self.ddocs_num:
             self.create_ddocs_and_views()
+        if not self.initial_version.startswith("1.") and self.input.param('check_seqno', True):
+            for bucket in self.buckets:
+                seq_id = {bucket.name:{}}
+                client = VBucketAwareMemcached(RestConnection(self.master), bucket)
+                valid_keys, deleted_keys = bucket.kvs[1].key_set()
+                _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
+                self.assertTrue(seqno == seqno_expected, msg="seqno {0} != {1} for key:{2}".
+                                    format(seqno, seqno_expected, valid_key))
         if self.during_ops:
             for opn in self.during_ops:
                 if opn != 'add_back_failover':
@@ -76,6 +86,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.buckets = []
                 remote.disconnect()
             upgrade_threads = self._async_update(upgrade_version, upgrade_nodes)
+            #wait upgrade statuses
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
             success_upgrade = True
@@ -94,6 +105,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                          if self.failover_node.ip == server.ip and str(self.failover_node.port) == server.port]
                     self.verification(list(set(self.servers[:self.nodes_init]) - set(rem)))
                     return
+            if self.input.param('check_seqno', True):
+                for bucket in self.buckets:
+                    seq_id = {bucket.name:{}}
+                    client = VBucketAwareMemcached(RestConnection(self.master), bucket)
+                    valid_keys, deleted_keys = bucket.kvs[1].key_set()
+                    for valid_key in valid_keys:
+                        _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
+                        self.assertTrue(seqno == seqno_expected, msg="seqno was changed:{0} for key:{1}".
+                                    format(seqno, valid_key))
+
             self.verification(self.servers[:self.nodes_init])
 
     def offline_cluster_upgrade_and_reboot(self):
@@ -117,6 +138,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -153,6 +179,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.log.info("rebalance failed as expected")
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
             ClusterOperationHelper.wait_for_ns_servers_or_assert(stoped_nodes, self)
             self.cluster.rebalance(self.servers[:self.nodes_init], [], servs_out)
             self.verification(list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out)))
@@ -187,16 +218,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.delete_data(self.servers[:tmp], [data_path, index_path])
             #remove data for nodes with default data paths
             self.delete_data(self.servers[tmp: max(tmp, num_nodes_remove_data)], ["/opt/couchbase/var/lib/couchbase/data"])
-
-            upgrade_threads = []
-            for server in self.servers[:self.nodes_init]:
-                upgrade_thread = Thread(target=self._upgrade,
-                                       name="upgrade_thread" + server.ip,
-                                       args=(upgrade_version, server))
-                upgrade_threads.append(upgrade_thread)
-                upgrade_thread.start()
+            upgrade_threads = self._async_update(upgrade_version, self.servers[:self.nodes_init])
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
             time.sleep(self.expire_time)
             for server in servers_with_not_default:
                 rest = RestConnection(server)
