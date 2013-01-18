@@ -342,15 +342,12 @@ class RemoteMachineShellConnection:
     def remove_directory(self, remote_path):
         sftp = self._ssh_client.open_sftp()
         try:
-            path_of_files_in_dir = remote_path + '/*'
             log.info("removing {0} directory...".format(remote_path))
-            files = self.list_files(remote_path)
-            for f in files:
-                sftp.remove("{0}/{1}".format(f["path"], f["file"]))
             sftp.rmdir(remote_path)
-            sftp.close()
         except IOError:
             return False
+        finally:
+            sftp.close()
         return True
 
     def list_files(self, remote_path):
@@ -419,14 +416,19 @@ class RemoteMachineShellConnection:
         sftp = self._ssh_client.open_sftp()
         try:
             sftp.put(src_path, des_path)
-            sftp.close()
         except IOError:
             log.error('Can not copy file')
+        finally:
+            sftp.close()
 
     # copy multi files from local to remote server
     def copy_files_local_to_remote(self, src_path, des_path):
         files = os.listdir(src_path)
+        log.info("copy file from {0} to {1}".format(src_path, des_path))
+        #self.execute_batch_command("cp -r  {0}/* {1}".format(src_path, des_path))
         for file in files:
+            if file.find("wget") != 1:
+                a = ""
             full_src_path = os.path.join(src_path, file)
             full_des_path = os.path.join(des_path, file)
             self.copy_file_local_to_remote(full_src_path, full_des_path)
@@ -502,7 +504,31 @@ class RemoteMachineShellConnection:
             except IOError:
                 log.error("can not find windows info file")
         else:
-            raise KeyError("can not find windows_info file")
+            return self.create_windows_info()
+
+    def create_windows_info(self):
+            systeminfo = self.get_windows_system_info()
+            info = {}
+            if "OS Name" in systeminfo:
+                info["os"] = systeminfo["OS Name"].find("indows") and "windows" or "NONE"
+                info["os_name"] = systeminfo["OS Name"].find("2008 R2") and "2k8" or "NONE"
+            if "System Type" in systeminfo:
+                info["os_arch"] = systeminfo["System Type"].find("64") and "x86_64" or "NONE"
+            info.update(systeminfo)
+            self.execute_batch_command("rm -rf  /cygdrive/c/tmp/windows_info.txt")
+            self.execute_batch_command("touch  /cygdrive/c/tmp/windows_info.txt")
+            sftp = self._ssh_client.open_sftp()
+            try:
+                f = sftp.open('/cygdrive/c/tmp/windows_info.txt', 'w')
+                content = ''
+                for key in sorted(info.keys()):
+                    content += '{0} = {1}\n'.format(key, info[key])
+                f.write(content)
+            except IOError:
+                log.error('Can not write windows_info.txt file')
+            finally:
+                sftp.close()
+            return info
 
     # Need to add new windows register ID in testconstant file when
     # new couchbase server version comes out.
@@ -538,7 +564,7 @@ class RemoteMachineShellConnection:
         # remove capture file from source after copy to destination
         #os.remove(full_src_path)
 
-    def extend_windows_info(self):
+    def get_windows_system_info(self):
         try:
             info = {}
             o = self.execute_batch_command('systeminfo')
@@ -557,9 +583,9 @@ class RemoteMachineShellConnection:
                     continue
                 key = key.strip(' \t\n\r')
                 if key.find("[") != -1:
-                    info[key_prev] += '\n' + key + value.strip(' \t\n\r')
+                    info[key_prev] += '|' + key + value.strip(' |')
                 else:
-                    value = value.strip(' \t\n\r')
+                    value = value.strip(' |')
                     info[key] = value
                     key_prev = key
             return info
@@ -1315,6 +1341,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.ip = self.ip
             info.distribution_version = win_info['os']
             info.deliverable_type = 'exe'
+            info.cpu = self.get_cpu_info(win_info)
+            info.disk = self.get_disk_info(win_info)
+            info.ram = self.get_ram_info(win_info)
+            info.hostname = self.get_hostname(win_info)
             return info
         else:
             #now run uname -m to get the architechtre type
@@ -1348,13 +1378,19 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         info['hostname'] = self.get_hostname()
         return info
 
-    def get_hostname(self):
+    def get_hostname(self, win_info=None):
+        if win_info:
+            if 'Host Name' not in win_info:
+                win_info = self.create_windows_info()
+            o = win_info['Host Name']
         o, r = self.execute_command_raw('hostname')
         if o:
             return o
 
     def get_cpu_info(self, win_info=None):
         if win_info:
+            if 'Processor(s)' not in win_info:
+                win_info = self.create_windows_info()
             o = win_info['Processor(s)']
         else:
             o, r = self.execute_command_raw('sudo cat /proc/cpuinfo')
@@ -1363,6 +1399,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def get_ram_info(self, win_info=None):
         if win_info:
+            if 'Virtual Memory Max Size' not in win_info:
+                win_info = self.create_windows_info()
             o = "Virtual Memory Max Size =" + win_info['Virtual Memory Max Size'] + '\n'
             o += "Virtual Memory Available =" + win_info['Virtual Memory Available'] + '\n'
             o += "Virtual Memory In Use =" + win_info['Virtual Memory In Use']
@@ -1373,6 +1411,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def get_disk_info(self, win_info=None):
         if win_info:
+            if 'Total Physical Memory' not in win_info:
+                win_info = self.create_windows_info()
             o = "Total Physical Memory =" + win_info['Total Physical Memory'] + '\n'
             o += "Available Physical Memory =" + win_info['Available Physical Memory']
         else:
@@ -1651,7 +1691,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def execute_batch_command(self, command):
         remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
-
         o, r = self.execute_command(remote_command)
         if r:
             log.error("Command didn't run successfully. Error: {0}".format(r))
