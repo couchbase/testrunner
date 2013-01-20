@@ -401,6 +401,12 @@ class RebalanceTests(EVPerfClient):
 
     @PerfWrapper.rebalance
     def test_views_rebalance(self):
+        # Consistent view setup
+        rc = RestConnection(self.input.servers[0])
+        if self.parami('consistent_view', 1):
+            rc.set_reb_cons_view(disable=False)
+        else:
+            rc.set_reb_cons_view(disable=True)
         super(RebalanceTests, self).test_vperf()
 
     @PerfWrapper.rebalance
