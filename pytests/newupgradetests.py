@@ -280,6 +280,31 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         time.sleep(self.sleep_time)
         self.verification(self.servers[1:])
 
+    def online_consequentially_upgrade(self):
+        half_node = len(self.servers/2)
+        self._install(self.servers[:half_node])
+        self.operations(self.servers[:half_node])
+        self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+        time.sleep(self.sleep_time)
+        self.initial_version = self.upgrade_versions[0]
+        self.product = 'couchbase-server'
+        self._install(self.servers[half_node:])
+        self.log.info("Installation of new version is done. Wait for %s sec for rebalance" % (self.sleep_time))
+        time.sleep(self.sleep_time)
+        self.cluster.rebalance(self.servers, self.servers[half_node:], self.servers[:half_node])
+        self.log.info("Rebalanced in upgraded nodes and rebalanced out nodes with old version")
+        time.sleep(self.sleep_time)
+        self.master = self.servers[half_node]
+        self.verification(self.servers[half_node:])
+        self.log.info("Upgrade nodes of old version")
+        self._upgrade(self.upgrade_versions[0], self.servers[:half_node])
+        self.cluster.rebalance(self.servers, self.servers[:half_node], [])
+        self.log.info("Rebalanced in all new version nodes")
+        time.sleep(self.sleep_time)
+        self.verification(self.servers)
+
     def online_upgrade(self):
         servers_in = self.servers[self.nodes_init:self.num_servers]
         self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, [])
