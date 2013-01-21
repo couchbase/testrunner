@@ -33,8 +33,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.rest_helper = None
         self.sleep_time = 10
         self.ddocs = []
-        self.item_flag = self.input.param('item_flag', 4042322160)
+        self.item_flag = self.input.param('item_flag', 0)
         self.expire_time = self.input.param('expire_time', 0)
+        self.wait_expire = self.input.param('wait_expire', False)
         self.default_view_name = "upgrade-test-view"
         self.ddocs_num = self.input.param("ddocs-num", 0)
         self.view_num = self.input.param("view-per-ddoc", 2)
@@ -97,7 +98,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self._bucket_creation()
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
-        self._load_all_buckets(self.master, gen_load, "create", 0)
+        self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
         self._wait_for_stats_all_buckets(servers)
         self.change_settings()
 

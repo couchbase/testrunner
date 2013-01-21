@@ -252,6 +252,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         if self.during_ops:
             for opn in self.during_ops:
                 getattr(self, opn)()
+        if self.wait_expire:
+            time.sleep(self.expire_time)
+            for bucket in self.buckets:
+                bucket.kvs[1]={}
         self.online_upgrade()
         time.sleep(self.sleep_time)
         if self.input.param('check_seqno', True):
