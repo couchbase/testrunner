@@ -896,7 +896,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
                 log.info("auto compaction is not started yet.")
                 time.sleep(1)
         log.error("auto compaction is not started in {0} sec.".format(str(timeout_in_seconds)))
-        return ended
+        return False
 
     def terminate_processes(self, info, list):
         for process in list:
