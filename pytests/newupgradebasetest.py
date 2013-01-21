@@ -4,6 +4,7 @@ import testconstants
 import gc
 import sys
 from basetestcase import BaseTestCase
+from memcached.helper.data_helper import VBucketAwareMemcached
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -243,3 +244,13 @@ class NewUpgradeBaseTest(BaseTestCase):
                 shell.log_command_output(output, error)
                 #shell._ssh_client.open_sftp().rmdir(path)
             shell.disconnect()
+
+    def check_seqno(self, seqno_expected):
+        for bucket in self.buckets:
+            client = VBucketAwareMemcached(RestConnection(self.master), bucket)
+            valid_keys, deleted_keys = bucket.kvs[1].key_set()
+            for valid_key in valid_keys:
+                _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
+                self.assertTrue(seqno == seqno_expected, msg="seqno {0} != {1} for key:{2}".
+                                    format(seqno, seqno_expected, valid_key))
+            client.done()

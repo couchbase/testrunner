@@ -6,7 +6,6 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
-from memcached.helper.data_helper import VBucketAwareMemcached
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
@@ -57,13 +56,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         if self.ddocs_num:
             self.create_ddocs_and_views()
         if not self.initial_version.startswith("1.") and self.input.param('check_seqno', True):
-            for bucket in self.buckets:
-                seq_id = {bucket.name:{}}
-                client = VBucketAwareMemcached(RestConnection(self.master), bucket)
-                valid_keys, deleted_keys = bucket.kvs[1].key_set()
-                _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
-                self.assertTrue(seqno == seqno_expected, msg="seqno {0} != {1} for key:{2}".
-                                    format(seqno, seqno_expected, valid_key))
+            self.check_seqno(seqno_expected)
         if self.during_ops:
             for opn in self.during_ops:
                 if opn != 'add_back_failover':
@@ -106,14 +99,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.verification(list(set(self.servers[:self.nodes_init]) - set(rem)))
                     return
             if self.input.param('check_seqno', True):
-                for bucket in self.buckets:
-                    seq_id = {bucket.name:{}}
-                    client = VBucketAwareMemcached(RestConnection(self.master), bucket)
-                    valid_keys, deleted_keys = bucket.kvs[1].key_set()
-                    for valid_key in valid_keys:
-                        _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
-                        self.assertTrue(seqno == seqno_expected, msg="seqno was changed:{0} for key:{1}".
-                                    format(seqno, valid_key))
+                self.check_seqno(seqno_expected)
 
             self.verification(self.servers[:self.nodes_init])
 
@@ -250,6 +236,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self._install(self.servers[:self.nodes_init])
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         self.operations(self.servers[:self.nodes_init])
+        seqno_expected = 1
+        if not self.initial_version.startswith("1.") and self.input.param('check_seqno', True):
+            self.check_seqno(seqno_expected)
         if self.ddocs_num:
             self.create_ddocs_and_views()
         time.sleep(self.sleep_time)
@@ -263,6 +252,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 getattr(self, opn)()
         self.online_upgrade()
         time.sleep(self.sleep_time)
+        if self.input.param('check_seqno', True):
+            self.check_seqno(seqno_expected)
         self.verification(self.servers[self.nodes_init : self.num_servers])
 
     def online_upgrade_incremental(self):
