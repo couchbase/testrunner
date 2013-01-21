@@ -10,6 +10,7 @@ from collections import defaultdict
 from lib.membase.api import httplib2
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.helper.rebalance_helper import RebalanceHelper
+from btrc import CouchbaseClient, StatsReporter
 
 from pytests.performance.eperf import EPerfClient, EVPerfClient
 from pytests.performance.perf_defaults import PerfDefaults
@@ -425,6 +426,12 @@ class RebalanceTests(EVPerfClient):
 
         time.sleep(self.parami("rebalance_after", 3600))
 
+        server = "{0}:{1}".format(self.input.servers[0].ip,
+                                  self.input.servers[0].port)
+        bucket = self.params("bucket", "default")
+        cb = CouchbaseClient(server, bucket)
+        cb.reset_utilization_stats()
+
         self.delayed_rebalance(
             num_nodes=self.parami("num_nodes_after",
                                   PerfDefaults.num_nodes_after),
@@ -433,6 +440,9 @@ class RebalanceTests(EVPerfClient):
                                     PerfDefaults.reb_max_retries),
             reb_mode=self.parami("reb_mode", PerfDefaults.reb_mode),
             sync=True)
+
+        reporter = StatsReporter(cb)
+        reporter.report_stats("util_stats")
 
         time.sleep(self.parami("shutdown_after", 3600))
         self.log.info("trigerring shutdown event")
