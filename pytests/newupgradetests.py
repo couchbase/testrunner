@@ -273,12 +273,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.cluster.rebalance(self.servers, [server], [])
             self.log.info("Rebalanced in upgraded nodes")
             time.sleep(self.sleep_time)
-            self.verification(self.servers[self.nodes_init : self.num_servers])
+            self.verification(self.servers)
         self.master = self.servers[1]
-        self.cluster.rebalance(self.servers[:self.num_servers], [], [self.servers[0]])
+        self.cluster.rebalance(self.servers, [], [self.servers[0]])
         self.log.info("Rebalanced out all old version nodes")
         time.sleep(self.sleep_time)
-        self.verification(self.servers[self.nodes_init : self.num_servers])
+        self.verification(self.servers[1:])
 
     def online_upgrade(self):
         servers_in = self.servers[self.nodes_init:self.num_servers]
