@@ -442,12 +442,14 @@ class BaseTestCase(unittest.TestCase):
                 self.fail("memcached did not start %s:%s" % (server.ip, server.port))
 
     def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120,
-                               bucket="default", expected_rows=None, retry_time=2):
+                               bucket="default", expected_rows=None, retry_time=2, server=None):
         tasks = []
+        if server is None:
+            server=self.master
         if expected_rows is None:
             expected_rows = self.num_items
         for i in xrange(num_views):
-            tasks.append(self.cluster.async_query_view(self.servers[0], prefix + ddoc_name,
+            tasks.append(self.cluster.async_query_view(server, prefix + ddoc_name,
                                                        self.default_view_name + str(i), query,
                                                        expected_rows, bucket, retry_time))
         try:
