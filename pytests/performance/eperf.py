@@ -1060,6 +1060,12 @@ class EPerfMaster(perf.PerfBase):
                 ddoc=view_gen.ddocs.next()
             )
 
+        # Incremental index phase
+        if self.parami("incr_index_phase", 0) and \
+                self.parami("disabled_updates", 0):
+            ddocs = view_gen.generate_ddocs(views, options=None)
+            self.index_phase(ddocs)
+
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
 
