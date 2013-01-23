@@ -641,7 +641,7 @@ class EPerfMaster(perf.PerfBase):
         self.end_stats(sc, ops, self.spec_reference + ".warmup")
 
     @cbtop
-    def index_phase(self, ddocs):
+    def index_phase(self, ddocs, skip_put=None):
         """Create design documents and views"""
 
         if self.parami("index_phase", 1) > 0:
@@ -664,14 +664,15 @@ class EPerfMaster(perf.PerfBase):
 
             bucket = self.param('bucket', 'default')
 
-            for ddoc_name, d in ddocs.items():
-                d = copy.copy(d)
-                d["language"] = "javascript"
-                d_json = json.dumps(d)
-                api = "{0}{1}/_design/{2}".format(self.rest.capiBaseUrl,
-                                                  bucket, ddoc_name)
-                self.rest._http_request(api, 'PUT', d_json,
-                                        headers=self.rest._create_capi_headers())
+            if not skip_put:
+                for ddoc_name, d in ddocs.items():
+                    d = copy.copy(d)
+                    d["language"] = "javascript"
+                    d_json = json.dumps(d)
+                    api = "{0}{1}/_design/{2}".format(self.rest.capiBaseUrl,
+                                                      bucket, ddoc_name)
+                    self.rest._http_request(api, 'PUT', d_json,
+                                            headers=self.rest._create_capi_headers())
 
             # Initialize indexing
             for ddoc_name, d in ddocs.items():
@@ -1064,7 +1065,7 @@ class EPerfMaster(perf.PerfBase):
         if self.parami("incr_index_phase", 0) and \
                 self.parami("disabled_updates", 0):
             ddocs = view_gen.generate_ddocs(views, options=None)
-            self.index_phase(ddocs)
+            self.index_phase(ddocs, skip_put=True)
 
         if self.parami("debug_phase", 0):
             self.debug_phase(ddocs)
