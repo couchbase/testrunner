@@ -49,7 +49,8 @@ class PerfWrapper(object):
 
             self.input.test_params['num_clients'] = total_clients
 
-            if self.parami('index_phase', 0):
+            if self.parami('index_phase', 0) or \
+                    self.parami('incr_index_phase', 0):
                 # Single-threaded tasks (hot load phase, index phase)
                 self.input.test_params['prefix'] = 0
                 return test(self, *args, **kargs)
