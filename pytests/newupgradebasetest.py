@@ -5,6 +5,7 @@ import gc
 import sys
 from basetestcase import BaseTestCase
 from memcached.helper.data_helper import VBucketAwareMemcached
+from membase.helper.bucket_helper import BucketOperationHelper
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -247,6 +248,9 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def check_seqno(self, seqno_expected):
         for bucket in self.buckets:
+            ready = BucketOperationHelper.wait_for_memcached(self.master,
+                                                          bucket.name)
+            self.assertTrue(ready, "wait_for_memcached failed")
             client = VBucketAwareMemcached(RestConnection(self.master), bucket)
             valid_keys, deleted_keys = bucket.kvs[1].key_set()
             for valid_key in valid_keys:
