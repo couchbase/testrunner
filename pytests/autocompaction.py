@@ -2,6 +2,7 @@ import unittest
 import logger
 import random
 import time
+import json
 
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
@@ -9,7 +10,7 @@ from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from memcached.helper.data_helper import MemcachedClientHelper
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 
 
 class AutoCompactionTests(unittest.TestCase):
@@ -28,12 +29,13 @@ class AutoCompactionTests(unittest.TestCase):
 
     @staticmethod
     def insert_key(serverInfo, bucket_name, count, size):
-        client = MemcachedClientHelper.proxy_client(serverInfo, bucket_name)
-        value = MemcachedClientHelper.create_value("*", size)
-        for i in range(count * 1000):
+        rest = RestConnection(serverInfo)
+        smart = VBucketAwareMemcached(rest, bucket_name)
+        for i in xrange(count * 1000):
             key = "key_" + str(i)
             flag = random.randint(1, 999)
-            client.set(key, 0, flag, value)
+            value = {"value" : MemcachedClientHelper.create_value("*", size)}
+            smart.memcached(key).set(key, 0, 0, json.dumps(value))
 
     def test_database_fragmentation(self):
         percent_threshold = self.autocompaction_value
