@@ -52,8 +52,8 @@ class AutoCompactionTests(unittest.TestCase):
             self.assertFalse(output, "it should be  impossible to set compaction value = {0}%".format(percent_threshold))
             import json
             self.assertTrue(json.loads(rq_content).has_key("errors"), "Error is not present in response")
-            self.assertTrue(json.loads(rq_content)["errors"].find("Allowed range is 2 - 100") > -1, \
-                            "Error 'Allowed range is 2 - 100' expected, but was '{0}'".format(json.loads(rq_content)["errors"]))
+            self.assertTrue(str(json.loads(rq_content)["errors"]).find("Allowed range is 2 - 100") > -1, \
+                            "Error 'Allowed range is 2 - 100' expected, but was '{0}'".format(str(json.loads(rq_content)["errors"])))
 
             self.log.info("Response contains error = '%(errors)s' as expected" % json.loads(rq_content))
         elif (output and percent_threshold >= MIN_COMPACTION_THRESHOLD
