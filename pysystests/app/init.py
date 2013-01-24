@@ -23,6 +23,7 @@ if cfg.SERIESLY_IP != '':
     os.system("curl -X DELETE http://{0}:3133/fast".format(cfg.SERIESLY_IP))
     os.system("curl -X DELETE http://{0}:3133/slow".format(cfg.SERIESLY_IP))
     os.system("curl -X DELETE http://{0}:3133/event".format(cfg.SERIESLY_IP))
+    os.system("curl -X DELETE http://{0}:3133/atop".format(cfg.SERIESLY_IP))
 
     seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
     seriesly.create_db('event')
