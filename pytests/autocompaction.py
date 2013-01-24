@@ -81,7 +81,7 @@ class AutoCompactionTests(unittest.TestCase):
 
             compact_run = remote_client.wait_till_compaction_end(rest, bucket_name, timeout_in_seconds=180)
             if not compact_run:
-                self.log.error("auto compaction does not run")
+                self.fail("auto compaction does not run")
             elif compact_run:
                 self.log.info("auto compaction runs successfully")
         else:
