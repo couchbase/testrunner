@@ -596,6 +596,15 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def get_cluster_settings(self):
+        settings = {}
+        api = self.baseUrl + 'settings/web'
+        status, content, header = self._http_request(api, 'GET')
+        if status:
+            settings = json.loads(content)
+        log.info('settings/web params : {0}'.format(settings))
+        return settings
+
     def init_cluster_memoryQuota(self, username='Administrator',
                                  password='password',
                                  memoryQuota=256):

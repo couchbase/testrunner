@@ -51,6 +51,9 @@ class BaseTestCase(unittest.TestCase):
             self.rebalanceIndexPausingDisabled = self.input.param("rebalanceIndexPausingDisabled", None)
             self.maxParallelIndexers = self.input.param("maxParallelIndexers", None)
             self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
+            self.port = None
+            if self.input.param("port", None):
+                self.port = str(self.input.param("port", None))
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                           .format(self.case_number, self._testMethodName))
             # avoid any cluster operations in setup for new upgrade tests
@@ -69,7 +72,7 @@ class BaseTestCase(unittest.TestCase):
 
             self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers)
+                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port)
 
             if str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1:
                 # rebalance all nodes into the cluster before each test
@@ -141,12 +144,14 @@ class BaseTestCase(unittest.TestCase):
         time.sleep(timeout)
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
-                          rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None):
+                          rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None,
+                          port=None):
         quota = 0
         init_tasks = []
         for server in servers:
+            init_port = port or server.port or '8091'
             init_tasks.append(cluster.async_init_node(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
-                          rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers))
+                          rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers, init_port))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:

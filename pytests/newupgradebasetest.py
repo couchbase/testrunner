@@ -91,7 +91,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.cluster.rebalance([servers[0]], servers[1:], [])
         self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers)
+                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port)
+        if self.port and self.port != '8091':
+            self.rest = RestConnection(self.master)
+            self.rest_helper = RestHelper(self.rest)
         self.buckets = []
         gc.collect()
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
@@ -118,7 +121,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         return appropriate_build
 
-    def _upgrade(self, upgrade_version, server, queue=None):
+    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False):
         try:
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote)
@@ -128,7 +131,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             remote.disconnect()
             if not self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
                 self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
-            self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
+            if not skip_init:
+                self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             self.sleep(self.sleep_time)
         except Exception, e:
             if queue is not None:
@@ -154,6 +158,17 @@ class NewUpgradeBaseTest(BaseTestCase):
 
 
     def verification(self, servers, check_items=True):
+        if self.master.ip != self.rest.ip or \
+           self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
+            if self.port:
+                self.master.port = self.port
+            self.rest = RestConnection(self.master)
+            self.rest_helper = RestHelper(self.rest)
+        if self.port and self.port != '8091':
+            settings = self.rest.get_cluster_settings()
+            if settings and 'port' in settings:
+                self.assertTrue(self.port == settings['port'],
+                                'Expected cluster port is %s, but is %s' % (self.port, settings['port']))
         for bucket in self.buckets:
             if not self.rest_helper.bucket_exists(bucket.name):
                 raise Exception("bucket: %s not found" % bucket.name)

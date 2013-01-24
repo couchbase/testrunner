@@ -67,9 +67,11 @@ class NodeInitializeTask(Task):
                  rebalanceIndexWaitingDisabled=None,
                  rebalanceIndexPausingDisabled=None,
                  maxParallelIndexers=None,
-                 maxParallelReplicaIndexers=None):
+                 maxParallelReplicaIndexers=None,
+                 port=None):
         Task.__init__(self, "node_init_task")
         self.server = server
+        self.port = port or server.port
         self.quota = 0
         self.disable_consistent_view = disabled_consistent_view
         self.rebalanceIndexWaitingDisabled = rebalanceIndexWaitingDisabled
@@ -99,7 +101,14 @@ class NodeInitializeTask(Task):
         if self.maxParallelReplicaIndexers is not None:
             rest.set_max_parallel_replica_indexers(self.maxParallelReplicaIndexers)
 
-        rest.init_cluster(username, password)
+        rest.init_cluster(username, password, self.port)
+        self.server.port = self.port
+        try:
+            rest = RestConnection(self.server)
+        except ServerUnavailableException as error:
+                self.state = FINISHED
+                self.set_exception(error)
+                return
         info = rest.get_nodes_self()
         if info is None:
             self.state = FINISHED
@@ -356,7 +365,7 @@ class StatsWaitTask(Task):
         self.set_result(True)
 
     def _stringify_servers(self):
-        return ''.join([`server.ip + ":" + server.port` for server in self.servers])
+        return ''.join([`server.ip + ":" + str(server.port)` for server in self.servers])
 
     def _get_connection(self, server):
         if not self.conns.has_key(server):
