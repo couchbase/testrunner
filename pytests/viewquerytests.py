@@ -1849,7 +1849,6 @@ class QueryView:
             view_name = self.name
 
             max_dupe_result_count = tc.input.param('max-dupe-result-count', 5)
-
             num_verified_docs = tc.input.param('num-verified-docs', 20)
 
             for query in self.queries:

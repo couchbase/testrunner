@@ -492,7 +492,7 @@ class ViewBaseTests(unittest.TestCase):
             return False
 
     @staticmethod
-    def _get_indexer_task_pid(self, rest, ddoc):
+    def _get_indexer_task_pid(self, rest, ddoc_name):
         active_tasks = rest.active_tasks()
         if u'error' in active_tasks:
             return None
@@ -500,11 +500,11 @@ class ViewBaseTests(unittest.TestCase):
             for task in active_tasks:
                 if task['type'] == 'indexer' and task['indexer_type'] == 'main':
                     for ddoc in task['design_documents']:
-                        if ddoc == ('_design/%s' % ddoc):
+                        if ddoc == ('_design/%s' % ddoc_name):
                             return task['pid'], False
                 if task['type'] == 'blocked_indexer' and task['indexer_type'] == 'main':
                     for ddoc in task['design_documents']:
-                        if ddoc == ('_design/%s' % ddoc):
+                        if ddoc == ('_design/%s' % ddoc_name):
                             return task['pid'], True
         return None, None
 
