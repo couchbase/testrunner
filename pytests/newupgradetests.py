@@ -281,7 +281,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.verification(self.servers[1:])
 
     def online_consequentially_upgrade(self):
-        half_node = len(self.servers/2)
+        half_node = len(self.servers)/2
         self._install(self.servers[:half_node])
         self.operations(self.servers[:half_node])
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
