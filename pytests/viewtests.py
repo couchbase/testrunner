@@ -509,7 +509,7 @@ class ViewBaseTests(unittest.TestCase):
         return None, None
 
     @staticmethod
-    def _wait_for_task_pid(self, pid, end_time):
+    def _wait_for_task_pid(self, pid, end_time, ddoc, rest):
         while (time.time() < end_time):
             new_pid, _ = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
             if pid == new_pid:
@@ -530,10 +530,10 @@ class ViewBaseTests(unittest.TestCase):
             self.log.info('Index for ddoc %s is not going on' % ddoc)
             return
         while is_pid_blocked:
-            ViewBaseTests._wait_for_task_pid(old_pid, end_time)
+            ViewBaseTests._wait_for_task_pid(self, old_pid, end_time, ddoc, rest)
             old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
         if old_pid:
-            ViewBaseTests._wait_for_task_pid(old_pid, end_time)
+            ViewBaseTests._wait_for_task_pid(self, old_pid, end_time, ddoc, rest)
 
     @staticmethod
     def get_update_seq(self, rest, view):
