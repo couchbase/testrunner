@@ -4,6 +4,7 @@ import testconstants
 import gc
 import sys
 from basetestcase import BaseTestCase
+from mc_bin_client import MemcachedError
 from memcached.helper.data_helper import VBucketAwareMemcached
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.api.rest_client import RestConnection, RestHelper
@@ -246,7 +247,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 #shell._ssh_client.open_sftp().rmdir(path)
             shell.disconnect()
 
-    def check_seqno(self, seqno_expected):
+    def check_seqno(self, seqno_expected, comparator='=='):
         for bucket in self.buckets:
             ready = BucketOperationHelper.wait_for_memcached(self.master,
                                                           bucket.name)
@@ -254,7 +255,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             client = VBucketAwareMemcached(RestConnection(self.master), bucket)
             valid_keys, deleted_keys = bucket.kvs[1].key_set()
             for valid_key in valid_keys:
-                _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
-                self.assertTrue(seqno == seqno_expected, msg="seqno {0} != {1} for key:{2}".
-                                    format(seqno, seqno_expected, valid_key))
+                try:
+                    _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
+                except MemcachedError, e:
+                    print e
+                    _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
+                self.assertTrue((comparator == '==' and seqno == seqno_expected) or
+                                (comparator == '>=' and seqno >= seqno_expected),
+                                msg="seqno {0} !{1} {2} for key:{3}".
+                                format(seqno, comparator, seqno_expected, valid_key))
             client.done()

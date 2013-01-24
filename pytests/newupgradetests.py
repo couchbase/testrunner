@@ -237,8 +237,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
         self.operations(self.servers[:self.nodes_init])
         seqno_expected = 1
+        seqno_comparator = '>='
         if not self.initial_version.startswith("1.") and self.input.param('check_seqno', True):
             self.check_seqno(seqno_expected)
+            seqno_comparator = '=='
         if self.ddocs_num:
             self.create_ddocs_and_views()
         time.sleep(self.sleep_time)
@@ -253,7 +255,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.online_upgrade()
         time.sleep(self.sleep_time)
         if self.input.param('check_seqno', True):
-            self.check_seqno(seqno_expected)
+            self.check_seqno(seqno_expected, comparator=seqno_comparator)
         self.verification(self.servers[self.nodes_init : self.num_servers])
 
     def online_upgrade_incremental(self):
@@ -281,7 +283,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.verification(self.servers[1:])
 
     def online_consequentially_upgrade(self):
-        half_node = len(self.servers)/2
+        half_node = len(self.servers) / 2
         self._install(self.servers[:half_node])
         self.operations(self.servers[:half_node])
         self.log.info("Installation of old version is done. Wait for %s sec for upgrade" % (self.sleep_time))
