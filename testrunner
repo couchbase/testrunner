@@ -313,8 +313,12 @@ if __name__ == "__main__":
         pprint(TestInputSingleton.input.test_params)
         try:
             suite = unittest.TestLoader().loadTestsFromName(name)
-        except AttributeError as e:
+        except AttributeError, e:
             print "Test {0} was not found: {1}".format(name, e)
+            result = unittest.TextTestRunner(verbosity=2)._makeResult()
+            result.errors = [(name, e.message)]
+        except SyntaxError, e:
+            print "SyntaxError in {0}: {1}".format(name, e)
             result = unittest.TextTestRunner(verbosity=2)._makeResult()
             result.errors = [(name, e.message)]
         else:
