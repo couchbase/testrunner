@@ -259,6 +259,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
                 except MemcachedError, e:
                     print e
+                    client.reset(RestConnection(self.master))
                     _, flags, exp, seqno, cas = client.memcached(valid_key).getMeta(valid_key)
                 self.assertTrue((comparator == '==' and seqno == seqno_expected) or
                                 (comparator == '>=' and seqno >= seqno_expected),
