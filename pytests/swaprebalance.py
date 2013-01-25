@@ -26,7 +26,10 @@ class SwapRebalanceBase(unittest.TestCase):
         self.case_number = self.input.param("case_number", 0)
 
         # Clear the state from Previous invalid run
-        rest.stop_rebalance()
+        if rest._rebalance_progress_status() == 'running':
+                self.log.warning("rebalancing is still running, previous test should be verified")
+                stopped = rest.stop_rebalance()
+                self.assertTrue(stopped, msg="unable to stop rebalance")
         self.load_started = False
         self.loaders = []
         self.log.info("==============  SwapRebalanceBase setup was started for test #{0} {1}=============="\
