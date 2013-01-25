@@ -113,16 +113,16 @@ class ClusterOperationHelper(object):
                         warmup_time = int(stats["ep_warmup_time"])
                         log.info("ep_warmup_time is %s " % warmup_time)
                         log.info(
-                            "Collected the stats %s for server %s:%s" % (stats["ep_warmup_time"], server.ip,
-                                server.port))
+                            "Collected the stats 'ep_warmup_time' %s for server %s:%s" %
+                                (stats["ep_warmup_time"], server.ip, server.port))
                         break
                     else:
                         log.info(" Did not get the stats from the server yet, trying again.....")
                         time.sleep(2)
                 except Exception as e:
                     log.error(
-                        "Could not get warmup_time stats from server %s:%s, exception %s" % (server.ip,
-                            server.port, e))
+                        "Could not get ep_warmup_time stats from server %s:%s, exception %s" %
+                             (server.ip, server.port, e))
             else:
                 self.fail(
                     "Fail! Unable to get the warmup-stats from server %s:%s after trying for %s seconds." % (
