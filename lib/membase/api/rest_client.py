@@ -877,6 +877,8 @@ class RestConnection(object):
                 if "errorMessage" in json_parsed:
                     msg = '{0} - rebalance failed'.format(json_parsed)
                     log.error(msg)
+                    log.info("Latest logs from UI:")
+                    for i in self.get_logs(): log.error(i)
                     raise RebalanceFailedException(msg)
                 elif json_parsed["status"] == "running":
                     total_percentage = 0
@@ -1457,6 +1459,19 @@ class RestConnection(object):
         if status:
             return json_parsed["sendStats"]
         return None
+
+    def get_logs(self, last_n=10, contains_text=None):
+        api = self.baseUrl + 'logs'
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        logs=json_parsed['list']
+        logs.reverse()
+        result=[]
+        for i in xrange(min(last_n, len(logs))):
+            result.append(logs[i])
+            if contains_text is not None and contains_text in logs[i]["text"]:
+                break
+        return result
 
 
 class MembaseServerVersion:
