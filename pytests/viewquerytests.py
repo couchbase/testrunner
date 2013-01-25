@@ -48,6 +48,7 @@ class ViewQueryTests(unittest.TestCase):
             self.limit = TestInputSingleton.input.param("limit", None)
             self.reduce_fn = TestInputSingleton.input.param("reduce_fn", None)
             self.skip_rebalance = TestInputSingleton.input.param("skip_rebalance", False)
+            self.wait_persistence = TestInputSingleton.input.param("wait_persistence", False)
             self.error = None
             self.task_manager = taskmanager.TaskManager()
             self.task_manager.start()
@@ -370,7 +371,13 @@ class ViewQueryTests(unittest.TestCase):
         data_set = EmployeeDataSet(self._rconn(), docs_per_day)
 
         data_set.add_all_docs_queries()
-        self._query_test_init(data_set)
+        if self.wait_persistence:
+            data_set.load(self, data_set.views[0], True)
+            for server in self.servers:
+                RebalanceHelper.wait_for_persistence(server, data_set.bucket)
+            self._query_all_views(data_set.views)
+        else:
+            self._query_test_init(data_set)
 
     def test_employee_dataset_key_quieres(self):
         '''
@@ -864,7 +871,13 @@ class ViewQueryTests(unittest.TestCase):
         data_set = EmployeeDataSet(self._rconn(), docs_per_day, limit=self.limit)
 
         data_set.add_all_query_sets()
-        self._query_test_init(data_set)
+        if self.wait_persistence:
+            data_set.load(self, data_set.views[0], True)
+            for server in self.servers:
+                RebalanceHelper.wait_for_persistence(server, data_set.bucket)
+            self._query_all_views(data_set.views)
+        else:
+            self._query_test_init(data_set)
 
     def test_employee_dataset_skip_queries(self):
         '''
@@ -1604,6 +1617,9 @@ class ViewQueryTests(unittest.TestCase):
         data_set = SalesDataSet(self._rconn(), docs_per_day, limit=self.limit, test_datatype=True)
         data_set.add_skip_queries(skip=skip, limit=self.limit)
         data_set.load(self, data_set.views[0], docs_per_day)
+        if self.wait_persistence:
+            for server in self.servers:
+                RebalanceHelper.wait_for_persistence(server, data_set.bucket)
         self._query_all_views(data_set.views, limit=self.limit)
 
     def test_sales_dataset_multiply_items(self):
