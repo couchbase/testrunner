@@ -334,6 +334,8 @@ class CreateDeleteViewTests(ViewBaseTest):
         if self.ddoc_ops in ["update", "delete"]:
                 self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view,
                                         self.num_ddocs / 2, self.num_views_per_ddoc / 2)
+
+        self._wait_for_stats_all_buckets([self.master])
         self._verify_ddoc_ops_all_buckets()
         self._verify_ddoc_data_all_buckets()
 
@@ -349,6 +351,8 @@ class CreateDeleteViewTests(ViewBaseTest):
                                                        views_to_ops, "dev_ddoc", "views", start_view)
         for task in create_tasks + tasks:
             task.result(self.wait_timeout * 2)
+
+        self._wait_for_stats_all_buckets([self.master])
         self._verify_ddoc_ops_all_buckets()
         self._verify_ddoc_data_all_buckets()
 
