@@ -47,6 +47,7 @@ class StatsCollector(object):
     _mb_stats = {"snapshots": []}  # manually captured memcached stats
     _reb_stats = {}
     _lat_avg_stats = {}     # aggregated top level latency stats
+    _xdcr_stats = {}
 
     def __init__(self, verbosity):
         self._verbosity = verbosity
@@ -115,6 +116,18 @@ class StatsCollector(object):
     def sample(self, cur):
         pass
 
+    def get_ns_servers_samples(self, metric):
+        for subset in self._task["ns_server_data"]:
+            samples = subset["op"]["samples"][metric]
+            yield float(sum(samples)) / len(samples)
+
+    def calc_xperf_stats(self):
+        metrics = ("replication_changes_left", "xdc_ops")
+        for metric in metrics:
+            self._xdcr_stats["avg_" + metric] = \
+                sum(self.get_ns_servers_samples(metric)) /\
+                sum(1 for _ in self.get_ns_servers_samples(metric))
+
     def export(self, name, test_params):
         for latency in self._task["latency"].keys():
             # save the last histogram snapshot
@@ -149,6 +162,13 @@ class StatsCollector(object):
                 self._lat_avg_stats["%s-90th-avg" % latency] \
                     = per_90th_tot / len(histos) * 1000000
 
+        # XDCR stats
+        try:
+            self.calc_xperf_stats()
+        except KeyError:
+            pass
+
+        test_params.update(self._xdcr_stats)
         test_params.update(self._reb_stats)
         test_params.update(self._lat_avg_stats)
 
