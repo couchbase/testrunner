@@ -56,8 +56,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 #cleanup only nodes that are in cluster
                 #not all servers have been installed
                 if self.rest is None:
-                    self.rest = RestConnection(self.master)
-                    self.rest_helper = RestHelper(self.rest)
+                    self._new_master(self.master)
                 nodes = self.rest.get_nodes()
                 temp = []
                 for server in self.servers:
@@ -84,8 +83,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.log.info("some nodes were not install successfully!")
                     sys.exit(1)
         if self.rest is None:
-            self.rest = RestConnection(self.master)
-            self.rest_helper = RestHelper(self.rest)
+            self._new_master(self.master)
 
 
     def operations(self, servers):
@@ -138,6 +136,12 @@ class NewUpgradeBaseTest(BaseTestCase):
                 raise e
         if queue is not None:
             queue.put(True)
+
+    def _new_master(self, server):
+        self.master = server
+        self.rest = RestConnection(self.master)
+        self.rest_helper = RestHelper(self.rest)
+
 
     def verification(self, servers, check_items=True):
         for bucket in self.buckets:

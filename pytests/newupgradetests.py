@@ -276,7 +276,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.log.info("Rebalanced in upgraded nodes")
             time.sleep(self.sleep_time)
             self.verification(self.servers)
-        self.master = self.servers[1]
+        self._new_master(self.servers[1])
         self.cluster.rebalance(self.servers, [], [self.servers[0]])
         self.log.info("Rebalanced out all old version nodes")
         time.sleep(self.sleep_time)
@@ -298,7 +298,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers, self.servers[half_node:], self.servers[:half_node])
         self.log.info("Rebalanced in upgraded nodes and rebalanced out nodes with old version")
         time.sleep(self.sleep_time)
-        self.master = self.servers[half_node]
+        self._new_master(self.servers[half_node])
         self.verification(self.servers[half_node:])
         self.log.info("Upgrade nodes of old version")
         self._upgrade(self.upgrade_versions[0], self.servers[:half_node])
@@ -318,9 +318,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         FIND_MASTER = False
         for new_server in servers_in:
             if content.find(new_server.ip) >= 0:
-                self.master = new_server
-                self.rest = RestConnection(self.master)
-                self.rest_helper = RestHelper(self.rest)
+                self._new_master(new_server)
                 FIND_MASTER = True
                 self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
         if not FIND_MASTER:
@@ -363,9 +361,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             FIND_MASTER = False
             for new_server in new_servers:
                 if content.find(new_server.ip) >= 0:
-                    self.master = new_server
-                    self.rest = RestConnection(self.master)
-                    self.rest_helper = RestHelper(self.rest)
+                    self._new_master(new_server)
                     FIND_MASTER = True
                     self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
             if not FIND_MASTER:
