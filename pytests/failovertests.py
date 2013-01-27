@@ -152,8 +152,9 @@ class FailoverTests(FailoverBaseTest):
             msg = "rebalance failed while removing failover nodes {0}".format(chosen)
             self.assertTrue(rest.monitorRebalance(stop_if_loop=True), msg=msg)
         else:
-            log.info("10 seconds sleep after failover before invoking rebalance...")
-            time.sleep(10)
+            # Need a delay > min because MB-7168
+            log.info("90 seconds sleep after failover before invoking rebalance...")
+            time.sleep(90)
             rest.rebalance(otpNodes=[node.id for node in nodes],
                                ejectedNodes=[node.id for node in chosen])
             msg = "rebalance failed while removing failover nodes {0}".format(chosen)
