@@ -120,11 +120,11 @@ class ViewGen(object):
         "achievements_by_category_and_and_coins":
             baseq + '?startkey=[{{category}},0]&endkey=[{{category}},{{coins}}]&limit=30',
         "id_by_realm_and_coins":
-            baseq + '?startkey=[{{realm}},{{coins}}]&endkey=[{{realm}},10000]&limit=30',
+            baseq + '?startkey=["{{realm}}",{{coins}}]&endkey=["{{realm}}",10000]&limit=30',
         "name_and_email_by_realm_and_coins":
-            baseq + '?startkey=[{{realm}},{{coins}}]&endkey=[{{realm}},10000]&limit=30',
+            baseq + '?startkey=["{{realm}}",{{coins}}]&endkey=["{{realm}}",10000]&limit=30',
         "experts_id_by_realm_and_coins":
-            baseq + '?startkey=[{{realm}},{{coins}}]&endkey=[{{realm}},10000]&limit=30'
+            baseq + '?startkey=["{{realm}}",{{coins}}]&endkey=["{{realm}}",10000]&limit=30'
     }
 
     queries_by_type = {  # 45%/30%/25%
@@ -185,12 +185,4 @@ class ViewGen(object):
         random.shuffle(queries)
 
         # Joined queries
-        return self.join_queries(queries)
-
-    def join_queries(self, queries):
-        """Join queries into string"""
-        queries = ';'.join(queries)
-        queries = queries.replace('[', '%5B')
-        queries = queries.replace(']', '%5D')
-        queries = queries.replace(',', '%2C')
-        return queries
+        return ';'.join(queries)
