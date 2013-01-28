@@ -280,7 +280,7 @@ class RebalanceTask(Task):
             for removed in self.to_remove:
                 rest = RestConnection(removed)
                 start = time.time()
-                while time.time() - start < 10:
+                while time.time() - start < 30:
                     try:
                         if len(rest.get_pools_info()["pools"]) == 0:
                             success_cleaned.append(removed)
@@ -529,8 +529,8 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
     def has_next(self):
         has = self.batch_generator.has_next()
         if math.fmod(self.batch_generator._doc_gen.itr, 50000) == 0.0 or not has:
-            self.log.info("Batch {0} documents done #: {1}".\
-                          format(self.op_type, self.batch_generator._doc_gen.itr))
+            self.log.info("Batch {0} documents done #: {1} with exp:{2}".\
+                          format(self.op_type, self.batch_generator._doc_gen.itr, self.exp))
         return has
 
     def next(self):
