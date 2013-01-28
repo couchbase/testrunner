@@ -98,10 +98,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                          if self.failover_node.ip == server.ip and str(self.failover_node.port) == server.port]
                     self.verification(list(set(self.servers[:self.nodes_init]) - set(rem)))
                     return
+            self.verification(self.servers[:self.nodes_init])
             if self.input.param('check_seqno', True):
                 self.check_seqno(seqno_expected)
 
-            self.verification(self.servers[:self.nodes_init])
 
     def offline_cluster_upgrade_and_reboot(self):
         self._install(self.servers[:self.nodes_init])
@@ -258,9 +258,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 bucket.kvs[1]={}
         self.online_upgrade()
         time.sleep(self.sleep_time)
+        self.verification(self.servers[self.nodes_init : self.num_servers])
         if self.input.param('check_seqno', True):
             self.check_seqno(seqno_expected, comparator=seqno_comparator)
-        self.verification(self.servers[self.nodes_init : self.num_servers])
 
     def online_upgrade_incremental(self):
         self._install(self.servers)
