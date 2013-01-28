@@ -1,9 +1,9 @@
 #!/bin/sh -ex
 erlang_threads=`grep erlang_threads ${test_conf} | awk -F"=" '{print $2}'`
 if [ -z ${erlang_threads} ]; then
-    ./bin/install -i ${ini_file} -p product=cb,version=${version_number},vbuckets=1024,parallel=True
+    ./bin/install -i ${ini_file} -p product=cb,version=${version_number},vbuckets=1024,parallel=True,use_domain_names=1,
 else
-    ./bin/install -i ${ini_file} -p product=cb,version=${version_number},vbuckets=1024,parallel=True,erlang_threads=${erlang_threads}
+    ./bin/install -i ${ini_file} -p product=cb,version=${version_number},vbuckets=1024,parallel=True,use_domain_names=1,erlang_threads=${erlang_threads}
 fi
 
 mem_quota=`grep mem_quota ${test_conf} | awk -F"=" '{print $2}'`
