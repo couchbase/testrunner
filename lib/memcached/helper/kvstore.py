@@ -2,6 +2,7 @@ import threading
 import random
 import zlib
 import time
+import copy
 
 class KVStore(object):
     def __init__(self, num_locks=16):
@@ -135,8 +136,12 @@ class Partition(object):
 
     def valid_key_set(self):
         key_set = []
-        for key in self.valid:
-            key_set.append(key)
+        valid_keys = copy.copy(self.valid)
+        for key in valid_keys:
+            if self._expired(key):
+                continue
+            else:
+                key_set.append(key)
         return key_set
 
     def deleted_key_set(self):
