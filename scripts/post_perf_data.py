@@ -251,6 +251,14 @@ def main():
                 row.update({"row": index})
             del input_json["indexer_info"]
 
+        if "xdcr_lag" in input_json:
+            log.info("flattening xdcr lag stats")
+            attachments["xdcr_lag"] = input_json["xdcr_lag"]
+            for index, row in enumerate(attachments["xdcr_lag"], start=1):
+                row.update(z)
+                row.update({"row": index})
+            del input_json["xdcr_lag"]
+
         for histogram in input_json.keys():
             if histogram.startswith("latency") and histogram.endswith("histogram"):
                 log.info("flattening {0} snapshot".format(histogram))

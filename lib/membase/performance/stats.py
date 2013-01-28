@@ -6,10 +6,11 @@ import gzip
 from collections import defaultdict
 import logging
 import logging.config
+from uuid import uuid4
 
 from lib.membase.api.exception import SetViewInfoNotFound, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
-from lib.memcached.helper.data_helper import MemcachedClientHelper
+from lib.memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from lib.remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 
 
@@ -18,6 +19,8 @@ RETRIES = 10
 logging.config.fileConfig('mcsoda.logging.conf')
 logging.getLogger("paramiko").setLevel(logging.WARNING)
 log = logging.getLogger()
+
+hex = lambda: uuid4().hex
 
 
 def histo_percentile(histo, percentiles):
@@ -55,7 +58,7 @@ class StatsCollector(object):
         self.active_mergers = 0
 
     def start(self, nodes, bucket, pnames, name, client_id='',
-              collect_server_stats=True, ddoc=None):
+              collect_server_stats=True, ddoc=None, clusters=None):
         """This function starts collecting stats from all nodes with the given
         interval"""
         self._task = {"state": "running", "threads": [], "name": name,
@@ -90,6 +93,11 @@ class StatsCollector(object):
                 )
                 self._task["threads"].append(
                     Thread(target=self.indexing_throughput_stats, name="index_thr")
+                )
+            if clusters:
+                self.clusters = clusters
+                self._task["threads"].append(
+                    Thread(target=self.xdcr_lag_stats, name="xdcr_lag_stats")
                 )
 
             for thread in self._task["threads"]:
@@ -187,6 +195,7 @@ class StatsCollector(object):
             "ns_server_data_system": self._task.get("ns_server_stats_system", []),
             "view_info": self._task.get("view_info", []),
             "indexer_info": self._task.get("indexer_info", []),
+            "xdcr_lag": self._task.get("xdcr_lag", []),
             "timings": self._task.get("timings", []),
             "dispatcher": self._task.get("dispatcher", []),
             "bucket-size": self._task.get("bucket_size", []),
@@ -682,6 +691,40 @@ class StatsCollector(object):
                 'indexing_throughput': thr,
                 'timestamp': time.time()
             })
+
+    def xdcr_lag_stats(self, interval=10):
+        master = self.clusters[0][0]
+        slave = self.clusters[1][0]
+        src_client = VBucketAwareMemcached(RestConnection(master), self.bucket)
+        dst_client = VBucketAwareMemcached(RestConnection(slave), self.bucket)
+
+        log.info("started xdcr lag measurements")
+        self._task['xdcr_lag'] = list()
+        while not self._aborted():
+            time.sleep(interval)  # 10 seconds by default
+
+            key = hex()
+            value = hex()
+            src_client.set(key, 0, 0, value)
+
+            persisted = persist_time = 0
+            t0 = time.time()
+            while not persisted:
+                _, _, persist_time, persisted, _ = src_client.observe(key)
+            while True:
+                try:
+                    dst_client.get(key)
+                    break
+                except:
+                    time.sleep(0.1)
+            total_time = (time.time() - t0) * 1000
+
+            self._task['xdcr_lag'].append({
+                'xdcr_lag': total_time,
+                'xdcr_persist_time': persist_time,
+                'timestamp': time.time()
+            })
+        log.info("finished xdcr lag measurements")
 
     def _aborted(self):
         return self._task["state"] == "stopped"

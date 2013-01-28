@@ -615,10 +615,17 @@ class PerfBase(unittest.TestCase):
             return None
 
         servers = servers or self.input.servers
+        clusters = None
+        if hasattr(self, "get_region"):
+            if self.parami("access_phase", 0):
+                clusters = self.input.clusters
+                if self.get_region() == "west":
+                    clusters[0], clusters[1] = clusters[1], clusters[0]
         sc = self.mk_stats(False)
         bucket = self.param("bucket", "default")
         sc.start(servers, bucket, process_names, stats_spec, client_id,
-                 collect_server_stats=collect_server_stats, ddoc=ddoc)
+                 collect_server_stats=collect_server_stats, ddoc=ddoc,
+                 clusters=clusters)
         test_params['testrunner'] = self._get_src_version()
         self.test_params = test_params
         self.sc = sc
