@@ -294,7 +294,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self._new_master(self.servers[half_node])
         self.verification(self.servers[half_node:])
         self.log.info("Upgrade nodes of old version")
-        self._upgrade(self.upgrade_versions[0], self.servers[:half_node])
+        upgrade_threads = self._async_update(self.upgrade_versions[0], self.servers[:half_node])
+        for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+        success_upgrade = True
+        while not self.queue.empty():
+            success_upgrade &= self.queue.get()
+        if not success_upgrade:
+                self.fail("Upgrade failed!")
         self.cluster.rebalance(self.servers, self.servers[:half_node], [])
         self.log.info("Rebalanced in all new version nodes")
         self.sleep(self.sleep_time)
