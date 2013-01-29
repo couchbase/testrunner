@@ -701,8 +701,6 @@ class StatsCollector(object):
         log.info("started xdcr lag measurements")
         self._task['xdcr_lag'] = list()
         while not self._aborted():
-            time.sleep(interval)  # 10 seconds by default
-
             key = hex()
             persisted = persist_time = 0
             t0 = time.time()
@@ -722,6 +720,9 @@ class StatsCollector(object):
                 'xdcr_persist_time': persist_time,
                 'timestamp': time.time()
             })
+            if total_time < 10000:
+                time.sleep(interval)
+
         log.info("finished xdcr lag measurements")
 
     def _aborted(self):
