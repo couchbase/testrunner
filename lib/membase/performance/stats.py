@@ -718,6 +718,7 @@ class StatsCollector(object):
             self._task['xdcr_lag'].append({
                 'xdcr_lag': total_time,
                 'xdcr_persist_time': persist_time,
+                'xdcr_diff': total_time - persist_time,
                 'timestamp': time.time()
             })
             if total_time < 10000:

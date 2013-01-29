@@ -932,6 +932,7 @@ if (nrow(xdcr_lag) > 0) {
     xdcr_lag$row <- as.numeric(xdcr_lag$row)
     xdcr_lag$xdcr_persist_time <- as.numeric(xdcr_lag$xdcr_persist_time)
     xdcr_lag$xdcr_lag <- as.numeric(xdcr_lag$xdcr_lag)
+    xdcr_lag$xdcr_diff <- as.numeric(xdcr_lag$xdcr_diff)
     xdcr_lag$timestamp <- as.numeric(xdcr_lag$timestamp)
 
     all_builds = factor(xdcr_lag$buildinfo.version)
@@ -2229,6 +2230,13 @@ if (nrow(xdcr_lag) > 0) {
     p <- p + labs(x="----time (sec)--->", y="ms")
     p <- p + geom_point()
     p <- addopts(p, "XDCR persistance time")
+    print(p)
+    makeFootnote(footnote)
+
+    p <- ggplot(xdcr_lag, aes(row, xdcr_diff, color=buildinfo.version, label=xdcr_diff))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p, "XDCR lag diff(total - persistance)")
     print(p)
     makeFootnote(footnote)
 }
