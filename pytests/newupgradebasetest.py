@@ -1,5 +1,4 @@
 import re
-import time
 import testconstants
 import gc
 import sys
@@ -130,7 +129,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             if not self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
                 self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
             self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
-            time.sleep(self.sleep_time)
+            self.sleep(self.sleep_time)
         except Exception, e:
             if queue is not None:
                 queue.put(False)
@@ -207,7 +206,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         warmup_node = self.servers[:self.nodes_init][-1]
         shell = RemoteMachineShellConnection(warmup_node)
         shell.stop_couchbase()
-        time.sleep(20)
+        self.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
         ClusterOperationHelper.wait_for_ns_servers_or_assert([warmup_node], self)
