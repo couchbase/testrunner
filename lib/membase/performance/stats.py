@@ -704,11 +704,9 @@ class StatsCollector(object):
             time.sleep(interval)  # 10 seconds by default
 
             key = hex()
-            value = hex()
-            src_client.set(key, 0, 0, value)
-
             persisted = persist_time = 0
             t0 = time.time()
+            src_client.set(key, 0, 0, key)
             while not persisted:
                 _, _, persist_time, persisted, _ = src_client.observe(key)
             while True:
