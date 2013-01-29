@@ -915,6 +915,37 @@ if (nrow(update_history) > 0) {
         update_history <- result
 }
 
+# Get xdcr lag stats
+cat("generating xdcr lag stats\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","xdcr_lag", sep="")
+		doc_json <- fromJSON(file=url)
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	}, error=function(e) e)
+}
+
+xdcr_lag <- result
+if (nrow(xdcr_lag) > 0) {
+    xdcr_lag$row <- as.numeric(xdcr_lag$row)
+    xdcr_lag$xdcr_persist_time <- as.numeric(xdcr_lag$xdcr_persist_time)
+    xdcr_lag$xdcr_lag <- as.numeric(xdcr_lag$xdcr_lag)
+    xdcr_lag$timestamp <- as.numeric(xdcr_lag$timestamp)
+
+    all_builds = factor(xdcr_lag$buildinfo.version)
+    result <- data.frame()
+    for(a_build in levels(all_builds)) {
+        tt <- xdcr_lag[xdcr_lag $buildinfo.version==a_build,]
+        tt$timestamp <- as.numeric(tt$timestamp)
+        min_timestamp = min(tt$timestamp)
+        filtered = transform(tt, row=timestamp-min_timestamp)
+        result <- rbind(result, filtered)
+    }
+    xdcr_lag <- result
+}
+
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
 	tryCatch({
@@ -2184,6 +2215,22 @@ if (nrow(ns_server_data) > 0) {
                             sep="\n"))
 
     }
+}
+
+if (nrow(xdcr_lag) > 0) {
+    p <- ggplot(xdcr_lag, aes(row, xdcr_lag, color=buildinfo.version, label=xdcr_lag))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p, "XDCR lag time")
+    print(p)
+    makeFootnote(footnote)
+
+    p <- ggplot(xdcr_lag, aes(row, xdcr_persist_time, color=buildinfo.version, label=xdcr_persist_time))
+    p <- p + labs(x="----time (sec)--->", y="ms")
+    p <- p + geom_point()
+    p <- addopts(p, "XDCR persistance time")
+    print(p)
+    makeFootnote(footnote)
 }
 
 cat("generating cpu_util \n")
