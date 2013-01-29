@@ -535,8 +535,11 @@ class RebalanceTests(EVPerfClient):
             elif self.param('rebalance', 'out') == 'swap':
                 RebalanceHelper.rebalance_swap(servers=self.input.servers,
                                                how_many=1, monitor=True)
+            elif self.param('rebalance', 'out') == 'in':
+                RebalanceHelper.rebalance_in(servers=self.input.servers,
+                                             how_many=1, monitor=True)
             else:
-                sys.exit('Only rebalance-out and swap rebalance supported.')
+                sys.exit('Wrong "rebalance" parameter')
             self.measure_indexing_time(rc, ddocs)
 
     def measure_indexing_time(self, rc, ddocs):
