@@ -844,7 +844,11 @@ class BatchedValidateDataTask(GenericLoadingTask):
 
     def _check_valid_keys(self, keys):
         partition_keys_dic = self.kv_store.acquire_partitions(keys)
-        key_vals = self.client.getMulti(keys, parallel=True)
+        try:
+            key_vals = self.client.getMulti(keys, parallel=True)
+        except ValueError as error:
+                self.state = FINISHED
+                self.set_exception(error)
         for partition, keys in partition_keys_dic.items():
             self._check_validity(partition, keys, key_vals)
         self.kv_store.release_partitions(partition_keys_dic.keys())
