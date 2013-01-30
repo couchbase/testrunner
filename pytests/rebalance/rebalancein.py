@@ -1,5 +1,4 @@
 import time
-import sys
 
 from threading import Thread
 from rebalance.rebalance_base import RebalanceBaseTest
@@ -79,7 +78,7 @@ class RebalanceInTests(RebalanceBaseTest):
     def rebalance_in_get_random_key(self):
         servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
-        time.sleep(5)
+        self.sleep(5)
         rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.nodes_init)]
         result = []
         num_iter = 0
@@ -212,7 +211,7 @@ class RebalanceInTests(RebalanceBaseTest):
         for i in xrange(iterations_to_try):
             servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
             rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
-            time.sleep(self.wait_timeout / 5)
+            self.sleep(self.wait_timeout / 5)
 
             #see that the result of view queries are the same as expected during the test
             for bucket in self.buckets:
@@ -228,7 +227,7 @@ class RebalanceInTests(RebalanceBaseTest):
             if reproducer:
                 rebalance = self.cluster.async_rebalance(self.servers, [], servs_in)
                 rebalance.result()
-                time.sleep(self.wait_timeout)
+                self.sleep(self.wait_timeout)
 
     """Rebalances nodes into a cluster incremental during view queries.
 
@@ -273,7 +272,7 @@ class RebalanceInTests(RebalanceBaseTest):
         query["stale"] = "update_after"
         for i in range(1, self.num_servers, 2):
             rebalance = self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])
-            time.sleep(self.wait_timeout / 5)
+            self.sleep(self.wait_timeout / 5)
             #see that the result of view queries are the same as expected during the test
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             #verify view queries results after rebalancing
@@ -298,7 +297,7 @@ class RebalanceInTests(RebalanceBaseTest):
         warmup_node = servs_init[-1]
         shell = RemoteMachineShellConnection(warmup_node)
         shell.stop_couchbase()
-        time.sleep(20)
+        self.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
         try:
@@ -354,7 +353,7 @@ class RebalanceInTests(RebalanceBaseTest):
                 self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
             self.fail("impossible to reach compaction value {0} after {1} sec".
-                      format(fragmentation_value,  (self.wait_timeout * 30)))
+                      format(fragmentation_value, (self.wait_timeout * 30)))
 
         fragmentation_monitor.result()
 
@@ -362,7 +361,7 @@ class RebalanceInTests(RebalanceBaseTest):
             active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
             result = active_task.result()
             self.assertTrue(result)
-            time.sleep(2)
+            self.sleep(2)
 
 
         expected_rows = None
@@ -418,7 +417,7 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [self.servers[i]], [])
             self._load_all_buckets(self.master, self.gen_update, "update", 0)
             self._load_all_buckets(self.master, gen_2, "update", 5)
-            time.sleep(5)
+            self.sleep(5)
             rebalance.result()
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i + 1])

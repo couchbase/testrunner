@@ -47,7 +47,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self._async_load_all_buckets(self.master, gen, "update", 0)
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            time.sleep(5)
+            self.sleep(5)
             self._async_load_all_buckets(self.master, gen, "update", 0)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
@@ -112,7 +112,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            time.sleep(5)
+            self.sleep(5)
             for task in tasks:
                 task.result(self.wait_timeout * 20)
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
@@ -156,7 +156,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 rebalance = self.cluster.async_rebalance(servs_init[:self.nodes_init] + servs_in, add_in_once, servs_out + extra_servs_out)
                 add_in_once = []
                 result_nodes = set(servs_init + servs_in + extra_servs_in) - set(servs_out + extra_servs_out)
-            time.sleep(5)
+            self.sleep(10)
             expected_progress = 20 * i
             reached = RestHelper(rest).rebalance_reached(expected_progress)
             self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
@@ -170,7 +170,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             else:
                 self.log.info("rebalance is still required")
                 self._wait_for_stats_all_buckets(servs_init)
-                self._verify_all_buckets(self.master, max_verify=self.max_verify, timeout=4*self.wait_timeout)
+                self._verify_all_buckets(self.master, max_verify=self.max_verify, timeout=4 * self.wait_timeout)
 
     """Rebalances nodes in and out of the cluster while doing mutations.
 
@@ -194,7 +194,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
 
             self.cluster.rebalance(self.servers[:self.num_servers], self.servers[init_num_nodes:init_num_nodes + i + 1], [])
-            time.sleep(10)
+            self.sleep(10)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    [], self.servers[init_num_nodes:init_num_nodes + i + 1])
             for task in tasks:
@@ -223,7 +223,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            time.sleep(10)
+            self.sleep(10)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             for task in tasks:
@@ -253,7 +253,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks.extend(self._async_load_all_buckets(self.master, gen_expire, "update", 5))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            time.sleep(5)
+            self.sleep(5)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             for task in tasks:
@@ -306,7 +306,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 shell.execute_cbepctl(bucket, "stop", "", "", "")
-        time.sleep(5)
+        self.sleep(5)
         self.num_items_without_persistence = self.input.param("num_items_without_persistence", 100000)
         gen_extra = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2\
                                       , end=self.num_items / 2 + self.num_items_without_persistence)
@@ -372,7 +372,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             # run queries to create indexes
             self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
         now = time.time()
-        time.sleep(5)
+        self.sleep(5)
         for i in xrange(num_ddocs * num_views * len(self.buckets)):
             #wait until all initial_build indexer processes are completed
             active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "True", wait_task=False)

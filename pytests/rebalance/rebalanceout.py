@@ -70,7 +70,7 @@ class RebalanceOutTests(RebalanceBaseTest):
 
         rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.num_servers - self.nodes_out)]
         rebalance = self.cluster.async_rebalance(self.servers[:self.num_servers], [], servs_out)
-        time.sleep(2)
+        self.sleep(2)
         result = []
         num_iter = 0
         # get random keys for each node during rebalancing
@@ -182,7 +182,7 @@ class RebalanceOutTests(RebalanceBaseTest):
 
         servs_out = self.servers[-self.nodes_out:]
         rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
-        time.sleep(self.wait_timeout / 5)
+        self.sleep(self.wait_timeout / 5)
         #see that the result of view queries are the same as expected during the test
         for bucket in self.buckets:
            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
@@ -225,7 +225,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
             result = active_task.result()
             self.assertTrue(result)
-            time.sleep(2)
+            self.sleep(2)
 
         expected_rows = None
         if self.max_verify:
@@ -237,7 +237,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         query["stale"] = "update_after"
         for i in reversed(range(1, self.num_servers, 2)):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], self.servers[i:i + 2])
-            time.sleep(self.wait_timeout / 5)
+            self.sleep(self.wait_timeout / 5)
             #see that the result of view queries are the same as expected during the test
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             #verify view queries results after rebalancing
@@ -264,7 +264,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         servs_out = self.servers[len(self.servers) - self.nodes_out:]
         shell = RemoteMachineShellConnection(warmup_node)
         shell.stop_couchbase()
-        time.sleep(20)
+        self.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
         try:
@@ -321,7 +321,7 @@ class RebalanceOutTests(RebalanceBaseTest):
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
             self.fail("impossible to reach compaction value {0} after {1} sec".
-                      format(fragmentation_value,  (self.wait_timeout * 30)))
+                      format(fragmentation_value, (self.wait_timeout * 30)))
 
         fragmentation_monitor.result()
 
@@ -329,7 +329,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
             result = active_task.result()
             self.assertTrue(result)
-            time.sleep(2)
+            self.sleep(2)
 
         expected_rows = None
         if self.max_verify:
@@ -386,6 +386,6 @@ class RebalanceOutTests(RebalanceBaseTest):
             self._load_all_buckets(self.master, self.gen_update, "update", 0)
             self._load_all_buckets(self.master, gen_2, "update", 5)
             rebalance.result()
-            time.sleep(5)
+            self.sleep(5)
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i])
