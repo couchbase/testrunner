@@ -93,13 +93,15 @@ def launchSystest(testMsg):
 
     # retrieve phase keys and make sure they are ordered
     phases = testMsg['phases']
+    # convert key type to int to be sorted correctly
     keys = phases.keys()
+    keys = [int(k) for k in keys]
     keys.sort()
 
     for phase_key in keys:
 
         # run phase
-        phase = testMsg['phases'][phase_key]
+        phase = testMsg['phases'][str(phase_key)]
         add_phase_to_db(phase, phase_key, name, desc)
         phase_status = runPhase(name, phase)
 
