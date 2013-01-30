@@ -60,7 +60,10 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
                 return
             # avoid clean up if the previous test has been tear down
-            if not self.input.param("skip_cleanup", True) or self.case_number == 1:
+            if not self.input.param("skip_cleanup", True) or self.case_number == 1 or self.case_number > 1000:
+                if self.case_number > 1000:
+                    self.log.warn("teardDown for previous test failed. will retry..")
+                    self.case_number -= 1000
                 self.tearDown()
                 self.cluster = Cluster()
 
@@ -111,6 +114,8 @@ class BaseTestCase(unittest.TestCase):
                     self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             finally:
+                # increase case_number to retry tearDown in setup for the next test
+                self.case_number += 1000
                 # stop all existing task manager threads
                 self.cluster.shutdown()
                 self._log_finish(self)
