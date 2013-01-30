@@ -1529,7 +1529,12 @@ class ViewCreationDeletionTests(unittest.TestCase):
         for ddoc in ddocs:
             results = self.create_ddoc(rest, 'default', ddoc)
 
-        Cluster().delete_view(self.servers[0], ddocs[1].name, ddocs[1].views[0])
+        try:
+            cluster = Cluster()
+            cluster.delete_view(self.servers[0], ddocs[1].name, ddocs[1].views[0])
+        finally:
+            cluster.shutdown()
+
         results_new = rest.query_view(ddocs[0].name, ddocs[0].views[0].name, 'default',
                                   {"stale" : "ok", "full_set" : "true"})
         self.assertEquals(results.get(u'rows', []), results_new.get(u'rows', []),
@@ -1651,6 +1656,7 @@ class ViewCreationDeletionTests(unittest.TestCase):
         ddoc_to_create = deepcopy(ddoc)
         ddoc_to_create.set_name(("", "dev_")[ddoc.views[0].dev_view] + ddoc_to_create.name)
         rest.create_design_document(bucket, ddoc_to_create)
+        time.sleep(1)
         return rest.query_view(ddoc_to_create.name, ddoc_to_create.views[0].name, bucket,
                                       {"stale" : "false", "full_set" : "true"})
 
