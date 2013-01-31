@@ -36,16 +36,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def tearDown(self):
         super(MultiNodesUpgradeTests, self).tearDown()
 
-    def _async_update(self, upgrade_version, servers):
-        upgrade_threads = []
-        for server in servers:
-            upgrade_thread = Thread(target=self._upgrade,
-                                    name="upgrade_thread" + server.ip,
-                                    args=(upgrade_version, server, self.queue))
-            upgrade_threads.append(upgrade_thread)
-            upgrade_thread.start()
-        return upgrade_threads
-
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.nodes_init])
         self.operations(self.servers[:self.nodes_init])
@@ -99,7 +89,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.verification(self.servers[:self.nodes_init])
             if self.input.param('check_seqno', True):
                 self.check_seqno(seqno_expected)
-
 
     def offline_cluster_upgrade_and_reboot(self):
         self._install(self.servers[:self.nodes_init])

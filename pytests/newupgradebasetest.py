@@ -15,7 +15,6 @@ from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 
 class NewUpgradeBaseTest(BaseTestCase):
-
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
         self.product = self.input.param('product', 'couchbase-server')
@@ -137,6 +136,16 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
+    def _async_update(self, upgrade_version, servers):
+        upgrade_threads = []
+        for server in servers:
+            upgrade_thread = Thread(target=self._upgrade,
+                                    name="upgrade_thread" + server.ip,
+                                    args=(upgrade_version, server, self.queue))
+            upgrade_threads.append(upgrade_thread)
+            upgrade_thread.start()
+        return upgrade_threads
+
     def _new_master(self, server):
         self.master = server
         self.rest = RestConnection(self.master)
@@ -187,9 +196,6 @@ class NewUpgradeBaseTest(BaseTestCase):
             if cluster_status["autoCompactionSettings"]["viewFragmentationThreshold"]\
                              ["percentage"] != self.input.param("autocompaction", 50):
                     self.fail("autocompaction settings weren't saved")
-
-
-
 
     def change_settings(self):
         if "update_notifications" in self.input.test_params:
