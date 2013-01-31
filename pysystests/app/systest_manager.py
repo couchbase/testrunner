@@ -281,12 +281,13 @@ def monitorPhase(runTime, workloadIds, rebalancing = False, queryIds = None):
             if rebalancing:
                 phase_status = monitorRebalance()
                 rebalancing = False
-            elif workloadIds is not None:
+            elif workloadIds is not None and len(workloadIds) > 0:
                 for workloadId in workloadIds:
-                    running = getWorkloadStatus(workloadId)
-                    if running == True:
-                        # there is still a workload active
-                        continue
+                    _status = getWorkloadStatus(workloadId)
+                    if _status == False:
+                        # remove stopped workload from list to stop polling
+                        index = workloadIds.index(workloadId)
+                        workloadIds.pop(index)
             else:
                 running = False
 
@@ -314,6 +315,7 @@ def getWorkloadStatus(workloadId):
                 if workload.active == False:
                     logger.error("Postconditions met %s" % workload.postconditions)
                     logger.error("Stopping workload %s" % workloadId)
+
                     running = False
             else:
                 logger.error("Stopping workload %s" % workloadId)
