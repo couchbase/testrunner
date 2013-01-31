@@ -55,44 +55,6 @@ class Rebalance(XDCRReplicationBaseTest):
             self._cluster_helper.shutdown()
             self._log_finish(self)
 
-    def _async_modify_data(self):
-        tasks = []
-        """Setting up creates/updates/deletes at source nodes"""
-        if self._doc_ops is not None:
-            # allows multiple of them but one by one
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "create" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-        for task in tasks:
-            task.result()
-        time.sleep(self._timeout)
-
-
-    def _async_update_delete_data(self):
-        self._log.info("The tasks:-")
-        tasks = []
-        #Setting up doc-ops at source nodes and doc-ops-dest at destination nodes
-        if self._doc_ops is not None:
-            # allows multiple of them but one by one on either of the clusters
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            time.sleep(5)
-        if self._doc_ops_dest is not None:
-            if "update" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
-            if "delete" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            time.sleep(5)
-        for task in tasks:
-            task.result()
-        time.sleep(self._timeout)
-
-
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
     Async Rebalance-In node at Source/Destination while
     Create/Update/Delete are performed in parallel based on doc-ops specified by the user.

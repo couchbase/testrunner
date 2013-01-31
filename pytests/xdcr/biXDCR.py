@@ -22,27 +22,6 @@ class bidirectional(XDCRReplicationBaseTest):
     def tearDown(self):
         super(bidirectional, self).tearDown()
 
-    def _async_update_delete_data(self):
-        self._log.info("The tasks:-")
-        tasks = []
-        #Setting up doc-ops at source nodes
-        if self._doc_ops is not None:
-            # allows multiple of them but one by one on either of the clusters
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            time.sleep(self._timeout / 6)
-        if self._doc_ops_dest is not None:
-            if "update" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
-            if "delete" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            time.sleep(self._timeout / 6)
-        for task in tasks:
-            task.result()
-
-
     """Bidirectional replication between two clusters(currently), create-updates-deletes on DISJOINT sets on same bucket."""
     # TODO fix exit condition on mismatch error, to check for a range instead of exiting on 1st mismatch
     def load_with_ops(self):

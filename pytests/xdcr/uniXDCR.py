@@ -15,20 +15,6 @@ class unidirectional(XDCRReplicationBaseTest):
     def tearDown(self):
         super(unidirectional, self).tearDown()
 
-    def _async_modify_data(self):
-        tasks = []
-        """Setting up creates/updates/deletes at source nodes"""
-        if self._doc_ops is not None:
-            # allows multiple of them but one by one
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "create" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-        for task in tasks:
-            task.result()
-
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
 

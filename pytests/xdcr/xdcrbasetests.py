@@ -36,8 +36,8 @@ class XDCRConstants:
 
     INPUT_PARAM_SEED_DATA_OPERATION = "sdata_op"
 
-    INPUT_PARAM_POLL_INTERVAL = "poll_interval" # in seconds
-    INPUT_PARAM_POLL_TIMEOUT = "poll_timeout" # in seconds
+    INPUT_PARAM_POLL_INTERVAL = "poll_interval"  # in seconds
+    INPUT_PARAM_POLL_TIMEOUT = "poll_timeout"  # in seconds
 
     #CLUSTER_TOPOLOGY_TYPE_LINE = "line"
     CLUSTER_TOPOLOGY_TYPE_CHAIN = "chain"
@@ -195,16 +195,16 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _init_parameters(self):
         self._log.info("Initializing input parameters started...")
-        self._clusters_dic = self._input.clusters # clusters is declared as dic in TestInput which is unordered.
+        self._clusters_dic = self._input.clusters  # clusters is declared as dic in TestInput which is unordered.
         self._clusters_keys_olst = range(
-            len(self._clusters_dic)) #clusters are populated in the dic in testrunner such that ordinal is the key.
+            len(self._clusters_dic))  #clusters are populated in the dic in testrunner such that ordinal is the key.
         #orderedDic cannot be used in order to maintain the compability with python 2.6
         self._cluster_counter_temp_int = 0
         self._cluster_names_dic = self._get_cluster_names()
         self._servers = self._input.servers
         self._disabled_consistent_view = self._input.param("disabled_consistent_view", True)
-        self._floating_servers_set = self._get_floating_servers() # These are the servers defined in .ini file but not linked to any cluster.
-        self._cluster_counter_temp_int = 0 #TODO: fix the testrunner code to pass cluster name in params.
+        self._floating_servers_set = self._get_floating_servers()  # These are the servers defined in .ini file but not linked to any cluster.
+        self._cluster_counter_temp_int = 0  #TODO: fix the testrunner code to pass cluster name in params.
         self._buckets = []
 
         self._default_bucket = self._input.param("default_bucket", True)
@@ -223,7 +223,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 256)
         self._dgm_run_bool = self._input.param("dgm_run", False)
-        self._mem_quota_int = 0 # will be set in subsequent methods
+        self._mem_quota_int = 0  # will be set in subsequent methods
 
         self._poll_interval = self._input.param(XDCRConstants.INPUT_PARAM_POLL_INTERVAL, 5)
         self._poll_timeout = self._input.param(XDCRConstants.INPUT_PARAM_POLL_TIMEOUT, 120)
@@ -732,7 +732,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         self._setup_topology()
         self._load_data()
 
-
     def teardown_extended(self):
         for _, clusters in self._clusters_dic.items():
             rest = RestConnection(clusters[0])
@@ -742,7 +741,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 #        for (rest_conn, cluster_ref, rep_database, rep_id) in self._cluster_state_arr:
 #            rest_conn.stop_replication(rep_database, rep_id)
             #rest_conn.remove_remote_cluster(cluster_ref)
-
 
     def init_parameters_extended(self):
         self._cluster_state_arr = []
@@ -757,7 +755,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         self._seed_data_mode_str = self._input.param(XDCRConstants.INPUT_PARAM_SEED_DATA_MODE,
             XDCRConstants.SEED_DATA_MODE_SYNC)
 
-
     def _setup_topology(self):
         if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
             self._setup_topology_chain()
@@ -765,7 +762,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._set_toplogy_star()
         else:
             raise "Not supported cluster topology : %s", self._cluster_topology_str
-
 
     def _load_data(self):
         if not self._seed_data:
@@ -776,7 +772,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._load_data_star()
         else:
             raise "Seed data not supported cluster topology : %s", self._cluster_topology_str
-
 
     def _setup_topology_chain(self):
         ord_keys = self._clusters_keys_olst
@@ -790,7 +785,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             dest_cluster_name = self._cluster_names_dic[dest_key]
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             dest_key_index += 1
-
 
     def _set_toplogy_star(self):
         src_master_identified = False
@@ -806,7 +800,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             time.sleep(30)
 
-
     def _load_data_chain(self):
         for key in self._clusters_keys_olst:
             cluster_node = self._clusters_dic[key][0]
@@ -818,7 +811,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 break
             self._log.info("Completed Load")
 
-
     def set_environ_param(self, interval_time):
         for server in self.src_nodes:
             shell = RemoteMachineShellConnection(server)
@@ -827,7 +819,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             for server in self.dest_nodes:
                 shell = RemoteMachineShellConnection(server)
                 shell.set_environment_variable('XDCR_FAILURE_RESTART_INTERVAL', interval_time)
-
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         if src_master.ip != dest_master.ip:
@@ -840,13 +831,11 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._link_clusters(dest_cluster_name, dest_master, src_cluster_name, src_master)
             self._replicate_clusters(dest_master, src_cluster_name)
 
-
     def _link_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         rest_conn_src = RestConnection(src_master)
         rest_conn_src.add_remote_cluster(dest_master.ip, dest_master.port,
             dest_master.rest_username,
             dest_master.rest_password, dest_cluster_name)
-
 
     def _replicate_clusters(self, src_master, dest_cluster_name):
         rest_conn_src = RestConnection(src_master)
@@ -857,7 +846,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             time.sleep(5)
         if self._get_cluster_buckets(src_master):
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
-
 
     def _load_gen_data(self, cname, node):
         for op_type in self._seed_data_ops_lst:
@@ -899,6 +887,40 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store)
+        for task in tasks:
+            task.result()
+
+    def _async_modify_data(self):
+        tasks = []
+        """Setting up creates/updates/deletes at source nodes"""
+        if self._doc_ops is not None:
+            # allows multiple of them but one by one
+            if "update" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
+            if "create" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0))
+            if "delete" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+        for task in tasks:
+            task.result()
+
+    def _async_update_delete_data(self):
+        self._log.info("The tasks:-")
+        tasks = []
+        #Setting up doc-ops at source nodes and doc-ops-dest at destination nodes
+        if self._doc_ops is not None:
+            # allows multiple of them but one by one on either of the clusters
+            if "update" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
+            if "delete" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+            time.sleep(self._timeout / 6)
+        if self._doc_ops_dest is not None:
+            if "update" in self._doc_ops_dest:
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
+            if "delete" in self._doc_ops_dest:
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
+            time.sleep(self._timeout / 6)
         for task in tasks:
             task.result()
 
