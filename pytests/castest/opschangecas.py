@@ -26,7 +26,7 @@ class OpsChangeCasTests(CasBaseTest):
         gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items / 2 - 1))
         gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items / 2, end=(3* self.num_items / 4 - 1))
         gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=3* self.num_items / 4, end=self.num_items)
-        self._load_all_buckets(self.master, gen_load_mysql, "create", 0)
+        self._load_all_buckets(self.master, gen_load_mysql, "create", 0, flag=self.item_flag)
 
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
@@ -72,7 +72,7 @@ class OpsChangeCasTests(CasBaseTest):
                     time.sleep(1)
                     self.log.info("Delete operation set item cas with key {0} to {1}".format(key, cas))
                     try:
-                        self.clients[bucket.name].cas(key, 0, 0, cas, value)
+                        self.clients[bucket.name].cas(key, 0, self.item_flag, cas, value)
                         raise Exception("The item should already be deleted. We can't mutate it anymore")
                     except MemcachedError as error:
                     #It is expected to raise MemcachedError because the key is deleted.
@@ -86,7 +86,7 @@ class OpsChangeCasTests(CasBaseTest):
                     time.sleep(self.expire_time+1)
                     self.log.info("Try to mutate an expired item with its previous cas {0}".format(cas))
                     try:
-                        self.clients[bucket.name].cas(key, 0, 0, cas, value)
+                        self.clients[bucket.name].cas(key, 0, self.item_flag, cas, value)
                         raise Exception("The item should already be expired. We can't mutate it anymore")
                     except MemcachedError as error:
                     #It is expected to raise MemcachedError becasue the key is expired.

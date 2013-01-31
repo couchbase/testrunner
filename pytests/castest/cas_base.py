@@ -9,6 +9,7 @@ class CasBaseTest(BaseTestCase):
         self.doc_ops = self.input.param("doc_ops", None)
         self.mutate_times = self.input.param("mutate_times", 10)
         self.expire_time = self.input.param("expire_time", 5)
+        self.item_flag = self.input.param("item_flag", 0)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
         self.clients = {}
