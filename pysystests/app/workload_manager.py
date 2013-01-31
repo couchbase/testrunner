@@ -143,7 +143,10 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
 
                 # note template was converted to dict for mset
                 template = args[1]
-                if template["cc_queues"] is not None:
+
+                # put created item into specified cc_queues (if specified)
+                # and item is not set to expire
+                if template["cc_queues"] is not None and template["ttl"] == 0:
                     for queue in template["cc_queues"]:
                         queue = str(queue)
                         rabbitHelper.declare(queue)
