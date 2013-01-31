@@ -239,7 +239,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 self.src_master = self.src_nodes[0]
                 rest = RestConnection(self.src_master)
                 master_id = rest.get_nodes_self().id
-                for bucket in self._buckets:
+                for bucket in self.buckets:
                     if bucket.master_id == RestConnection(prev_master).get_nodes_self().id:
                         bucket.master_id = master_id
 
@@ -253,7 +253,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 self.dest_master = self.dest_nodes[0]
                 rest = RestConnection(self.dest_master)
                 master_id = rest.get_nodes_self().id
-                for bucket in self._buckets:
+                for bucket in self.buckets:
                     if bucket.master_id == RestConnection(prev_master).get_nodes_self().id:
                         bucket.master_id = master_id
 

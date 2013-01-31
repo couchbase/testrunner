@@ -56,8 +56,9 @@ class BaseTestCase(unittest.TestCase):
                 self.port = str(self.input.param("port", None))
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                           .format(self.case_number, self._testMethodName))
-            # avoid any cluster operations in setup for new upgrade tests
-            if str(self.__class__).find('newupgradetests') != -1:
+            # avoid any cluster operations in setup for new upgrade & upgradeXDCR tests
+            if str(self.__class__).find('newupgradetests') != -1 or \
+                    str(self.__class__).find('upgradeXDCR') != -1:
                 self.log.info("any cluster operation in setup will be skipped")
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
@@ -83,7 +84,7 @@ class BaseTestCase(unittest.TestCase):
             if self.dgm_run:
                 self.quota = 256
             if self.total_buckets > 0:
-                self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+                self.bucket_size = self._get_bucket_size(self.servers[0], self.servers, self.quota, self.total_buckets)
             if str(self.__class__).find('newupgradetests') == -1:
                 self._bucket_creation()
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
@@ -167,38 +168,45 @@ class BaseTestCase(unittest.TestCase):
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
+    def _get_bucket_size(self, master_node, nodes, mem_quota, num_buckets, ratio=2.0 / 3.0):
+        for node in nodes:
+            if node.ip == master_node.ip:
+                return int(ratio / float(len(nodes)) / float(num_buckets) * float(mem_quota))
+        return int(ratio / float(num_buckets) * float(mem_quota))
 
-    def _get_bucket_size(self, quota, num_buckets, ratio=2.0 / 3.0):
-        ip = self.servers[0]
-        for server in self.servers:
-            if server.ip == ip:
-                return int(ratio / float(self.num_servers) / float(num_buckets) * float(quota))
-        return int(ratio / float(num_buckets) * float(quota))
-
-    def _create_sasl_buckets(self, server, num_buckets):
+    def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
+        if server_id is None:
+            server_id = RestConnection(server).get_nodes_self().id
+        if bucket_size is None:
+            bucket_size = self.bucket_size
         bucket_tasks = []
         for i in range(num_buckets):
             name = 'bucket' + str(i)
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name,
                                                                       'password',
-                                                                      self.bucket_size,
+                                                                      bucket_size,
                                                                       self.num_replicas))
             self.buckets.append(Bucket(name=name, authType="sasl", saslPassword='password',
-                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size));
+                                       num_replicas=self.num_replicas, bucket_size=bucket_size,
+                                       master_id=server_id));
         for task in bucket_tasks:
             task.result()
 
-    def _create_standard_buckets(self, server, num_buckets):
+    def _create_standard_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
+        if server_id is None:
+            server_id = RestConnection(server).get_nodes_self().id
+        if bucket_size is None:
+            bucket_size = self.bucket_size
         bucket_tasks = []
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
             bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
                                                                           11214 + i,
-                                                                          self.bucket_size,
+                                                                          bucket_size,
                                                                           self.num_replicas))
-
-            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None, num_replicas=self.num_replicas,
-                                       bucket_size=self.bucket_size, port=11214 + i));
+            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+                                       num_replicas=self.num_replicas,
+                                       bucket_size=bucket_size, port=11214 + i, master_id=server_id));
         for task in bucket_tasks:
             task.result()
 

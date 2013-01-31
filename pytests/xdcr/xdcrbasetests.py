@@ -79,10 +79,9 @@ class XDCRBaseTest(unittest.TestCase):
             self._xdc_replication_rate = {}
             self._start_replication_time = {}
 
-            ##
             self._log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
                 .format(self._case_number, self._testMethodName))
-            if not self._input.param("skip_cleanup", False):
+            if not self._input.param("skip_cleanup", False):  # and str(self.__class__).find('upgradeXDCR') == -1:
                 self._cleanup_previous_setup()
 
             self._init_clusters(self._disabled_consistent_view)
@@ -90,27 +89,27 @@ class XDCRBaseTest(unittest.TestCase):
             self._log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
             ## THREADS FOR STATS KEEPING
-            self._stats_thread1 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.src_master])
-            self._stats_thread2 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.dest_master])
-            self._stats_thread3 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.src_master])
-            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                self._stats_thread4 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.dest_master])
-                self._stats_thread5 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.src_master])
-                self._stats_thread6 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.dest_master])
-            self._stats_thread1.setDaemon(True)
-            self._stats_thread2.setDaemon(True)
-            self._stats_thread3.setDaemon(True)
-            self._stats_thread1.start()
-            self._stats_thread2.start()
-            self._stats_thread3.start()
-            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                self._stats_thread4.setDaemon(True)
-                self._stats_thread5.setDaemon(True)
-                self._stats_thread6.setDaemon(True)
-                self._stats_thread4.start()
-                self._stats_thread5.start()
-                self._stats_thread6.start()
-                self._log_start(self)
+            if str(self.__class__).find('upgradeXDCR') == -1:
+                self._stats_thread1 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.src_master])
+                self._stats_thread2 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.dest_master])
+                self._stats_thread3 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.src_master])
+                self._stats_thread1.setDaemon(True)
+                self._stats_thread2.setDaemon(True)
+                self._stats_thread3.setDaemon(True)
+                self._stats_thread1.start()
+                self._stats_thread2.start()
+                self._stats_thread3.start()
+                if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                    self._stats_thread4 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.dest_master])
+                    self._stats_thread5 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.src_master])
+                    self._stats_thread6 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.dest_master])
+                    self._stats_thread4.setDaemon(True)
+                    self._stats_thread5.setDaemon(True)
+                    self._stats_thread6.setDaemon(True)
+                    self._stats_thread4.start()
+                    self._stats_thread5.start()
+                    self._stats_thread6.start()
+                    self._log_start(self)
         except  Exception as e:
             self._log.error(e.message)
             self._log.error("Error while setting up clusters: %s", sys.exc_info())
@@ -122,13 +121,14 @@ class XDCRBaseTest(unittest.TestCase):
             self._log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
                     .format(self._case_number, self._testMethodName))
             self._end_replication_flag = 1
-            self._stats_thread1.join()
-            self._stats_thread2.join()
-            self._stats_thread3.join()
-            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                self._stats_thread4.join()
-                self._stats_thread5.join()
-                self._stats_thread6.join()
+            if str(self.__class__).find('upgradeXDCR') == -1:
+                self._stats_thread1.join()
+                self._stats_thread2.join()
+                self._stats_thread3.join()
+                if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                    self._stats_thread4.join()
+                    self._stats_thread5.join()
+                    self._stats_thread6.join()
             if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
                 self._log.info("Type of run: BIDIRECTIONAL XDCR")
             else:
@@ -205,7 +205,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._disabled_consistent_view = self._input.param("disabled_consistent_view", True)
         self._floating_servers_set = self._get_floating_servers()  # These are the servers defined in .ini file but not linked to any cluster.
         self._cluster_counter_temp_int = 0  #TODO: fix the testrunner code to pass cluster name in params.
-        self._buckets = []
+        self.buckets = []
 
         self._default_bucket = self._input.param("default_bucket", True)
         self._end_replication_flag = self._input.param("end_replication_flag", 0)
@@ -419,26 +419,30 @@ class XDCRBaseTest(unittest.TestCase):
             if mem_quota_node < self._mem_quota_int or self._mem_quota_int == 0:
                 self._mem_quota_int = mem_quota_node
 
-    def _create_sasl_buckets(self, server, server_id, bucket_size):
+    def _create_sasl_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
-        for i in range(self._sasl_buckets):
+        for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
             bucket_tasks.append(self._cluster_helper.async_create_sasl_bucket(server, name, 'password',
-                bucket_size, self._num_replicas))
-            self._buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
-                num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=server_id))
+                                                                              bucket_size, self._num_replicas))
+            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
+                                        num_replicas=self._num_replicas, bucket_size=bucket_size,
+                                        master_id=server_id))
 
         for task in bucket_tasks:
             task.result()
 
-    def _create_standard_buckets(self, server, server_id, bucket_size):
+    def _create_standard_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
-        for i in range(self._standard_buckets):
+        for i in range(num_buckets):
             name = "standard_bucket_" + str(i + 1)
             bucket_tasks.append(self._cluster_helper.async_create_standard_bucket(server, name,
-                11214 + i, bucket_size, self._num_replicas))
-            self._buckets.append(Bucket(name=name, authType=None, saslPassword=None,
-                num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=server_id))
+                                                                                  11214 + i,
+                                                                                  bucket_size,
+                                                                                  self._num_replicas))
+            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+                                        num_replicas=self._num_replicas, bucket_size=bucket_size,
+                                        port=11214 + i, master_id=server_id))
 
         for task in bucket_tasks:
             task.result()
@@ -452,12 +456,12 @@ class XDCRBaseTest(unittest.TestCase):
         master_id = rest.get_nodes_self().id
 
         if self._sasl_buckets > 0:
-            self._create_sasl_buckets(master_node, master_id, bucket_size)
+            self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
         if self._standard_buckets > 0:
-            self._create_standard_buckets(master_node, master_id, bucket_size)
+            self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
             self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
-            self._buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                 num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
 
     def _config_cluster(self, nodes):
@@ -508,14 +512,14 @@ class XDCRBaseTest(unittest.TestCase):
         if master_id.find('es') != 0:
 
             #verify if node_ids were changed for cluster_run
-            for bucket in self._buckets:
+            for bucket in self.buckets:
                 if ("127.0.0.1" in bucket.master_id and "127.0.0.1" not in master_id) or \
                    ("localhost" in bucket.master_id and "localhost" not in master_id):
                     new_ip = master_id[master_id.index("@") + 1:]
                     bucket.master_id = bucket.master_id.replace("127.0.0.1", new_ip).\
                     replace("localhost", new_ip)
 
-        return [bucket for bucket in self._buckets if bucket.master_id == master_id]
+        return [bucket for bucket in self.buckets if bucket.master_id == master_id]
 
 
     """merge 2 different kv strores from different clsusters/buckets
@@ -579,6 +583,16 @@ class XDCRBaseTest(unittest.TestCase):
         for src_bucket in src_buckets:
             for dest_bucket in dest_buckets:
                 if src_bucket.name == dest_bucket.name:
+                    if bidirection:
+                        src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
+
+    def do_merge_bucket(self, src_master, dest_master, bidirection, bucket):
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name == dest_bucket.name and bucket.name == src_bucket.name:
                     if bidirection:
                         src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
                     dest_bucket.kvs[1] = src_bucket.kvs[1]

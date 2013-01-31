@@ -97,7 +97,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         self.buckets = []
         gc.collect()
-        self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+        self.bucket_size = self._get_bucket_size(self.servers[0], self.servers, self.quota, self.total_buckets)
         self._bucket_creation()
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
@@ -129,7 +129,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             remote.download_build(appropriate_build)
             remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
             remote.disconnect()
-            if not self.rest_helper.is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
+            if not RestHelper(RestConnection(server)).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
                 self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
             if not skip_init:
                 self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
