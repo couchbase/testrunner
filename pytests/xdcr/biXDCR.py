@@ -424,14 +424,15 @@ class bidirectional(XDCRReplicationBaseTest):
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
             time.sleep(5)
+
         while True:
             for view in views:
                 self._cluster_helper.query_view(self.src_master, prefix + ddoc_name, view.name, query)
                 self._cluster_helper.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
-            for task in tasks:
-                if task.state != "FINISHED":
-                    continue;
-            break;
+            if set([task.state for task in tasks]) != set(["FINISHED"]):
+                continue
+            else:
+                break
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
