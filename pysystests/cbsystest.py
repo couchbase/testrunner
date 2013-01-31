@@ -30,7 +30,7 @@ def add_template_parser(parent):
     parser.add_argument("--cc_queues",nargs='+', help="queues to copy created keys into")
     parser.add_argument("--kvpairs",   nargs='+', help="list of kv items i.e=> state:ca,age:28,company:cb")
     parser.add_argument("--type",    help="json/non-json default is json", default="json")
-    parser.add_argument("--size",    help="size of documents. padding is used if necessary")
+    parser.add_argument("--size", nargs='+',    help="size of documents. padding is used if necessary")
 
 #TODO    parser.add_argument("--blobs",   nargs='+', help="data strings for non-json docs")
     parser.set_defaults(handler=import_template)

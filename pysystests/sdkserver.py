@@ -233,7 +233,9 @@ class CouchClientManager():
             kv.update({key : _a_})
 
         if template["size"] is not None:
-            size = int(template['size'])
+            size_idx = random.randint(0,len(template["size"]) - 1)
+            size = int(template['size'][size_idx])
+
             kv_size = sys.getsizeof(kv)/8
             if  kv_size < size:
                 padding = _random_string(size - kv_size)
