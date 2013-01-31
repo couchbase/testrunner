@@ -323,6 +323,7 @@ class Rebalance(XDCRReplicationBaseTest):
                             self.src_master.ip, add_node.ip, remove_node.ip))
                     self.src_nodes.remove(self.src_nodes[0])
                     self.src_nodes.append(add_node)
+                    self.src_master = add_node
 
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                     if "source" in self._rebalance:
@@ -334,13 +335,11 @@ class Rebalance(XDCRReplicationBaseTest):
                             add_node.ip, remove_node.ip))
                     self.dest_nodes.remove(self.dest_nodes[0])
                     self.dest_nodes.append(add_node)
+                    self.dest_master = add_node
 
                 time.sleep(self._timeout / 2)
                 for task in tasks:
                     task.result()
-
-                self.src_master = self.src_nodes[0]
-                self.dest_master = self.dest_nodes[0]
 
                 if self._replication_direction_str in "unidirection":
                     self._async_modify_data()
