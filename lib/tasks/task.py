@@ -849,6 +849,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
         except ValueError as error:
                 self.state = FINISHED
                 self.set_exception(error)
+                return
         for partition, keys in partition_keys_dic.items():
             self._check_validity(partition, keys, key_vals)
         self.kv_store.release_partitions(partition_keys_dic.keys())
