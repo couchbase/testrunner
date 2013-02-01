@@ -1030,7 +1030,8 @@ class EPerfMaster(perf.PerfBase):
         # Access phase
         if self.parami("access_phase", 0) == 1:
             bucket = self.params("bucket", "default")
-            queries = view_gen.generate_queries(ddocs, bucket)
+            stale = self.params("stale", "update_after")
+            queries = view_gen.generate_queries(ddocs, bucket, stale)
 
             self.bg_max_ops_per_sec = self.parami("bg_max_ops_per_sec", 100)
             self.fg_max_ops = self.parami("fg_max_ops", 1000000)

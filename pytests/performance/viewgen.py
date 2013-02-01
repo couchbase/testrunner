@@ -166,16 +166,20 @@ class ViewGen(object):
         self.ddocs.reset()
         return ddocs
 
-    def get_query(self, bucket, ddoc, view):
+    def _get_query(self, bucket, ddoc, view, stale):
         """Generate template-based query"""
         template = self.queries[view]
         query = template.format(bucket=bucket, ddoc=ddoc, view=view)
+        if stale == "ok":
+            query += "&stale=ok"
+        elif stale == "false":
+            query += "&stale=false"
         return (query, ) * self.queries_by_type[view]
 
-    def generate_queries(self, ddocs, bucket='default'):
+    def generate_queries(self, ddocs, bucket='default', stale="update_after"):
         """Generate string from permuted queries"""
         # Generate list of queries
-        queries = (self.get_query(bucket, ddoc, view)
+        queries = (self._get_query(bucket, ddoc, view, stale)
                    for ddoc, ddoc_definition in ddocs.iteritems()
                    for view in ddoc_definition["views"])
         queries = [query for query_group in queries for query in query_group]
