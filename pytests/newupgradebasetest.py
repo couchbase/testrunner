@@ -2,6 +2,7 @@ import re
 import testconstants
 import gc
 import sys
+from threading import Thread
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedError
 from memcached.helper.data_helper import VBucketAwareMemcached

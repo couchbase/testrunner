@@ -1,5 +1,4 @@
 import Queue
-from threading import Thread
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
