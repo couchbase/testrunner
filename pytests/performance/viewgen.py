@@ -164,6 +164,7 @@ class ViewGen(object):
             if options:
                 ddocs[ddoc_name]["options"] = options
         self.ddocs.reset()
+        self.views.reset()
         return ddocs
 
     def _get_query(self, bucket, ddoc, view, stale):
