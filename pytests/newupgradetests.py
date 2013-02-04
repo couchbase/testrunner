@@ -159,61 +159,70 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.verification(list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out)))
 
     def offline_cluster_upgrade_non_default_path(self):
-        num_nodes_with_not_default = self.input.param('num_nodes_with_not_default', 1)
-        data_path = self.input.param('data_path', '/tmp/data').replace('|', "/")
-        index_path = self.input.param('index_path', data_path).replace('|', "/")
-        num_nodes_remove_data = self.input.param('num_nodes_remove_data', 0)
-        servers_with_not_default = self.servers[:num_nodes_with_not_default]
-        for server in servers_with_not_default:
-            server.data_path = data_path
-            server.index_path = index_path
-            shell = RemoteMachineShellConnection(server)
-            for path in set([data_path, index_path]):
-                shell.create_directory(path)
-            shell.disconnect()
-        self._install(self.servers[:self.nodes_init])
-        self.operations(self.servers[:self.nodes_init])
-        if self.ddocs_num and not self.input.param('extra_verification', False):
-            self.create_ddocs_and_views()
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
-        for upgrade_version in self.upgrade_versions:
-            for server in self.servers[:self.nodes_init]:
-                remote = RemoteMachineShellConnection(server)
-                remote.stop_server()
-                self.sleep(self.sleep_time)
-                remote.disconnect()
-            #remove data for nodes with non default data paths
-            tmp = min(num_nodes_with_not_default, num_nodes_remove_data)
-            self.delete_data(self.servers[:tmp], [data_path, index_path])
-            #remove data for nodes with default data paths
-            self.delete_data(self.servers[tmp: max(tmp, num_nodes_remove_data)], ["/opt/couchbase/var/lib/couchbase/data"])
-            upgrade_threads = self._async_update(upgrade_version, self.servers[:self.nodes_init])
-            for upgrade_thread in upgrade_threads:
-                upgrade_thread.join()
-            success_upgrade = True
-            while not self.queue.empty():
-                success_upgrade &= self.queue.get()
-            if not success_upgrade:
-                self.fail("Upgrade failed!")
-            self.sleep(self.expire_time)
+        try:
+            num_nodes_with_not_default = self.input.param('num_nodes_with_not_default', 1)
+            data_path = self.input.param('data_path', '/tmp/data').replace('|', "/")
+            index_path = self.input.param('index_path', data_path).replace('|', "/")
+            num_nodes_remove_data = self.input.param('num_nodes_remove_data', 0)
+            servers_with_not_default = self.servers[:num_nodes_with_not_default]
+            old_paths = {}
             for server in servers_with_not_default:
-                rest = RestConnection(server)
-                node = rest.get_nodes_self()
-                self.assertTrue(node.storage[0].path, data_path)
-                self.assertTrue(node.storage[0].index_path, index_path)
-        if num_nodes_remove_data:
-            for bucket in self.buckets:
-                if self.rest_helper.bucket_exists(bucket):
-                    raise Exception("bucket: %s still exists" % bucket.name)
-            self.buckets = []
-
-        if self.input.param('extra_verification', False):
-            self.bucket_size = 100
-            self._create_sasl_buckets(self.master, 1)
-            self._create_standard_buckets(self.master, 1)
-            if self.ddocs_num:
+                #to restore servers paths in finally
+                old_paths[server.ip] = [server.data_path, server.index_path]
+                server.data_path = data_path
+                server.index_path = index_path
+                shell = RemoteMachineShellConnection(server)
+                for path in set([data_path, index_path]):
+                    shell.create_directory(path)
+                shell.disconnect()
+            self._install(self.servers[:self.nodes_init])
+            self.operations(self.servers[:self.nodes_init])
+            if self.ddocs_num and not self.input.param('extra_verification', False):
                 self.create_ddocs_and_views()
-        self.verification(self.servers[:self.nodes_init], check_items=not num_nodes_remove_data)
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
+            for upgrade_version in self.upgrade_versions:
+                for server in self.servers[:self.nodes_init]:
+                    remote = RemoteMachineShellConnection(server)
+                    remote.stop_server()
+                    self.sleep(self.sleep_time)
+                    remote.disconnect()
+                #remove data for nodes with non default data paths
+                tmp = min(num_nodes_with_not_default, num_nodes_remove_data)
+                self.delete_data(self.servers[:tmp], [data_path, index_path])
+                #remove data for nodes with default data paths
+                self.delete_data(self.servers[tmp: max(tmp, num_nodes_remove_data)], ["/opt/couchbase/var/lib/couchbase/data"])
+                upgrade_threads = self._async_update(upgrade_version, self.servers[:self.nodes_init])
+                for upgrade_thread in upgrade_threads:
+                    upgrade_thread.join()
+                success_upgrade = True
+                while not self.queue.empty():
+                    success_upgrade &= self.queue.get()
+                if not success_upgrade:
+                    self.fail("Upgrade failed!")
+                self.sleep(self.expire_time)
+                for server in servers_with_not_default:
+                    rest = RestConnection(server)
+                    node = rest.get_nodes_self()
+                    self.assertTrue(node.storage[0].path, data_path)
+                    self.assertTrue(node.storage[0].index_path, index_path)
+            if num_nodes_remove_data:
+                for bucket in self.buckets:
+                    if self.rest_helper.bucket_exists(bucket):
+                        raise Exception("bucket: %s still exists" % bucket.name)
+                self.buckets = []
+
+            if self.input.param('extra_verification', False):
+                self.bucket_size = 100
+                self._create_sasl_buckets(self.master, 1)
+                self._create_standard_buckets(self.master, 1)
+                if self.ddocs_num:
+                    self.create_ddocs_and_views()
+            self.verification(self.servers[:self.nodes_init], check_items=not num_nodes_remove_data)
+        finally:
+                for server in servers_with_not_default:
+                    server.data_path = old_paths[server.ip][0]
+                    server.index_path = old_paths[server.ip][1]
+
 
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.nodes_init])
