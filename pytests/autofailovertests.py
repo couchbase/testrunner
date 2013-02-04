@@ -66,8 +66,14 @@ class AutoFailoverBaseTest(unittest.TestCase):
                 break
             time.sleep(2)
 
-        testcase.assertTrue(failover_count == autofailover_count, "{0} nodes failed over, expected {1} in {2} seconds".
+        if failover_count != autofailover_count:
+            rest = RestConnection(master)
+            testcase.log.info("Latest logs from UI:")
+            for i in rest.get_logs(): testcase.log.error(i)
+            testcase.fail("{0} nodes failed over, expected {1} in {2} seconds".
                             format(failover_count, autofailover_count, time.time() - time_start))
+        else:
+            testcase.log.info("{O} nodes failed over as expected")
 
     @staticmethod
     def wait_for_no_failover_or_assert(master, autofailover_count, timeout, testcase):
