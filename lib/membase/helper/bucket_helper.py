@@ -124,7 +124,6 @@ class BucketOperationHelper():
     @staticmethod
     def delete_all_buckets_or_assert(servers, test_case):
         log = logger.Logger.get_logger()
-        log.info('deleting existing buckets on {0}'.format(servers))
         for serverInfo in servers:
             rest = RestConnection(serverInfo)
             buckets = []
@@ -134,7 +133,9 @@ class BucketOperationHelper():
                 log.info('15 seconds sleep before calling get_buckets again...')
                 time.sleep(15)
                 buckets = rest.get_buckets()
+            log.info('deleting existing buckets {0} on {1}'.format(buckets, servers))
             for bucket in buckets:
+                log.info("remove bucket {0} ...".format(bucket.name))
                 status = rest.delete_bucket(bucket.name)
                 if not status:
                     try:
@@ -156,7 +157,7 @@ class BucketOperationHelper():
     @staticmethod
     def delete_bucket_or_assert(serverInfo, bucket='default', test_case=None):
         log = logger.Logger.get_logger()
-        log.info('deleting existing buckets on {0}'.format(serverInfo))
+        log.info('deleting existing bucket {0} on {1}'.format(bucket, serverInfo))
 
         rest = RestConnection(serverInfo)
         if RestHelper(rest).bucket_exists(bucket):
