@@ -286,6 +286,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 bucket.kvs[1] = KVStore()
         self.online_upgrade()
         self.sleep(self.sleep_time)
+        if self.input.param('reboot_cluster', False):
+            self.warm_up_node(self.servers[self.nodes_init : self.num_servers])
         self.verification(self.servers[self.nodes_init : self.num_servers])
         if self.input.param('check_seqno', True):
             self.check_seqno(seqno_expected, comparator=seqno_comparator)

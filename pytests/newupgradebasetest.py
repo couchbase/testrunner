@@ -238,14 +238,19 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.rest.set_auto_compaction(viewFragmntThresholdPercentage=
                                      self.input.param("autocompaction", 50))
 
-    def warm_up_node(self):
-        warmup_node = self.servers[:self.nodes_init][-1]
-        shell = RemoteMachineShellConnection(warmup_node)
-        shell.stop_couchbase()
+    def warm_up_node(self, warmup_nodes=None):
+        if not warmup_nodes:
+            warmup_nodes = [self.servers[:self.nodes_init][-1],]
+        for warmup_node in warmup_nodes:
+            shell = RemoteMachineShellConnection(warmup_node)
+            shell.stop_couchbase()
+            shell.disconnect()
         self.sleep(20)
-        shell.start_couchbase()
-        shell.disconnect()
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([warmup_node], self)
+        for warmup_node in warmup_nodes:
+            shell = RemoteMachineShellConnection(warmup_node)
+            shell.start_couchbase()
+            shell.disconnect()
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(warmup_nodes, self)
 
     def start_index(self):
         if self.ddocs:
