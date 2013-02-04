@@ -350,7 +350,7 @@ class StatsWaitTask(Task):
             except EOFError as ex:
                 self.state = FINISHED
                 self.set_exception(ex)
-
+                return
         if not self._compare(self.comparison, str(stat_result), self.value):
             self.log.warn("Not Ready: %s %s %s %s expected on %s" % (self.stat, stat_result,
                       self.comparison, self.value, self._stringify_servers()))
