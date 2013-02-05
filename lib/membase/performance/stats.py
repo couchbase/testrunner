@@ -7,6 +7,7 @@ from collections import defaultdict
 import logging
 import logging.config
 from uuid import uuid4
+from itertools import cycle
 
 from lib.membase.api.exception import SetViewInfoNotFound, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
@@ -86,6 +87,9 @@ class StatsCollector(object):
             )
             self._task["threads"].append(
                 Thread(target=self.get_bucket_size, name="bucket_size")
+            )
+            self._task["threads"].append(
+                Thread(target=self.rebalance_progress(), name="rebalance_progress")
             )
             if ddoc is not None:
                 self._task["threads"].append(
@@ -196,6 +200,7 @@ class StatsCollector(object):
             "view_info": self._task.get("view_info", []),
             "indexer_info": self._task.get("indexer_info", []),
             "xdcr_lag": self._task.get("xdcr_lag", []),
+            "rebalance_progress": self._task.get("rebalance_progress", []),
             "timings": self._task.get("timings", []),
             "dispatcher": self._task.get("dispatcher", []),
             "bucket-size": self._task.get("bucket_size", []),
@@ -725,6 +730,27 @@ class StatsCollector(object):
                 time.sleep(interval)
 
         log.info("finished xdcr lag measurements")
+
+    def rebalance_progress(self, interval=15):
+        self._task["rebalance_progress"] = list()
+        nodes = cycle(self.nodes)
+        rest = RestConnection(nodes.next())
+        while not self._aborted():
+            try:
+                tasks = rest.ns_server_tasks()
+            except ServerUnavailableException, error:
+                log.error(error)
+                rest = RestConnection(nodes.next())
+                continue
+            for task in tasks:
+                if task["type"] == "rebalance":
+                    self._task["rebalance_progress"].append({
+                        "rebalance_progress": task.get("progress", 0),
+                        "timestamp": time.time()
+                    })
+                    break
+            time.sleep(interval)
+        log.info("finished active_tasks measurements")
 
     def _aborted(self):
         return self._task["state"] == "stopped"
