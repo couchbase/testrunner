@@ -25,7 +25,6 @@ def collect_index_barriers(server):
     repl = filter(lambda t: t['type'] == 'couch_replica_index_barrier', tasks)
 
     return {
-        'timestamp': time.time(),
         server.ip + '_running_couch_main_index_barrier': main[0]['running'],
         server.ip + '_waiting_couch_main_index_barrier': main[0]['waiting'],
         server.ip + '_running_couch_replica_index_barrier': repl[0]['running'],
@@ -45,7 +44,7 @@ def collect_couchdb_tasks(server):
                                                  task['type'],
                                                  task.get('indexer_type', ''))
 
-    samples = {'timestamp': time.time()}
+    samples = {}
     for metric in ('changes_done', 'total_changes', 'progress'):
         sample = dict(
             (server.ip + get_id(t) + metric, t.get(metric, None))
@@ -68,7 +67,7 @@ def collect_active_tasks(server):
                                                task.get('bucket', ''),
                                                task.get('designDocument', ''))
 
-    samples = {'timestamp': time.time()}
+    samples = {}
     for metric in ('changesDone', 'totalChanges', 'progress'):
         sample = dict(
             (get_id(task) + metric, task.get(metric, None))
@@ -87,11 +86,11 @@ def main():
         all_samples = list()
         while True:
             try:
-                samples =\
-                    [collect_index_barriers(s) for s in input.servers] +\
-                    [collect_couchdb_tasks(s) for s in input.servers] +\
-                    [collect_active_tasks(input.servers[0])]
-                samples = filter(lambda sample: sample, samples)
+                samples = {'timestamp': time.time()}
+                samples.update(collect_active_tasks(input.servers[0]))
+                for server in input.servers:
+                    samples.update(collect_index_barriers(server))
+                    samples.update(collect_couchdb_tasks(server))
                 all_samples.extend(samples)
 
                 pprint(samples)
