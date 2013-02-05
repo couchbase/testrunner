@@ -794,7 +794,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             elif info.deliverable_type == 'deb':
                 output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
             success &= self.log_command_output(output, error, track_words)
-
+            self.create_directory(path)
             output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
                                     format(server_type, abbr_product, path))
             success &= self.log_command_output(output, error, track_words)
