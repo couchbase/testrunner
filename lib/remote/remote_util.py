@@ -1210,6 +1210,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if self.use_sudo or use_channel:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()
+            channel.settimeout(600)
             stdin = channel.makefile('wb')
             stdout = channel.makefile('rb')
             stderro = channel.makefile_stderr('rb')
@@ -1648,7 +1649,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
     def execute_batch_command(self, command):
         remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
 
-        o,r = self.execute_command(remote_command)
+        o, r = self.execute_command(remote_command)
         if r:
             log.error("Command didn't run successfully. Error: {0}".format(r))
         return o;
