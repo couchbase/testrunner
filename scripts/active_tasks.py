@@ -17,7 +17,7 @@ def collect_index_barriers(server):
     url = 'http://{0}:8092/_active_tasks'.format(server.ip)
     auth = (server.rest_username, server.rest_password)
     try:
-        tasks = requests.get(url=url, auth=auth).json
+        tasks = requests.get(url=url, auth=auth).json()
     except requests.exceptions.ConnectionError:
         return
 
@@ -37,7 +37,7 @@ def collect_couchdb_tasks(server):
     url = 'http://{0}:8092/_active_tasks'.format(server.ip)
     auth = (server.rest_username, server.rest_password)
     try:
-        tasks = requests.get(url=url, auth=auth).json
+        tasks = requests.get(url=url, auth=auth).json()
     except requests.exceptions.ConnectionError:
         return
 
@@ -60,7 +60,7 @@ def collect_active_tasks(server):
     url = 'http://{0}:8091/pools/default/tasks'.format(server.ip)
     auth = (server.rest_username, server.rest_password)
     try:
-        tasks = requests.get(url=url, auth=auth).json
+        tasks = requests.get(url=url, auth=auth).json()
     except requests.exceptions.ConnectionError:
         return
 
