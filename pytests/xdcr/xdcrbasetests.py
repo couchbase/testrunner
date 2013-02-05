@@ -866,27 +866,29 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         else:
             return self._num_items
 
-    def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1):
+    def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
         gen = copy.deepcopy(kv_gen)
         task = self._cluster_helper.async_load_gen_docs(server, bucket.name, gen,
-                        bucket.kvs[kv_store],
-                        op_type, exp)
+                                                          bucket.kvs[kv_store],
+                                                          op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         return task
 
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1):
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
         tasks = []
         buckets = self._get_cluster_buckets(server)
         for bucket in buckets:
-            task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store)
-            tasks.append(task)
+            gen = copy.deepcopy(kv_gen)
+            tasks.append(self._cluster_helper.async_load_gen_docs(server, bucket.name, gen,
+                                                          bucket.kvs[kv_store],
+                                                          op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs))
         return tasks
 
-    def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1):
-        task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store)
+    def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
+        task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store, flag, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30)
         task.result()
 
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1):
-        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store)
+    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
+        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
 
@@ -971,13 +973,13 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             raise ValueError(
                 "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
-    def _verify_all_buckets(self, server, kv_store=1, timeout=None):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=None, max_verify=None, only_store_hash=True, batch_size=1000):
         def verify():
             try:
                 tasks = []
                 buckets = self._get_cluster_buckets(server)
                 for bucket in buckets:
-                    tasks.append(self._cluster_helper.async_verify_data(server, bucket, bucket.kvs[kv_store]))
+                    tasks.append(self._cluster_helper.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
                 for task in tasks:
                     task.result(timeout)
                 return True
