@@ -141,12 +141,13 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
-    def _async_update(self, upgrade_version, servers):
+    def _async_update(self, upgrade_version, servers, queue=None, skip_init=False):
+        q = queue or self.queue
         upgrade_threads = []
         for server in servers:
             upgrade_thread = Thread(target=self._upgrade,
                                     name="upgrade_thread" + server.ip,
-                                    args=(upgrade_version, server, self.queue))
+                                    args=(upgrade_version, server, q, skip_init))
             upgrade_threads.append(upgrade_thread)
             upgrade_thread.start()
         return upgrade_threads
