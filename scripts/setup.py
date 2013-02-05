@@ -11,6 +11,7 @@ setup(
             "ssh = scripts.ssh:main",
             "grab_atops = scripts.perf.grab_atops:main",
             "collect_server_info = scripts.collect_server_info:main",
+            "active_tasks = scripts.active_tasks:main",
         ],
     },
 )
