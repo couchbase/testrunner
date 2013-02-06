@@ -89,7 +89,7 @@ class StatsCollector(object):
                 Thread(target=self.get_bucket_size, name="bucket_size")
             )
             self._task["threads"].append(
-                Thread(target=self.rebalance_progress(), name="rebalance_progress")
+                Thread(target=self.rebalance_progress, name="rebalance_progress")
             )
             if ddoc is not None:
                 self._task["threads"].append(
