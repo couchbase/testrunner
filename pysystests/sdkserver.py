@@ -342,6 +342,8 @@ def _random_string(length):
     return ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(length))
 
 def _int_float_str_gen(_str):
+    if type(_str)==unicode:
+        _str = str(_str)
     if type(_str)==str and _str.startswith("$int"):
         _val = _str[4:]
         _n_ = 0
