@@ -707,18 +707,20 @@ class StatsCollector(object):
         self._task['xdcr_lag'] = list()
         while not self._aborted():
             key = hex()
-            persisted = persist_time = 0
+            persisted = False
             t0 = time.time()
             src_client.set(key, 0, 0, key)
             while not persisted:
-                _, _, persist_time, persisted, _ = src_client.observe(key)
+                _, _, _, persisted, _ = src_client.observe(key)
+            t1 = time.time()
             while True:
                 try:
                     dst_client.get(key)
                     break
                 except:
-                    time.sleep(0.1)
+                    time.sleep(0.05)
             total_time = (time.time() - t0) * 1000
+            persist_time = (t1 - t0) * 1000
 
             self._task['xdcr_lag'].append({
                 'xdcr_lag': total_time,
