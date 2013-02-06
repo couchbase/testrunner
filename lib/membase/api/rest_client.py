@@ -1070,6 +1070,8 @@ class RestConnection(object):
 
     def get_bucket_json(self, bucket='default'):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
+        if isinstance(bucket, Bucket):
+            api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
         status, content, header = self._http_request(api)
         if not status:
             raise GetBucketInfoFailed(bucket, content)
@@ -1151,6 +1153,45 @@ class RestConnection(object):
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
         create_time = time.time() - create_start_time
         log.info("{0} seconds to create bucket {1}".format(create_time, bucket))
+        return status
+
+    def change_bucket_props(self, bucket,
+                      ramQuotaMB=None,
+                      authType=None,
+                      saslPassword=None,
+                      replicaNumber=None,
+                      proxyPort=None,
+                      replicaIndex=None,
+                      flushEnabled=None):
+        api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
+        if isinstance(bucket, Bucket):
+            api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
+        params = urllib.urlencode({})
+        params_dict = {}
+        existing_bucket = self.get_bucket_json(bucket)
+        params_dict["ramQuotaMB"] = existing_bucket["quota"]["ram"] /(1024 * 1024)
+        if ramQuotaMB:
+            params_dict["ramQuotaMB"] = ramQuotaMB
+        if authType:
+            params_dict["authType"] =  authType
+        if saslPassword:
+            params_dict["authType"] =  "sasl"
+            params_dict["saslPassword"] =  saslPassword
+        if replicaNumber:
+            params_dict["replicaNumber"] =  replicaNumber
+        if proxyPort:
+            params_dict["proxyPort"] =  proxyPort
+        if replicaIndex:
+            params_dict["replicaIndex"] =  replicaIndex
+        if flushEnabled:
+            params_dict["flushEnabled"] =  flushEnabled
+        params = urllib.urlencode(params_dict)
+
+        log.info("%s with param: %s" % (api, params))
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status:
+            raise Exception("Unable to set bucket settings %s for bucket" % (params, bucket))
+        log.info("bucket %s updated" % bucket)
         return status
 
     #return AutoFailoverSettings

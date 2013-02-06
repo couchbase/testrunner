@@ -423,3 +423,27 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance.result()
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i + 1])
+
+    '''
+    test rebalances nodes_in nodes ,
+    changes bucket passwords and then rebalances nodes_in_second nodes
+    '''
+    def rebalance_in_with_bucket_password_change(self):
+        if self.sasl_buckets == 0:
+            self.fail("no sasl buckets are specified!")
+        new_pass = self.input.param("new_pass", "new_pass")
+        servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        nodes_in_second = self.input.param("nodes_in_second", 1)
+        servs_in_second = self.servers[self.nodes_init + self.nodes_in:
+                                       self.nodes_init + self.nodes_in + nodes_in_second]
+        servs_init = self.servers[:self.nodes_init]
+        servs_result = self.servers[:self.nodes_init + self.nodes_in]
+
+        rebalance = self.cluster.async_rebalance(servs_init, servs_in, [])
+        rebalance.result()
+        rest = RestConnection(self.master)
+        bucket_to_change = [bucket for bucket in self.buckets
+                            if bucket.authType =='sasl' and bucket.name !='default'][0]
+        rest.change_bucket_props(bucket_to_change, saslPassword=new_pass)
+        rebalance = self.cluster.async_rebalance(servs_result, servs_in_second, [])
+        rebalance.result()
