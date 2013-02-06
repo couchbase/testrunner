@@ -731,6 +731,9 @@ class StatsCollector(object):
             if total_time < 10000:
                 time.sleep(interval)
 
+        with open("xdcr_lag.json", 'a') as fh:
+            fh.write(json.dumps(self._task['xdcr_lag'],
+                                indent=4, sort_keys=True))
         log.info("finished xdcr lag measurements")
 
     def rebalance_progress(self, interval=15):
