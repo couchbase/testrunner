@@ -706,7 +706,7 @@ class StatsCollector(object):
         log.info("started xdcr lag measurements")
         self._task['xdcr_lag'] = list()
         while not self._aborted():
-            key = hex()
+            key = "XDCR_TIMING" + hex()
             persisted = False
             t0 = time.time()
             src_client.set(key, 0, 0, key)
