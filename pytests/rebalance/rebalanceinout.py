@@ -373,17 +373,18 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
         now = time.time()
         self.sleep(5)
-        for i in xrange(num_ddocs * num_views * len(self.buckets)):
-            #wait until all initial_build indexer processes are completed
-            active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "True", wait_task=False)
-            result = active_task.result()
-            self.assertTrue(result)
-        self.log.info("PERF: indexing time for {0} ddocs with {1} views:{2}".
-                      format(num_ddocs, num_views, time.time() - now))
-
         servs_init = self.servers[:self.nodes_init]
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
         servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        for i in xrange(num_ddocs * num_views * len(self.buckets)):
+            #wait until all initial_build indexer processes are completed
+            active_tasks = self.cluster.async_monitor_active_task(servs_init, "indexer", "True", wait_task=False)
+            for active_task in active_tasks:
+                result = active_task.result()
+                self.assertTrue(result)
+        self.log.info("PERF: indexing time for {0} ddocs with {1} views:{2}".
+                      format(num_ddocs, num_views, time.time() - now))
+
         rest = RestConnection(self.master)
         #self._wait_for_stats_all_buckets(servs_init)
         self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))

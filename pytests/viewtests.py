@@ -524,16 +524,28 @@ class ViewBaseTests(unittest.TestCase):
 
     @staticmethod
     def _wait_for_indexer_ddoc(self, rest, ddoc, timeout=300):
-        end_time = time.time() + timeout
-        old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
-        if not old_pid:
-            self.log.info('Index for ddoc %s is not going on' % ddoc)
-            return
-        while is_pid_blocked:
-            ViewBaseTests._wait_for_task_pid(self, old_pid, end_time, ddoc, rest)
-            old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
-        if old_pid:
-            ViewBaseTests._wait_for_task_pid(self, old_pid, end_time, ddoc, rest)
+        nodes = rest.get_nodes()
+        servers_to_check = []
+        for node in nodes:
+            for server in self.servers:
+                if node.ip == server.ip and str(node.port) == str(server.port):
+                    servers_to_check.append(server)
+        for server in servers_to_check:
+            try:
+                rest = RestConnection(server)
+                self.log.info('Check index for ddoc %s , server %s' % (ddoc, server.ip))
+                end_time = time.time() + timeout
+                old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
+                if not old_pid:
+                    self.log.info('Index for ddoc %s is not going on' % ddoc)
+                    continue
+                while is_pid_blocked:
+                    ViewBaseTests._wait_for_task_pid(self, old_pid, end_time, ddoc, rest)
+                    old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
+                if old_pid:
+                    ViewBaseTests._wait_for_task_pid(self, old_pid, end_time, ddoc, rest)
+            except Exception, ex:
+                self.log.error('unable to check index on server %s because of %s' % (server.ip, str(ex)))
 
     @staticmethod
     def get_update_seq(self, rest, view):

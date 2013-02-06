@@ -195,9 +195,10 @@ class RebalanceInTests(RebalanceBaseTest):
                     # run queries to create indexes
                     self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
 
-        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
-        result = active_task.result()
-        self.assertTrue(result)
+        active_tasks = self.cluster.async_monitor_active_task(self.servers[:self.nodes_init], "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
+        for active_task in active_tasks:
+            result = active_task.result()
+            self.assertTrue(result)
 
         expected_rows = None
         if self.max_verify:
@@ -258,9 +259,10 @@ class RebalanceInTests(RebalanceBaseTest):
             # run queries to create indexes
             self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
 
-        active_task = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
-        result = active_task.result()
-        self.assertTrue(result)
+        active_tasks = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
+        for active_task in active_tasks:
+            result = active_task.result()
+            self.assertTrue(result)
 
         expected_rows = None
         if self.max_verify:

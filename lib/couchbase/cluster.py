@@ -1,6 +1,7 @@
 from tasks.future import Future
 from tasks.taskmanager import TaskManager
 from tasks.task import *
+import types
 
 
 """An API for scheduling tasks that run against Couchbase Server
@@ -399,8 +400,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task.result(timeout)
 
-    def async_monitor_active_task(self, server,
-                                  type,
+    def async_monitor_active_task(self, servers,
+                                  type_task,
                                   target_value,
                                   wait_progress=100,
                                   num_iteration=100,
@@ -410,8 +411,8 @@ class Cluster(object):
            When active task reached wait_progress this method  will return.
 
         Parameters:
-            server - The server to handle fragmentation config task. (TestInputServer)
-            type - task type('indexer' , 'bucket_compaction', 'view_compaction' ) (String)
+            servers - list of servers or The server to handle fragmentation config task. (TestInputServer)
+            type_task - task type('indexer' , 'bucket_compaction', 'view_compaction' ) (String)
             target_value - target value (for example "_design/ddoc" for indexing, bucket "default"
                 for bucket_compaction or "_design/dev_view" for view_compaction) (String)
             wait_progress - expected progress (int)
@@ -419,10 +420,15 @@ class Cluster(object):
             wait_task - expect to find task in the first attempt(bool)
 
         Returns:
-            MonitorActiveTask - A task future that is a handle to the scheduled task."""
-        _task = MonitorActiveTask(server, type, target_value, wait_progress, num_iteration, wait_task)
-        self.task_manager.schedule(_task)
-        return _task
+            list of MonitorActiveTask - A task future that is a handle to the scheduled task."""
+        _tasks = []
+        if type(servers) != types.ListType:
+            servers = [servers,]
+        for server in servers:
+            _task = MonitorActiveTask(server, type_task, target_value, wait_progress, num_iteration, wait_task)
+            self.task_manager.schedule(_task)
+            _tasks.append(_task)
+        return _tasks
 
     def async_monitor_view_fragmentation(self, server,
                                          design_doc_name,
