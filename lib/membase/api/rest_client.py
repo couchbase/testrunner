@@ -95,7 +95,7 @@ class RestHelper(object):
             if vBuckets:
                 return True
             if isinstance(vBuckets, tuple):
-               return True # es vbucket format
+               return True  # es vbucket format
             else:
                 time.sleep(0.5)
         msg = 'vbucket map is not ready for bucket {0} after waiting {1} seconds'
@@ -208,8 +208,7 @@ class RestConnection(object):
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         #for Node is unknown to this cluster error
-        #determine the real couchApiBase for cluster_run
-        for iteration in xrange(3):
+        for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
             if not success and type(http_res) == unicode and\
                http_res.find('Node is unknown to this cluster') > -1:
@@ -222,6 +221,7 @@ class RestConnection(object):
                 continue
             else:
                 break
+        #determine the real couchApiBase for cluster_run
         #couchApiBase appeared in version 2.*
         if not http_res or http_res["version"][0:2] == "1.":
             self.capiBaseUrl = self.baseUrl + "/couchBase"
@@ -1473,9 +1473,9 @@ class RestConnection(object):
         api = self.baseUrl + 'logs'
         status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
-        logs=json_parsed['list']
+        logs = json_parsed['list']
         logs.reverse()
-        result=[]
+        result = []
         for i in xrange(min(last_n, len(logs))):
             result.append(logs[i])
             if contains_text is not None and contains_text in logs[i]["text"]:
@@ -1505,17 +1505,17 @@ class OtpNode(object):
 
 class NodeInfo(object):
     def __init__(self):
-        self.availableStorage = None # list
+        self.availableStorage = None  # list
         self.memoryQuota = None
 
 
 class NodeDataStorage(object):
     def __init__(self):
-        self.type = '' #hdd or ssd
+        self.type = ''  #hdd or ssd
         self.path = ''
         self.index_path = ''
         self.quotaMb = ''
-        self.state = '' #ok
+        self.state = ''  #ok
 
     def __str__(self):
         return '{0}'.format({'type': self.type,
