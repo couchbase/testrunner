@@ -133,7 +133,7 @@ class BucketOperationHelper():
                 log.info('15 seconds sleep before calling get_buckets again...')
                 time.sleep(15)
                 buckets = rest.get_buckets()
-            log.info('deleting existing buckets {0} on {1}'.format(buckets, servers))
+            log.info('deleting existing buckets {0} on {1}'.format([b.name for b in buckets], servers))
             for bucket in buckets:
                 log.info("remove bucket {0} ...".format(bucket.name))
                 status = rest.delete_bucket(bucket.name)

@@ -5,6 +5,7 @@ from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.kvstore import KVStore
 
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
@@ -186,8 +187,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 for server in self.servers[:self.nodes_init]:
                     remote = RemoteMachineShellConnection(server)
                     remote.stop_server()
-                    self.sleep(self.sleep_time)
                     remote.disconnect()
+                self.sleep(self.sleep_time)
                 #remove data for nodes with non default data paths
                 tmp = min(num_nodes_with_not_default, num_nodes_remove_data)
                 self.delete_data(self.servers[:tmp], [data_path, index_path])
@@ -227,7 +228,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     server.data_path = old_paths[server.ip][0]
                     server.index_path = old_paths[server.ip][1]
 
-
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.nodes_init])
         self.operations(self.servers[:self.nodes_init])
@@ -249,7 +249,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         if self.wait_expire:
             self.sleep(self.expire_time)
             for bucket in self.buckets:
-                bucket.kvs[1] = {}
+                bucket.kvs[1] = KVStore()
         self.online_upgrade()
         self.sleep(self.sleep_time)
         self.verification(self.servers[self.nodes_init : self.num_servers])
@@ -341,13 +341,13 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self._new_master(new_server)
                 FIND_MASTER = True
                 self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
+                break
         if not FIND_MASTER:
             raise Exception("After rebalance in 2.0 Nodes, 2.0 doesn't become the master")
 
         servers_out = self.servers[:self.nodes_init]
-        self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
         self.log.info("Rebalanced out all old version nodes")
-        self.sleep(self.sleep_time)
+        self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
 
     def online_upgrade_swap_rebalance(self):
         self._install(self.servers[:self.nodes_init])
