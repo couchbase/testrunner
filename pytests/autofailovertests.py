@@ -162,6 +162,7 @@ class AutoFailoverTests(unittest.TestCase):
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings!')
+        time.sleep(5)
         time_start = time.time()
         self._enable_firewall(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)

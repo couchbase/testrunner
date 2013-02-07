@@ -129,7 +129,8 @@ class FailoverTests(FailoverBaseTest):
                             o, r = shell.execute_command("/sbin/iptables --list")
                             shell.log_command_output(o, r)
                             shell.disconnect()
-                    self.assertTrue(status, msg="node status is not unhealthy even after waiting for 5 minutes")
+                    for i in rest.get_logs(): self.log.error(i)
+                    self.fail("node status is not unhealthy even after waiting for 5 minutes")
 
             failed_over = rest.fail_over(node.id)
             if not failed_over:
