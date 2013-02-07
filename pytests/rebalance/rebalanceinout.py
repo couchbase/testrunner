@@ -156,12 +156,13 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 rebalance = self.cluster.async_rebalance(servs_init[:self.nodes_init] + servs_in, add_in_once, servs_out + extra_servs_out)
                 add_in_once = []
                 result_nodes = set(servs_init + servs_in + extra_servs_in) - set(servs_out + extra_servs_out)
-            self.sleep(10)
+            self.sleep(20)
             expected_progress = 20 * i
             reached = RestHelper(rest).rebalance_reached(expected_progress)
             self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
-            stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
-            self.assertTrue(stopped, msg="unable to stop rebalance")
+            if not RestHelper(rest).is_cluster_rebalanced():
+                stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
+                self.assertTrue(stopped, msg="unable to stop rebalance")
             rebalance.result()
             if RestHelper(rest).is_cluster_rebalanced():
                 self.verify_cluster_stats(result_nodes)
