@@ -26,13 +26,13 @@ class Rebalance(XDCRReplicationBaseTest):
             self._log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
                         .format(self._case_number, self._testMethodName))
             self._end_replication_flag = 1
-            self._stats_thread1.join()
-            self._stats_thread2.join()
-            self._stats_thread3.join()
+            if hasattr(self, '_stats_thread1'): self._stats_thread1.join()
+            if hasattr(self, '_stats_thread2'): self._stats_thread2.join()
+            if hasattr(self, '_stats_thread3'): self._stats_thread3.join()
             if self._replication_direction_str in "bidirection":
-                self._stats_thread4.join()
-                self._stats_thread5.join()
-                self._stats_thread6.join()
+                if hasattr(self, '_stats_thread4'): self._stats_thread4.join()
+                if hasattr(self, '_stats_thread5'): self._stats_thread5.join()
+                if hasattr(self, '_stats_thread6'): self._stats_thread6.join()
             if self._replication_direction_str in "bidirection":
                 self._log.info("Type of run: BIDIRECTIONAL XDCR")
             else:
@@ -43,12 +43,11 @@ class Rebalance(XDCRReplicationBaseTest):
             self._log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
             self._log.info("==============  rebalanceXDCR cleanup was started for test #{0} {1} =============="\
                     .format(self._case_number, self._testMethodName))
-            BucketOperationHelper.delete_all_buckets_or_assert(self.src_nodes, self)
-            ClusterOperationHelper.cleanup_cluster(self.src_nodes, self)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.src_nodes, self)
-            BucketOperationHelper.delete_all_buckets_or_assert(self.dest_nodes, self)
-            ClusterOperationHelper.cleanup_cluster(self.dest_nodes, self)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.dest_nodes, self)
+            for nodes in [self.src_nodes, self.dest_nodes]:
+                for node in nodes:
+                    BucketOperationHelper.delete_all_buckets_or_assert([node], self)
+                    ClusterOperationHelper.cleanup_cluster([node], self)
+                    ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self)
             self._log.info("==============  rebalanceXDCR cleanup was finished for test #{0} {1} =============="\
                     .format(self._case_number, self._testMethodName))
         finally:
