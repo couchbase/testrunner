@@ -1,9 +1,11 @@
 import Queue
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
+from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
+
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
@@ -217,6 +219,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self._create_standard_buckets(self.master, 1)
                 if self.ddocs_num:
                     self.create_ddocs_and_views()
+                    gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
+                    self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
             self.verification(self.servers[:self.nodes_init], check_items=not num_nodes_remove_data)
         finally:
                 for server in servers_with_not_default:
