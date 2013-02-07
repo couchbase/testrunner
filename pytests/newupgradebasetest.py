@@ -87,14 +87,15 @@ class NewUpgradeBaseTest(BaseTestCase):
 
 
     def operations(self, servers):
-        if len(servers) > 1:
-            self.cluster.rebalance([servers[0]], servers[1:], [])
         self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
                                             self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port)
         if self.port and self.port != '8091':
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
+        if len(servers) > 1:
+            self.cluster.rebalance([servers[0]], servers[1:], [])
+
         self.buckets = []
         gc.collect()
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
@@ -153,6 +154,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         return upgrade_threads
 
     def _new_master(self, server):
+        if self.port and self.port != '8091':
+            server.port = self.port
         self.master = server
         self.rest = RestConnection(self.master)
         self.rest_helper = RestHelper(self.rest)
