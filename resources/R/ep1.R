@@ -947,6 +947,36 @@ if (nrow(xdcr_lag) > 0) {
     xdcr_lag <- result
 }
 
+# Get rebalance progress
+cat("generating rebalance progress stats\n")
+result <- data.frame()
+for(index in 1:nrow(builds_list)) {
+	tryCatch({
+		url = paste("http://",dbip,":5984/",dbname,"/",builds_list[index,]$id,"/","rebalance_progress", sep="")
+		doc_json <- fromJSON(file=url)
+		unlisted <- plyr::ldply(doc_json, unlist)
+		result <- rbind(result,unlisted)
+	}, error=function(e) e)
+}
+
+rebalance_progress <- result
+if (nrow(rebalance_progress) > 0) {
+    rebalance_progressrow <- as.numeric(rebalance_progress$row)
+    rebalance_progress$rebalance_progress <- as.numeric(rebalance_progress$rebalance_progress)
+    rebalance_progress$timestamp <- as.numeric(rebalance_progress$timestamp)
+
+    all_builds = factor(rebalance_progress$buildinfo.version)
+    result <- data.frame()
+    for(a_build in levels(all_builds)) {
+        tt <- rebalance_progress[rebalance_progress $buildinfo.version==a_build,]
+        tt$timestamp <- as.numeric(tt$timestamp)
+        min_timestamp = min(tt$timestamp)
+        filtered = transform(tt, row=timestamp-min_timestamp)
+        result <- rbind(result, filtered)
+    }
+    rebalance_progress <- result
+}
+
 result <- data.frame()
 for(index in 1:nrow(builds_list)) {
 	tryCatch({
@@ -2237,6 +2267,15 @@ if (nrow(xdcr_lag) > 0) {
     p <- p + labs(x="----time (sec)--->", y="ms")
     p <- p + geom_point()
     p <- addopts(p, "XDCR lag diff(total - persistance)")
+    print(p)
+    makeFootnote(footnote)
+}
+
+if (nrow(rebalance_progress) > 0) {
+    p <- ggplot(rebalance_progress, aes(row, rebalance_progress, color=buildinfo.version, label=rebalance_progress))
+    p <- p + labs(x="----time (sec)--->", y="%")
+    p <- p + geom_point()
+    p <- addopts(p, "Rebalance progress")
     print(p)
     makeFootnote(footnote)
 }
