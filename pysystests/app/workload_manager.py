@@ -127,7 +127,7 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
         if isinstance(retval, Workload):
             workload = retval
             try:
-                rabbitHelper.purge(workload.task_queue)
+                rabbitHelper.delete(workload.task_queue)
             except:
                 pass # queue already deleted
         else:
@@ -246,9 +246,9 @@ def setupCacheMissQueues(workload):
         new_cc_queue = workload.id + "__hot__"
         workload.cc_queues = [new_cc_queue]
 
-        # purge new cc_queue if it exists
+        # delete new cc_queue if it exists
         try:
-            rabbitHelper.purge(new_cc_queue)
+            rabbitHelper.delete(new_cc_queue)
         except:
             pass # queue already deleted
     else:

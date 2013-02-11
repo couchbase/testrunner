@@ -139,12 +139,12 @@ def receiveResponse(handle, rc_queue, tries = 5):
         rc = handle.getMsg(rc_queue)
         if rc is not None:
             print rc
-            handle.purge(rc_queue)
+            handle.delete(rc_queue)
             return
         tries = tries - 1
         time.sleep(1)
     print "no response received from broker"
-    handle.purge(rc_queue)
+    handle.delete(rc_queue)
 
 def run_workload(args):
 

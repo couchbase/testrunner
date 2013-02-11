@@ -34,13 +34,17 @@ class RabbitHelper(object):
         channel.close()
         return res
 
-
-    def purge(self, queue):
+    def delete(self, queue):
         channel = self.connection.channel()
         if not isinstance(queue,str): queue = str(queue)
         channel.queue_delete(queue=queue)
         channel.close()
 
+    def purge(self, queue):
+        channel = self.connection.channel()
+        if not isinstance(queue,str): queue = str(queue)
+        channel.queue_purge(queue=queue)
+        channel.close()
 
     def consume(self, callback, queue, no_ack = True):
         channel = self.connection.channel()
