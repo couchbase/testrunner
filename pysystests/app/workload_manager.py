@@ -518,6 +518,45 @@ def generate_delete_tasks(count, docs_queue, bucket = "default", password = ""):
 
     return tasks
 
+@celery.task(base = PersistedMQ, ignore_result = True)
+def kv_ops_manager():
+
+    rabbitHelper = kv_ops_manager.rabbitHelper
+
+    isovercommited = False
+
+    get_q = "get_"+cfg.CB_CLUSTER_TAG
+    set_q = "set_"+cfg.CB_CLUSTER_TAG
+    del_q = "delete_"+cfg.CB_CLUSTER_TAG
+    kv_queues = [get_q, set_q, del_q]
+
+
+    # check set/get/delete queues
+    for queue in kv_queues:
+        if rabbitHelper.qsize(queue) > 100:
+            # purge tasks in this queue
+            rabbitHelper.purge(queue)
+            isovercommited = True
+
+    if isovercommited:
+        throttle_kv_ops()
+
+@celery.task(base = PersistedMQ, ignore_result = True)
+def throttle_kv_ops(isovercommited=True):
+
+    rabbitHelper = throttle_kv_ops.rabbitHelper
+
+    workloads = CacheHelper.workloads()
+    for workload in workloads:
+       if workload.active:
+           if isovercommited:
+               # clear pending task_queue
+               rabbitHelper.purge(workload.task_queue)
+
+               # reduce ops by 10%
+               workload.ops_per_sec = workload.ops_per_sec*0.90
+               logger.error("Cluster Overcommited: reduced ops to (%s)" % workload.ops_per_sec)
+
 class Workload(object):
     def __init__(self, params):
         self.id = "workload_"+str(uuid.uuid4())[:7]
@@ -571,7 +610,7 @@ class Workload(object):
         super(Workload, self).__setattr__(name, value)
 
         # cache when active key mutated
-        if name == 'active' or name == 'postconditions':
+        if name == 'active' or name == 'postconditions' or name == 'ops_per_sec':
             ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, self)
 
     @staticmethod

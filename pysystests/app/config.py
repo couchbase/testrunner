@@ -50,6 +50,7 @@ class BaseConfig(object):
         for type_ in types:
             if type_ == "kv" or type_ == "all":
                 self.add_kvconfig()
+                self.add_kv_ops_manager()
             if type_ == "query" or type_ == "all":
                 self.add_queryconfig()
             if type_ == "admin" or type_ == "all":
@@ -257,5 +258,29 @@ class BaseConfig(object):
                 self.route_args('stats_tasks','stats_tasks.atop')},
             {'app.stats.generate_node_stats_report':
                 self.route_args('stats_tasks','stats_tasks.genreport')},
+        )
+
+    def add_kv_ops_manager(self):
+        direct_ex = Exchange("kv_ops_direct", type="direct", auto_delete = True, durable = True)
+
+        self.CELERYBEAT_SCHEDULE.update(
+        {
+            'kv_ops_manager': {
+                'task': 'app.workload_manager.kv_ops_manager',
+                'schedule': timedelta(seconds=10), # every 10s
+            },
+        })
+
+        self.CELERY_QUEUES = self.CELERY_QUEUES +\
+            (
+                # schedulable queue for multiple tasks
+                self.make_queue('kv_ops_mgr',  'kv.ops_mgr', direct_ex),
+            )
+
+        self.CELERY_ROUTES = self.CELERY_ROUTES +\
+        (
+            # route schedulable tasks both to same interal task queue
+            {'app.workload_manager.kv_ops_manager':
+                self.route_args('kv_ops_mgr','kv.ops_mgr')},
         )
 
