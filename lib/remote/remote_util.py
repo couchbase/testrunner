@@ -779,6 +779,9 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
                              "firefox.*", "WerFault.*", "iexplore.*"]
             self.terminate_processes(info, win_processes)
+            #to prevent getting full disk let's delete some large files
+            self.remove_win_backup_dir()
+            self.remove_win_collect_tmp()
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
             self.wait_till_file_added("/cygdrive/c/Program Files/{0}/Server/".format(server_type.title()), 'VERSION.txt',
@@ -1654,6 +1657,25 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             log.error("Command didn't run successfully. Error: {0}".format(r))
         return o;
 
+    def remove_win_backup_dir(self):
+        win_paths = [testconstants.WIN_CB_PATH, testconstants.WIN_MB_PATH]
+        backup_files = []
+        for each_path in win_paths:
+            files = self.list_files(each_path)
+            for f in files:
+                if f["file"].startswith("backup-"):
+                    backup_files.append(f)
+             # keep the last one
+            if len(backup_files) > 5:
+                log.info("start remove {0} backup directory in {1}".format(count, each_path))
+                for f in backup_files[:-1]:
+                    self.execute_command("rm -rf '{0}{1}'".format(each_path, f))
+
+    def remove_win_collect_tmp(self):
+        win_tmp_path = testconstants.WIN_TMP_PATH
+        log.info("start remove tmp files from directory %s" % win_tmp_path)
+        self.execute_command("rm -rf '%stmp*'" % win_tmp_path)
+
 class RemoteUtilHelper(object):
 
     @staticmethod
@@ -1695,18 +1717,3 @@ class RemoteUtilHelper(object):
             shell.disconnect()
         time.sleep(10)
 
-    def remove_win_backup_dir(self, servers):
-        for server in servers:
-            shell = RemoteMachineShellConnection(server)
-            win_paths = [testconstants.WIN_CB_PATH, testconstants.WIN_MB_PATH]
-            backup_files = []
-            for each_path in win_paths:
-                files = shell.list_files(each_path)
-                for f in files:
-                    if f["file"].startswith("backup-"):
-                        backup_files.append(f)
-                # keep the last one
-                if len(backup_files) > 5:
-                    log.info("start remove {0} backup directory in {1}".format(count, each_path))
-                    for f in backup_files[:-1]:
-                        shell.execute_command("rm -rf '{0}{1}'".format(each_path, f))

@@ -18,3 +18,4 @@ MAX_COMPACTION_THRESHOLD = 100
 NUM_ERLANG_THREADS = 16
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
 WIN_COUCHBASE_BIN_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/bin/'
+WIN_TMP_PATH = '/cygdrive/c/tmp/'
