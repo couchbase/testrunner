@@ -697,18 +697,22 @@ class StatsCollector(object):
                 'timestamp': time.time()
             })
 
-    def xdcr_lag_stats(self, interval=10):
-        master = self.clusters[0][0]
-        slave = self.clusters[1][0]
-        src_client = VBucketAwareMemcached(RestConnection(master), self.bucket)
-        dst_client = VBucketAwareMemcached(RestConnection(slave), self.bucket)
+    def _get_xdcr_latency(self, src_client, dst_client, multi=False):
+        PREFIX = "XDCR_TIMING_"
+        kvs = dict((PREFIX + hex(), hex()) for _ in xrange(100))
+        key = PREFIX + hex()
+        persisted = False
 
-        log.info("started xdcr lag measurements")
-        self._task['xdcr_lag'] = list()
-        while not self._aborted():
-            key = "XDCR_TIMING" + hex()
-            persisted = False
-            t0 = time.time()
+        t0 = t1 = time.time()
+        if multi:
+            src_client.setMulti(0, 0, kvs)
+            while True:
+                try:
+                    dst_client.getMulti(kvs.keys(), timeout_sec=120)
+                    break
+                except ValueError:
+                    time.sleep(0.05)
+        else:
             src_client.set(key, 0, 0, key)
             while not persisted:
                 _, _, _, persisted, _ = src_client.observe(key)
@@ -719,17 +723,33 @@ class StatsCollector(object):
                     break
                 except:
                     time.sleep(0.05)
-            total_time = (time.time() - t0) * 1000
-            persist_time = (t1 - t0) * 1000
+        total_time = (time.time() - t0) * 1000
+        persist_time = (t1 - t0) * 1000
 
-            self._task['xdcr_lag'].append({
-                'xdcr_lag': total_time,
-                'xdcr_persist_time': persist_time,
-                'xdcr_diff': total_time - persist_time,
-                'timestamp': time.time()
-            })
-            if total_time < 10000:
-                time.sleep(interval)
+        if multi:
+            return {"multi_100_xdcr_lag": total_time}
+        else:
+            return {
+                "xdcr_lag": total_time,
+                "xdcr_persist_time": persist_time,
+                "xdcr_diff": total_time - persist_time,
+                "timestamp": time.time()
+            }
+
+    def xdcr_lag_stats(self, interval=5):
+        master = self.clusters[0][0]
+        slave = self.clusters[1][0]
+        src_client = VBucketAwareMemcached(RestConnection(master), self.bucket)
+        dst_client = VBucketAwareMemcached(RestConnection(slave), self.bucket)
+
+        log.info("started xdcr lag measurements")
+        self._task["xdcr_lag"] = list()
+        while not self._aborted():
+            single_stats = self._get_xdcr_latency(src_client, dst_client)
+            multi_stats = self._get_xdcr_latency(src_client, dst_client, True)
+            multi_stats.update(single_stats)
+            self._task['xdcr_lag'].append(multi_stats)
+            time.sleep(interval)
 
         with open("xdcr_lag.json", 'a') as fh:
             fh.write(json.dumps(self._task['xdcr_lag'],
