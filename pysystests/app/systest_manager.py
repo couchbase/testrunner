@@ -323,7 +323,6 @@ def getWorkloadStatus(workloadId):
                 running = False
         else:
             logger.error("Unable to fetch workload...cache down?")
-            running = False
 
         return running
 
