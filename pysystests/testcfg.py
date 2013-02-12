@@ -17,6 +17,9 @@ CB_CLUSTER_TAG = "default"
 ATOP_LOG_FILE = "/tmp/atop-node.log"
 LOGDIR="logs"  # relative to current dir
 
+#Cluster Config
+CLUSTER = {'setitup':False, 'ini':'pysystests/cluster.ini', 'sasl_buckets':0, 'standard_buckets':0, 'default_bucket':True, 'xdcr':False}
+
 #Backup Config
 ENABLE_BACKUPS = False
 BACKUP_DIR = "/tmp/backup"
