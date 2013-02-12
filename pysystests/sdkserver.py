@@ -301,7 +301,7 @@ class CouchClientManager():
             rc = client.recv_bulk_responses()
             if len(rc) > 0:
                 for msg in rc:
-                    if isinstance(msg, dict) and 'error' in msg:
+                    if isinstance(msg, dict) and 'error' in msg and int(msg["error"]) != 0:
                         ts = time.localtime()
                         ts_string = "%s/%s/%s %s:%s:%s" %\
                             (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
