@@ -253,12 +253,14 @@ class CouchClientManager():
         rc = client.recv_bulk_responses()
         if len(rc) > 0:
             for msg in rc:
-                if isinstance(msg, dict) and 'error' in msg:
-                    if msg["error"] > 0:
-                        ts = time.localtime()
-                        ts_string = "%s/%s/%s %s:%s:%s" %\
-                            (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
-                        print "%s:set MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"])
+                if isinstance(msg, dict) and 'error' in msg and int(msg["error"]) != 0:
+                   if int(msg["error"]) == 7:
+                       client.reconfig_vbucket_map(True)
+                   else:
+                       ts = time.localtime()
+                       ts_string = "%s/%s/%s %s:%s:%s" %\
+                           (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
+                       print "%s:set MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"])
 
         return True
 
@@ -302,10 +304,15 @@ class CouchClientManager():
             if len(rc) > 0:
                 for msg in rc:
                     if isinstance(msg, dict) and 'error' in msg and int(msg["error"]) != 0:
-                        ts = time.localtime()
-                        ts_string = "%s/%s/%s %s:%s:%s" %\
-                            (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
-                        print "%s:get MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"])
+                        if int(msg["error"]) == 7:
+                            client.reconfig_vbucket_map(True)
+                        else:
+                            ts = time.localtime()
+                            ts_string = "%s/%s/%s %s:%s:%s" %\
+                                (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
+                            print "%s:get MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"])
+
+
             client.pending_get_msgs = 0
         else:
             client.noop()
