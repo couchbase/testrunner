@@ -23,7 +23,7 @@ class DocsTests(BaseTestCase):
         self.log.info("create %s documents..." % (self.num_items))
         try:
             self._load_all_buckets(self.master, gen_load, "create", 0)
-            self._verify_stats_all_buckets(self.servers)
+            self._verify_stats_all_buckets([self.master])
         except Exception as e:
             if error:
                self.log.info("Unable to create documents as expected: %s" % str(e))
