@@ -362,8 +362,22 @@ class StatChecker(object):
         self.rest = create_rest(self.ip, self.port, self.username, self.password)
 
     def get_curr_items(self):
-        stats = self.rest.get_bucket_stats(self.bucket)
-        return stats['curr_items']
+        curr_items = -1
+        stats = self.get_bucket_stats()
+        if stats is not None and 'curr_items' in stats:
+            curr_items = stats['curr_items']
+
+        return curr_items
+
+    def get_bucket_stats(self):
+        stats = None
+        try:
+            stats = self.rest.get_bucket_stats(self.bucket)
+        except ValueError:
+            logger.error("unable to get stats for bucket: %s" % self.bucket)
+
+        return stats
+
 
     def check(self, condition, datatype = int):
 
@@ -375,7 +389,10 @@ class StatChecker(object):
             return valid
 
         value = datatype(value)
-        stats = self.rest.get_bucket_stats(self.bucket)
+        stats = self.get_bucket_stats()
+
+        if stats is None:
+            return False
 
         if len(stats) > 0:
             try:
