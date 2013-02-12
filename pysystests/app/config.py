@@ -268,6 +268,7 @@ class BaseConfig(object):
             'kv_ops_manager': {
                 'task': 'app.workload_manager.kv_ops_manager',
                 'schedule': timedelta(seconds=10), # every 10s
+                'args' : 1000, # no. of msgs to trigger throttling 
             },
         })
 

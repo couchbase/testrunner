@@ -519,7 +519,7 @@ def generate_delete_tasks(count, docs_queue, bucket = "default", password = ""):
     return tasks
 
 @celery.task(base = PersistedMQ, ignore_result = True)
-def kv_ops_manager():
+def kv_ops_manager(max_msgs = 1000):
 
     rabbitHelper = kv_ops_manager.rabbitHelper
 
@@ -533,7 +533,7 @@ def kv_ops_manager():
 
     # check set/get/delete queues
     for queue in kv_queues:
-        if rabbitHelper.qsize(queue) > 100:
+        if rabbitHelper.qsize(queue) > max_msgs:
             # purge tasks in this queue
             rabbitHelper.purge(queue)
             isovercommited = True
@@ -554,8 +554,10 @@ def throttle_kv_ops(isovercommited=True):
                rabbitHelper.purge(workload.task_queue)
 
                # reduce ops by 10%
-               workload.ops_per_sec = workload.ops_per_sec*0.90
-               logger.error("Cluster Overcommited: reduced ops to (%s)" % workload.ops_per_sec)
+               new_ops_per_sec = workload.ops_per_sec*0.90
+               if new_ops_per_sec > 5000:
+                   workload.ops_per_sec = workload.ops_per_sec*0.90
+                   logger.error("Cluster Overcommited: reduced ops to (%s)" % workload.ops_per_sec)
 
 class Workload(object):
     def __init__(self, params):
