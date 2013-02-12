@@ -751,7 +751,7 @@ class StatsCollector(object):
             self._task['xdcr_lag'].append(multi_stats)
             time.sleep(interval)
 
-        with open("xdcr_lag.json", 'a') as fh:
+        with open("xdcr_lag.json", "w") as fh:
             fh.write(json.dumps(self._task['xdcr_lag'],
                                 indent=4, sort_keys=True))
         log.info("finished xdcr lag measurements")
