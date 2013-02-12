@@ -292,6 +292,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers, self.servers[half_node:], self.servers[:half_node])
         self.log.info("Rebalanced in upgraded nodes and rebalanced out nodes with old version")
         self.sleep(self.sleep_time)
+        for server in self.servers[half_node:]:
+            if self.port and self.port != '8091':
+                server.port = self.port
         self._new_master(self.servers[half_node])
         self.verification(self.servers[half_node:])
         self.log.info("Upgrade nodes of old version")

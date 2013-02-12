@@ -154,8 +154,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         return upgrade_threads
 
     def _new_master(self, server):
-        if self.port and self.port != '8091':
-            server.port = self.port
         self.master = server
         self.rest = RestConnection(self.master)
         self.rest_helper = RestHelper(self.rest)
@@ -171,7 +169,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if self.port and self.port != '8091':
             settings = self.rest.get_cluster_settings()
             if settings and 'port' in settings:
-                self.assertTrue(self.port == settings['port'],
+                self.assertTrue(self.port == str(settings['port']),
                                 'Expected cluster port is %s, but is %s' % (self.port, settings['port']))
         for bucket in self.buckets:
             if not self.rest_helper.bucket_exists(bucket.name):
