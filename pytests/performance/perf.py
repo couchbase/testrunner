@@ -175,13 +175,21 @@ class PerfBase(unittest.TestCase):
 
     def reconfigure(self):
         """Customize basic Couchbase setup"""
-
         self.log.info("customizing setup")
 
         self.set_loglevel()
         self.customize_xdcr_settings()
         self.set_autocompaction()
         self.set_exp_pager_stime()
+        self.set_rebalance_options()
+
+    def set_rebalance_options(self):
+        # rebalanceMovesBeforeCompaction
+        rmbc = self.parami('rebalance_moves_before_compaction', 0)
+        if rmbc:
+            cmd = 'ns_config:set(rebalance_moves_before_compaction, {0}).'\
+                .format(rmbc)
+            self.rest.diag_eval(cmd)
 
     def set_exp_pager_stime(self):
         exp_pager_stime = self.param('exp_pager_stime',
