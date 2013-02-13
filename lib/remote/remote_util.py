@@ -300,10 +300,9 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
             self.log_command_output(output, error)
             output, error = self.execute_command(
-                "cd /cygdrive/c/automation;cmd /c 'c:\\automation\\GnuWin32\\bin\\wget.exe -q {0} -O setup.exe';ls;".format(
-                    url))
+                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O setup.exe';ls -l;".format(url))
             self.log_command_output(output, error)
-            return self.file_exists('/cygdrive/c/automation/', 'setup.exe')
+            return self.file_exists('/cygdrive/c/tmp/', 'setup.exe')
         else:
         #try to push this build into
         #depending on the os
@@ -402,6 +401,10 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM WerFault.*')
         self.execute_command('taskkill /F /T /IM Firefox.*')
         self.disable_firewall()
+        if url.lower().find("membase") != -1:
+            name = "mb"
+        elif url.lower().find("couchbase") != -1:
+            name = "cb"
         exist = self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name, version))
         if not exist:
             output, error = self.execute_command(
@@ -442,7 +445,6 @@ class RemoteMachineShellConnection:
         try:
             #found = False
             files = sftp.listdir(remote_path)
-            log.info('File(s) name in {0}'.format(remote_path))
             for name in files:
                 log.info(name)
                 if name == file:
@@ -452,6 +454,9 @@ class RemoteMachineShellConnection:
                     sftp.close()
                     break
             else:
+                log.eror('File(s) name in {0}'.format(remote_path))
+                for name in files:
+                    log.info(name)
                 log.error('Can not find {0}'.format(file))
         except IOError:
             pass
@@ -596,7 +601,7 @@ class RemoteMachineShellConnection:
     def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
-        releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1", "1.7.2"]
+        #releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1", "1.7.2"]
 
         product_version = ""
         if   "2.1.0" in version:
@@ -614,27 +619,32 @@ class RemoteMachineShellConnection:
         elif "1.7.2" in version:
             product_version = "1.7.2"
             name = "mb"
-        elif version in releases_version:
-            product_version = version
-            name = "mb"
+#        elif version in releases_version:
+#            product_version = version
+#            name = "mb"
         else:
             log.error('Windows automation does not support {0} version yet'.format(version))
             sys.exit()
 
         try:
             f = sftp.open(found, 'w')
-            if product_version in releases_version:
-                log.info("write cb_version_install/uninstall.iss format")
-                name = name.rstrip()
-                version = version.rstrip()
-                f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
-                                                          version, name, product_version, task))
-                log.info('Successful write to {0}'.format(found))
-                sftp.close()
+            name = name.rstrip()
+            version = version.rstrip()
+            if task == "upgrade":
+                content = 'c:\\tmp\setup.exe /s -f1c:\\automation\{0}_{1}_{2}.iss'.format(name,
+                                                                         product_version, task)
             else:
-                log.info("write cb-install/uninstall.iss format")
-                f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{0}-{2}.iss'.format(name,
-                                                                                 version, task))
+                content = 'c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
+                                                            version, name, product_version, task)
+            log.info("create {0} task with content:{0}".format(task, content))
+            f.write(content)
+            log.info('Successful write to {0}'.format(found))
+            sftp.close()
+
+#            else:
+#                log.info("write cb-install/uninstall.iss format")
+#                f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{0}-{2}.iss'.format(name,
+#                                                                                 version, task))
 
         except IOError:
             log.error('Can not write build name file to bat file {0}'.format(found))
@@ -678,7 +688,17 @@ class RemoteMachineShellConnection:
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
         command = ''
         if info.type.lower() == 'windows':
-            log.error('automation does not support windows upgrade yet!')
+                self.membase_upgrade_win(info.architecture_type, info.windows_name, build.name)
+#                self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb", version, "modreg")
+#                self.stop_schedule_tasks()
+#                log.info('sleep for 5 seconds before running task schedule to modify version')
+#                time.sleep(5)
+#                output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+#                self.log_command_output(output, error)
+#                log.info('pause 30 seconds to execute modify register script')
+                time.sleep(30)
+                log.info('********* continue upgrade process **********')
+
         elif info.deliverable_type == 'rpm':
             #run rpm -i to install
             if save_upgrade_config:
@@ -697,43 +717,19 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command, info, use_channel=True)
         self.log_command_output(output, error)
 
-    def membase_upgrade_win(self, architecture, windows_name, version, initial_version=''):
+    def membase_upgrade_win(self, architecture, windows_name, version):
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
-        if initial_version.startswith("1.8"):
-            version_path = testconstants.WIN_CB_PATH
-        else:
-            version_path = testconstants.WIN_MB_PATH
-        if version.startswith("1.8"):
-            product = "cb"
-        else:
-            product = "mb"
-        build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
-        if version.startswith("1.8.1"):
-            if short_version.startswith("1.7.2") or short_version.startswith("1.8.0"):
-                self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb", version, "modreg")
-                self.stop_schedule_tasks()
-                log.info('sleep for 5 seconds before running task schedule to modify version')
-                time.sleep(5)
-                output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
-                self.log_command_output(output, error)
-                log.info('pause 30 seconds to execute modify register script')
-                time.sleep(30)
-                log.info('********* continue upgrade process **********')
-        self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb", version, task)
+        self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
         log.info('sleep for 5 seconds before running task schedule upgrade me')
         time.sleep(5)
         # run task schedule to upgrade Membase server
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
-        if initial_version.startswith("1.8"):
-            self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
-            self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
-        else:
-            self.wait_till_file_deleted(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
-            self.wait_till_file_added(testconstants.WIN_MB_PATH, version_file, timeout_in_seconds=600)
+        self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
         log.info('wait 60 seconds for server to start up completely')
         time.sleep(60)
 

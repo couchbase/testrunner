@@ -45,9 +45,6 @@ class InstallerHelper(object):
             raise Exception("error happened while initializing the cluster @ {0}".format(ip))
 
 
-
-
-
 # tests . create your own bucket , use it for testing then get rid of it
 # rebalance : delete the bucket in all the clusters ?
 
