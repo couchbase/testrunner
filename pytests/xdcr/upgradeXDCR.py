@@ -103,15 +103,42 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         if self._get_cluster_buckets(src_master):
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
 
+    def _get_bucket(self, bucket_name, server):
+            server_id = RestConnection(server).get_nodes_self().id
+            for bucket in self.buckets:
+                if bucket.name == bucket_name and bucket.master_id == server_id:
+                    return bucket
+            return None
+
+
+    def _online_upgrade(self, update_servers, extra_servers, check_newmaster=True):
+        self.cluster.rebalance(update_servers + extra_servers, extra_servers, [])
+        self.log.info("Rebalance in all 2.0 Nodes")
+        self.sleep(self.sleep_time)
+        status, content = ClusterOperationHelper.find_orchestrator(update_servers[0])
+        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
+                        format(status, content))
+        if check_newmaster:
+            FIND_MASTER = False
+            for new_server in extra_servers:
+                if content.find(new_server.ip) >= 0:
+                    FIND_MASTER = True
+                    self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
+                    break
+            if not FIND_MASTER:
+                raise Exception("After rebalance in 2.0 Nodes, 2.0 doesn't become the master")
+        self.log.info("Rebalanced out all old version nodes")
+        self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
+
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
         XDCRReplicationBaseTest.setUp(self)
-        bucket = self.get_bucket('default', self.src_master)
+        bucket = self._get_bucket('default', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self.get_bucket('bucket0', self.src_master)
+        bucket = self._get_bucket('bucket0', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self.get_bucket('bucket0', self.dest_master)
+        bucket = self._get_bucket('bucket0', self.dest_master)
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
         nodes_to_upgrade = []
@@ -136,19 +163,56 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                 self.fail("Upgrade failed!")
             self.sleep(self.expire_time)
 
-        bucket = self.get_bucket('bucket0', self.src_master)
+        bucket = self._get_bucket('bucket0', self.src_master)
         gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self._num_items)
         self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
-        bucket = self.get_bucket('default', self.src_master)
+        bucket = self._get_bucket('default', self.src_master)
         self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
 
-    def get_bucket(self, bucket_name, server):
-            server_id = RestConnection(server).get_nodes_self().id
-            for bucket in self.buckets:
-                if bucket.name == bucket_name and bucket.master_id == server_id:
-                    return bucket
-            return None
 
+    def online_cluster_upgrade(self):
+        self._install(self.servers[:self.src_init + self.dest_init ])
+        self.initial_version = self.upgrade_versions[0]
+        self._install(self.servers[self.src_init + self.dest_init:])
+        XDCRReplicationBaseTest.setUp(self)
+        bucket_default = self._get_bucket('default', self.src_master)
+        bucket_sasl = self._get_bucket('bucket0', self.src_master)
+        bucket_standard = self._get_bucket('standard_bucket0', self.dest_master)
+
+        self._load_bucket(bucket_default, self.src_master, self.gen_create, 'create', exp=0)
+        self._load_bucket(bucket_sasl, self.src_master, self.gen_create, 'create', exp=0)
+        self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
+        gen_create2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, end=self._num_items)
+        self._load_bucket(bucket_sasl, self.dest_master, gen_create2, 'create', exp=0)
+
+        self._online_upgrade(self.src_nodes, self.servers[self.src_init + self.dest_init:])
+        self._install(self.src_nodes)
+        self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.src_nodes, False)
+
+        self._load_bucket(bucket_default, self.src_master, self.gen_delete, 'delete', exp=0)
+        self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
+        self._load_bucket(bucket_sasl, self.src_master, self.gen_delete, 'delete', exp=0)
+        self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
+
+        self._online_upgrade(self.dest_nodes, self.servers[self.src_init + self.dest_init:])
+        self._install(self.dest_nodes)
+        self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)
+
+        self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
+        self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
+        self.do_merge_buckets(self.src_master, self.dest_master, True, bucket_sasl)
+        bucket_sasl = self._get_bucket('bucket0', self.dest_master)
+        gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
+            start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+        gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,
+            end=int(self._num_items * (float)(self._percent_update) / 100))
+        self._load_bucket(bucket_sasl, self.dest_master, gen_delete2, 'delete', exp=0)
+        self._load_bucket(bucket_sasl, self.dest_master, gen_update2, 'create', exp=self._expires)
+
+        self.do_merge_buckets(self.dest_master, self.src_master, False, bucket_sasl)
+        self.do_merge_buckets(self.src_master, self.dest_master, False, bucket_default)
+        self.do_merge_buckets(self.dest_master, self.src_master, False, bucket_standard)
+        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
