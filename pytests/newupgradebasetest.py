@@ -80,8 +80,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             for server in servers:
                 success &= RemoteMachineShellConnection(server).is_couchbase_installed()
                 if not success:
-                    self.log.info("some nodes were not install successfully!")
-                    sys.exit(1)
+                    self.exit("some nodes were not install successfully!")
         if self.rest is None:
             self._new_master(self.master)
 
