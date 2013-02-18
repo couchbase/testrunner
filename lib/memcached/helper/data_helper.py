@@ -841,7 +841,7 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
 
-            except EOFError as error:
+            except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in  error.message or \
                    "Timeout waiting for socket send." in  error.message \
                     and vb_error < 5:
@@ -868,7 +868,7 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
 
-            except EOFError as error:
+            except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in  error.message or \
                    "Timeout waiting for socket send." in  error.message \
                     and vb_error < 5:
@@ -895,7 +895,7 @@ class VBucketAwareMemcached(object):
                     vb_error += 1
                 else:
                     raise error
-            except EOFError as error:
+            except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in  error.message or \
                    "Timeout waiting for socket send." in  error.message \
                     and vb_error < 5:
@@ -970,17 +970,17 @@ class VBucketAwareMemcached(object):
             else:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
-                rec_caller_fn(exp, flags, keyval, pause, timeout - pause) # Start all over again for these key vals.
-                return [] # Note: If used for async,too many recursive threads could get spwan here.
+                rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Start all over again for these key vals.
+                return []  # Note: If used for async,too many recursive threads could get spwan here.
         except BaseException as error:
             if timeout <= 0:
                 return [error]
             else:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
-                rec_caller_fn(exp, flags, keyval, pause, timeout - pause) # Please refer above for comments.
+                rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Please refer above for comments.
                 return []
-        except EOFError as error:
+        except (EOFError, socket.error) , error:
             if "Got empty data (remote died?)" in error.message or \
                "Timeout waiting for socket send." in error.message \
                 and timeout > 0:
@@ -1016,9 +1016,9 @@ class VBucketAwareMemcached(object):
 
 
     def _getMulti_seq(self, keys_lst, pause_sec=1, timeout_sec=5):
-        server_keys = self._get_server_keys_dic(keys_lst) # set keys in their respective vbuckets and identify the server for each vBucketId
+        server_keys = self._get_server_keys_dic(keys_lst)  # set keys in their respective vbuckets and identify the server for each vBucketId
         keys_vals = {}
-        for server_str , keys in server_keys.items() : # get memcached client against each server and multi get
+        for server_str , keys in server_keys.items() :  # get memcached client against each server and multi get
             mc = self.memcacheds[server_str]
             keys_vals.update(self._getMulti_from_mc(mc, keys, pause_sec, timeout_sec, self._getMulti_seq))
         if len(keys_lst) != len(keys_vals):
@@ -1049,7 +1049,7 @@ class VBucketAwareMemcached(object):
             time.sleep(pause)
             self.reset_vbuckets(self.rest, self._get_vBucket_ids(keys))
             return rec_caller_fn(keys, pause, timeout - pause)
-        except EOFError as error:
+        except (EOFError, socket.error), error:
             if "Got empty data (remote died?)" in error.message or \
                "Timeout waiting for socket send." in error.message \
                 and timeout > 0:
@@ -1100,7 +1100,7 @@ class VBucketAwareMemcached(object):
                     vb_error += 1
                 else:
                     raise error
-            except EOFError as error:
+            except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in  error.message or \
                    "Timeout waiting for socket send." in  error.message \
                     and vb_error < 5:
@@ -1126,7 +1126,7 @@ class VBucketAwareMemcached(object):
                     backoff *= 2
                 else:
                     raise error
-            except EOFError, IOError:
+            except (EOFError, IOError, socket.error):
                 raise MemcachedError(ERR_NOT_MY_VBUCKET, "Connection reset")
 
     def done(self):
