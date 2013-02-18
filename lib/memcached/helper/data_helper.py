@@ -952,7 +952,7 @@ class VBucketAwareMemcached(object):
             now = time.time()
             for future in concurrent.futures.as_completed(tasks, timeout_sec):
                 if future.exception() is not None:
-                    self.log("exception in {0} sec".format(time.time() - now))
+                    self.log.error("exception in {0} sec".format(time.time() - now))
                     raise future.exception()
                 errors.extend(future.result())
 
@@ -1065,7 +1065,7 @@ class VBucketAwareMemcached(object):
         now = time.time()
         for future in concurrent.futures.as_completed(tasks, timeout):
             if future.exception() is not None:
-                self.log("exception in {0} sec".format(time.time() - now))
+                self.log.error("exception in {0} sec".format(time.time() - now))
                 raise future.exception()
             keys_vals.update(future.result())
         return keys_vals
