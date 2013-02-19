@@ -866,7 +866,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         else:
             return self._num_items
 
-    def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
+    def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
         gen = copy.deepcopy(kv_gen)
         task = self._cluster_helper.async_load_gen_docs(server, bucket.name, gen,
                                                           bucket.kvs[kv_store],
@@ -884,7 +884,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         return tasks
 
     def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
-        task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store, flag, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30)
+        task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store, flag, only_store_hash=True, batch_size, pause_secs=1, timeout_secs=30)
         task.result()
 
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
