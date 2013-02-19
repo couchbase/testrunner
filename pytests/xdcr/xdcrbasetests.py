@@ -575,6 +575,7 @@ class XDCRBaseTest(unittest.TestCase):
         return kv_store_first[kvs_num]
 
     def merge_buckets(self, src_master, dest_master, bidirection=True):
+        self.log.info("merge buckets {0}->{1}, bidirection:{2}".format(src_master.ip, dest_master.ip, bidirection))
         if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
             self.do_merge_buckets(src_master, dest_master, bidirection)
         elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
