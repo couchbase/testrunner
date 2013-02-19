@@ -165,6 +165,15 @@ class RemoteMachineShellConnection:
                     processes.append(process)
         return processes
 
+    def get_mem_usage_by_process(self, process_name):
+        """Now only linux"""
+        output, error = self.execute_command('ps -e -o %mem,cmd|grep {0}'.format(process_name),
+                                             debug=False)
+        if output:
+            for line in output:
+                if not 'grep' in line.strip().split(' '):
+                    return float(line.strip().split(' ')[0])
+
     def stop_membase(self):
         info = self.extract_remote_info()
         if info.type.lower() == 'windows':

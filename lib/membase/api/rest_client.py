@@ -5,6 +5,8 @@ import httplib2
 import socket
 import time
 import logger
+import uuid
+from threading import Thread
 
 try:
     from couchbase.document import DesignDocument, View
@@ -237,6 +239,29 @@ class RestConnection(object):
                     self.capiBaseUrl = http_res["couchApiBase"]
                     return
             raise Exception("couchApiBase doesn't exist in nodes/self: %s " % http_res)
+
+    def sasl_streaming_rq(self, bucket, timeout=120):
+        api = self.baseUrl + 'pools/default/bucketsStreaming/{0}'.format(bucket)
+        if isinstance(bucket, Bucket):
+            api = self.baseUrl + 'pools/default/bucketsStreaming/{0}'.format(bucket.name)
+        try:
+            httplib2.Http(timeout=timeout).request(api, 'GET', '',
+                                                   headers=self._create_capi_headers_with_auth(self.username, self.password))
+        except Exception, ex:
+            log.warn('Exception while streaming: %s' % str(ex))
+
+    def open_sasl_streaming_connection(self, bucket, timeout=1000):
+        log.info("Opening sasl streaming connection for bucket %s" %
+                 (bucket,bucket.name)[isinstance(bucket, Bucket)])
+        t = Thread(target=self.sasl_streaming_rq,
+                          name="streaming_" + str(uuid.uuid4())[:4],
+                          args=(bucket, timeout))
+        try:
+            t.start()
+        except:
+            log.warn("thread is not started")
+            return null
+        return t
 
     def is_cluster_mixed(self):
             http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
