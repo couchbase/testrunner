@@ -446,12 +446,11 @@ class RemoteMachineShellConnection:
             files = sftp.listdir(remote_path)
             for name in files:
                 if name == file:
-                    log.info("File {0} was found".format(os.path.join(remote_path, name)))
-                    return True
-                    sftp.close()
-                    break
+                    found_it = os.path.join(remote_path, name)
+                    log.info("File {0} was found".format(found_it))
+                    return found_it
             else:
-                log.eror('File(s) name in {0}'.format(remote_path))
+                log.error('File(s) name in {0}'.format(remote_path))
                 for name in files:
                     log.info(name)
                 log.error('Can not find {0}'.format(file))
@@ -637,7 +636,6 @@ class RemoteMachineShellConnection:
             f.write(content)
             log.info('Successful write to {0}'.format(found))
             sftp.close()
-
 #            else:
 #                log.info("write cb-install/uninstall.iss format")
 #                f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{0}-{2}.iss'.format(name,
