@@ -216,6 +216,8 @@ class PerfBase(unittest.TestCase):
                                                  None)
         xdcr_doc_batch_size_kb = self.param('xdcr_doc_batch_size_kb', None)
         xdcr_checkpoint_interval = self.param('xdcr_checkpoint_interval', None)
+        xdcr_optimistic_replication = self.param('xdcr_optimistic_replication',
+                                                 None)
 
         if max_concurrent_reps_per_doc:
             env_var = 'MAX_CONCURRENT_REPS_PER_DOC'
@@ -226,6 +228,9 @@ class PerfBase(unittest.TestCase):
         elif xdcr_checkpoint_interval:
             env_var = 'XDCR_CHECKPOINT_INTERVAL'
             value = xdcr_checkpoint_interval
+        elif xdcr_optimistic_replication:
+            env_var = 'XDCR_OPTIMISTIC_REPLICATION'
+            value = xdcr_optimistic_replication
         else:
             return
 
