@@ -443,14 +443,11 @@ class RemoteMachineShellConnection:
     def find_file(self, remote_path, file):
         sftp = self._ssh_client.open_sftp()
         try:
-            #found = False
             files = sftp.listdir(remote_path)
             for name in files:
-                log.info(name)
                 if name == file:
-                    found_it = os.path.join(remote_path, name)
-                    #found = True
-                    return found_it
+                    log.info("File {0} was found".format(os.path.join(remote_path, name)))
+                    return True
                     sftp.close()
                     break
             else:
@@ -1687,7 +1684,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def execute_batch_command(self, command):
         remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
-        o, r = self.execute_command(remote_command)
+        o, r = self.execute_command_raw(remote_command)
         if r:
             log.error("Command didn't run successfully. Error: {0}".format(r))
         return o;
