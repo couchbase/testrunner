@@ -905,9 +905,9 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
         end_time = time.time() + float(timeout_in_seconds)
         compaction_started = False
         while time.time() < end_time:
-            status, vBucket = rest.check_compaction_status(bucket)
+            status, progress = rest.check_compaction_status(bucket)
             if status:
-                log.info("compacting vBucket {0}".format(vBucket))
+                log.info("compaction progress is %s" % progress)
                 time.sleep(1)
                 compaction_started = True
             elif compaction_started:

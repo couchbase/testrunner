@@ -4,6 +4,8 @@ import random
 import time
 import json
 
+from threading import Thread
+
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from TestInput import TestInputSingleton
@@ -48,7 +50,7 @@ class AutoCompactionTests(unittest.TestCase):
         rest = RestConnection(serverInfo)
         remote_client = RemoteMachineShellConnection(serverInfo)
 
-        output, rq_content, header = rest.set_auto_compaction("false", dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=100)
+        output, rq_content, header = rest.set_auto_compaction("false", dbFragmentThresholdPercentage=percent_threshold, viewFragmntThresholdPercentage=None)
 
         if not output and (percent_threshold <= MIN_COMPACTION_THRESHOLD or percent_threshold >= MAX_COMPACTION_THRESHOLD):
             self.assertFalse(output, "it should be  impossible to set compaction value = {0}%".format(percent_threshold))
@@ -77,13 +79,19 @@ class AutoCompactionTests(unittest.TestCase):
 
             self.log.info("start to update {0}K keys with smaller value {1} bytes/key".format(items,
                                                                              int(update_item_size)))
-            self.insert_key(serverInfo, bucket_name, items, int(update_item_size))
 
-            compact_run = remote_client.wait_till_compaction_end(rest, bucket_name, timeout_in_seconds=180)
-            if not compact_run:
-                self.fail("auto compaction does not run")
-            elif compact_run:
-                self.log.info("auto compaction runs successfully")
+            insert_thread = Thread(target=self.insert_key,
+                                   name="insert",
+                                args=(serverInfo, bucket_name, items, int(update_item_size)))
+            try:
+                insert_thread.start()
+                compact_run = remote_client.wait_till_compaction_end(rest, bucket_name, timeout_in_seconds=300)
+                if not compact_run:
+                    self.fail("auto compaction does not run")
+                elif compact_run:
+                    self.log.info("auto compaction run successfully")
+            finally:
+                insert_thread.join()
         else:
             self.log.error("Unknown error")
 

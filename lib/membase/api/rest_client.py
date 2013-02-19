@@ -1304,15 +1304,14 @@ class RestConnection(object):
             raise CompactViewFailed(design_doc_id, content)
         log.info("compaction for ddoc '%s' was triggered" % design_doc_id)
 
-    def check_compaction_status(self, bucket):
-        vbucket = self.get_vbuckets(bucket)
-        for i in range(len(vbucket)):
-            api = self.capiBaseUrl + "/{0}%2F{1}".format(bucket, i)
-            status, content = httplib2.Http().request(api, "GET")
-            data = json.loads(content)
-            if "compact_running" in data and data["compact_running"]:
-                return True, i
-        return False, i
+    def check_compaction_status(self, bucket_name):
+        tasks = self.active_tasks()
+        for task in tasks:
+            print task
+            if task["type"] == "bucket_compaction":
+                if task["bucket"] == bucket_name:
+                    return True, task["progress"]
+        return False, None
 
     def set_ensure_full_commit(self, value):
         """Dynamic settings changes"""
