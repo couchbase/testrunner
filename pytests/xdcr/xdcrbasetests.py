@@ -69,7 +69,7 @@ class XDCRConstants:
 class XDCRBaseTest(unittest.TestCase):
     def setUp(self):
         try:
-            self._log = logger.Logger.get_logger()
+            self.log = logger.Logger.get_logger()
             self._input = TestInputSingleton.input
             self._init_parameters()
             self._cluster_helper = Cluster()
@@ -79,14 +79,14 @@ class XDCRBaseTest(unittest.TestCase):
             self._xdc_replication_rate = {}
             self._start_replication_time = {}
 
-            self._log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
+            self.log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
                 .format(self._case_number, self._testMethodName))
             if not self._input.param("skip_cleanup", False):  # and str(self.__class__).find('upgradeXDCR') == -1:
                 self._cleanup_previous_setup()
 
             self._init_clusters(self._disabled_consistent_view)
             self.setup_extended()
-            self._log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
+            self.log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
             ## THREADS FOR STATS KEEPING
             if str(self.__class__).find('upgradeXDCR') == -1:
@@ -111,14 +111,14 @@ class XDCRBaseTest(unittest.TestCase):
                     self._stats_thread6.start()
                     self._log_start(self)
         except  Exception as e:
-            self._log.error(e.message)
-            self._log.error("Error while setting up clusters: %s", sys.exc_info())
+            self.log.error(e.message)
+            self.log.error("Error while setting up clusters: %s", sys.exc_info())
             self._cleanup_broken_setup()
             raise
 
     def tearDown(self):
         try:
-            self._log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
+            self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
                     .format(self._case_number, self._testMethodName))
             self._end_replication_flag = 1
             if str(self.__class__).find('upgradeXDCR') == -1:
@@ -130,18 +130,18 @@ class XDCRBaseTest(unittest.TestCase):
                     self._stats_thread5.join()
                     self._stats_thread6.join()
             if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                self._log.info("Type of run: BIDIRECTIONAL XDCR")
+                self.log.info("Type of run: BIDIRECTIONAL XDCR")
             else:
-                self._log.info("Type of run: UNIDIRECTIONAL XDCR")
+                self.log.info("Type of run: UNIDIRECTIONAL XDCR")
             self._print_stats(self.src_master)
             if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
                 self._print_stats(self.dest_master)
-            self._log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
-            self._log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
+            self.log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
+            self.log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
             self.teardown_extended()
             self._do_cleanup()
-            self._log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
+            self.log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
         finally:
             self._cluster_helper.shutdown()
@@ -152,16 +152,16 @@ class XDCRBaseTest(unittest.TestCase):
             node1 = self.dest_master
         else:
             node1 = self.src_master
-        self._log.info("STATS with source at {0} and destination at {1}".format(node.ip, node1.ip))
+        self.log.info("STATS with source at {0} and destination at {1}".format(node.ip, node1.ip))
         for the_bucket in self._get_cluster_buckets(node):
-            self._log.info("Bucket: {0}".format(the_bucket.name))
+            self.log.info("Bucket: {0}".format(the_bucket.name))
             if node in self._local_replication_rate:
                 if the_bucket.name in self._local_replication_rate[node]:
                     if self._local_replication_rate[node][the_bucket.name] is not None:
                         _sum_ = 0
                         for _i in self._local_replication_rate[node][the_bucket.name]:
                             _sum_ += _i
-                        self._log.info("\tAverage local replica creation rate for bucket '{0}': {1} KB per second"\
+                        self.log.info("\tAverage local replica creation rate for bucket '{0}': {1} KB per second"\
                             .format(the_bucket.name, (float)(_sum_) / (len(self._local_replication_rate[node][the_bucket.name]) * 1000)))
             if node1 in self._xdc_replication_ops:
                 if the_bucket.name in self._xdc_replication_ops[node1]:
@@ -176,9 +176,9 @@ class XDCRBaseTest(unittest.TestCase):
                                                      self._xdc_replication_ops[node1][the_bucket.name][_mid - 1]) / 2
                         else:
                             _median_value_ = self._xdc_replication_ops[node1][the_bucket.name][_mid]
-                        self._log.info("\tMedian XDC replication ops for bucket '{0}': {1} K ops per second"\
+                        self.log.info("\tMedian XDC replication ops for bucket '{0}': {1} K ops per second"\
                             .format(the_bucket.name, (float)(_median_value_) / 1000))
-                        self._log.info("\tMean XDC replication ops for bucket '{0}': {1} K ops per second"\
+                        self.log.info("\tMean XDC replication ops for bucket '{0}': {1} K ops per second"\
                             .format(the_bucket.name, (float)(_sum_) / (len(self._xdc_replication_ops[node1][the_bucket.name]) * 1000)))
             if node in self._xdc_replication_rate:
                 if the_bucket.name in self._xdc_replication_rate[node]:
@@ -186,7 +186,7 @@ class XDCRBaseTest(unittest.TestCase):
                         _sum_ = 0
                         for _i in self._xdc_replication_rate[node][the_bucket.name]:
                             _sum_ += _i
-                        self._log.info("\tAverage XDCR data replication rate for bucket '{0}': {1} KB per second"\
+                        self.log.info("\tAverage XDCR data replication rate for bucket '{0}': {1} KB per second"\
                             .format(the_bucket.name, (float)(_sum_) / (len(self._xdc_replication_rate[node][the_bucket.name]) * 1000)))
 
     def _cleanup_previous_setup(self):
@@ -194,7 +194,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._do_cleanup()
 
     def _init_parameters(self):
-        self._log.info("Initializing input parameters started...")
+        self.log.info("Initializing input parameters started...")
         self._clusters_dic = self._input.clusters  # clusters is declared as dic in TestInput which is unordered.
         self._clusters_keys_olst = range(
             len(self._clusters_dic))  #clusters are populated in the dic in testrunner such that ordinal is the key.
@@ -286,7 +286,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.disable_src_comp = self._input.param("disable_src_comp", True)
         self.disable_dest_comp = self._input.param("disable_dest_comp", True)
 
-        self._log.info("Initializing input parameters completed.")
+        self.log.info("Initializing input parameters completed.")
 
     @staticmethod
     def _log_start(self):
@@ -305,6 +305,11 @@ class XDCRBaseTest(unittest.TestCase):
             RestConnection(self.dest_master[0]).log_client_error(msg)
         except:
             pass
+
+    def sleep(self, timeout=1, message=""):
+        self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
+        time.sleep(timeout)
+
 
     def _replication_stat_keeper(self, arg, node):
         while not self._end_replication_flag == 1:
@@ -396,7 +401,7 @@ class XDCRBaseTest(unittest.TestCase):
         try:
             self.tearDown()
         except:
-            self._log.info("Error while cleaning broken setup.")
+            self.log.info("Error while cleaning broken setup.")
 
     def _get_cluster_names(self):
         cs_names = {}
@@ -488,13 +493,13 @@ class XDCRBaseTest(unittest.TestCase):
             if condition():
                 return True
             else:
-                time.sleep(sleep)
+                self.sleep(sleep)
                 return self._poll_for_condition_rec(condition, sleep, (num_itr - 1))
 
     def do_a_warm_up(self, node):
         shell = RemoteMachineShellConnection(node)
         shell.stop_couchbase()
-        time.sleep(5)
+        self.sleep(5)
         shell.start_couchbase()
         shell.disconnect()
 
@@ -620,7 +625,7 @@ class XDCRBaseTest(unittest.TestCase):
             timeout *= 3 / 2
 
         end_time = time.time() + timeout
-        self._log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_nodes[0].ip))
+        self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_nodes[0].ip))
         if verify_src:
             timeout = max(120, end_time - time.time())
             self._wait_for_stats_all_buckets(self.src_nodes, timeout=timeout)
@@ -671,18 +676,18 @@ class XDCRBaseTest(unittest.TestCase):
                 start = time.time()
                 while time.time() - start < 150:
                     if mc.stats()["ep_warmup_thread"] == "complete":
-                        self._log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
-                        time.sleep(10)
+                        self.log.info("Warmed up: %s items " % (mc.stats()["curr_items_tot"]))
+                        self.sleep(10)
                         break
                     elif mc.stats()["ep_warmup_thread"] == "running":
-                        self._log.info(
+                        self.log.info(
                             "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
                         continue
                     else:
-                        self._log.info("Value of ep_warmup_thread does not exist, exiting from this server")
+                        self.log.info("Value of ep_warmup_thread does not exist, exiting from this server")
                         break
                 if mc.stats()["ep_warmup_thread"] == "running":
-                    self._log.info("ERROR: ep_warmup_thread's status not complete")
+                    self.log.info("ERROR: ep_warmup_thread's status not complete")
                 mc.close
 
 
@@ -812,18 +817,18 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             dest_cluster_name = self._cluster_names_dic[key]
             self.dest_master = nodes[0]
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
-            time.sleep(30)
+            self.sleep(30)
 
     def _load_data_chain(self):
         for key in self._clusters_keys_olst:
             cluster_node = self._clusters_dic[key][0]
             cluster_name = self._cluster_names_dic[key]
-            self._log.info("Starting Load # items {0} node {1} , cluster {2}....".format(self._num_items, cluster_node,
+            self.log.info("Starting Load # items {0} node {1} , cluster {2}....".format(self._num_items, cluster_node,
                 cluster_name))
             self._load_gen_data(cluster_name, cluster_node)
             if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_UNIDIRECTION:
                 break
-            self._log.info("Completed Load")
+            self.log.info("Completed Load")
 
     def set_environ_param(self, interval_time):
         for server in self.src_nodes:
@@ -838,7 +843,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         if src_master.ip != dest_master.ip:
             if self._failover is not None or self._warmup is not None:
                 self.set_environ_param(1)
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
@@ -857,7 +862,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
                 bucket.name, dest_cluster_name)
             self._start_replication_time[bucket.name] = datetime.now()
-            time.sleep(5)
+            self.sleep(5)
         if self._get_cluster_buckets(src_master):
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
 
@@ -865,14 +870,14 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for op_type in self._seed_data_ops_lst:
             num_items_ratio = self._get_num_items_ratio(op_type)
             load_gen = BlobGenerator(cname, cname, self._value_size, end=num_items_ratio)
-            self._log.info("Starting Load operation '{0}' for items (ratio) '{1}' on node '{2}'....".format(op_type,
+            self.log.info("Starting Load operation '{0}' for items (ratio) '{1}' on node '{2}'....".format(op_type,
                 num_items_ratio, cname))
             if self._seed_data_mode_str == XDCRConstants.SEED_DATA_MODE_SYNC:
                 self._load_all_buckets(node, load_gen, op_type, 0)
-                self._log.info("Completed Load of {0}".format(op_type))
+                self.log.info("Completed Load of {0}".format(op_type))
             else:
                 self._async_load_all_buckets(node, load_gen, op_type, 0)
-                self._log.info("Started async Load of {0}".format(op_type))
+                self.log.info("Started async Load of {0}".format(op_type))
 
     def _get_num_items_ratio(self, op_type):
         if op_type in ["update", "delete"]:
@@ -887,7 +892,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                                                           op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         return task
 
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
         tasks = []
         buckets = self._get_cluster_buckets(server)
         for bucket in buckets:
@@ -921,7 +926,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             task.result()
 
     def _async_update_delete_data(self):
-        self._log.info("The tasks:-")
+        self.log.info("The tasks:-")
         tasks = []
         #Setting up doc-ops at source nodes and doc-ops-dest at destination nodes
         if self._doc_ops is not None:
@@ -930,13 +935,13 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
             if "delete" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            time.sleep(self._timeout / 6)
+            self.sleep(self._timeout / 6)
         if self._doc_ops_dest is not None:
             if "update" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            time.sleep(self._timeout / 6)
+            self.sleep(self._timeout / 6)
         for task in tasks:
             task.result()
 
@@ -960,8 +965,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         buckets = self._get_cluster_buckets(master)
         for bucket in buckets:
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 10, bucket)
-            self._log.info("wait for expiry pager to run on all these nodes")
-            time.sleep(30)
+            self.log.info("wait for expiry pager to run on all these nodes")
+            self.sleep(30)
 
     def _wait_for_stats_all_buckets(self, servers, timeout=120):
         def verify():
@@ -978,8 +983,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     task.result(timeout)
                 return True
             except MemcachedError as e:
-                self._log.info("verifying ...")
-                self._log.debug("Not able to fetch data. Error is %s", (e.message))
+                self.log.info("verifying ...")
+                self.log.debug("Not able to fetch data. Error is %s", (e.message))
                 return False
 
         is_verified = self._poll_for_condition(verify)
@@ -998,8 +1003,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     task.result(timeout)
                 return True
             except  MemcachedError as e:
-                self._log.info("verifying ...")
-                self._log.info("Not able to fetch data. Error is %s", (e.message))
+                self.log.info("verifying ...")
+                self.log.info("Not able to fetch data. Error is %s", (e.message))
                 return False
 
         is_verified = self._poll_for_condition(verify)
@@ -1036,8 +1041,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     task.result(timeout)
                 return True
             except  MemcachedError as e:
-                self._log.info("verifying ...")
-                self._log.debug("Not able to fetch data. Error is %s", (e.message))
+                self.log.info("verifying ...")
+                self.log.debug("Not able to fetch data. Error is %s", (e.message))
                 return False
 
         is_verified = self._poll_for_condition(verify)
@@ -1072,7 +1077,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             shell.log_command_output(o, r)
         o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED, RELATED -j ACCEPT")
         shell.log_command_output(o, r)
-        self._log.info("enabled firewall on {0}".format(server))
+        self.log.info("enabled firewall on {0}".format(server))
         o, r = shell.execute_command("/sbin/iptables --list")
         shell.log_command_output(o, r)
         shell.disconnect()
@@ -1088,7 +1093,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             shell.log_command_output(o, r)
         o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED, RELATED -j ACCEPT")
         shell.log_command_output(o, r)
-        self._log.info("enabled firewall on {0}".format(server))
+        self.log.info("enabled firewall on {0}".format(server))
         o, r = shell.execute_command("/sbin/iptables --list")
         shell.log_command_output(o, r)
         shell.disconnect()

@@ -37,7 +37,7 @@ class bidirectional(XDCRReplicationBaseTest):
             if "delete" in self._doc_ops_dest:
                 self._load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
         self._wait_for_stats_all_buckets(self.src_nodes)
         self._wait_for_stats_all_buckets(self.dest_nodes)
 
@@ -54,7 +54,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
@@ -70,7 +70,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(self._timeout * 2)
+        self.sleep(self._timeout * 2)
         tasks = []
         if "update" in self._doc_ops:
             tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
@@ -81,7 +81,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "delete" in self._doc_ops_dest:
             tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete, "delete", 0))
 
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
         for task in tasks:
             task.result()
 
@@ -95,7 +95,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
         #warmup
         warmupnodes = []
         if self._warmup is not None:
@@ -105,13 +105,13 @@ class bidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         self.wait_warmup_completed(warmupnodes)
 
@@ -123,7 +123,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
         #warmup
         warmupnodes = []
         if self._warmup is not None:
@@ -133,11 +133,11 @@ class bidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.src_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
@@ -151,7 +151,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
         #warmup
         warmupnodes = []
         if self._warmup is not None:
@@ -161,13 +161,13 @@ class bidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self.wait_warmup_completed(warmupnodes)
 
@@ -179,7 +179,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
         #warmup
         warmupnodes = []
         if self._warmup is not None:
@@ -189,11 +189,11 @@ class bidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.src_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
@@ -204,95 +204,95 @@ class bidirectional(XDCRReplicationBaseTest):
     def load_with_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         if self._failover is not None:
             if "source" in self._failover and len(self.src_nodes) > 1:
                 if len(self.src_nodes) > 1:
                     i = len(self.src_nodes) - 1
                     self._cluster_helper.failover(self.src_nodes, [self.src_nodes[i]])
-                    self._log.info(
+                    self.log.info(
                             " Failing over Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip, self.src_nodes[i].port))
                     self._cluster_helper.rebalance(self.src_nodes, [], [self.src_nodes[i]])
                     self.src_nodes.remove(self.src_nodes[i])
                 else:
-                    self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
+                    self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                             len(self.src_nodes)))
             if "destination" in self._failover and len(self.dest_nodes) > 1:
                 if len(self.dest_nodes) > 1:
                     i = len(self.dest_nodes) - 1
                     self._cluster_helper.failover(self.dest_nodes, [self.dest_nodes[i]])
-                    self._log.info(" Failing over Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
+                    self.log.info(" Failing over Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
                                                                                               self.dest_nodes[i].port))
                     self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_nodes[i]])
                     self.dest_nodes.remove(self.dest_nodes[i])
                 else:
-                    self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
+                    self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                             len(self.dest_nodes)))
 
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         self.verify_results(verify_src=True)
 
     def load_with_failover_then_add_back(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         if self._failover is not None:
             if "source" in self._failover and len(self.src_nodes) > 1:
                 if len(self.src_nodes) > 1:
                     i = len(self.src_nodes) - 1
-                    self._log.info(
+                    self.log.info(
                             " Failing over Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip, self.src_nodes[i].port))
                     self._cluster_helper.failover(self.src_nodes, [self.src_nodes[i]])
-                    self._log.info(" Add back Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip,
+                    self.log.info(" Add back Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip,
                                                                                      self.src_nodes[i].port))
                     self.adding_back_a_node(self.src_master, self.src_nodes[i])
                     self._cluster_helper.rebalance(self.src_nodes, [], [])
                 else:
-                    self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
+                    self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                     len(self.src_nodes)))
             if "destination" in self._failover and len(self.dest_nodes) > 1:
                 if len(self.dest_nodes) > 1:
                     i = len(self.dest_nodes) - 1
-                    self._log.info(" Failing over Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
+                    self.log.info(" Failing over Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
                                                                                               self.dest_nodes[i].port))
                     self._cluster_helper.failover(self.dest_nodes, [self.dest_nodes[i]])
-                    self._log.info(" Add back Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
+                    self.log.info(" Add back Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
                                                                                           self.dest_nodes[i].port))
                     self.adding_back_a_node(self.dest_master, self.dest_nodes[i])
                     self._cluster_helper.rebalance(self.dest_nodes, [], [])
                 else:
-                    self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
+                    self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                     len(self.dest_nodes)))
 
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         self.verify_results(verify_src=True)
 
     def load_with_failover_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         if self._failover is not None:
             if "source" in self._failover  and len(self.src_nodes) > 1:
-                self._log.info(" Failing over Source Master Node {0}".format(self.src_master.ip))
+                self.log.info(" Failing over Source Master Node {0}".format(self.src_master.ip))
                 self._cluster_helper.failover(self.src_nodes, [self.src_master])
-                self._log.info(" Rebalance out Source Master Node {0}".format(self.src_master.ip))
+                self.log.info(" Rebalance out Source Master Node {0}".format(self.src_master.ip))
                 self._cluster_helper.rebalance(self.src_nodes, [], [self.src_master])
                 prev_master = self.src_master
                 self.src_nodes.remove(self.src_master)
@@ -303,13 +303,13 @@ class bidirectional(XDCRReplicationBaseTest):
                     if bucket.master_id == RestConnection(prev_master).get_nodes_self().id:
                         bucket.master_id = master_id
             elif "source" in self._failover and len(self.src_nodes) <= 1:
-                self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
+                self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                 len(self.src_nodes)))
 
             if "destination" in self._failover  and len(self.dest_nodes) > 1:
-                self._log.info(" Failing over Destination Master Node {0}".format(self.dest_master.ip))
+                self.log.info(" Failing over Destination Master Node {0}".format(self.dest_master.ip))
                 self._cluster_helper.failover(self.dest_nodes, [self.dest_master])
-                self._log.info(" Rebalance out Destination Master Node {0}".format(self.dest_master.ip))
+                self.log.info(" Rebalance out Destination Master Node {0}".format(self.dest_master.ip))
                 self._cluster_helper.rebalance(self.dest_nodes, [], [self.dest_master])
                 prev_master = self.dest_master
                 self.dest_nodes.remove(self.dest_master)
@@ -320,15 +320,15 @@ class bidirectional(XDCRReplicationBaseTest):
                     if bucket.master_id == RestConnection(prev_master).get_nodes_self().id:
                         bucket.master_id = master_id
             elif "destination" in self._failover and len(self.dest_nodes) <= 1:
-                self._log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
+                self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                 len(self.dest_nodes)))
 
-        time.sleep(self._timeout / 2)
+        self.sleep(self._timeout / 2)
 
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-        time.sleep(self._timeout * 5)
+        self.sleep(self._timeout * 5)
         self.verify_results(verify_src=True)
 
     """Replication with compaction ddocs and view queries on both clusters.
@@ -345,7 +345,7 @@ class bidirectional(XDCRReplicationBaseTest):
     def replication_with_ddoc_compaction(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         src_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_buckets:
@@ -386,7 +386,7 @@ class bidirectional(XDCRReplicationBaseTest):
     def replication_with_view_queries_and_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         src_buckets = self._get_cluster_buckets(self.src_master)
         dest_buckets = self._get_cluster_buckets(self.src_master)
@@ -417,13 +417,13 @@ class bidirectional(XDCRReplicationBaseTest):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
             if "delete" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            time.sleep(5)
+            self.sleep(5)
         if self._doc_ops_dest is not None:
             if "update" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            time.sleep(5)
+            self.sleep(5)
 
         while True:
             for view in views:
@@ -458,7 +458,7 @@ class bidirectional(XDCRReplicationBaseTest):
     def replication_with_disabled_ddoc_compaction(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         disable_src_comp = self._input.param("disable_src_comp", True)
         disable_dest_comp = self._input.param("disable_dest_comp", True)
@@ -469,7 +469,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         # perform doc's ops 3 times to increase rev number
         for i in range(3):
-            time.sleep(30)
+            self.sleep(30)
             self._async_update_delete_data()
             tasks = []
             #restore deleted items
@@ -479,7 +479,7 @@ class bidirectional(XDCRReplicationBaseTest):
             if self._doc_ops_dest is not None:
                 if "delete" in self._doc_ops_dest:
                     tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "create", 0))
-            time.sleep(5)
+            self.sleep(5)
             for task in tasks:
                 task.result()
 
@@ -491,7 +491,7 @@ class bidirectional(XDCRReplicationBaseTest):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
         self._async_update_delete_data()
-        time.sleep(self._timeout)
+        self.sleep(self._timeout)
 
         i = len(self.dest_nodes) - 1
         shell = RemoteMachineShellConnection(self.dest_nodes[i])
@@ -507,7 +507,7 @@ class bidirectional(XDCRReplicationBaseTest):
         elif shell.extract_remote_info().type.lower() == 'linux':
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
-        time.sleep(self._timeout * 2)
+        self.sleep(self._timeout * 2)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 

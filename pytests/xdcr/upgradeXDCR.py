@@ -82,7 +82,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             dest_cluster_name = self._cluster_names_dic[key]
             self.dest_master = nodes[0]
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
-            time.sleep(30)
+            self.sleep(30)
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         if len(self.repl_buckets_from_src):
@@ -99,7 +99,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
                 bucket, dest_cluster_name)
             self._start_replication_time[bucket] = datetime.now()
-            time.sleep(5)
+            self.sleep(5)
         if self._get_cluster_buckets(src_master):
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
 
