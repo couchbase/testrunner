@@ -175,6 +175,8 @@ class BaseTestCase(unittest.TestCase):
         return int(ratio / float(num_buckets) * float(mem_quota))
 
     def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
+        if not num_buckets:
+            return
         if server_id is None:
             server_id = RestConnection(server).get_nodes_self().id
         if bucket_size is None:
@@ -193,6 +195,8 @@ class BaseTestCase(unittest.TestCase):
             task.result()
 
     def _create_standard_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
+        if not num_buckets:
+            return
         if server_id is None:
             server_id = RestConnection(server).get_nodes_self().id
         if bucket_size is None:
