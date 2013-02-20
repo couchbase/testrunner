@@ -626,8 +626,9 @@ class XDCRBaseTest(unittest.TestCase):
             timeout *= 3 / 2
 
         end_time = time.time() + timeout
-        self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_nodes[0].ip))
+        self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_master.ip))
         if verify_src:
+            self.log.info("and Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
             timeout = max(120, end_time - time.time())
             self._wait_for_stats_all_buckets(self.src_nodes, timeout=timeout)
         timeout = max(120, end_time - time.time())
@@ -647,10 +648,10 @@ class XDCRBaseTest(unittest.TestCase):
         errors_caught = 0
         if self._doc_ops is not None or self._doc_ops_dest is not None:
             if "update" in self._doc_ops or (self._doc_ops_dest is not None and "update" in self._doc_ops_dest):
-                errors_caught = self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "update")
+                errors_caught = self._verify_revIds(self.src_master, self.dest_master, "update")
 
             if "delete" in self._doc_ops or (self._doc_ops_dest is not None and "delete" in self._doc_ops_dest):
-                errors_caught = self._verify_revIds(self.src_nodes[0], self.dest_nodes[0], "delete")
+                errors_caught = self._verify_revIds(self.src_master, self.dest_master, "delete")
 
         if errors_caught > 0:
             self.fail("Mismatches on Meta Information on xdcr-replicated items!")
