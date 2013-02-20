@@ -18,7 +18,7 @@
                     "desc" :  "drain_disks_ph1",
                     "workload" : [{"bucket" : "default",
                                   "template" : "default",
-                                  "spec" : "g:100,coq:defaultph1keyes,ops:100",
+                                  "spec" : "g:100,coq:defaultph1keyes,ops:0",
                                   "conditions" : "post:ep_queue_size < 100"}]
 
                 },
@@ -48,7 +48,7 @@
                     "desc" :  "drain_disks_ph3",
                     "workload" : [{"bucket" : "default",
                                   "template" : "default",
-                                  "spec" : "g:100,coq:defaultph2keyes,ops:100",
+                                  "spec" : "g:100,coq:defaultph2keyes,ops:0",
                                   "conditions" : "post:ep_queue_size < 100"}]
 
                 },
