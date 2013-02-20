@@ -718,7 +718,7 @@ class StatsCollector(object):
             while not persisted:
                 _, _, _, persisted, _ = src_client.observe(key)
             t1 = time.time()
-            while True:
+            while time.time() - t1 < 300:  # 5 minutes timeout
                 try:
                     dst_client.get(key)
                     break
@@ -728,7 +728,10 @@ class StatsCollector(object):
         persist_time = (t1 - t0) * 1000
 
         if multi:
-            return {"multi_100_xdcr_lag": total_time}
+            if total_time < 300000:  # only return normal results
+                return {"multi_100_xdcr_lag": total_time}
+            else:
+                return {}
         else:
             return {
                 "xdcr_lag": total_time,
