@@ -6,6 +6,7 @@ import app.sdk_client_tasks as client
 import json
 import uuid
 import time
+import copy
 from rabbit_helper import PersistedMQ
 from celery import current_task
 from celery import Task
@@ -341,7 +342,6 @@ back into nonblocking mode
 def postcondition_handler():
 
     workloads = CacheHelper.workloads()
-
     for workload in workloads:
         if workload.postconditions and workload.active:
             bucket = workload.bucket
@@ -372,8 +372,9 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
 
     create_tasks , update_tasks , get_tasks , del_tasks = ([],[],[],[])
     if create_count > 0:
-        template.ttl = 0 # override template level ttl
-        create_tasks = generate_set_tasks(template, create_count, bucket, password = password)
+        set_template = copy.deepcopy(template)
+        set_template.ttl = 0 # override template level ttl
+        create_tasks = generate_set_tasks(set_template, create_count, bucket, password = password)
 
     if update_count > 0:
 
@@ -396,10 +397,11 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
     if exp_count > 0:
         # set ttl from workload level ttl
         # otherwise template level ttl will be used
+        exp_template = copy.deepcopy(template)
         if ttl > 0:
-            template.ttl = ttl
+            exp_template.ttl = ttl
         create_tasks = create_tasks + \
-            generate_set_tasks(template, exp_count, bucket, password = password)
+            generate_set_tasks(exp_template, exp_count, bucket, password = password)
 
     pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks 
     pending_tasks = json.dumps(pending_tasks)
