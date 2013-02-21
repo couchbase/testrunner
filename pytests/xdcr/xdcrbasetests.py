@@ -657,17 +657,28 @@ class XDCRBaseTest(unittest.TestCase):
             self.fail("Mismatches on Meta Information on xdcr-replicated items!")
 
     def verify_results(self, verify_src=False):
+        if len(self.ord_keys) == 2:
+            src_nodes = self.get_servers_in_cluster(self.src_master)
+            dest_nodes = self.get_servers_in_cluster(self.dest_master)
+            self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src)
+        else:
+             # Checking replication at destination clusters when more then 2 clusters defined
+             for cluster_num in self.ord_keys[1:]:
+                 if dest_key_index == self.ord_keys_len:
+                     break
+                 self.dest_nodes = self._clusters_dic[cluster_num]
+                 self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
 
-        # Checking replication at destination clusters
-        dest_key_index = 1
-        for key in self.ord_keys[1:]:
-            if dest_key_index == self.ord_keys_len:
-                break
-            dest_key = self.ord_keys[dest_key_index]
-            self.dest_nodes = self._clusters_dic[dest_key]
-            self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
-            dest_key_index += 1
-
+    def get_servers_in_cluster(self, member):
+        nodes = [node for node in RestConnection(member).get_nodes()]
+        servers = []
+        cluster_run = len(set([server.ip for server in self._servers])) == 1
+        for server in self._servers:
+            for node in nodes:
+                if (server.ip == str(node.ip) or cluster_run)\
+                 and server.port == str(node.port):
+                    servers.append(server)
+        return servers
 
     def wait_warmup_completed(self, warmupnodes, bucket_names=["default"]):
         if isinstance(bucket_names, str):
