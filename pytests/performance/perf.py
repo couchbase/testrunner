@@ -212,12 +212,10 @@ class PerfBase(unittest.TestCase):
 
     def customize_xdcr_settings(self):
         """Set custom XDCR environment variables"""
-        max_concurrent_reps_per_doc = self.param('max_concurrent_reps_per_doc',
-                                                 None)
+        max_concurrent_reps_per_doc = self.param('max_concurrent_reps_per_doc', None)
         xdcr_doc_batch_size_kb = self.param('xdcr_doc_batch_size_kb', None)
         xdcr_checkpoint_interval = self.param('xdcr_checkpoint_interval', None)
-        xdcr_optimistic_replication = self.param('xdcr_optimistic_replication',
-                                                 None)
+        xdcr_latency_optimization = self.param('xdcr_latency_optimization', None)
 
         if max_concurrent_reps_per_doc:
             env_var = 'MAX_CONCURRENT_REPS_PER_DOC'
@@ -228,9 +226,9 @@ class PerfBase(unittest.TestCase):
         elif xdcr_checkpoint_interval:
             env_var = 'XDCR_CHECKPOINT_INTERVAL'
             value = xdcr_checkpoint_interval
-        elif xdcr_optimistic_replication:
-            env_var = 'XDCR_OPTIMISTIC_REPLICATION'
-            value = xdcr_optimistic_replication
+        elif xdcr_latency_optimization:
+            env_var = 'XDCR_LATENCY_OPTIMIZATION'
+            value = xdcr_latency_optimization
         else:
             return
 
