@@ -699,7 +699,7 @@ class StatsCollector(object):
 
     def _get_xdcr_latency(self, src_client, dst_client, multi=False):
         PREFIX = "XDCR_TIMING_"
-        kvs = dict((PREFIX + hex(), hex()) for _ in xrange(100))
+        kvs = dict((PREFIX + hex(), hex()) for _ in xrange(10))
         key = PREFIX + hex()
         persisted = False
 
@@ -728,10 +728,7 @@ class StatsCollector(object):
         persist_time = (t1 - t0) * 1000
 
         if multi:
-            if total_time < 300000:  # only return normal results
-                return {"multi_100_xdcr_lag": total_time}
-            else:
-                return {}
+            return {"multi_100_xdcr_lag": total_time}
         else:
             return {
                 "xdcr_lag": total_time,
