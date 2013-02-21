@@ -1,11 +1,8 @@
-from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
-from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from xdcrbasetests import XDCRReplicationBaseTest
-import time
-import copy
 
 """Testing Rebalance on Unidirectional and Bidirectional XDCR replication setup"""
 
@@ -100,11 +97,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-
+                self.verify_results(True)
         finally:
             pass
 
@@ -149,11 +145,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-
+                self.verify_results(True)
         finally:
             pass
 
@@ -205,11 +200,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-
+                self.verify_results(True)
         finally:
             pass
 
@@ -261,11 +255,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-
+                self.verify_results(True)
         finally:
             pass
 
@@ -323,15 +316,14 @@ class Rebalance(XDCRReplicationBaseTest):
                     self._async_modify_data()
                 elif self._replication_direction_str in "bidirection":
                     self._async_update_delete_data()
-                time.sleep(self._timeout / 2)
+                self.sleep(self._timeout / 2)
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-
+                self.verify_results(True)
         finally:
             pass
 
@@ -346,7 +338,7 @@ class Rebalance(XDCRReplicationBaseTest):
             if self._replication_direction_str in "bidirection":
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-            time.sleep(self._timeout / 2)
+            self.sleep(self._timeout / 2)
 
             src_buckets = self._get_cluster_buckets(self.src_master)
             for bucket in src_buckets:
@@ -360,7 +352,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 tasks = []
                 tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
                 tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
-                time.sleep(self._timeout / 2)
+                self.sleep(self._timeout / 2)
 
                 add_node = self._floating_servers_set[self._num_rebalance - 1]
                 if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
@@ -378,7 +370,7 @@ class Rebalance(XDCRReplicationBaseTest):
                             self.dest_master.ip, add_node.ip, remove_node.ip))
                     self.dest_nodes.remove(remove_node)
 
-                time.sleep(30)
+                self.sleep(30)
                 for task in tasks:
                     task.result(self._poll_timeout)
                 self.disable_compaction()
@@ -401,11 +393,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-
+                self.verify_results(True)
         finally:
             pass
 
@@ -416,7 +407,7 @@ class Rebalance(XDCRReplicationBaseTest):
             if self._replication_direction_str in "bidirection":
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-            time.sleep(self._timeout / 2)
+            self.sleep(self._timeout / 2)
 
             src_buckets = self._get_cluster_buckets(self.src_master)
             dest_buckets = self._get_cluster_buckets(self.src_master)
@@ -447,7 +438,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     if "delete" in self._doc_ops:
                         tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
 
-                    time.sleep(5)
+                    self.sleep(5)
 
                 if self._doc_ops_dest is not None:
                     if "update" in self._doc_ops_dest:
@@ -456,7 +447,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     if "delete" in self._doc_ops_dest:
                         tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
 
-                    time.sleep(5)
+                    self.sleep(5)
 
                 if self._rebalance is not None:
                     if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
@@ -475,7 +466,7 @@ class Rebalance(XDCRReplicationBaseTest):
                                 self.dest_master.ip, add_node.ip, remove_node.ip))
                         self.dest_nodes.remove(remove_node)
 
-                time.sleep(5)
+                self.sleep(5)
 
                 while True:
                     for view in views:
@@ -505,10 +496,9 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-
+                self.verify_results(True)
         finally:
             pass
