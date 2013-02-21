@@ -1,11 +1,7 @@
-from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
-from membase.helper.rebalance_helper import RebalanceHelper
 from xdcrbasetests import XDCRReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from random import randrange
-
-import time
 
 #Assumption that at least 2 nodes on every cluster
 class unidirectional(XDCRReplicationBaseTest):
@@ -78,13 +74,9 @@ class unidirectional(XDCRReplicationBaseTest):
         for node in warmupnodes:
             self.do_a_warm_up(node)
         self.sleep(self._timeout / 2)
-
         self._modify_src_data()
-
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         self.wait_warmup_completed(warmupnodes)
-
         self.verify_results()
 
     def load_with_async_ops_with_warmup(self):
@@ -101,16 +93,11 @@ class unidirectional(XDCRReplicationBaseTest):
         for node in warmupnodes:
             self.do_a_warm_up(node)
         self.sleep(self._timeout / 2)
-
         self._async_modify_data()
-
         self.sleep(30)
-
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         self._wait_for_stats_all_buckets(self.src_nodes)
         self.wait_warmup_completed(warmupnodes)
-
         self.verify_results()
 
     def load_with_async_ops_with_warmup_master(self):
@@ -127,17 +114,11 @@ class unidirectional(XDCRReplicationBaseTest):
         for node in warmupnodes:
             self.do_a_warm_up(node)
         self.sleep(self._timeout / 2)
-
         self._async_modify_data()
-
         self.sleep(self._timeout / 2)
-
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         self._wait_for_stats_all_buckets(self.dest_nodes)
-
         self.wait_warmup_completed(warmupnodes)
-
         self.verify_results()
 
     def load_with_failover(self):
@@ -173,11 +154,8 @@ class unidirectional(XDCRReplicationBaseTest):
                                     len(self.dest_nodes)))
 
         self.sleep(self._timeout / 6)
-
         self._async_modify_data()
-
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         self.verify_results()
 
     def load_with_failover_then_add_back(self):
@@ -213,11 +191,8 @@ class unidirectional(XDCRReplicationBaseTest):
                                     len(self.dest_nodes)))
 
         self.sleep(self._timeout / 6)
-
         self._async_modify_data()
-
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -258,11 +233,8 @@ class unidirectional(XDCRReplicationBaseTest):
                         bucket.master_id = master_id
 
         self.sleep(self._timeout / 6)
-
         self._async_modify_data()
-
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -436,10 +408,7 @@ class unidirectional(XDCRReplicationBaseTest):
                     self.sleep(5)
                     for task in tasks:
                         task.result()
-
-
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         self.verify_results()
 
     def replication_while_rebooting_a_non_master_destination_node(self):
@@ -464,7 +433,6 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def replication_with_firewall_enabled(self):
         self.set_environ_param(1)
-
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.sleep(self._timeout / 6)
         self._async_modify_data()
@@ -472,8 +440,5 @@ class unidirectional(XDCRReplicationBaseTest):
         self._enable_firewall(self.dest_master)
         self.sleep(self._timeout / 2)
         self._disable_firewall(self.dest_master)
-
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
         self.verify_results()
-

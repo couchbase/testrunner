@@ -1,11 +1,8 @@
-from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase.documentgenerator import BlobGenerator
 from xdcrbasetests import XDCRReplicationBaseTest
-from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from random import randrange
-
-import time
 
 #Assumption that at least 2 nodes on every cluster
 #TODO fail the tests if this condition is not met
@@ -378,7 +375,6 @@ class bidirectional(XDCRReplicationBaseTest):
         self.assertTrue(result)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-
         self.verify_results(verify_src=True)
 
 
@@ -483,7 +479,6 @@ class bidirectional(XDCRReplicationBaseTest):
                 task.result()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-
         self.verify_results(verify_src=True)
 
     def replication_while_rebooting_a_non_master_destination_node(self):
@@ -509,5 +504,4 @@ class bidirectional(XDCRReplicationBaseTest):
         self.sleep(self._timeout * 2)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-
         self.verify_results(verify_src=True)
