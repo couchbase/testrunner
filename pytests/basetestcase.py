@@ -13,6 +13,8 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+
 
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -157,6 +159,12 @@ class BaseTestCase(unittest.TestCase):
             node_quota = task.result()
             if node_quota < quota or quota == 0:
                 quota = node_quota
+        if quota < 100 and not len(set([server.ip for server in self.servers])) == 1:
+            self.log.warn("RAM quota was defined less than 100 MB:")
+            for server in servers:
+                remote_client = RemoteMachineShellConnection(server)
+                ram = remote_client.extract_remote_info().ram
+                self.log.info("{0}: {1} MB".format(server.ip, ram))
         return quota
 
     def _bucket_creation(self):
