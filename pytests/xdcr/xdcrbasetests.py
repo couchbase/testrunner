@@ -630,18 +630,18 @@ class XDCRBaseTest(unittest.TestCase):
         if verify_src:
             self.log.info("and Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
             timeout = max(120, end_time - time.time())
-            self._wait_for_stats_all_buckets(self.src_nodes, timeout=timeout)
+            self._wait_for_stats_all_buckets(src_nodes, timeout=timeout)
         timeout = max(120, end_time - time.time())
-        self._wait_for_stats_all_buckets(self.dest_nodes, timeout=timeout)
+        self._wait_for_stats_all_buckets(dest_nodes, timeout=timeout)
         self._expiry_pager(self.src_nodes[0])
         self._expiry_pager(self.dest_nodes[0])
         if verify_src:
             timeout = max(120, end_time - time.time())
-            self._verify_stats_all_buckets(self.src_nodes, timeout=timeout)
+            self._verify_stats_all_buckets(src_nodes, timeout=timeout)
             timeout = max(120, end_time - time.time())
             self._verify_all_buckets(self.src_master)
         timeout = max(120, end_time - time.time())
-        self._verify_stats_all_buckets(self.dest_nodes, timeout=timeout)
+        self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
         timeout = max(120, end_time - time.time())
         self._verify_all_buckets(self.dest_master)
 
