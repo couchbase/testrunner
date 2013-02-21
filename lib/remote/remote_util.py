@@ -979,13 +979,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            elif type == "centos":
-                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server", "couchbase-server")
-                log.info('running rpm -e to remove couchbase-server')
-                output, error = self.execute_command(uninstall_cmd)
-                self.log_command_output(output, error)
-            elif type == "red hat":
-                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server", "couchbase-server")
+            elif type in ["centos", "red hat"]:
+                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
                 log.info('running rpm -e to remove couchbase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
@@ -1052,13 +1047,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            elif type == "centos":
-                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server", "couchbase-server")
-                log.info('running rpm -e to remove couchbase-server')
-                output, error = self.execute_command(uninstall_cmd)
-                self.log_command_output(output, error)
-            elif type == "red hat":
-                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server", "couchbase-server")
+            elif type in ["centos", "red hat"]:
+                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
                 log.info('running rpm -e to remove couchbase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
@@ -1176,12 +1166,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};'.format('membase-server', 'membase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            elif type == "centos":
-                uninstall_cmd = 'rpm -e {0}'.format('membase-server')
-                log.info('running rpm -e to remove membase-server')
-                output, error = self.execute_command(uninstall_cmd)
-                self.log_command_output(output, error)
-            elif type == "red hat":
+            elif type in ["centos", "red hat"]:
                 uninstall_cmd = 'rpm -e {0}'.format('membase-server')
                 log.info('running rpm -e to remove membase-server')
                 output, error = self.execute_command(uninstall_cmd)
