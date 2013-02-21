@@ -856,10 +856,15 @@ class BatchedValidateDataTask(GenericLoadingTask):
         partition_keys_dic = self.kv_store.acquire_partitions(keys)
         try:
             key_vals = self.client.getMulti(keys, parallel=True)
-        except (ValueError, TimeoutError) as error:
-                self.state = FINISHED
-                self.set_exception(error)
-                return
+        except ValueError, error:
+            self.state = FINISHED
+            self.set_exception(error)
+            return
+        except BaseException, error:
+        #handle all other exception, for instance concurrent.futures._base.TimeoutError
+            self.state = FINISHED
+            self.set_exception(error)
+            return
         for partition, keys in partition_keys_dic.items():
             self._check_validity(partition, keys, key_vals)
         self.kv_store.release_partitions(partition_keys_dic.keys())
