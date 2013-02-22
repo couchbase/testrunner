@@ -393,9 +393,11 @@ class XDCRBaseTest(unittest.TestCase):
     def _do_cleanup(self):
         for key in self._clusters_keys_olst:
             nodes = self._clusters_dic[key]
-            BucketOperationHelper.delete_all_buckets_or_assert(nodes, self)
-            ClusterOperationHelper.cleanup_cluster(nodes)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(nodes, self)
+            self.log.info("cleanup cluster{0}: {1}".format(key + 1, nodes))
+            for node in nodes:
+                BucketOperationHelper.delete_all_buckets_or_assert([node], self)
+                ClusterOperationHelper.cleanup_cluster([node], self)
+                ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self)
 
     def _cleanup_broken_setup(self):
         try:
