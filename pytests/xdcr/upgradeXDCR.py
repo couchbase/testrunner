@@ -43,7 +43,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         elif self.dest_master.ip in [node.ip for node in nodes]:
             buckets = self.buckets_on_dest
 
-        bucket_size = self._get_bucket_size(master_node, [], self._mem_quota_int, len(buckets))
+        bucket_size = self._get_bucket_size(self._mem_quota_int, len(buckets))
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
 

@@ -456,7 +456,7 @@ class XDCRBaseTest(unittest.TestCase):
         if self._dgm_run_bool:
             self._mem_quota_int = 256
         master_node = nodes[0]
-        bucket_size = self._get_bucket_size(master_node, nodes, self._mem_quota_int, self._default_bucket)
+        bucket_size = self._get_bucket_size(self._mem_quota_int, self._default_bucket)
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
 
@@ -473,12 +473,8 @@ class XDCRBaseTest(unittest.TestCase):
         task = self._cluster_helper.async_rebalance(nodes, nodes[1:], [])
         task.result()
 
-    def _get_bucket_size(self, master_node, nodes, mem_quota, num_buckets, ratio=2.0 / 3.0):
-        for node in nodes:
-            if node.ip == master_node.ip:
-                return int(ratio / float(len(nodes)) / float(num_buckets) * float(mem_quota))
+    def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
         return int(ratio / float(num_buckets) * float(mem_quota))
-
 
     def _poll_for_condition(self, condition):
         timeout = self._poll_timeout

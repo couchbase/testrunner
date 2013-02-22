@@ -97,7 +97,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         self.buckets = []
         gc.collect()
-        self.bucket_size = self._get_bucket_size(self.servers[0], self.servers, self.quota, self.total_buckets)
+        self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self._bucket_creation()
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)

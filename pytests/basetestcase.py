@@ -86,7 +86,7 @@ class BaseTestCase(unittest.TestCase):
             if self.dgm_run:
                 self.quota = 256
             if self.total_buckets > 0:
-                self.bucket_size = self._get_bucket_size(self.servers[0], self.servers, self.quota, self.total_buckets)
+                self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
             if str(self.__class__).find('newupgradetests') == -1:
                 self._bucket_creation()
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
@@ -176,10 +176,7 @@ class BaseTestCase(unittest.TestCase):
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
 
-    def _get_bucket_size(self, master_node, nodes, mem_quota, num_buckets, ratio=2.0 / 3.0):
-        for node in nodes:
-            if node.ip == master_node.ip:
-                return int(ratio / float(len(nodes)) / float(num_buckets) * float(mem_quota))
+    def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
         return int(ratio / float(num_buckets) * float(mem_quota))
 
     def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
