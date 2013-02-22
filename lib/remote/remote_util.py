@@ -1689,15 +1689,15 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def remove_win_backup_dir(self):
         win_paths = [testconstants.WIN_CB_PATH, testconstants.WIN_MB_PATH]
-        backup_files = []
         for each_path in win_paths:
+            backup_files = []
             files = self.list_files(each_path)
             for f in files:
                 if f["file"].startswith("backup-"):
-                    backup_files.append(f)
+                    backup_files.append(f["file"])
              # keep the last one
-            if len(backup_files) > 5:
-                log.info("start remove {0} backup directory in {1}".format(count, each_path))
+            if len(backup_files) > 2:
+                log.info("start remove previous backup directory")
                 for f in backup_files[:-1]:
                     self.execute_command("rm -rf '{0}{1}'".format(each_path, f))
 
