@@ -862,6 +862,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             self.create_windows_capture_file(task, abbr_product, version)
             self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
             self.stop_schedule_tasks()
+            self.remove_win_backup_dir()
+            self.remove_win_collect_tmp()
             log.info('sleep for 5 seconds before running task schedule install me')
             time.sleep(5)
             # run task schedule to install Membase server
