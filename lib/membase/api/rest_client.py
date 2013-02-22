@@ -592,7 +592,7 @@ class RestConnection(object):
         params = urllib.urlencode({'port': port,
                                    'username': username,
                                    'password': password})
-        log.info('settings/web params : {0}'.format(params))
+        log.info('settings/web params on {0}:{1} :{2}'.format(self.ip, self.port, params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
@@ -602,7 +602,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET')
         if status:
             settings = json.loads(content)
-        log.info('settings/web params : {0}'.format(settings))
+        log.info('settings/web params on {0}:{1} :{2}'.format(self.ip, self.port, params))
         return settings
 
     def init_cluster_memoryQuota(self, username='Administrator',
@@ -1169,22 +1169,22 @@ class RestConnection(object):
         params = urllib.urlencode({})
         params_dict = {}
         existing_bucket = self.get_bucket_json(bucket)
-        params_dict["ramQuotaMB"] = existing_bucket["quota"]["ram"] /(1024 * 1024)
+        params_dict["ramQuotaMB"] = existing_bucket["quota"]["ram"] / (1024 * 1024)
         if ramQuotaMB:
             params_dict["ramQuotaMB"] = ramQuotaMB
         if authType:
-            params_dict["authType"] =  authType
+            params_dict["authType"] = authType
         if saslPassword:
-            params_dict["authType"] =  "sasl"
-            params_dict["saslPassword"] =  saslPassword
+            params_dict["authType"] = "sasl"
+            params_dict["saslPassword"] = saslPassword
         if replicaNumber:
-            params_dict["replicaNumber"] =  replicaNumber
+            params_dict["replicaNumber"] = replicaNumber
         if proxyPort:
-            params_dict["proxyPort"] =  proxyPort
+            params_dict["proxyPort"] = proxyPort
         if replicaIndex:
-            params_dict["replicaIndex"] =  replicaIndex
+            params_dict["replicaIndex"] = replicaIndex
         if flushEnabled:
-            params_dict["flushEnabled"] =  flushEnabled
+            params_dict["flushEnabled"] = flushEnabled
         params = urllib.urlencode(params_dict)
 
         log.info("%s with param: %s" % (api, params))
