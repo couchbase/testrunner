@@ -1,4 +1,5 @@
 import Queue
+import copy
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.documentgenerator import BlobGenerator
@@ -227,6 +228,35 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 for server in servers_with_not_default:
                     server.data_path = old_paths[server.ip][0]
                     server.index_path = old_paths[server.ip][1]
+
+    def online_upgrade_rebalance_in_with_ops(self):
+        gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
+        def modify_data():
+            tasks_ops = []
+            for bucket in self.buckets:
+                gen = copy.deepcopy(gen_load)
+                tasks_ops.append(self.cluster.async_load_gen_docs(self.master, bucket.name, gen,
+                                                          bucket.kvs[1], "create"))
+            for task in tasks_ops:
+                task.result()
+        self._install(self.servers[:self.nodes_init])
+        self.operations(self.servers[:self.nodes_init])
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
+        self.initial_version = self.upgrade_versions[0]
+        self.product = 'couchbase-server'
+        servs_in = self.servers[self.nodes_init:self.nodes_in + self.nodes_init]
+        servs_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+        self._install(self.servers[self.nodes_init:self.num_servers])
+        self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
+
+        modify_data()
+        task_reb = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, servs_out)
+        while task_reb.state != "FINISHED":
+            modify_data()
+        task_reb.result()
+        self.verification(list(set(self.servers[:self.nodes_init]) - set(servs_out)))
 
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.nodes_init])
