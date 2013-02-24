@@ -256,7 +256,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         while task_reb.state != "FINISHED":
             modify_data()
         task_reb.result()
-        self.verification(list(set(self.servers[:self.nodes_init]) - set(servs_out)))
+        self.verification(list((set(self.servers[:self.nodes_init]) | set(servs_in)) - set(servs_out)))
 
     def online_upgrade_rebalance_in_out(self):
         self._install(self.servers[:self.nodes_init])
