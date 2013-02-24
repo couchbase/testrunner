@@ -2,6 +2,7 @@ from couchbase.documentgenerator import BlobGenerator
 from xdcrbasetests import XDCRReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
 from random import randrange
 
 #Assumption that at least 2 nodes on every cluster
@@ -501,7 +502,7 @@ class bidirectional(XDCRReplicationBaseTest):
         elif shell.extract_remote_info().type.lower() == 'linux':
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
-        self.sleep(self._timeout * 2)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([self.dest_nodes[i]], self, wait_if_warmup=True)
         self.verify_results(verify_src=True)
