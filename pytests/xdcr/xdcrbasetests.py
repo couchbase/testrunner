@@ -566,6 +566,8 @@ class XDCRBaseTest(unittest.TestCase):
                 partition1 = kv_store_first[kvs_num].acquire_partition(key)
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
                 partition1.deleted[key] = partition2.get_key(key)
+                if key in partition1.valid:
+                    del partition1.valid[key]
                 kv_store_first[kvs_num].release_partition(key)
                 kv_store_second[kvs_num].release_partition(key)
             # return merged kvs, that we expect to get on both clusters
