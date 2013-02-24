@@ -458,14 +458,13 @@ class XDCRBaseTest(unittest.TestCase):
         if self._dgm_run_bool:
             self._mem_quota_int = 256
         master_node = nodes[0]
-        bucket_size = self._get_bucket_size(self._mem_quota_int, self._default_bucket)
+        total_buckets = self._sasl_buckets + self._default_bucket + self._standard_buckets
+        bucket_size = self._get_bucket_size(self._mem_quota_int, total_buckets)
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
 
-        if self._sasl_buckets > 0:
-            self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
-        if self._standard_buckets > 0:
-            self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
+        self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
+        self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
             self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
