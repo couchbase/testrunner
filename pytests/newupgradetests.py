@@ -45,7 +45,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         seqno_expected = 1
         if self.ddocs_num:
             self.create_ddocs_and_views()
-            self.verify_all_queries()
+            if self.input.param('run_index', False):
+                self.verify_all_queries()
         if not self.initial_version.startswith("1.") and self.input.param('check_seqno', True):
             self.check_seqno(seqno_expected)
         if self.during_ops:
