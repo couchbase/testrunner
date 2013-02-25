@@ -17,6 +17,11 @@ for proc in kill_procs:
     os.system("ps aux | grep %s | awk '{print $2}' | xargs kill" % proc)
 
 # cluster setup
+try:
+    cfg.CLUSTER
+except NameError:
+    cfg.CLUSTER = {}
+
 if cfg.CLUSTER:
     if 'setitup' in cfg.CLUSTER and cfg.CLUSTER['setitup']:
         function = "setitup"
