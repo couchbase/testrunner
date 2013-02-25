@@ -1,6 +1,7 @@
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import VBucketAwareMemcached
 from mc_bin_client import MemcachedError
+import logger
 import time
 import json
 
@@ -22,6 +23,7 @@ class ESReplicationBaseTest(object):
         self._es_swap = xd_ref._input.param("es_swap", False)
         self._cb_swap = xd_ref._input.param("cb_swap", False)
         self._cb_failover = xd_ref._input.param("cb_failover", False)
+        self._log = logger.Logger.get_logger()
 
 
     def verify_es_results(self, verify_src = False, verification_count = 10000):
@@ -55,7 +57,7 @@ class ESReplicationBaseTest(object):
         if verify_src:
             xd_ref._verify_stats_all_buckets(src_nodes)
 
-        self.xd_ref._log.info("Verifing couchbase to elasticsearch replication")
+        self._log.info("Verifing couchbase to elasticsearch replication")
         self.verify_es_num_docs(src_nodes[0], dest_nodes[0], verification_count = verification_count)
 
         if xd_ref._doc_ops is not None:
@@ -82,7 +84,7 @@ class ESReplicationBaseTest(object):
             es_num_items = es_rest.get_bucket(bucket.name).stats.itemCount
             _retry = retry
             while _retry > 0 and cb_num_items != es_num_items:
-                self.xd_ref._log.info("elasticsearch items %s, expected: %s....retry after %s seconds" %\
+                self._log.info("elasticsearch items %s, expected: %s....retry after %s seconds" %\
                                      (es_num_items, cb_num_items, wait))
                 time.sleep(wait)
                 last_es_items = es_num_items
@@ -91,10 +93,10 @@ class ESReplicationBaseTest(object):
                     _retry = _retry - 1
                     # if index doesn't change reduce retry count
                 elif es_num_items <= last_es_items:
-                    self.xd_ref._log.info("%s items removed from index " % (es_num_items - last_es_items))
+                    self._log.info("%s items removed from index " % (es_num_items - last_es_items))
                     _retry = retry
                 elif es_num_items >= last_es_items:
-                    self.xd_ref._log.info("%s items added to index" % (es_num_items - last_es_items))
+                    self._log.info("%s items added to index" % (es_num_items - last_es_items))
                     _retry = retry
 
 
@@ -107,7 +109,7 @@ class ESReplicationBaseTest(object):
             es_valid = es_rest.all_docs(keys_only=True,indices=[bucket.name], size = cb_num_items)
 
             if len(es_valid) != cb_num_items:
-                self.xd_ref._log.info("WARNING: Couchbase has %s docs, ElasticSearch all_docs returned %s docs " %\
+                self._log.info("WARNING: Couchbase has %s docs, ElasticSearch all_docs returned %s docs " %\
                                      (cb_num_items, len(es_valid)))
             for _id in cb_valid[:verification_count]:  # match at most 10k keys
                 if _id not in es_valid:
@@ -115,7 +117,7 @@ class ESReplicationBaseTest(object):
                     if es_rest.term_exists(_id, indices=[bucket.name]) == False:
                         self.xd_ref.fail("Document %s Missing from ES Index (%s)" % (_id, bucket.name))
 
-            self.xd_ref._log.info("Verified couchbase bucket (%s) replicated (%s) docs to elasticSearch with matching keys" %\
+            self._log.info("Verified couchbase bucket (%s) replicated (%s) docs to elasticSearch with matching keys" %\
                                  (bucket.name, cb_num_items))
 
 
@@ -155,7 +157,7 @@ class ESReplicationBaseTest(object):
                         self.xd_ref.fail("ES document %s has invalid revid (%s). Couchbase revid (%s). bucket (%s)" %\
                                         (es_id_rev_pair, cb_id_rev_pair, bucket.name))
 
-            self.xd_ref._log.info("Verified doc rev-ids in couchbase bucket (%s) match meta rev-ids elastic search" %\
+            self._log.info("Verified doc rev-ids in couchbase bucket (%s) match meta rev-ids elastic search" %\
                                  (bucket.name))
 
     def get_cb_id_rev_list(self, docs):
@@ -187,7 +189,7 @@ class ESReplicationBaseTest(object):
                 except MemcachedError as e:
                     self.xd_ref.fail("Error during verification.  Index contains invalid key: %s" % key)
 
-            self.xd_ref._log.info("Verified doc values in couchbase bucket (%s) match values in elastic search" %\
+            self._log.info("Verified doc values in couchbase bucket (%s) match values in elastic search" %\
                                  (bucket.name))
 
     def verify_dest_added(self):
