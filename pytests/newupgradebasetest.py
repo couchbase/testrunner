@@ -174,7 +174,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             if not self.rest_helper.bucket_exists(bucket.name):
                 raise Exception("bucket: %s not found" % bucket.name)
         self.verify_cluster_stats(servers, max_verify=self.max_verify, \
-                                  timeout=self.wait_timeout * 50, check_items=check_items)
+                                  timeout=self.wait_timeout * 20, check_items=check_items)
 
         if self.ddocs:
             self.verify_all_queries()
