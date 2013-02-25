@@ -86,9 +86,11 @@ class docloaderTests(CliBaseTest):
             command = "find %s/design_docs/ -name *.json | wc -l" % (file)
             output, error = self.shell.execute_command(command.format(command))
             self.shell.log_command_output(output, error)
-            b = int(output[0])
-
-            number_of_items = a - b #design doc create views not items in cluster
+            if 'unable to resolve host' in output[0]:
+                b = int(output[1])
+            else:
+                b = int(output[0])
+            number_of_items = a - b  #design doc create views not items in cluster
             self.shell.delete_files(file)
             return number_of_items
         elif os == "windows":
