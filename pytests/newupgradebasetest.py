@@ -177,19 +177,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                                   timeout=self.wait_timeout * 50, check_items=check_items)
 
         if self.ddocs:
-            query = {"connectionTimeout" : 60000}
-            expected_rows = self.num_items
-            if self.max_verify:
-                expected_rows = self.max_verify
-                query["limit"] = expected_rows
-            if self.input.param("wait_expiration", False):
-                expected_rows = 0
-            for bucket in self.buckets:
-                for ddoc in self.ddocs:
-                    prefix = ("", "dev_")[ddoc.views[0].dev_view]
-                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
-                                                wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
-                                                retry_time=10)
+            self.verify_all_queries()
         if "update_notifications" in self.input.test_params:
             if self.rest.get_notifications() != self.input.param("update_notifications", True):
                 self.fail("update notifications settings wasn't saved")
@@ -211,6 +199,21 @@ class NewUpgradeBaseTest(BaseTestCase):
             if cluster_status["autoCompactionSettings"]["viewFragmentationThreshold"]\
                              ["percentage"] != self.input.param("autocompaction", 50):
                     self.fail("autocompaction settings weren't saved")
+
+    def verify_all_queries(self):
+        query = {"connectionTimeout" : 60000}
+        expected_rows = self.num_items
+        if self.max_verify:
+            expected_rows = self.max_verify
+            query["limit"] = expected_rows
+        if self.input.param("wait_expiration", False):
+            expected_rows = 0
+        for bucket in self.buckets:
+            for ddoc in self.ddocs:
+                prefix = ("", "dev_")[ddoc.views[0].dev_view]
+                self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
+                                           wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
+                                           retry_time=10)
 
     def change_settings(self):
         if "update_notifications" in self.input.test_params:
