@@ -18,7 +18,8 @@ ATOP_LOG_FILE = "/tmp/atop-node.log"
 LOGDIR="logs"  # relative to current dir
 
 #Cluster Config
-CLUSTER = {'setitup':False, 'ini':'pysystests/cluster.ini', 'sasl_buckets':0, 'standard_buckets':0, 'default_bucket':True, 'xdcr':False}
+CLUSTER = {'setitup':False, 'ini':'pysystests/cluster.ini', 'sasl_buckets':0, 'standard_buckets':0, 'default_bucket':True, 
+           'default_mem_quota':12000, 'sasl_mem_quota':7000, 'xdcr':False}
 
 #Backup Config
 ENABLE_BACKUPS = False

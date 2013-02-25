@@ -27,6 +27,9 @@ class initialize(unittest.TestCase):
         self._standard_buckets = self._input.param("standard_buckets", 0)
         self._sasl_buckets = self._input.param("sasl_buckets",0)
         self._buckets = []
+        self._default_quota = self._input.param("default_mem_quota", 0)
+        self._sasl_quota = self._input.param("sasl_mem_quota", 0)
+        self._standard_quota = self._input.param("standard_mem_quota", 0)
         self._mem_quota_int = 0
         self._num_replicas = self._input.param("replicas", 1)
         self._xdcr = self._input.param("xdcr", False)
@@ -117,6 +120,8 @@ class SETUP(initialize):
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
         if self._default_bucket:
+            if self._default_quota != 0:
+                bucket_size = self._default_quota
             rest = RestConnection(nodes[0])
             rest.create_bucket(bucket=self.default_bucket_name,
                                ramQuotaMB=bucket_size,
@@ -126,8 +131,12 @@ class SETUP(initialize):
                                saslPassword=None)
             self._buckets.append(self.default_bucket_name)
         if self._sasl_buckets > 0:
+            if self._sasl_quota != 0:
+                bucket_size = self._sasl_quota
             self._create_sasl_buckets(master_node, master_id, bucket_size, password="password")
         if self._standard_buckets > 0:
+            if self._standard_quota != 0:
+                bucket_size = self._standard_quota
             self._create_standard_buckets(master_node, master_id, bucket_size)
 
     def _link_create_replications(self, master_1, master_2, cluster_name):
@@ -143,7 +152,10 @@ class SETUP(initialize):
     def _create_sasl_buckets(self, server, server_id, bucket_size, password):
         rest = RestConnection(server)
         for i in range(self._sasl_buckets):
-            name = "sasl-" + str(i+1)
+            if i == 0:
+                name = "saslbucket"
+            else:
+                name = "saslbucket-" + str(i)
             rest.create_bucket(bucket=name,
                                ramQuotaMB=bucket_size,
                                replicaNumber=self._num_replicas,
@@ -155,7 +167,10 @@ class SETUP(initialize):
     def _create_standard_buckets(self, server, server_id, bucket_size):
         rest = RestConnection(server)
         for i in range(self._standard_buckets):
-            name = "standard-" + str(i+1)
+            if i == 0:
+                name = "standardbucket"
+            else:
+                name = "standardbucket-" + str(i)
             rest.create_bucket(bucket=name,
                                ramQuotaMB=bucket_size,
                                replicaNumber=self._num_replicas,

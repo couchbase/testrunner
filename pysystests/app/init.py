@@ -27,10 +27,16 @@ if cfg.CLUSTER:
         function = "setitup"
         if 'default_bucket' in cfg.CLUSTER and cfg.CLUSTER['default_bucket'] == False:
             function = function + ",default_bucket=" + str(cfg.CLUSTER['default_bucket'])
+        if 'default_mem_quota' in cfg.CLUSTER:
+            function = function + ",default_mem_quota=" + str(cfg.CLUSTER['default_mem_quota'])
         if 'sasl_buckets' in cfg.CLUSTER and cfg.CLUSTER['sasl_buckets'] > 0:
             function = function + ",sasl_buckets=" + str(cfg.CLUSTER['sasl_buckets'])
+        if 'sasl_mem_quota' in cfg.CLUSTER:
+            function = function + ",sasl_mem_quota=" + str(cfg.CLUSTER['sasl_mem_quota'])
         if 'standard_buckets' in cfg.CLUSTER and cfg.CLUSTER['standard_buckets'] > 0:
             function = function + ",standard_buckets=" + str(cfg.CLUSTER['standard_buckets'])
+        if 'standard_mem_quota' in cfg.CLUSTER:
+            function = function + ",standard_mem_quota=" + str(cfg.CLUSTER['standard_mem_quota'])
 
         if 'xdcr' in cfg.CLUSTER and cfg.CLUSTER['xdcr']:
             function = function + ",xdcr=True"
