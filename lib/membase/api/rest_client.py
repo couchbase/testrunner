@@ -792,6 +792,9 @@ class RestConnection(object):
                 log.error('eject_node error {0}'.format(content))
         return True
 
+    def force_eject_node(self):
+        self.diag_eval("gen_server:cast(ns_cluster, leave).")
+
     def fail_over(self, otpNode=None):
         if otpNode is None:
             log.error('otpNode parameter required')
@@ -843,7 +846,8 @@ class RestConnection(object):
     def diag_eval(self, code):
         api = '{0}{1}'.format(self.baseUrl, 'diag/eval/')
         status, content, header = self._http_request(api, "POST", code)
-        log.info("/diag/eval status: {0} content: {1} command: {2}".format(status, content, code))
+        log.info("/diag/eval status on {0}:{1}: {2} content: {3} command: {4}".
+                 format(self.ip, self.port, status, content, code))
         return status, content
 
     def diag_master_events(self):

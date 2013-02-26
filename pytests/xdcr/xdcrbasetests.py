@@ -408,7 +408,14 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("cleanup cluster{0}: {1}".format(key + 1, nodes))
             for node in nodes:
                 BucketOperationHelper.delete_all_buckets_or_assert([node], self)
-                ClusterOperationHelper.cleanup_cluster([node], self)
+                if self._input.param("forceEject", False) and node not in [self.src_nodes[0], self.dest_nodes[0] ]:
+                            try:
+                                rest = RestConnection(node)
+                                rest.force_eject_node()
+                            except BaseException, e:
+                                self.log.error(e)
+                else:
+                    ClusterOperationHelper.cleanup_cluster([node], self)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self)
 
     def _cleanup_broken_setup(self):

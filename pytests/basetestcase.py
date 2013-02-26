@@ -117,6 +117,14 @@ class BaseTestCase(unittest.TestCase):
                         stopped = rest.stop_rebalance()
                         self.assertTrue(stopped, msg="unable to stop rebalance")
                     BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+                    if self.input.param("forceEject", False):
+                        for server in self.servers:
+                            if server != self.servers[0]:
+                                try:
+                                    rest = RestConnection(server)
+                                    rest.force_eject_node()
+                                except BaseException, e:
+                                    self.log.error(e)
                     ClusterOperationHelper.cleanup_cluster(self.servers)
                     self.sleep(10)
                     ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
