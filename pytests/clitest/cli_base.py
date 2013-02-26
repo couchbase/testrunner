@@ -20,14 +20,14 @@ class CliBaseTest(BaseTestCase):
         self.cluster.rebalance(self.servers[:1], servers_in, [])
 
     def tearDown(self):
-        super(CliBaseTest, self).tearDown()
         if not self.input.param("skip_cleanup", True):
-            if times_tear_down_called > 1 :
+            if self.times_teardown_called > 1 :
                 self.shell.disconnect()
         if self.input.param("skip_cleanup", True):
             if self.case_number > 1 or self.times_teardown_called > 1:
                 self.shell.disconnect()
         self.times_teardown_called += 1
+        super(CliBaseTest, self).tearDown()
 
     def _set_vbucket(self, key, vbucket= -1):
         if vbucket < 0:
