@@ -26,15 +26,14 @@ class BackupBaseTest(BaseTestCase):
         self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
-        servers_in = [self.servers[i+1] for i in range(self.num_servers-1)]
+        servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
         for bucket in self.buckets:
-            bucket.kvs[2]= KVStore()
+            bucket.kvs[2] = KVStore()
         self.cluster.rebalance(self.servers[:1], servers_in, [])
 
     def tearDown(self):
-        super(BackupBaseTest, self).tearDown()
         if not self.input.param("skip_cleanup", True):
-            if times_tear_down_called > 1 :
+            if self.times_teardown_called > 1 :
                 if self.os == 'windows':
                     self.shell.delete_files("/cygdrive/c%s" % (self.backup_location))
                 else:
@@ -43,7 +42,7 @@ class BackupBaseTest(BaseTestCase):
                 del self.buckets
                 gc.collect()
         if self.input.param("skip_cleanup", True):
-            if self.case_number > 1 or self.times_teardown_called >1:
+            if self.case_number > 1 or self.times_teardown_called > 1:
                 if self.os == 'windows':
                     self.shell.delete_files("/cygdrive/c%s" % (self.backup_location))
                 else:
@@ -51,7 +50,8 @@ class BackupBaseTest(BaseTestCase):
                 self.shell.disconnect()
                 del self.buckets
                 gc.collect()
-        self.times_teardown_called +=1
+        self.times_teardown_called += 1
+        super(BackupBaseTest, self).tearDown()
 
     def verify_results(self, server, kv_store=1):
         """This is the verification function for test cases of backup/restore.
@@ -71,10 +71,10 @@ class BackupBaseTest(BaseTestCase):
             for s in self.command_options:
                 if s.find("-k") != -1:
                     sub = s.find(" ")
-                    key_name = s[sub+1:]
+                    key_name = s[sub + 1:]
                 if s.find("-b") != -1:
                     sub = s.find(" ")
-                    bucket_name = s[sub+1:]
+                    bucket_name = s[sub + 1:]
                 if "--single-node" in self.command_options:
                     single_node_flag = True
 
@@ -84,13 +84,13 @@ class BackupBaseTest(BaseTestCase):
              if key_name is not None:
                 valid_keys, deleted_keys = bucket.kvs[kv_store].key_set()
                 for key in valid_keys:
-                    matchObj = re.search(key_name, key, re.M|re.S) #use regex match to find out keys we need to verify
+                    matchObj = re.search(key_name, key, re.M | re.S) #use regex match to find out keys we need to verify
                     if matchObj is None:
                         partition = bucket.kvs[kv_store].acquire_partition(key)
                         partition.delete(key)  #we delete keys whose prefix does not match the value assigned to -k in KVStore
                         bucket.kvs[kv_store].release_partition(key)
         if single_node_flag is False:
-            self._verify_all_buckets(server, kv_store, self.wait_timeout*50, self.max_verify, True, 1)
+            self._verify_all_buckets(server, kv_store, self.wait_timeout * 50, self.max_verify, True, 1)
         else:
             self.verify_single_node(server, kv_store)
 
@@ -122,4 +122,4 @@ class BackupBaseTest(BaseTestCase):
                     partition.delete(key)
                     bucket.kvs[kv_store].release_partition(key)
 
-        self._verify_all_buckets(server, kv_store, self.wait_timeout*50, self.max_verify, True, 1)
+        self._verify_all_buckets(server, kv_store, self.wait_timeout * 50, self.max_verify, True, 1)
