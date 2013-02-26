@@ -414,7 +414,7 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _setup_cluster(self, nodes, disabled_consistent_view=None):
         self._init_nodes(nodes, disabled_consistent_view)
-        self._config_cluster(nodes)
+        self._cluster_helper.async_rebalance(nodes, nodes[1:], []).result()
         self._create_buckets(nodes)
 
     def _init_nodes(self, nodes, disabled_consistent_view=None):
@@ -469,10 +469,6 @@ class XDCRBaseTest(unittest.TestCase):
             self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                 num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
-
-    def _config_cluster(self, nodes):
-        task = self._cluster_helper.async_rebalance(nodes, nodes[1:], [])
-        task.result()
 
     def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
         return int(ratio / float(num_buckets) * float(mem_quota))
@@ -608,12 +604,7 @@ class XDCRBaseTest(unittest.TestCase):
         3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
         * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
     def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False):
-        timeout = 360
-        if self._num_items in range(50000, 100000):
-            timeout = 500
-        elif self._num_items >= 100000:
-            timeout = 600
-
+        timeout = 500
         if self._failover is not None or self._rebalance is not None:
             timeout *= 3 / 2
 
