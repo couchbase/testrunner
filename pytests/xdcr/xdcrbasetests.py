@@ -606,7 +606,7 @@ class XDCRBaseTest(unittest.TestCase):
     def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False):
         timeout = 500
         if self._failover is not None or self._rebalance is not None:
-            timeout *= 3 / 2
+            timeout *= 2
 
         #for verification src and dest clusters need more time
         if verify_src:
