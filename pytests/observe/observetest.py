@@ -32,10 +32,10 @@ class ObserveTests(BaseTestCase):
     def tearDown(self):
         super(ObserveTests, self).tearDown()
 
-    def _load_doc_data_all_buckets(self, op_type = 'create', start = 0, end = 0, expiry = 0):
+    def _load_doc_data_all_buckets(self, op_type='create', start=0, end=0, expiry=0):
         loaded = False
         count = 0
-        gen_load = BlobGenerator('observe', 'observe', 1024, start = start, end = end)
+        gen_load = BlobGenerator('observe', 'observe', 1024, start=start, end=end)
         while not loaded and count < 60:
             try :
                 self._load_all_buckets(self.servers[0], gen_load, op_type, expiry)
@@ -47,19 +47,19 @@ class ObserveTests(BaseTestCase):
                     count += 1
                     time.sleep(5)
 
-    def _async_load_doc_data_all_buckets(self, op_type = 'create', start = 0, end = 0):
-        gen_load = BlobGenerator('observe', 'observe', 1024, start = start, end = end)
+    def _async_load_doc_data_all_buckets(self, op_type='create', start=0, end=0):
+        gen_load = BlobGenerator('observe', 'observe', 1024, start=start, end=end)
         tasks = self._async_load_all_buckets(self.servers[0], gen_load, op_type, 0)
         return tasks
 
-    def block_for_replication(self, key, cas = 0, num = 1, timeout = 0, persist = False):
+    def block_for_replication(self, key, cas=0, num=1, timeout=0, persist=False):
         """
         observe a key until it has been replicated to @param num of servers
 
         @param persist : block until item has been persisted to disk
         """
         vbucketid = self.client._get_vBucket_id(key)
-        repl_servers = self._get_server_str(vbucketid, repl = True)
+        repl_servers = self._get_server_str(vbucketid, repl=True)
         persisted = 0
         self.log.info("VbucketId:%s on replicated servers:%s" % (vbucketid, repl_servers))
 
@@ -80,7 +80,7 @@ class ObserveTests(BaseTestCase):
                     break
         return True
 
-    def _get_server_str(self, vbucketid, repl = True):
+    def _get_server_str(self, vbucketid, repl=True):
         """retrieve server string {ip:port} based on vbucketid"""
         memcacheds, vBucketMap, vBucketMapReplica = self.client.request_map(self.client.rest, self.client.bucket)
         if repl:
@@ -117,7 +117,7 @@ class ObserveTests(BaseTestCase):
             self.cluster.create_view(self.master, self.default_design_doc,
                                       self.default_view, bucket , self.wait_timeout * 2)
             client = VBucketAwareMemcached(RestConnection(self.master), bucket)
-            self.max_time = timedelta(microseconds = 0)
+            self.max_time = timedelta(microseconds=0)
             if self.mutate_by == "multi_set":
                 key_val = self._create_multi_set_batch()
                 client.setMulti(0, 0, key_val)
@@ -157,7 +157,7 @@ class ObserveTests(BaseTestCase):
                     self.log.info("Max Time taken for observe is :- %s" % self.max_time)
                     self.log.info("Cas Value:- %s" % (cas))
             query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
-            self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
+            self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket, timeout=self.wait_timeout)
             self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, bucket))
             # check whether observe has to run with delete and delete parallel with observe or not
             if len (self.observe_with) > 0 :
@@ -176,14 +176,9 @@ class ObserveTests(BaseTestCase):
                 if self.observe_with == "delete_parallel":
                     for task in tasks:
                         task.result()
-                # verify the persistence of data by querying view
-                stale = self.input.param("stale", "ok")
-                if stale == "ok" :
-                    query = {"stale" : "ok", "full_set" : query_set, "connection_timeout" : 60000}
-                    self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
 
                 query = {"stale" : "false", "full_set" : query_set, "connection_timeout" : 60000}
-                self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket)
+                self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items / 2, bucket, timeout=self.wait_timeout)
                 self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, self.default_bucket_name))
 
         """test_observe_basic_data_load_delete will test observer basic scenario
