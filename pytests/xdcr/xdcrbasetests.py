@@ -690,6 +690,39 @@ class XDCRBaseTest(unittest.TestCase):
                     self.log.info("ERROR: ep_warmup_thread's status not complete")
                 mc.close
 
+    def wait_node_restarted(self, server, wait_time=120, wait_if_warmup=False, check_service=False):
+        now = time.time()
+        if check_service:
+            self.wait_service_started(server, wait_time)
+            wait_time = now + wait_time - time.time()
+        num = 0
+        while num < wait_time / 10:
+            try:
+                ClusterOperationHelper.wait_for_ns_servers_or_assert(
+                                            [server], self, wait_time=wait_time - num * 10, wait_if_warmup=wait_if_warmup)
+                break
+            except BaseException, e:
+                if e.message.find('couchApiBase doesn') != -1 or e.message.find('unable to reach') != -1:
+                    num += 1
+                    self.sleep(10)
+                else:
+                    raise e
+
+    def wait_service_started(self, server, wait_time=120):
+        shell = RemoteMachineShellConnection(server)
+        type = shell.extract_remote_info().distribution_type
+        if type.lower() == 'windows':
+            cmd = "sc query CouchbaseServer | grep STATE"
+        else:
+            cmd = "service couchbase-server status"
+        now = time.time()
+        while time.time() - now < wait_time:
+            output, error = shell.execute_command(cmd)
+            if str(output).lower().find("running") != -1:
+                self.log.info("Couchbase service is running")
+                return
+            self.sleep(10, "couchbase service is not running")
+        self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
 
     def _modify_src_data(self):
         """Setting up creates/updates/deletes at source nodes"""

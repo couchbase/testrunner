@@ -4,6 +4,7 @@ from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from random import randrange
 
+
 #Assumption that at least 2 nodes on every cluster
 class unidirectional(XDCRReplicationBaseTest):
     def setUp(self):
@@ -421,14 +422,23 @@ class unidirectional(XDCRReplicationBaseTest):
 
         i = len(self.dest_nodes) - 1
         shell = RemoteMachineShellConnection(self.dest_nodes[i])
-        if shell.extract_remote_info().type.lower() == 'windows':
+        type = shell.extract_remote_info().type.lower()
+        if type == 'windows':
             o, r = shell.execute_command("shutdown -r -f -t 0")
-        elif shell.extract_remote_info().type.lower() == 'linux':
+        elif type == 'linux':
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
-        self.sleep(20)
+        num = 0
+        while num < 10:
+            try:
+                shell = RemoteMachineShellConnection(self.dest_nodes[i])
+            except BaseException, e:
+                self.sleep(60)
+                num += 1
+            break
+        shell.disable_firewall()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([self.dest_nodes[i]], self, wait_if_warmup=True)
+        self.wait_node_restarted(self.dest_nodes[i], wait_time=self._timeout * 4, wait_if_warmup=True)
         self.verify_results()
 
     def replication_with_firewall_enabled(self):
