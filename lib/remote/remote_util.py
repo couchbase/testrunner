@@ -1705,29 +1705,31 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 class RemoteUtilHelper(object):
 
     @staticmethod
-    def enable_firewall(servers, node, bidirectional=False):
-        for server in servers:
-            if server.ip == node.ip:
-                shell = RemoteMachineShellConnection(server)
-                info = shell.extract_remote_info()
-                if info.type.lower() == "windows":
-                    shell.execute_command('netsh advfirewall set publicprofile state on')
-                    shell.execute_command('netsh advfirewall set privateprofile state on')
-                else:
-                    #Reject incoming connections on port 1000->60000
-                    o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
-                    shell.log_command_output(o, r)
+    def enable_firewall(server, bidirectional=False, xdcr=False):
+        shell = RemoteMachineShellConnection(server)
+        info = shell.extract_remote_info()
+        if info.type.lower() == "windows":
+            shell.execute_command('netsh advfirewall set publicprofile state on')
+            shell.execute_command('netsh advfirewall set privateprofile state on')
+            log.info("enabled firewall on {0}".format(server))
+        else:
+            #Reject incoming connections on port 1000->60000
+            o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+            shell.log_command_output(o, r)
 
-                #Reject outgoing connections on port 1000->60000
-                if bidirectional:
-                    o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:60000 -j REJECT")
-                    shell.log_command_output(o, r)
-
-                log.info("enabled firewall on {0}".format(server))
-                o, r = shell.execute_command("/sbin/iptables --list")
+            #Reject outgoing connections on port 1000->60000
+            if bidirectional:
+                o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:60000 -j REJECT")
                 shell.log_command_output(o, r)
-                shell.disconnect()
-                break
+
+            if xdcr:
+                o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
+                shell.log_command_output(o, r)
+
+            log.info("enabled firewall on {0}".format(server))
+            o, r = shell.execute_command("/sbin/iptables --list")
+            shell.log_command_output(o, r)
+        shell.disconnect()
 
     @staticmethod
     def common_basic_setup(servers):

@@ -118,7 +118,8 @@ class FailoverTests(FailoverBaseTest):
                 self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
             elif failover_reason == "firewall":
-                RemoteUtilHelper.enable_firewall(self.servers, node, bidirectional=self.bidirectional)
+                server = [srv for srv in self.servers if node.ip == srv.ip][0]
+                RemoteUtilHelper.enable_firewall(server, bidirectional=self.bidirectional)
                 status = RestHelper(rest).wait_for_node_status(node, "unhealthy", 300)
                 if status:
                     log.info("node {0}:{1} is 'unhealthy' as expected".format(node.ip, node.port))

@@ -165,7 +165,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.fail('failed to change autofailover_settings!')
         time.sleep(5)
         time_start = time.time()
-        self._enable_firewall(server_fail)
+        RemoteUtilHelper.enable_firewall(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
         time_end = time.time()
         msg = "{0} != {1}".format(time_end - time_start, timeout)
@@ -181,7 +181,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.fail('failed to change autofailover_settings!')
         time.sleep(5)
         time_start = time.time()
-        self._enable_firewall(server_fail)
+        RemoteUtilHelper.enable_firewall(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
         time_end = time.time()
         msg = "{0} != {1}".format(time_end - time_start, timeout)
@@ -348,16 +348,6 @@ class AutoFailoverTests(unittest.TestCase):
         shell.pause_beam()
         shell.disconnect()
         log.info("stopped couchbase server on {0}".format(server))
-
-    def _enable_firewall(self, server):
-        log = logger.Logger.get_logger()
-        shell = RemoteMachineShellConnection(server)
-        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
-        shell.log_command_output(o, r)
-        log.info("enabled firewall on {0}".format(server))
-        o, r = shell.execute_command("/sbin/iptables --list")
-        shell.log_command_output(o, r)
-        shell.disconnect()
 
     def load_data(self, master, bucket, keys_count):
         log = logger.Logger.get_logger()
