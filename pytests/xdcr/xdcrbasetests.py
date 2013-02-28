@@ -1075,7 +1075,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         if self._replication_direction_str == "bidirection":
             o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j REJECT")
             shell.log_command_output(o, r)
-        o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED, RELATED -j ACCEPT")
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
         shell.log_command_output(o, r)
         self.log.info("enabled firewall on {0}".format(server))
         o, r = shell.execute_command("/sbin/iptables --list")
@@ -1091,7 +1091,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         if self._replication_direction_str == "bidirection":
             o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j ACCEPT")
             shell.log_command_output(o, r)
-        o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED, RELATED -j ACCEPT")
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
         shell.log_command_output(o, r)
         self.log.info("enabled firewall on {0}".format(server))
         o, r = shell.execute_command("/sbin/iptables --list")
