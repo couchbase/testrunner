@@ -46,6 +46,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.product = 'membase-server'
         else:
             self.product = 'couchbase-server'
+        if self.max_verify is None:
+            self.max_verify = min(self.num_items, 100000)
 
     def tearDown(self):
         if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)):
