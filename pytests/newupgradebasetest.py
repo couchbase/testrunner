@@ -48,6 +48,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.product = 'couchbase-server'
         if self.max_verify is None:
             self.max_verify = min(self.num_items, 100000)
+        shell = RemoteMachineShellConnection(self.master)
+        type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
+        if type.lower() == 'windows':
+            self.is_linux = False
+        else:
+            self.is_linux = True
 
     def tearDown(self):
         if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)):
@@ -131,20 +138,11 @@ class NewUpgradeBaseTest(BaseTestCase):
             remote.download_build(appropriate_build)
             remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
             remote.disconnect()
-            self.sleep(20)
-            num = 0
-            while num < 4:
-                try:
-                    ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_time=testconstants.NS_SERVER_TIMEOUT * 4)
-                    break
-                except BaseException, e:
-                    if e.message.find('couchApiBase doesn') != -1:
-                        num += 1
-                        self.sleep(10)
-                    else:
-                        raise e
-#            if not RestHelper(RestConnection(server)).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT * 4):
-#                self.fail("node {0}:{1} is not running after upgrade".format(server.ip, server.port))
+            self.sleep(10)
+            if self.is_linux:
+                self.wait_node_restarted(self, server, wait_time=testconstants.NS_SERVER_TIMEOUT)
+            else:
+                self.wait_node_restarted(self, server, wait_time=testconstants.NS_SERVER_TIMEOUT * 3, check_service=True)
             if not skip_init:
                 self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             self.sleep(self.sleep_time)

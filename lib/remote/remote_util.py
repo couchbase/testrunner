@@ -723,8 +723,17 @@ class RemoteMachineShellConnection:
         # run task schedule to upgrade Membase server
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
+        time.sleep(100)
+        self.stop_schedule_tasks()
+        #run installer in second time as workaround for:
+        #Installer needs to update registry value in order to upgrade from the previous version.
+        #Please run installer again to continue.
+        output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+        self.log_command_output(output, error)
         self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
         self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        self.log.info("installed version:")
+        output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info('wait 60 seconds for server to start up completely')
         time.sleep(60)
 
