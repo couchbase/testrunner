@@ -391,12 +391,16 @@ class CouchbaseServerInstaller(Installer):
                 return False
             #TODO: need separate methods in remote_util for couchbase and membase install
             path = server.data_path or '/tmp'
-            success = remote_client.install_server(build, path=path, vbuckets=vbuckets)
-            log.info('wait 5 seconds for membase server to start')
-            time.sleep(5)
-        if "rest_vbuckets" in params:
-            rest_vbuckets = int(params["rest_vbuckets"])
-            ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
+            try:
+                success = remote_client.install_server(build, path=path, vbuckets=vbuckets)
+                log.info('wait 5 seconds for membase server to start')
+                time.sleep(5)
+                if "rest_vbuckets" in params:
+                    rest_vbuckets = int(params["rest_vbuckets"])
+                    ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
+            except BaseException, e:
+                success = False
+                log.error("installation failed: {0}".format(e))
         if queue:
             queue.put(success)
         return success
