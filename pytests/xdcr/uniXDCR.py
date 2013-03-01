@@ -428,14 +428,20 @@ class unidirectional(XDCRReplicationBaseTest):
         elif type == 'linux':
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
+        shell.disconnect()
+        self.sleep(30, "after rebooting node")
         num = 0
         while num < 10:
             try:
                 shell = RemoteMachineShellConnection(self.dest_nodes[i])
+                shell.disconnect()
             except BaseException, e:
+                self.log.warn("node {0} is unreachable".format(self.dest_nodes[i].ip))
                 self.sleep(60)
                 num += 1
             break
+        self.sleep(20)
+        shell = RemoteMachineShellConnection(self.dest_nodes[i])
         shell.disable_firewall()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.wait_node_restarted(self.dest_nodes[i], wait_time=self._timeout * 4, wait_if_warmup=True)
