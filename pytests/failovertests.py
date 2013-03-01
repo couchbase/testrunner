@@ -3,6 +3,7 @@ import logger
 import time
 import copy
 import sys
+import json
 
 import unittest
 from membase.api.rest_client import RestConnection, RestHelper
@@ -130,6 +131,10 @@ class FailoverTests(FailoverBaseTest):
                             shell.log_command_output(o, r)
                             shell.disconnect()
                     for i in rest.get_logs(): self.log.error(i)
+                    api = rest.baseUrl + 'nodeStatuses'
+                    status, content, header = rest._http_request(api)
+                    json_parsed = json.loads(content)
+                    self.log.info("nodeStatuses: {0}".format(json_parsed))
                     self.fail("node status is not unhealthy even after waiting for 5 minutes")
 
             failed_over = rest.fail_over(node.id)
