@@ -529,8 +529,10 @@ class BaseTestCase(unittest.TestCase):
             output, error = shell.execute_command(cmd)
             if str(output).lower().find("running") != -1:
                 self.log.info("Couchbase service is running")
+                shell.disconnect()
                 return
             else:
                 self.log.warn("couchbase service is not running. {0}".format(output))
                 self.sleep(10)
+        shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
