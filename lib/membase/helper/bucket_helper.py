@@ -199,11 +199,14 @@ class BucketOperationHelper():
             node = RestConnection(serverInfo).get_nodes_self()
             paths = set([node.storage[0].path, node.storage[0].index_path])
             for path in paths:
+                if "c:/Program Files" in path:
+                    path = path.replace("c:/Program Files", "/cygdrive/c/Program Files")
+
                 if cluster_run:
                     call(["ls", "-lR", path])
                 else:
                     shell = RemoteMachineShellConnection(serverInfo)
-                    o, r = shell.execute_command("ls -LR {0}".format(path))
+                    o, r = shell.execute_command("ls -LR '{0}'".format(path))
                     shell.log_command_output(o, r)
 
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
