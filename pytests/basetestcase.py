@@ -330,6 +330,8 @@ class BaseTestCase(unittest.TestCase):
     """
     def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1000):
         tasks = []
+        if len(self.buckets) > 1:
+            batch_size = 1
         for bucket in self.buckets:
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
         for task in tasks:
