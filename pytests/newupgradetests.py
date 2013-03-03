@@ -24,7 +24,7 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
             self._upgrade(upgrade_version, self.master)
             self.sleep(self.expire_time)
             if not self.is_linux:
-                self.wait_node_restarted(self.master, wait_if_warmup=True, check_service=True)
+                self.wait_node_restarted(self.master, wait_time=600, wait_if_warmup=True, check_service=True)
             remote = RemoteMachineShellConnection(self.master)
             for bucket in self.buckets:
                 remote.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)

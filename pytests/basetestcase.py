@@ -530,5 +530,7 @@ class BaseTestCase(unittest.TestCase):
             if str(output).lower().find("running") != -1:
                 self.log.info("Couchbase service is running")
                 return
-            self.sleep(10, "couchbase service is not running")
+            else:
+                self.log.warn("couchbase service is not running. {0}".format(output))
+                self.sleep(10)
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
