@@ -95,7 +95,6 @@ class Installer(object):
         remote_client = RemoteMachineShellConnection(params["server"])
         remote_client.membase_uninstall()
         remote_client.couchbase_uninstall()
-        remote_client.couchbase_single_uninstall()
 
     def build_url(self, params):
         _errors = []
