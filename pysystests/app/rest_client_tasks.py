@@ -1,7 +1,7 @@
 ##!/usr/bin/env python
 """
 
-rest tasks 
+rest tasks
 
 """
 from __future__ import absolute_import
@@ -25,16 +25,22 @@ SDK_PORT = 50008
 
 
 @celery.task
-def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", password = "", type_ = "view", batch_size = 100, limit=1000):
+def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", password = "", type_ = "view", batch_size = 100):
+
+    if params is not None:
+        params = urllib2.urllib.urlencode(params)
 
     pool = eventlet.GreenPool(batch_size)
     capiUrl = "http://%s:%s/couchBase/" % (cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT)
-    url = capiUrl + '%s/_design/%s/_%s/%s?limit=%s' % (bucket,
-                                                design_doc_name, type_,
-                                                view_name, limit) # TODO: support filters
+
+    url = capiUrl + '%s/_design/%s/_%s/%s?%s' % (bucket,
+                                                 design_doc_name, type_,
+                                                 view_name, params)
 
     for res in pool.imap(send_query, [url for i in xrange(count)]):
         pass
+
+    logger.error(url)
 
 def send_query(url):
 

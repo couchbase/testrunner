@@ -45,7 +45,7 @@ def mset(keys, template, bucket = "default", isupdate = False, password = ""):
                "password" : password}
     rc = _send_msg(message)
 
-    return keys
+    return keys, rawTemplate
 
 @celery.task
 def mget(keys, bucket = "default", password = ""):
@@ -82,7 +82,6 @@ def delete(key, bucket = "default", password = ""):
     return  _send_msg(message)
 
 @celery.task
-
 def mdelete(keys, bucket = "default", password = ""):
     message = {"command" : "mdelete",
                "bucket" : bucket,

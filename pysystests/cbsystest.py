@@ -31,6 +31,7 @@ def add_template_parser(parent):
     parser.add_argument("--kvpairs",   nargs='+', help="list of kv items i.e=> state:ca,age:28,company:cb")
     parser.add_argument("--type",    help="json/non-json default is json", default="json")
     parser.add_argument("--size", nargs='+',    help="size of documents. padding is used if necessary")
+    parser.add_argument("--indexed_key",   help="the key from this templates kvpair that is indexed in a view", default="json", metavar = "KEY")
 
 #TODO    parser.add_argument("--blobs",   nargs='+', help="data strings for non-json docs")
     parser.set_defaults(handler=import_template)
@@ -92,6 +93,14 @@ def add_query_parser(parent):
     parser.add_argument("--bucket", help="Bucket with documents to query", default="default", type=str)
     parser.add_argument("--password", help="Sasl password of bucket", default="", type=str)
     parser.add_argument("--queries_per_sec", help="Queries per second", default=1, type=int, metavar = 'N')
+    parser.add_argument("--template", help="Template used to create indxed documents", default="default", type=str)
+    parser.add_argument("--include_filters", help="<startkey_docid, endkey_docid, descending, stale_ok, stale_false>", default=["startkey", "endkey", "limit"], nargs='+', metavar="")
+    parser.add_argument("--exclude_filters", help="<startkey, endkey, limit>", default=[], nargs='+', metavar="")
+    parser.add_argument("--startkey", help="manually specify value for startkey <default=auto>", type=str)
+    parser.add_argument("--endkey", help="manually specify value for endkey <default=auto>", type=str)
+    parser.add_argument("--startkey_docid", help="manually specify value for startkey_docid <default=auto>", type=str)
+    parser.add_argument("--endkey_docid", help="manually specify value for endkey_docid <default=auto>", type=str)
+    parser.add_argument("--limit", help="number of rows in query results", type=int, default=10)
     parser.set_defaults(handler=perform_query_tasks)
 
 def add_test_parser(parent):
@@ -201,12 +210,13 @@ def import_template(args):
 
     #TODO binary blobs
 
-    template = { "name" : args.name,
-                 "ttl" : args.ttl,
-                 "flags" : args.flags,
-                 "cc_queues" : args.cc_queues,
-                 "size" : args.size,
-                 "kv" : val}
+    template = {"name" : args.name,
+                "ttl" : args.ttl,
+                "flags" : args.flags,
+                "cc_queues" : args.cc_queues,
+                "size" : args.size,
+                "kv" : val,
+                "indexed_key" : args.indexed_key}
     cluster = args.cluster
 
     rabbitHelper = RabbitHelper(args.broker)
@@ -253,7 +263,16 @@ def perform_query_tasks(args):
                 'ddoc' : args.ddoc,
                 'view' : args.view,
                 'bucket' : args.bucket,
-                'password' : args.password}
+                'password' : args.password,
+                'template' : args.template,
+                'include_filters' : args.include_filters,
+                'exclude_filters' : args.exclude_filters,
+                'startkey' : args.startkey,
+                'endkey' : args.endkey,
+                'startkey_docid' : args.startkey_docid,
+                'endkey_docid' : args.endkey_docid,
+                'limit' : args.limit}
+
     cluster = args.cluster
 
     rabbitHelper = RabbitHelper(args.broker)

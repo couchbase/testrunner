@@ -112,6 +112,7 @@ class CacheHelper():
     BUCKETSTATUSCACHEKEY = "BUCKETSTATUSCACHEKEY"
     NODESTATSCACHEKEY = "NODESTATSCACHEKEY"
     QUERYCACHEKEY = "QUERYCACHEKEY"
+    QBUILDCACHEKEY = "QBUILDCACHEKEY"
 
     @staticmethod
     def workloads():
@@ -128,6 +129,10 @@ class CacheHelper():
     @staticmethod
     def queries():
         return ObjCacher().allinstances(CacheHelper.QUERYCACHEKEY)
+
+    @staticmethod
+    def qbuilders():
+        return ObjCacher().allinstances(CacheHelper.QBUILDCACHEKEY)
 
     @staticmethod
     def active_queries():

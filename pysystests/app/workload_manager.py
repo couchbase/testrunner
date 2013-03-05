@@ -11,6 +11,7 @@ from rabbit_helper import PersistedMQ
 from celery import current_task
 from celery import Task
 from cache import ObjCacher, CacheHelper
+from app.query import updateQueryBuilder
 import random
 import testcfg as cfg
 from celery.exceptions import TimeoutError
@@ -25,7 +26,7 @@ def conn():
     pass
 
 """Monitors the workload queue for new messages sent from clients.
-When a message is received it is caached and sent to sysTestRunner for processing 
+When a message is received it is caached and sent to sysTestRunner for processing
 """
 @celery.task(base = PersistedMQ, ignore_result = True)
 def workloadConsumer(workloadQueue = "workload_default", templateQueue = "workload_template_default"):
@@ -77,18 +78,18 @@ def workloadConsumer(workloadQueue = "workload_default", templateQueue = "worklo
 
 """Runs the provided workload against configured bucket.  If previous workload has
 postcondition dependencies then bucket will be set to blocking mode, meaning workloads
-cannot overwrite each other.  Note, if postcondition of previous workload never 
+cannot overwrite each other.  Note, if postcondition of previous workload never
 finishes you will have to manually kill task via cbsystest script.
 """
 @celery.task(ignore_result = True)
 def sysTestRunner(workload):
-   
+
 
     bucket = str(workload.bucket)
     prevWorkload = None
 
     bucketStatus = BucketStatus.from_cache(bucket)
-    
+
     if bucketStatus is not None:
         prevWorkload = bucketStatus.latestWorkload(bucket)
     else:
@@ -108,7 +109,7 @@ def sysTestRunner(workload):
 
     elif bucketStatus.mode(bucket) == "nonblocking":
         if prevWorkload is not None:
-            # disable previously running 
+            # disable previously running
             # workload if bucket in nonblocking mode.
             # if current workload has no preconditions
             # it's not allowed to override previous workload
@@ -136,14 +137,17 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
 
     if sender == client.mset:
 
-        if isinstance(retval,list):
+        if isinstance(retval,tuple):
             isupdate = args[3]
             if isupdate == False:
                 # allow multi set keys to be consumed
-                keys = retval 
+                keys = retval[0]
+                template = retval[1]
+                bucket = args[2]
 
-                # note template was converted to dict for mset
-                template = args[1]
+                if 'indexed_key' in args[1]:
+                    if keys is not None and len(keys) > 0:
+                        updateQueryBuilder(template, bucket, keys[0])
 
                 # put created item into specified cc_queues (if specified)
                 # and item is not set to expire
@@ -155,7 +159,6 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
                             rabbitHelper.putMsg(queue, json.dumps(keys))
         else:
             logger.error("Error during multi set")
-            logger.error(retval)
 
 task_postrun.connect(task_postrun_handler)
 
@@ -180,10 +183,10 @@ def run(workload, prevWorkload = None):
 
     inflight = 0
     while workload.active:
-        
+
         if inflight < 20:
 
-            # read doc template 
+            # read doc template
             template = Template.from_cache(str(workload.template))
 
             if template != None:
@@ -306,7 +309,7 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
             prevWorkload.active = False
             bs = BucketStatus.from_cache(bucket)
             bs.unblock(bucket)
-            
+
 
 task_prerun.connect(task_prerun_handler)
 
@@ -333,7 +336,7 @@ def taskScheduler():
                     # apply async
                     result = TaskSet(tasks = tasks).apply_async()
 
-""" scans active workloads for postcondition flags and 
+""" scans active workloads for postcondition flags and
 runs checks against bucket stats.  If postcondition
 is met, the workload is deactivated and bucket put
 back into nonblocking mode
@@ -403,7 +406,7 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
         create_tasks = create_tasks + \
             generate_set_tasks(exp_template, exp_count, bucket, password = password)
 
-    pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks 
+    pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks
     pending_tasks = json.dumps(pending_tasks)
     rabbitHelper.putMsg(task_queue, pending_tasks)
 
@@ -464,7 +467,7 @@ def generate_get_tasks(count, docs_queue, bucket="default", password = ""):
 
     return tasks
 
-    
+
 @celery.task(base = PersistedMQ)
 def generate_update_tasks(template, count, docs_queue, bucket = "default", password = ""):
 
@@ -489,7 +492,7 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default", passw
                 keys = keys[:-end_idx]
             tasks.append(client.mset.s(keys, template.__dict__, bucket, True, password = ""))
 
-    return tasks 
+    return tasks
 
 
 @celery.task(base = PersistedMQ)
@@ -564,7 +567,7 @@ def throttle_kv_ops(isovercommited=True):
 class Workload(object):
     def __init__(self, params):
         self.id = "workload_"+str(uuid.uuid4())[:7]
-        self.params = params        
+        self.params = params
         self.bucket = str(params["bucket"])
         self.password = str(params["password"])
         self.task_queue = "%s_%s" % (self.bucket, self.id)
@@ -578,8 +581,8 @@ class Workload(object):
         self.miss_perc = params["miss_perc"]
         self.preconditions = params["preconditions"]
         self.postconditions = params["postconditions"]
-        self.active = False 
-        self.consume_queue = params["consume_queue"] 
+        self.active = False
+        self.consume_queue = params["consume_queue"]
         self.cc_queues = params["cc_queues"]
         self.miss_queue = None # internal use only
         self.wait = params["wait"]
@@ -623,6 +626,7 @@ class Workload(object):
 
 class Template(object):
     def __init__(self, params):
+        logger.error(params)
         self.name = params["name"]
         self.id = self.name
         self.ttl = params["ttl"]
@@ -630,6 +634,7 @@ class Template(object):
         self.cc_queues = params["cc_queues"]
         self.kv = params["kv"]
         self.size = params["size"]
+        self.indexed_key = params["indexed_key"]
 
         # cache
         ObjCacher().store(CacheHelper.TEMPLATECACHEKEY, self)
@@ -641,7 +646,7 @@ class Template(object):
 class BucketStatus(object):
 
     def __init__(self, id_):
-        self.id = id_ 
+        self.id = id_
         self.history = {}
 
     def addTask(self, bucket, taskid, workload):
@@ -651,7 +656,7 @@ class BucketStatus(object):
         else:
             self.history[bucket]["tasks"].append(newPair)
         ObjCacher().store(CacheHelper.BUCKETSTATUSCACHEKEY, self)
-            
+
     def latestWorkload(self, bucket):
         workload = None
         if len(self.history) > 0 and bucket in self.history:
@@ -672,7 +677,7 @@ class BucketStatus(object):
         self._set_mode(bucket, "nonblocking")
 
     def _set_mode(self, bucket, mode):
-        self.history[bucket]["mode"] = mode 
+        self.history[bucket]["mode"] = mode
 
 
     def __setattr__(self, name, value):
