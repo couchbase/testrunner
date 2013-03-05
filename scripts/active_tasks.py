@@ -93,6 +93,9 @@ def main():
                     samples.update(collect_couchdb_tasks(server))
                 all_samples.extend(samples)
 
+                if samples['timestamp']:
+                    samples['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S GMT", \
+                                                time.gmtime(samples['timestamp']))
                 pprint(samples)
                 print " "
                 time.sleep(input.param('interval', 5))
