@@ -9,6 +9,7 @@ from celery.task.sets import TaskSet
 from rabbit_helper import PersistedMQ
 from cache import ObjCacher, CacheHelper
 from app.rest_client_tasks import multi_query
+from app.sdk_client_tasks import _int_float_str_gen
 from celery.exceptions import TimeoutError
 
 from celery.utils.log import get_task_logger
@@ -168,15 +169,30 @@ def generateQueryParams(template_name,
             endkey_docid = typecast(endkey_docid)
             params.update({'endkey_docid' : qbuilder.endkey_docid})
 
+        if startkey > endkey:
+            params.update({'descending' : True})
+
     return params
 
 def typecast(str_):
-    try:
-        return int(str_)
-    except ValueError:
-        return '"%s"' % str_
-    except TypeError:
-        return ""
+    val = None
+
+    try: #Int
+        val = int(str_)
+
+    except ValueError: #String
+
+        # decode magic value if specified
+        if str_.find('$') == 0:
+            val = _int_float_str_gen(str_)
+            return typecast(val)
+
+        val = '"%s"' % str_
+    except TypeError: #None
+        val = ""
+
+
+    return val
 
 class QueryBuilder(object):
     def __init__(self, template_name, bucket = "default"):
