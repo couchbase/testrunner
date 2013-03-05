@@ -1129,7 +1129,9 @@ class ViewQueryTests(unittest.TestCase):
                 rebalance = self.cluster.async_rebalance(self.servers[:i + 1], [self.servers[i]], [])
                 self.server = self.servers[i]
                 self._query_all_views(data_set.views)
+                self.log.info("Queries finished")
                 rebalance.result()
+                self.log.info("Rebalance finished")
     '''
     Test verifies querying when other thread is adding/updating/deleting other view
     Parameters:
@@ -1787,14 +1789,15 @@ class ViewQueryTests(unittest.TestCase):
                 return
             self.thread_stopped.wait(60)
             if self.thread_crashed.is_set():
+                self.log.error("Will stop all threads!")
                 for t in query_threads:
                     t.stop()
+                    self.log.error("Thread %s stopped" % str(t))
                 self._check_view_intergrity(views)
                 return
             else:
                 query_threads = [d for d in query_threads if d.is_alive()]
                 self.thread_stopped.clear()
-#        [t.join() for t in query_threads]
 
         self._check_view_intergrity(views)
 
