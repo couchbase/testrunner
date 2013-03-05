@@ -171,7 +171,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             else:
                 self.log.info("rebalance is still required")
                 self._wait_for_stats_all_buckets(servs_init)
-                self._verify_all_buckets(self.master, max_verify=self.max_verify, batch_size=1)
+                self._verify_all_buckets(self.master, timeout=None, max_verify=self.max_verify, batch_size=1)
 
     """Rebalances nodes in and out of the cluster while doing mutations.
 

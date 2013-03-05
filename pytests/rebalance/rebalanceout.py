@@ -364,8 +364,8 @@ class RebalanceOutTests(RebalanceBaseTest):
                               end=self.num_items)
         for i in reversed(range(self.num_servers)[1:]):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
-            self._load_all_buckets(self.master, self.gen_update, "update", 0)
-            self._load_all_buckets(self.master, gen_2, "delete", 0)
+            self._load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=100, timeout_secs=60)
+            self._load_all_buckets(self.master, gen_2, "delete", 0, batch_size=100, timeout_secs=60)
             rebalance.result()
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i])
@@ -385,8 +385,8 @@ class RebalanceOutTests(RebalanceBaseTest):
 
         for i in reversed(range(self.num_servers)[1:]):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
-            self._load_all_buckets(self.master, self.gen_update, "update", 0)
-            self._load_all_buckets(self.master, gen_2, "update", 5)
+            self._load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=100, timeout_secs=60)
+            self._load_all_buckets(self.master, gen_2, "update", 5, batch_size=100, timeout_secs=60)
             rebalance.result()
             self.sleep(5)
             self._load_all_buckets(self.master, gen_2, "create", 0)
