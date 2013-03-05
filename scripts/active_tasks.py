@@ -94,6 +94,7 @@ def main():
                 all_samples.extend(samples)
 
                 pprint(samples)
+                print " "
                 time.sleep(input.param('interval', 5))
             except KeyboardInterrupt:
                 break
