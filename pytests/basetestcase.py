@@ -98,8 +98,9 @@ class BaseTestCase(unittest.TestCase):
 
     def tearDown(self):
             try:
-                if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
-                    and TestInputSingleton.input.param("stop-on-failure", False))\
+                test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
+                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
+                if test_failed and TestInputSingleton.input.param("stop-on-failure", False)\
                         or self.input.param("skip_cleanup", False):
                     self.log.warn("CLEANUP WAS SKIPPED")
                 else:
