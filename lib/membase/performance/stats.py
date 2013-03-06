@@ -698,7 +698,7 @@ class StatsCollector(object):
             })
 
     def _get_xdcr_latency(self, src_client, dst_client, multi=False):
-        PREFIX = "XDCR_TIMING_"
+        PREFIX = "xdcr_track_"
         kvs = dict((PREFIX + hex(), hex()) for _ in xrange(10))
         key = PREFIX + hex()
         persisted = False
