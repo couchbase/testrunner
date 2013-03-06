@@ -107,6 +107,22 @@ class QueryWorkload(object):
         self.limit = params.get("limit")
         self.task_queue = "%s_%s" % (self.bucket, self.id)
 
+    @staticmethod
+    def defaultSpec():
+        return {"template" : "default",
+                "queries_per_sec" : 0,
+                "ddoc" : None,
+                "view" : None,
+                "bucket" : "default",
+                "password" : None,
+                "include_filters" : ["startkey", "endkey", "limit"],
+                "exclude_filters" : [],
+                "startkey" : None,
+                "endkey" : None,
+                "startkey_docid" : None,
+                "endkey_docid" : None,
+                "limit" : 10}
+
     def uniq_include_filters(self, ex_filters):
         include = ["startkey","endkey","limit"]
         [include.append(f_) for f_ in ex_filters]

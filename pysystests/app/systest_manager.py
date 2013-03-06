@@ -227,7 +227,7 @@ def _activateQueries(params):
 
 def parseQueryStr(query):
 
-    params = {"bucket" : "default"}
+    params = QueryWorkload.defaultSpec()
 
     for op in query.split(','):
         key, val = op.split(':')
@@ -241,6 +241,23 @@ def parseQueryStr(query):
             params['bucket'] = str(val)
         if key == 'password':
             params['password'] = str(val)
+        if key == 'include':
+            val = [str(v) for v in val.split(' ')]
+            params['include_filters'] = val 
+        if key == 'exclude':
+            params['exclude_filters'] = str(val)
+        if key == 't':
+            params['template'] = str(val)
+        if key == 'start':
+            params['startkey'] = str(val)
+        if key == 'end':
+            params['endkey'] = str(val)
+        if key == 'limit':
+            params['limit'] = str(val)
+        if key == 'startid':
+            params['startkey_docid'] = str(val)
+        if key == 'endid':
+            params['endkey_docid'] = str(val)
 
     return params
 
