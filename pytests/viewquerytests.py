@@ -1128,6 +1128,7 @@ class ViewQueryTests(unittest.TestCase):
         for i in xrange(1, len(self.servers)):
                 rebalance = self.cluster.async_rebalance(self.servers[:i + 1], [self.servers[i]], [])
                 self.server = self.servers[i]
+                self.log.info("Queries started!")
                 self._query_all_views(data_set.views)
                 self.log.info("Queries finished")
                 rebalance.result()
@@ -1797,6 +1798,7 @@ class ViewQueryTests(unittest.TestCase):
                 return
             else:
                 query_threads = [d for d in query_threads if d.is_alive()]
+                self.log.error("Current amount of threads %s" % len(query_threads))
                 self.thread_stopped.clear()
 
         self._check_view_intergrity(views)

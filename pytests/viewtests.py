@@ -494,6 +494,7 @@ class ViewBaseTests(unittest.TestCase):
     @staticmethod
     def _get_indexer_task_pid(self, rest, ddoc_name):
         active_tasks = rest.active_tasks()
+        print active_tasks
         if u'error' in active_tasks:
             return None
         if active_tasks:
@@ -535,7 +536,10 @@ class ViewBaseTests(unittest.TestCase):
                 rest = RestConnection(server)
                 self.log.info('Check index for ddoc %s , server %s' % (ddoc, server.ip))
                 end_time = time.time() + timeout
+                self.log.info('Start getting index for ddoc %s , server %s' % (ddoc, server.ip))
                 old_pid, is_pid_blocked = ViewBaseTests._get_indexer_task_pid(self, rest, ddoc)
+                print old_pid
+                print is_pid_blocked
                 if not old_pid:
                     self.log.info('Index for ddoc %s is not going on' % ddoc)
                     continue
