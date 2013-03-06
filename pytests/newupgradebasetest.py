@@ -141,7 +141,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             remote.disconnect()
             self.sleep(10)
             if self.is_linux:
-                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT)
+                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4)
             else:
                 self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, check_service=True)
             if not skip_init:
