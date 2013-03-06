@@ -202,7 +202,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
-        self.do_merge_buckets(self.src_master, self.dest_master, True, bucket_sasl)
+        self.do_merge_bucket(self.src_master, self.dest_master, True, bucket_sasl)
         bucket_sasl = self._get_bucket('bucket0', self.dest_master)
         gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
             start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
@@ -211,7 +211,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._load_bucket(bucket_sasl, self.dest_master, gen_delete2, 'delete', exp=0)
         self._load_bucket(bucket_sasl, self.dest_master, gen_update2, 'create', exp=self._expires)
 
-        self.do_merge_buckets(self.dest_master, self.src_master, False, bucket_sasl)
-        self.do_merge_buckets(self.src_master, self.dest_master, False, bucket_default)
-        self.do_merge_buckets(self.dest_master, self.src_master, False, bucket_standard)
+        self.do_merge_bucket(self.dest_master, self.src_master, False, bucket_sasl)
+        self.do_merge_bucket(self.src_master, self.dest_master, False, bucket_default)
+        self.do_merge_bucket(self.dest_master, self.src_master, False, bucket_standard)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
