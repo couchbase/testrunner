@@ -57,10 +57,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.is_linux = True
 
     def tearDown(self):
-        if ((hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) or \
-                (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)):
+        test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
+                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
+        if test_failed:
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown()
+                if self.input.param('BUGS', False):
+                    self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
         else:
             try:
                 #cleanup only nodes that are in cluster
