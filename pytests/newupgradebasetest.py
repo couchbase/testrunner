@@ -57,7 +57,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.is_linux = True
 
     def tearDown(self):
-        if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)):
+        if ((hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) or \
+                (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)):
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown()
         else:
@@ -240,7 +241,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def warm_up_node(self, warmup_nodes=None):
         if not warmup_nodes:
-            warmup_nodes = [self.servers[:self.nodes_init][-1],]
+            warmup_nodes = [self.servers[:self.nodes_init][-1], ]
         for warmup_node in warmup_nodes:
             shell = RemoteMachineShellConnection(warmup_node)
             shell.stop_couchbase()
