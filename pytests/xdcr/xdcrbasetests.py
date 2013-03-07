@@ -82,7 +82,7 @@ class XDCRBaseTest(unittest.TestCase):
 
             self.log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
                 .format(self._case_number, self._testMethodName))
-            if not self._input.param("skip_cleanup", False):  # and str(self.__class__).find('upgradeXDCR') == -1:
+            if not self._input.param("skip_cleanup", False) and str(self.__class__).find('upgradeXDCR') == -1:
                 self._cleanup_previous_setup()
 
             self._init_clusters(self._disabled_consistent_view)
@@ -119,6 +119,8 @@ class XDCRBaseTest(unittest.TestCase):
 
     def tearDown(self):
         try:
+            test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
+                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
             self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
                     .format(self._case_number, self._testMethodName))
             self._end_replication_flag = 1
@@ -130,6 +132,10 @@ class XDCRBaseTest(unittest.TestCase):
                     self._stats_thread4.join()
                     self._stats_thread5.join()
                     self._stats_thread6.join()
+            elif test_failed:
+                if test_failed:
+                    self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
+                    return
             if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
                 self.log.info("Type of run: BIDIRECTIONAL XDCR")
             else:
