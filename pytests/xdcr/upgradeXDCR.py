@@ -29,7 +29,10 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.queue = Queue.Queue()
 
     def tearDown(self):
-        XDCRReplicationBaseTest.tearDown(self)
+        try:
+            XDCRReplicationBaseTest.tearDown(self)
+        finally:
+            self.cluster.shutdown()
 
     def _override_clusters_structure(self):
         TestInputSingleton.input.clusters[0] = self.servers[:self.src_init]
