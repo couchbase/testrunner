@@ -13,10 +13,14 @@ from remote.remote_util import RemoteMachineShellConnection
 from app.celery import celery
 import testcfg as cfg
 import json
+import time
 import eventlet
 from eventlet.green import urllib2
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
+
+if cfg.SERIESLY_IP != '':
+    from seriesly import Seriesly
 
 ###
 SDK_IP = '127.0.0.1'
@@ -37,8 +41,12 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
                                                  design_doc_name, type_,
                                                  view_name, params)
 
-    for res in pool.imap(send_query, [url for i in xrange(count)]):
+    for qtime, data in pool.imap(send_query, [url for i in xrange(count)]):
         pass
+
+    if cfg.SERIESLY_IP != '':
+        # TODO: store the most recent query response time 'qtime' into seriesly
+        logger.error(qtime)
 
     logger.error(url)
 
@@ -50,13 +58,27 @@ def send_query(url):
                'Authorization': 'Basic %s' % authorization,
                'Accept': '*/*'}
     try:
-        req = urllib2.Request(url, headers = headers)
-        data = urllib2.urlopen(req)
+        qtime, data = timed_url_request(url, headers)
 
         # log 500 chars to output
         logger.error(data.read()[:500])
     except urllib2.URLError:
         pass
+
+    return qtime, data
+
+def timed_url_request(url, headers):
+    start = time.time()
+    data = url_request(url, headers)
+    end = time.time()
+    qtime = end - start
+    return qtime, data
+
+def url_request(url, headers):
+    req = urllib2.Request(url, headers = headers)
+    data = urllib2.urlopen(req)
+    return data
+
 
 def _send_msg(message):
     sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
