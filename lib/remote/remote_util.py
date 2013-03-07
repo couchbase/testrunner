@@ -641,7 +641,7 @@ class RemoteMachineShellConnection:
             else:
                 content = 'c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
                                                             version, name, product_version, task)
-            log.info("create {0} task with content:{0}".format(task, content))
+            log.info("create {0} task with content:{1}".format(task, content))
             f.write(content)
             log.info('Successful write to {0}'.format(found))
             sftp.close()
