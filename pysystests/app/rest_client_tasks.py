@@ -45,9 +45,14 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
         pass
 
     if cfg.SERIESLY_IP != '':
-        # TODO: store the most recent query response time 'qtime' into seriesly
-        logger.error(qtime)
+        # store the most recent query response time 'qtime' into seriesly
+        seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
+        #TODO: do not hardcode fast...we should have per/testdbs
+        db='fast'
+        seriesly[db].append({'query_latency' : qtime})
 
+    # log to logs/celery-query.log
+    logger.error(qtime)
     logger.error(url)
 
 def send_query(url):
