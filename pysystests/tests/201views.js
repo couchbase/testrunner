@@ -50,8 +50,12 @@
 			"workload" : [{"bucket" : "default",
 					"template" : "default",
 					"spec" : "s:10,u:10,g:75,d:5,ccq:default2keys,ops:30000"},
-					{"spec" : "b:saslbucket,pwd:password,u:20,g:80,ccq:sasl2keys,ops:30000"}],
-			"runtime" : 3600
+					{"spec" : "b:saslbucket,pwd:password,u:5,d:60,g:35,ccq:sasl2keys,ops:30000"}],
+			"query" : ["ddoc:d1,view:v1,qps:200,limit:100,start:$int1",
+					   	"ddoc:d1,view:v2,qps:200,limit:100,start:$int1",
+						"bucket:saslbucket,password:password,ddoc:d11,view:v1,qps:200,limit:100,start:$int1"
+						"bucket:saslbucket,password:password,ddoc:d11,view:v2,qps:200,limit:100,start:$int1"],
+			"runtime" : 7200
 		},
 		"5" :
 		{
@@ -61,9 +65,21 @@
 					"template" : "default",
 					"spec" : "s:10,u:25,g:50,d:10,e:5,ttl:60000,ccq:default2keys,ops:10000"},
 					{"spec" : "b:saslbucket,pwd:password,s:10,u:35,g:40,d:10,e:5,ttl:60000,ccq:sasl2keys,ops:10000"}],
+			"cluster" : {"add" : "10.6.2.45"},
 			"runtime" : 32000
 		},
 		"6" :
+		{
+			"name" : "failover_one",
+			"desc" : "FL1",
+			"workload" : [{"bucket" : "default",
+					"template" : "default",
+					"spec" : "s:10,u:25,g:50,d:10,e:5,ttl:60000,ccq:default2keys,ops:10000"},
+					{"spec" : "b:saslbucket,pwd:password,s:10,u:35,g:40,d:10,e:5,ttl:60000,ccq:sasl2keys,ops:10000"}],
+			"cluster" : {"failover" : "10.6.2.44"},
+			"runtime" : 32000
+		},
+		"7" :
 		{
 			"name" : "restart_all",
 			"desc" :  "CR-3",
