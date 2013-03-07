@@ -414,12 +414,13 @@ class ViewBaseTests(unittest.TestCase):
         num_tries = num_tries or self.input.param('num-tries', 40)
         timeout = self.input.param('timeout', 10)
         results = json.loads("{}")
+        timeout_for_connection = 60000
         #if view name starts with "dev" then we should append the full_set
         for i in range(0, num_tries):
             try:
                 start = time.time()
                 #full_set=true&connection_timeout=60000&limit=10&skip=0
-                params = {"connection_timeout": 60000}
+                params = {"connection_timeout": timeout_for_connection}
                 params.update(extra_params)
                 if view.find("dev_") == 0:
                     params["full_set"] = "true"
@@ -472,6 +473,8 @@ class ViewBaseTests(unittest.TestCase):
                         self.fail("unable to get view_results for {0} after {1} tries due to error {2}"
                                   .format(view, num_tries, ex))
                     time.sleep(timeout)
+                    if str(ex).find('timeout') != -1:
+                        timeout_for_connection = 120000
                 else:
                     if u'rows' in results:
                         self.fail("Results are returned partially, but also error appears: {0}".format(ex))
