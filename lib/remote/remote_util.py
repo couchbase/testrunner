@@ -693,14 +693,6 @@ class RemoteMachineShellConnection:
         command = ''
         if info.type.lower() == 'windows':
                 self.membase_upgrade_win(info.architecture_type, info.windows_name, build.name)
-#                self.modify_bat_file('/cygdrive/c/automation', bat_file, "cb", version, "modreg")
-#                self.stop_schedule_tasks()
-#                log.info('sleep for 5 seconds before running task schedule to modify version')
-#                time.sleep(5)
-#                output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
-#                self.log_command_output(output, error)
-#                log.info('pause 30 seconds to execute modify register script')
-                time.sleep(30)
                 log.info('********* continue upgrade process **********')
 
         elif info.deliverable_type == 'rpm':
@@ -733,6 +725,8 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
         time.sleep(100)
+        output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
+        self.log_command_output(output, error)
         self.stop_schedule_tasks()
         #run installer in second time as workaround for:
         #Installer needs to update registry value in order to upgrade from the previous version.
@@ -744,6 +738,8 @@ class RemoteMachineShellConnection:
         self.log.info("installed version:")
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info('wait 60 seconds for server to start up completely')
+        output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
+        self.log_command_output(output, error)
         time.sleep(60)
 
     def couchbase_single_install(self, build):
@@ -787,6 +783,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             success &= self.log_command_output(output, error, track_words)
             self.wait_till_file_added("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
                                           timeout_in_seconds=600)
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
+            self.log_command_output(output, error)
         elif info.deliverable_type in ["rpm", "deb"]:
             log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
             if info.deliverable_type == 'rpm':
@@ -821,6 +819,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             success &= self.log_command_output(output, error, track_words)
             self.wait_till_file_added("/cygdrive/c/Program Files/{0}/Server/".format(server_type.title()), 'VERSION.txt',
                                           timeout_in_seconds=600)
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
+            self.log_command_output(output, error)
         elif info.deliverable_type in ["rpm", "deb"]:
             if startserver and vbuckets == None:
                 environment = ""
@@ -890,6 +890,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             self.wait_till_file_added(remote_path, "VERSION.txt", timeout_in_seconds=600)
             log.info('wait 30 seconds for server to start up completely')
             time.sleep(30)
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+            self.log_command_output(output, error)
             return success
 
 
@@ -991,6 +993,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                                             timeout_in_seconds=120)
                 log.info("Wait for 30 seconds before doing something else")
                 time.sleep(30)
+                output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+                self.log_command_output(output, error)
             else:
                 log.info("No couchbase single server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
@@ -1059,6 +1063,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
                 log.info('sleep 30 seconds before running the next job ...')
                 time.sleep(30)
+                output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+                self.log_command_output(output, error)
             else:
                 log.info("No couchbase server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
@@ -1123,6 +1129,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
             log.info('sleep 15 seconds before running the next job ...')
             time.sleep(15)
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+            self.log_command_output(output, error)
         else:
             log.info('No couchbase server on this server')
 
@@ -1178,6 +1186,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
                 log.info('sleep 30 seconds before running the next job ...')
                 time.sleep(30)
+                output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+                self.log_command_output(output, error)
             else:
                 log.info("No membase server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
