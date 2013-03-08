@@ -73,36 +73,32 @@ class OpsDuringBackupTests(BackupBaseTest):
         We first load amount of items. After that, when we start backup, we begin do mutations on these existing items."""
 
         gen_load = BlobGenerator('mysql', 'mysql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items/2-1))
-        gen_expire = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items/2, end=(self.num_items*3/4-1))
-        gen_delete = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items*3/4, end=self.num_items)
+        gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items / 2 - 1))
+        gen_expire = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items / 2, end=(self.num_items * 3 / 4 - 1))
+        gen_delete = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items * 3 / 4, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         mutate_threads = []
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
-                mutate_threads.append(Thread(target=self._load_all_buckets,
-                                             name="update",
-                                             args=(self.master, gen_update, "update", 0, 1, 0, True)))
+                mutate_threads.append(self._async_load_all_buckets(self.master, gen_update, "update", 0, 1, 0, True, batch_size=20000))
+
             if("delete" in self.doc_ops):
-                mutate_threads.append(Thread(target=self._load_all_buckets,
-                                             name="delete",
-                                             args=(self.master, gen_delete, "delete", 0, 1, 0, True)))
+                mutate_threads.append(self._async_load_all_buckets(self.master, gen_delete, "delete", 0, 1, 0, True, batch_size=20000))
+
             if("expire" in self.doc_ops):
-                mutate_threads.append(Thread(target=self._load_all_buckets,
-                                             name="expire",
-                                             args=(self.master, gen_expire, "update", self.expire_time, 1, 0, True)))
-        for t in mutate_threads:
-            t.start()
+                mutate_threads.append(self._async_load_all_buckets(self.master, gen_expire, "update", self.expire_time, 1, 0, True, batch_size=20000))
 
         first_backup_thread = Thread(target=self.shell.execute_cluster_backup,
                                      name="backup",
                                      args=(self.couchbase_login_info, self.backup_location, self.command_options))
         first_backup_thread.start()
         first_backup_thread.join()
+
         for t in mutate_threads:
-            t.join()
+            for task in t:
+                task.result()
 
         kvs_before = {}
         for bucket in self.buckets:
