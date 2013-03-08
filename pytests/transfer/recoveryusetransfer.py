@@ -17,9 +17,8 @@ class RecoveryUseTransferTests(TransferBaseTest):
         self.os = info.type.lower()
 
     def tearDown(self):
-        super(RecoveryUseTransferTests, self).tearDown()
         if not self.input.param("skip_cleanup", True):
-            if times_tear_down_called > 1 :
+            if self.times_teardown_called > 1 :
                 if self.os == 'windows':
                     self.shell.delete_files("/cygdrive/c%s" % (self.backup_location))
                 else:
@@ -27,14 +26,15 @@ class RecoveryUseTransferTests(TransferBaseTest):
                 self.shell.disconnect()
                 del self.buckets
         if self.input.param("skip_cleanup", True):
-            if self.case_number > 1 or self.times_teardown_called >1:
+            if self.case_number > 1 or self.times_teardown_called > 1:
                 if self.os == 'windows':
                     self.shell.delete_files("/cygdrive/c%s" % (self.backup_location))
                 else:
                     self.shell.delete_files(self.backup_location)
                 self.shell.disconnect()
                 del self.buckets
-        self.times_teardown_called +=1
+        self.times_teardown_called += 1
+        super(RecoveryUseTransferTests, self).tearDown()
 
     def recover_to_cbserver(self):
         """Recover data with 2.0 couchstore files to a 2.0 online server
@@ -75,7 +75,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
         time.sleep(30)
 
         self._wait_for_stats_all_buckets([self.server_recovery])
-        self._verify_all_buckets(self.server_recovery, 1, self.wait_timeout*50, self.max_verify, True, 1)
+        self._verify_all_buckets(self.server_recovery, 1, self.wait_timeout * 50, self.max_verify, True, 1)
         self._verify_stats_all_buckets([self.server_recovery])
 
     def recover_to_backupdir(self):
@@ -118,14 +118,14 @@ class RecoveryUseTransferTests(TransferBaseTest):
         time.sleep(30)
 
         self._wait_for_stats_all_buckets([self.server_origin])
-        self._verify_all_buckets(self.server_origin, 1, self.wait_timeout*50, self.max_verify, True, 1)
+        self._verify_all_buckets(self.server_origin, 1, self.wait_timeout * 50, self.max_verify, True, 1)
         self._verify_stats_all_buckets([self.server_origin])
 
     def load_data(self):
         gen_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items/2-1))
-        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items/2, end=(self.num_items*3/4-1))
-        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items*3/4, end=self.num_items)
+        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items / 2 - 1))
+        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items / 2, end=(self.num_items * 3 / 4 - 1))
+        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 3 / 4, end=self.num_items)
         self._load_all_buckets(self.server_origin, gen_load, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
 
         if(self.doc_ops is not None):
