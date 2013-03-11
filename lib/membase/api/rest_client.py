@@ -134,6 +134,44 @@ class RestHelper(object):
         log.info('node {0} status_reached : {1}'.format(node.id, status_reached))
         return status_reached
 
+    def _wait_for_task_pid(self, pid, end_time, ddoc_name):
+        while (time.time() < end_time):
+            new_pid, _ = self.rest._get_indexer_task_pid(self, ddoc_name)
+            if pid == new_pid:
+                time.sleep(5)
+                continue
+            else:
+                return
+
+    def _wait_for_indexer_ddoc(self, servers, ddoc_name, timeout=300):
+        nodes = self.rest.get_nodes()
+        servers_to_check = []
+        for node in nodes:
+            for server in servers:
+                if node.ip == server.ip and str(node.port) == str(server.port):
+                    servers_to_check.append(server)
+        for server in servers_to_check:
+            try:
+                rest = RestConnection(server)
+                log.info('Check index for ddoc %s , server %s' % (ddoc_name, server.ip))
+                end_time = time.time() + timeout
+                log.info('Start getting index for ddoc %s , server %s' % (ddoc_name, server.ip))
+                old_pid, is_pid_blocked = rest._get_indexer_task_pid(ddoc_name)
+                if not old_pid:
+                    log.info('Index for ddoc %s is not going on, server %s' % (ddoc_name, server.ip))
+                    continue
+                while is_pid_blocked:
+                    log.info('Index for ddoc %s is blocked, server %s' % (ddoc_name, server.ip))
+                    rest._wait_for_task_pid(old_pid, end_time, ddoc_name)
+                    old_pid, is_pid_blocked = rest._get_indexer_task_pid(ddoc_name)
+                    if time.time() > end_time:
+                        log.error("INDEX IS STILL BLOKED node %s ddoc % pid %" % (server, ddoc_name, old_pid))
+                        break
+                if old_pid:
+                    log.info('Index for ddoc %s is running, server %s' % (ddoc_name, server.ip))
+                    rest._wait_for_task_pid(old_pid, end_time, ddoc_name)
+            except Exception, ex:
+                log.error('unable to check index on server %s because of %s' % (server.ip, str(ex)))
 
 class RestConnection(object):
 
@@ -332,6 +370,28 @@ class RestConnection(object):
             raise DesignDocCreationException(design_doc_name, content)
         return json.loads(content)
 
+    def is_index_triggered(self, ddoc_name):
+        run, block = self._get_indexer_task_pid(ddoc_name)
+        if run or block:
+            return True
+        else:
+            return False
+
+    def _get_indexer_task_pid(self, ddoc_name):
+        active_tasks = self.active_tasks()
+        if u'error' in active_tasks:
+            return None
+        if active_tasks:
+            for task in active_tasks:
+                if task['type'] == 'indexer' and task['indexer_type'] == 'main':
+                    for ddoc in task['design_documents']:
+                        if ddoc == ('_design/%s' % ddoc_name):
+                            return task['pid'], False
+                if task['type'] == 'blocked_indexer' and task['indexer_type'] == 'main':
+                    for ddoc in task['design_documents']:
+                        if ddoc == ('_design/%s' % ddoc_name):
+                            return task['pid'], True
+        return None, None
 
     def query_view(self, design_doc_name, view_name, bucket, query, timeout=120, invalid_query=False, type="view"):
         status, content = self._query(design_doc_name, view_name, bucket, type, query, timeout)

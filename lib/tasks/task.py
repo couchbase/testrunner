@@ -11,7 +11,7 @@ import crc32
 from httplib import IncompleteRead
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import KVStoreAwareSmartClient, VBucketAwareMemcached, MemcachedClientHelper
@@ -547,6 +547,39 @@ class LoadDocumentsTask(GenericLoadingTask):
             self.set_exception(Exception("Bad operation type: %s" % self.op_type))
         self.kv_store.release_partition(key)
 
+class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
+    def __init__(self, server, bucket, generators, kv_store, op_type, exp, flag=0, only_store_hash=True):
+        LoadDocumentsTask.__init__(self, server, bucket, generators[0], kv_store, op_type, exp, flag=flag, only_store_hash=only_store_hash)
+        self.generators = generators
+        self.op_types = None
+        self.buckets = None
+        if isinstance(op_type, list):
+            self.op_types = op_type
+        if isinstance(bucket, list):
+            self.buckets = bucket
+
+    def run(self):
+        if self.op_types:
+            if len(self.op_types) != len(self.generators):
+                self.state = FINISHED
+                self.set_exception(Exception("not all generators have op_type!"))
+        if self.buckets:
+            if len(self.op_types) != len(self.buckets):
+                self.state = FINISHED
+                self.set_exception(Exception("not all generators have bucket specified!"))
+        iterator = 0
+        for generator in self.generators:
+            self.generator = generator
+            if self.op_types:
+                self.op_type = self.op_types[iterator]
+            if self.buckets:
+                self.bucket = self.buckets[iterator]
+            while self.has_next() and not self.done():
+                self.next()
+            iterator += 1
+        self.state = FINISHED
+        self.set_result(True)
+
 class BatchedLoadDocumentsTask(GenericLoadingTask):
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=30):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
@@ -1058,7 +1091,8 @@ class VerifyRevIdTask(GenericLoadingTask):
                 self.set_exception(error)
 
 class ViewCreateTask(Task):
-    def __init__(self, server, design_doc_name, view, bucket="default", with_query=True, check_replication=False):
+    def __init__(self, server, design_doc_name, view, bucket="default", with_query=True,
+                 check_replication=False, ddoc_options=None):
         Task.__init__(self, "create_view_task")
         self.server = server
         self.bucket = bucket
@@ -1066,10 +1100,13 @@ class ViewCreateTask(Task):
         prefix = ""
         if self.view:
             prefix = ("", "dev_")[self.view.dev_view]
+        if design_doc_name.find('/') != -1:
+            design_doc_name = design_doc_name.replace('/', '%2f')
         self.design_doc_name = prefix + design_doc_name
         self.ddoc_rev_no = 0
         self.with_query = with_query
         self.check_replication = check_replication
+        self.ddoc_options = ddoc_options
         self.rest = RestConnection(self.server)
 
     def execute(self, task_manager):
@@ -1096,6 +1133,8 @@ class ViewCreateTask(Task):
             #create an empty design doc
             else:
                 ddoc = DesignDocument(self.design_doc_name, [])
+            if self.ddoc_options:
+                ddoc.options = self.ddoc_options
 
         try:
             self.rest.create_design_document(self.bucket, ddoc)
@@ -1382,6 +1421,201 @@ class ViewQueryTask(Task):
             self.log.error("Unexpected Exception Caught")
             self.set_exception(e)
 
+class MonitorViewQueryResultsTask(Task):
+    def __init__(self, servers, design_doc_name, view,
+                 query, expected_docs=None, bucket="default",
+                 retries=100, error=None, verify_rows=False,
+                 server_to_query=0, type_query="view"):
+        Task.__init__(self, "query_view_task")
+        self.servers = servers
+        self.bucket = bucket
+        self.view_name = view.name
+        self.view = view
+        self.design_doc_name = design_doc_name
+        self.query = query
+        self.retries = retries
+        self.current_retry = 0
+        self.timeout = 900
+        self.error = error
+        self.expected_docs = expected_docs
+        self.verify_rows = verify_rows
+        self.rest = RestConnection(self.servers[server_to_query])
+        self.results = None
+        self.connection_timeout = 60000
+        self.type_query = type_query
+        self.query["connection_timeout"] = self.connection_timeout
+        if self.design_doc_name.find("dev_") == 0:
+            self.query["full_set"] = "true"
+
+    def execute(self, task_manager):
+
+        try:
+            self.current_retry += 1
+            if self.type_query == 'all_docs':
+                self.results = self.rest.all_docs(self.bucket, self.query, timeout=self.timeout)
+            else:
+                self.results = \
+                    self.rest.query_view(self.design_doc_name, self.view_name, self.bucket,
+                                         self.query, self.timeout)
+            raised_error = self.results.get(u'error', '') or ''.join(self.results.get(u'errors', []))
+            if raised_error:
+                raise QueryViewException(self.view_name, raised_error)
+            else:
+                self.log.info("view %s, query %s: expected- %s, actual -%s" % (
+                                        self.design_doc_name, self.query,
+                                        len(self.expected_docs),
+                                        len(self.results.get(u'rows', []))))
+                self.state = CHECKING
+                task_manager.schedule(self)
+        except QueryViewException, ex:
+            self.log.error("During query run (ddoc=%s, query=%s, server=%s) error is: %s" %(
+                                self.design_doc_name, self.query, self.servers[0].ip, str(ex)))
+            if self.error and str(ex).find(self.error) != -1:
+                self.state = FINISHED
+                self.set_result({"passed" : True,
+                                 "errors" : str(ex)})
+            elif self.current_retry == self.retries:
+                self.state = FINISHED
+                self.set_result({"passed" : False,
+                                 "errors" : str(ex)})
+            elif str(ex).find('view_undefined') != -1 or \
+                str(ex).find('not_found') != -1 or \
+                str(ex).find('unable to reach') != -1 or \
+                str(ex).find('socket error') != -1 or \
+                str(ex).find('econnrefused') != -1 or \
+                str(ex).find("doesn't exist") != -1 or \
+                str(ex).find('missing') != -1 or \
+                str(ex).find("Undefined set view") != -1:
+                raise ex
+            elif str(ex).find('timeout') != -1:
+                self.connection_timeout = self.connection_timeout * 2
+                raise ex
+            else:
+                self.state = FINISHED
+                res = {"passed" : False,
+                       "errors" : str(ex)}
+                if self.results and self.results.get(u'rows', []):
+                    res[results] = self.results
+                self.set_result(res)
+        except Exception, ex:
+            if self.current_retry == self.retries:
+                self.state = CHECKING
+                self.log.error("view %s, query %s: verifying results" % (
+                                        self.design_doc_name, self.query))
+                task_manager.schedule(self)
+            else:
+                self.log.error(
+                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." %
+                       self.design_doc_name)
+                task_manager.schedule(self, 10)
+
+    def check(self, task_manager):
+        try:
+            if self.view.red_func and (('reduce' in self.query and\
+                        self.query['reduce']=="true") or (not 'reduce' in self.query)):
+                if len(self.expected_docs) != len(self.results.get(u'rows', [])):
+                    if self.current_retry == self.retries:
+                        self.state = FINISHED
+                        msg = "ddoc=%s, query=%s, server=%s" %(
+                            self.design_doc_name, self.query, self.servers[0].ip)
+                        msg += "Number of groups expected:%s, actual:%s" % (
+                             len(self.expected_docs), len(self.results.get(u'rows', [])))
+                        self.set_result({"passed" : False,
+                                         "errors" : msg})
+                    else:
+                        RestHelper(self.rest)._wait_for_indexer_ddoc(self.servers, self.design_doc_name)
+                        self.state = EXECUTING
+                        task_manager.schedule(self, 10)
+                else:
+                    for row in self.expected_docs:
+                        key_expected = row['key']
+
+                        if not (key_expected in [key['key'] for key in self.results.get(u'rows', [])]):
+                            if self.current_retry == self.retries:
+                                self.state = FINISHED
+                                msg = "ddoc=%s, query=%s, server=%s" %(
+                                    self.design_doc_name, self.query, self.servers[0].ip)
+                                msg += "Key expected but not present :%s" % (key_expected)
+                                self.set_result({"passed" : False,
+                                                 "errors" : msg})
+                            else:
+                                RestHelper(self.rest)._wait_for_indexer_ddoc(self.servers, self.design_doc_name)
+                                self.state = EXECUTING
+                                task_manager.schedule(self, 10)
+                        else:
+                            for res in self.results.get(u'rows', []):
+                                if key_expected == res['key']:
+                                    value = res['value']
+                                    break
+                            msg = "ddoc=%s, query=%s, server=%s\n" %(
+                                    self.design_doc_name, self.query, self.servers[0].ip)
+                            msg += "Key %s: expected value %s, actual: %s" % (
+                                                                key_expected, row['value'], value)
+                            self.log.info(msg)
+                            if row['value'] == value:
+                                self.state = FINISHED
+                                self.log.info(msg)
+                                self.set_result({"passed" : True,
+                                                 "errors" : []})
+                            else:
+                                if self.current_retry == self.retries:
+                                    self.state = FINISHED
+                                    self.log.error(msg)
+                                    self.set_result({"passed" : True,
+                                                     "errors" : msg})
+                                else:
+                                    RestHelper(self.rest)._wait_for_indexer_ddoc(self.servers, self.design_doc_name)
+                                    self.state = EXECUTING
+                                    task_manager.schedule(self, 10)
+                return
+            if len(self.expected_docs) > len(self.results.get(u'rows', [])):
+                if self.current_retry == self.retries:
+                    self.state = FINISHED
+                    self.set_result({"passed" : False,
+                                     "errors" : [],
+                                     "results" : self.results})
+                else:
+                    RestHelper(self.rest)._wait_for_indexer_ddoc(self.servers, self.design_doc_name)
+                    if self.current_retry == 70:
+                        self.query["stale"] = 'false'
+                    self.log.info("View result is still not expected (ddoc=%s, query=%s, server=%s). retry in 10 sec" %(
+                                    self.design_doc_name, self.query, self.servers[0].ip))
+                    self.state = EXECUTING
+                    task_manager.schedule(self, 10)
+            elif len(self.expected_docs) < len(self.results.get(u'rows', [])):
+                self.state = FINISHED
+                self.set_result({"passed" : False,
+                                 "errors" : [],
+                                 "results" : self.results})
+            elif len(self.expected_docs) == len(self.results.get(u'rows', [])):
+                if self.verify_rows:
+                    expected_ids = [row['id'] for row in self.expected_docs]
+                    rows_ids = [str(row['id']) for row in self.results[u'rows']]
+                    if expected_ids == rows_ids:
+                        self.state = FINISHED
+                        self.set_result({"passed" : True,
+                                         "errors" : []})
+                    else:
+                        if self.current_retry == self.retries:
+                            self.state = FINISHED
+                            self.set_result({"passed" : False,
+                                             "errors" : [],
+                                             "results" : self.results})
+                        else:
+                            self.state = EXECUTING
+                            task_manager.schedule(self, 10)
+                else:
+                    self.state = FINISHED
+                    self.set_result({"passed" : True,
+                                     "errors" : []})
+        #catch and set all unexpected exceptions
+        except Exception, e:
+            self.state = FINISHED
+            self.log.error("Exception caught %s" % str(e))
+            self.set_exception(e)
+            self.set_result({"passed" : False,
+                             "errors" : str(e)})
+
 
 class ModifyFragmentationConfigTask(Task):
 
@@ -1578,7 +1812,6 @@ class MonitorActiveTask(Task):
         self.state = FINISHED
         self.log.info("task %s:%s was completed" % (self.type, self.target_value))
         self.set_result(True)
-
 
 class MonitorViewFragmentationTask(Task):
 
@@ -1876,20 +2109,29 @@ class GenerateExpectedViewResultsTask(Task):
         Also NOTE, this task is to be used with doc_generators that
         produce json like documentgenerator.DocumentGenerator
     """
-    def __init__(self, doc_generators, view, query):
+    def __init__(self, doc_generators, view, query, type_query="view"):
         Task.__init__(self, "generate_view_query_results_task")
         self.doc_generators = doc_generators
         self.view = view
         self.query = query
         self.emitted_rows = []
+        self.is_reduced = self.view.red_func is not None and (('reduce' in query and query['reduce']=="true") or\
+                         (not 'reduce' in query))
+        self.type_filter = None
+        self.type_query = type_query
 
 
     def execute(self, task_manager):
-        self.generate_emitted_rows()
-        self.filter_emitted_rows()
-        self.log.info("Finished generating expected query results")
-        self.state = CHECKING
-        task_manager.schedule(self)
+        try:
+            self.generate_emitted_rows()
+            self.filter_emitted_rows()
+            self.log.info("Finished generating expected query results")
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except Exception, ex:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception: %s" % str(ex))
+            self.set_exception(ex)
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1897,18 +2139,47 @@ class GenerateExpectedViewResultsTask(Task):
 
 
     def generate_emitted_rows(self):
+        emit_key = re.sub(r',.*', '', re.sub(r'.*emit\([ +]?doc\.', '', self.view.map_func))
+        emit_value = None
+        if re.match(r'.*emit\([ +]?\[doc\.*', self.view.map_func):
+            emit_key = re.sub(r'],.*', '', re.sub(r'.*emit\([ +]?\[doc\.', '', self.view.map_func))
+            emit_key = emit_key.split(", doc.")
+        if re.match(r'.*new RegExp\("\^.*', self.view.map_func):
+            filter_what = re.sub(r'.*new RegExp\(.*\)*doc\.', '',
+                                 re.sub(r'\.match\(.*', '', self.view.map_func))
+            self.type_filter ={"filter_what" : filter_what,
+                               "filter_expr" : re.sub(r'[ +]?"\);.*', '',
+                                 re.sub(r'.*.new RegExp\("\^', '', self.view.map_func))}
+        if self.is_reduced and self.view.red_func !="_count":
+            emit_value = re.sub(r'\);*', '', re.sub(r'.*emit\([ +]?\[*],[ +]?doc\.', '', self.view.map_func))
         for doc_gen in self.doc_generators:
 
             query_doc_gen = copy.deepcopy(doc_gen)
             while query_doc_gen.has_next():
-                emit_key = re.sub(r',.*', '', re.sub(r'.*emit\([ +]?doc\.', '', self.view.map_func))
+
                 _id, val = query_doc_gen.next()
                 val = json.loads(val)
 
-                val_emit_key = val[emit_key]
+                if isinstance(emit_key, list):
+                    val_emit_key = []
+                    for ek in emit_key:
+                        val_emit_key.append(val[ek])
+                else:
+                    val_emit_key = val[emit_key]
+                if self.type_filter:
+                    filter_expr = r'\A{0}.*'.format(self.type_filter["filter_expr"])
+                    if re.match(filter_expr, val[self.type_filter["filter_what"]]) is None:
+                        continue
                 if isinstance(val_emit_key, unicode):
                     val_emit_key = val_emit_key.encode('utf-8')
-                self.emitted_rows.append({'id' : _id, 'key' : val_emit_key})
+                if not self.is_reduced or self.view.red_func == "_count":
+                    if self.type_query == 'view':
+                        self.emitted_rows.append({'id' : _id, 'key' : val_emit_key})
+                    else:
+                        self.emitted_rows.append({'id' : _id, 'key' : _id})
+                else:
+                    val_emit_value = val[emit_value]
+                    self.emitted_rows.append({'value' : val_emit_value, 'key' : key, 'id' : _id,})
 
     def filter_emitted_rows(self):
 
@@ -1921,6 +2192,7 @@ class GenerateExpectedViewResultsTask(Task):
         inclusive_end_false = 'inclusive_end' in query and query['inclusive_end'] == "false"
         key_set = 'key' in query
 
+
         # sort expected results to match view results
         expected_rows = sorted(self.emitted_rows,
                                cmp=GenerateExpectedViewResultsTask.cmp_result_rows,
@@ -1929,12 +2201,26 @@ class GenerateExpectedViewResultsTask(Task):
         # filter rows according to query flags
         if startkey_set:
             start_key = query['startkey']
+            if isinstance(start_key, str) and start_key.find('"') == 0:
+                start_key = start_key[1:-1]
+            if isinstance(start_key, str) and start_key.find('[') == 0:
+                start_key = start_key[1:-1].split(',')
+                start_key = map(lambda x:int(x) if x!= 'null' else None, start_key)
         else:
             start_key = expected_rows[0]['key']
+            if isinstance(start_key, str) and start_key.find('"') == 0:
+                start_key = start_key[1:-1]
         if endkey_set:
             end_key = query['endkey']
+            if isinstance(end_key, str) and end_key.find('"') == 0:
+                end_key = end_key[1:-1]
+            if isinstance(end_key, str) and end_key.find('[') == 0:
+                end_key = end_key[1:-1].split(',')
+                end_key = map(lambda x:int(x) if x!= 'null' else None, end_key)
         else:
             end_key = expected_rows[-1]['key']
+            if isinstance(end_key, str) and end_key.find('"') == 0:
+                end_key = end_key[1:-1]
 
         if descending_set:
             start_key, end_key = end_key, start_key
@@ -1948,6 +2234,9 @@ class GenerateExpectedViewResultsTask(Task):
 
         if key_set:
             key_ = query['key']
+            if isinstance(key_, str) and key_.find('[') == 0:
+                key_ = key_[1:-1].split(',')
+                key_ = map(lambda x:int(x) if x!= 'null' else None, key_)
             start_key, end_key = key_, key_
             expected_rows = [row for row in expected_rows if row['key'] == key_]
 
@@ -1993,10 +2282,73 @@ class GenerateExpectedViewResultsTask(Task):
         if inclusive_end_false:
             if endkey_set and not endkey_docid_set:
                 # remove all keys that match endkey
-                expected_rows = [row for row in expected_rows['key'] if row['key'] != end_key]
+                expected_rows = [row for row in expected_rows if row['key'] != end_key]
             else:
                 # remove last key
                 expected_rows = expected_rows[:-1]
+
+        if self.is_reduced:
+            groups = {}
+            gr_level = None
+            if not 'group' in query and\
+               not 'group_level' in query:
+               if self.view.red_func == '_count':
+                   groups[None] = len(expected_rows)
+               elif self.view.red_func == '_sum':
+                   groups[None] = 0
+                   groups[None] = math.fsum([row['value']
+                                               for row['value'] in expected_rows])
+               elif self.view.red_func == '_stats':
+                   groups[None] = {}
+                   values = [row['value'] for row['value'] in expected_rows]
+                   group[None]['count'] = len(expected_rows)
+                   group[None]['sum'] = math.fsum(values)
+                   group[None]['max'] = max(values)
+                   group[None]['min'] = min(values)
+                   group[None]['sumsqr'] = math.fsum(map(lambda x: x * x, values))
+            elif 'group' in query and query['group']=='true':
+                if not 'group_level' in query:
+                    gr_level = len(expected_rows) - 1
+            elif 'group_level' in query:
+                gr_level = int(query['group_level'])
+            if gr_level is not None:
+                for row in expected_rows:
+                    key = str(row['key'][:gr_level])
+                    if not key in groups:
+                        if self.view.red_func == '_count':
+                            groups[key] = 1
+                        elif self.view.red_func == '_sum':
+                            groups[key] = row['value']
+                        elif self.view.red_func == '_stats':
+                            groups[key]['count'] = 1
+                            groups[key]['sum'] = row['value']
+                            groups[key]['max'] = row['value']
+                            groups[key]['min'] = row['value']
+                            groups[key]['sumsqr'] = row['value']**2
+                    else:
+                        if self.view.red_func == '_count':
+                           groups[key] += 1
+                        elif self.view.red_func == '_sum':
+                            groups[key] += row['value']
+                        elif self.view.red_func == '_stats':
+                            groups[key]['count'] += 1
+                            groups[key]['sum'] += row['value']
+                            groups[key]['max'] = max(row['value'], groups[key]['max'])
+                            groups[key]['min'] = min(row['value'], groups[key]['min'])
+                            groups[key]['sumsqr'] += row['value']**2
+            expected_rows = []
+            for group, value in groups.iteritems():
+                if isinstance(group, str) and group.find("[") == 0:
+                    group = group[1:-1].split(",")
+                    group = [int(k) for k in group]
+                expected_rows.append({"key" : group, "value" : value})
+            expected_rows = sorted(expected_rows,
+                               cmp=GenerateExpectedViewResultsTask.cmp_result_rows,
+                               reverse=descending_set)
+        if 'skip' in query:
+            expected_rows = expected_rows[(int(query['skip'])):]
+        if 'limit' in query:
+            expected_rows = expected_rows[:(int(query['limit']))]
 
         self.emitted_rows = expected_rows
 
@@ -2017,8 +2369,8 @@ class ViewQueryVerificationTask(Task):
             * check memcached
             * check couch
     """
-    def __init__(self, server, design_doc_name, view_name, query, expected_rows,
-                num_verified_docs=20, bucket="default", query_timeout=120):
+    def __init__(self, design_doc_name, view_name, query, expected_rows, server=None,
+                num_verified_docs=20, bucket="default", query_timeout=120, results=None):
 
         Task.__init__(self, "view_query_verification_task")
         self.server = server
@@ -2029,30 +2381,33 @@ class ViewQueryVerificationTask(Task):
         self.num_verified_docs = num_verified_docs
         self.bucket = bucket
         self.query_timeout = query_timeout
-        self.results = None
-
-        for key in config:
-            self.config[key] = config[key]
-
-    def execute(self, task_manager):
-
-        rest = RestConnection(self.server)
+        self.results = results
 
         try:
-            # query for full view results
-            self.query["stale"] = "false"
-            self.query["reduce"] = "false"
-            self.query["include_docs"] = "true"
-            self.results = rest.query_view(self.design_doc_name, self.view_name,
-                                           self.bucket, self.query, timeout=self.query_timeout)
-        except QueryViewException as e:
-            self.set_exception(e)
-            self.state = FINISHED
+            for key in config:
+                self.config[key] = config[key]
+        except:
+            pass
+
+    def execute(self, task_manager):
+        if not self.results:
+            rest = RestConnection(self.server)
+
+            try:
+                # query for full view results
+                self.query["stale"] = "false"
+                self.query["reduce"] = "false"
+                self.query["include_docs"] = "true"
+                self.results = rest.query_view(self.design_doc_name, self.view_name,
+                                               self.bucket, self.query, timeout=self.query_timeout)
+            except QueryViewException as e:
+                self.set_exception(e)
+                self.state = FINISHED
 
 
-        msg = "Checking view query results: (%d keys expected) vs (%d keys returned)" % \
-            (len(self.expected_rows), len(self.results['rows']))
-        self.log.info(msg)
+            msg = "Checking view query results: (%d keys expected) vs (%d keys returned)" % \
+                (len(self.expected_rows), len(self.results['rows']))
+            self.log.info(msg)
 
         self.state = CHECKING
         task_manager.schedule(self)
@@ -2069,6 +2424,7 @@ class ViewQueryVerificationTask(Task):
         # check results
         self.check_for_duplicate_ids(expected_ids, couch_ids, err_infos)
         self.check_for_missing_ids(expected_ids, couch_ids, err_infos)
+        self.check_for_extra_ids(expected_ids, couch_ids, err_infos)
         self.check_for_value_corruption(err_infos)
 
         # check for errors
@@ -2109,6 +2465,13 @@ class ViewQueryVerificationTask(Task):
                         "details" : missing_id_errors}
                 err_infos.append(err)
 
+    def check_for_extra_ids(self, expected_ids, couch_ids, err_infos):
+
+        extra_id_set = set(couch_ids) - set(expected_ids)
+        if len(extra_id_set) > 0:
+                err = { "msg" : "extra ids from memcached",
+                        "details" : extra_id_set}
+                err_infos.append(err)
 
     def check_for_value_corruption(self, err_infos):
 
@@ -2162,6 +2525,8 @@ class ViewQueryVerificationTask(Task):
         client = KVStoreAwareSmartClient(rest, self.bucket)
         doc_integrity_errors = []
 
+        if 'doc' not in self.results['rows'][0]:
+            return doc_integrity_errors
         exp_verify_set = [row['doc'] for row in\
             self.results['rows'][:self.num_verified_docs]]
 

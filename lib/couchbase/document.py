@@ -22,7 +22,8 @@ class DesignDocument():
                 sp_view = View._init_from_json(view,spatial=True)
                 sp_view.is_spatial = True
                 ddoc_self.spatial_views.append(sp_view)
-
+        if 'options' in json_object:
+            ddoc_self.options = json_object['options']
         return ddoc_self
 
     def add_view(self, view):

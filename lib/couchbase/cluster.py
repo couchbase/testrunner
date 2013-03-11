@@ -122,7 +122,10 @@ class Cluster(object):
         if batch_size > 1:
             _task = BatchedLoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         else:
-            _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash)
+            if isinstance(generator, list):
+                _task = LoadDocumentsGeneratorsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash)
+            else:
+                _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash)
         self.task_manager.schedule(_task)
         return _task
 
@@ -306,7 +309,8 @@ class Cluster(object):
     def shutdown(self, force=False):
         self.task_manager.shutdown(force)
 
-    def async_create_view(self, server, design_doc_name, view, bucket="default", with_query=True, check_replication=False):
+    def async_create_view(self, server, design_doc_name, view, bucket="default", with_query=True,
+                          check_replication=False, ddoc_options=None):
         """Asynchronously creates a views in a design doc
 
         Parameters:
@@ -315,10 +319,11 @@ class Cluster(object):
             view - The view being created (document.View)
             bucket - The name of the bucket containing items for this view. (String) or (Bucket)
             with_query - Wait indexing to get view query results after creation
-
+            check_replication - Should the test check replication or not (Boolean)
+            ddoc_options - DDoc options to define automatic index building (minUpdateChanges, updateInterval ...) (Dict)
         Returns:
             ViewCreateTask - A task future that is a handle to the scheduled task."""
-        _task = ViewCreateTask(server, design_doc_name, view, bucket, with_query, check_replication)
+        _task = ViewCreateTask(server, design_doc_name, view, bucket, with_query, check_replication, ddoc_options)
         self.task_manager.schedule(_task)
         return _task
 
@@ -472,22 +477,23 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_generate_expected_view_results(self, doc_generators, view, query):
+    def async_generate_expected_view_results(self, doc_generators, view, query, type_query="view"):
         """Asynchronously generate expected view query results
 
         Parameters:
             doc_generators - Generators used for loading docs (DocumentGenerator[])
             view - The view with map function (View)
             query - Query params to filter docs from the generator. (dict)
+            type_query - type of query: "view" or "all_doc" (String)
 
         Returns:
             GenerateExpectedViewResultsTask - A task future that is a handle to the scheduled task."""
 
-        _task = GenerateExpectedViewResultsTask(doc_generators, view, query)
+        _task = GenerateExpectedViewResultsTask(doc_generators, view, query, type_query)
         self.task_manager.schedule(_task)
         return _task
 
-    def generate_expected_view_query_results(self, doc_generators, view, query, timeout=None):
+    def generate_expected_view_query_results(self, doc_generators, view, query, timeout=None, type_query='view'):
         """Synchronously generate expected view query results
 
         Parameters:
@@ -498,11 +504,38 @@ class Cluster(object):
         Returns:
             list - A list of rows expected to be returned for given query"""
 
-        _task = self.async_generate_expected_view_results(doc_generators, view, query)
+        _task = self.async_generate_expected_view_results(doc_generators, view, query, type_query)
         return _task.result(timeout)
 
+    def async_monitor_view_query(self, servers, design_doc_name, view_name,
+                                 query, expected_docs=None, bucket="default",
+                                 retries=100, error=None, verify_rows=False,
+                                 server_to_query=0, type_query="view"):
+        """
+        Asynchronously monitor view query results:
+        waits for expected rows length match with returned rows length
 
-    def async_view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs=20, bucket="default", query_timeout=20):
+        Parameters:
+            servers - servers to be checked (List of TestInputServer)
+            design_doc_name - name of ddoc to query (String)
+            view_name - name of view to query (String)
+            query - query params (dict)
+            expected_docs - expected emitted rows(list)
+            bucket - bucket which contains ddoc (String or Bucket)
+            retries - how much times it will try to get correct result
+            error - for negative tests, expected error raised by query results (String)
+            verify_rows - verify values of returned results
+            server_to_query - index of server to query (int)
+            type_query - "view" or "all_doc" (String)
+        """
+        _task = MonitorViewQueryResultsTask(servers, design_doc_name, view_name,
+                 query, expected_docs, bucket, retries, error, verify_rows, server_to_query,
+                 type_query)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs=20, bucket="default", query_timeout=20,
+                                      results=None):
         """Asynchronously query a views in a design doc and does full verification of results
 
         Parameters:
@@ -515,14 +548,18 @@ class Cluster(object):
             bucket - The name of the bucket containing items for this view. (String)
             query_timeout - The time to allow a query with stale=false to run. (int)
             retry_time - The time in seconds to wait before retrying failed queries (int)
+            results - already gotten results to check, if None task will newly get results(dict)
 
         Returns:
             ViewQueryVerificationTask - A task future that is a handle to the scheduled task."""
-        _task = ViewQueryVerificationTask(server, design_doc_name, view_name, query, expected_rows, num_verified_docs, bucket, query_timeout)
+        _task = ViewQueryVerificationTask(server, design_doc_name, view_name, query, expected_rows, num_verified_docs, bucket, query_timeout, results=results)
         self.task_manager.schedule(_task)
         return _task
 
-    def view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs=20, bucket="default", query_timeout=20, timeout=None):
+    def view_query_verification(self, server, design_doc_name, view_name, query,
+                                expected_rows, num_verified_docs=20,
+                                bucket="default", query_timeout=20, timeout=None,
+                                results=None):
         """Synchronously query a views in a design doc and does full verification of results
 
         Parameters:
@@ -535,11 +572,12 @@ class Cluster(object):
             bucket - The name of the bucket containing items for this view. (String)
             query_timeout - The time to allow a query with stale=false to run. (int)
             retry_time - The time in seconds to wait before retrying failed queries (int)
+            results - already gotten results to check, if None task will newly get results(dict)
 
         Returns:
             dict - An object with keys: passed = True or False
                                         errors = reasons why verification failed """
-        _task = self.async_view_query_verification(server, design_doc_name, view_name, query, expected_rows, num_verified_docs, bucket, query_timeout)
+        _task = self.async_view_query_verification(server, design_doc_name, view_name, query, expected_rows, num_verified_docs, bucket, query_timeout, results)
         return _task.result(timeout)
 
 

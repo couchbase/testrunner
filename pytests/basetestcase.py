@@ -84,7 +84,9 @@ class BaseTestCase(unittest.TestCase):
                 self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
             elif self.nodes_init > 1:
                 self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
-
+            elif str(self.__class__).find('ViewQueryTests') != -1 and \
+                 not self.input.param("skip_rebalance", False):
+                self.cluster.rebalance(self.servers, self.servers[1:], [])
             if self.dgm_run:
                 self.quota = 256
             if self.total_buckets > 0:
