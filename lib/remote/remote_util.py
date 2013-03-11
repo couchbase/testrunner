@@ -719,18 +719,21 @@ class RemoteMachineShellConnection:
         version_file = "VERSION.txt"
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
+        output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
+        log.info("version to upgrade: {0}".format(output))
         log.info('sleep for 5 seconds before running task schedule upgrade me')
         time.sleep(5)
-        """# run task schedule to upgrade Membase server
-        output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
-        self.log_command_output(output, error)
-        time.sleep(100)
-        output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
-        self.log_command_output(output, error)
-        self.stop_schedule_tasks()
-        #run installer in second time as workaround for upgrade 1.8.0 only:
-        #Installer needs to update registry value in order to upgrade from the previous version.
-        #Please run installer again to continue."""
+        if '1.8.0' in output:
+            #run installer in second time as workaround for upgrade 1.8.0 only:
+            #Installer needs to update registry value in order to upgrade from the previous version.
+            #Please run installer again to continue."""
+            output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+            self.log_command_output(output, error)
+            time.sleep(100)
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
+            self.log_command_output(output, error)
+            self.stop_schedule_tasks()
+        # run task schedule to upgrade Membase server
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
         self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
