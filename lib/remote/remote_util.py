@@ -723,7 +723,7 @@ class RemoteMachineShellConnection:
         log.info("version to upgrade: {0}".format(output))
         log.info('sleep for 5 seconds before running task schedule upgrade me')
         time.sleep(5)
-        if '1.8.0' in output:
+        if '1.8.0' in str(output):
             #run installer in second time as workaround for upgrade 1.8.0 only:
             #Installer needs to update registry value in order to upgrade from the previous version.
             #Please run installer again to continue."""
@@ -1183,7 +1183,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule uninstall')
                 time.sleep(5)
-                # run schedule task uninstall Membase server
+                # run schedule task uninstall Couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
                 self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)

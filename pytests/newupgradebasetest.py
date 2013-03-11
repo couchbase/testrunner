@@ -153,6 +153,15 @@ class NewUpgradeBaseTest(BaseTestCase):
         except Exception, e:
             if queue is not None:
                 queue.put(False)
+                if not self.is_linux:
+                    remote = RemoteMachineShellConnection(server)
+                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+                    remote.log_command_output(output, error)
+                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
+                    remote.log_command_output(output, error)
+                    output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
+                    remote.log_command_output(output, error)
+                    remote.disconnect()
                 raise e
         if queue is not None:
             queue.put(True)
