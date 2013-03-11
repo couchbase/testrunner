@@ -145,9 +145,9 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
                 template = retval[1]
                 bucket = args[2]
 
-                if 'indexed_key' in args[1]:
-                    if keys is not None and len(keys) > 0:
-                        updateQueryBuilder(template, bucket, keys[0])
+                if 'indexed_key' in args[1] and args[1]['indexed_key'] is not None:
+                   if keys is not None and len(keys) > 0:
+                       updateQueryBuilder(template, bucket, keys[0])
 
                 # put created item into specified cc_queues (if specified)
                 # and item is not set to expire
@@ -634,10 +634,23 @@ class Template(object):
         self.cc_queues = params["cc_queues"]
         self.kv = params["kv"]
         self.size = params["size"]
-        self.indexed_key = params["indexed_key"]
+        self.indexed_key = self.set_indexed_key(params["indexed_key"])
 
         # cache
         ObjCacher().store(CacheHelper.TEMPLATECACHEKEY, self)
+
+    def set_indexed_key(self, key):
+        indexed_key = None
+
+        # when indexed key does not exist in kv pair return null
+        # and wan user
+        if key is not None:
+            if key in self.kv:
+                indexed_key = key
+            else:
+                logger.error("key: '%s' does not exist in kvpair.  Smart querying disabled" % key)
+
+        return indexed_key
 
     @staticmethod
     def from_cache(id_):
