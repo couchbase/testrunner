@@ -12,6 +12,7 @@ from memcached.helper.kvstore import KVStore
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
         super(SingleNodeUpgradeTests, self).setUp()
+        self.queue = Queue.Queue()
 
     def tearDown(self):
         super(SingleNodeUpgradeTests, self).tearDown()
@@ -21,7 +22,17 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
         self.operations([self.master])
         self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         for upgrade_version in self.upgrade_versions:
-            self._upgrade(upgrade_version, self.master)
+            upgrade_threads = self._async_update(upgrade_version, [self.master])
+            #wait upgrade statuses
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
+
+
             self.sleep(self.expire_time)
 #            if not self.is_linux:
 #                self.wait_node_restarted(self.master, wait_time=1200, wait_if_warmup=True, check_service=True)
