@@ -893,7 +893,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             self.wait_till_file_added(remote_path, "VERSION.txt", timeout_in_seconds=600)
             log.info('wait 30 seconds for server to start up completely')
             time.sleep(30)
-            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
             return success
 
