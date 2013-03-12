@@ -54,13 +54,31 @@ class CouchClientManager():
 
     def requestHandler(self, client_sock):
         c = ''
+        respond = False
         while True:
             _recv = client_sock.recv(1024)
             if not _recv:
                 break
+            if _recv == '\0':
+                respond = True
+                break
             else:
                 c = c + _recv
-        self._requestHandler(c)
+        rc = self._requestHandler(c)
+
+        if respond:
+            self.sendClientResponse(client_sock, rc)
+
+        client_sock.close()
+
+    def sendClientResponse(self, client_sock, rc):
+        msg = ""
+        if rc is not None:
+            try:
+                msg = json.dumps(rc)
+            except Exception:
+                pass
+        client_sock.send(msg)
 
     def _requestHandler(self, c, retries = 0):
         try:
