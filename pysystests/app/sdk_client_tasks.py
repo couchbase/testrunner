@@ -12,6 +12,7 @@ import random
 import string
 import sys
 import copy
+import time
 
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
@@ -89,20 +90,50 @@ def mdelete(keys, bucket = "default", password = ""):
                "args" : keys}
     return  _send_msg(message)
 
-def _send_msg(message):
+def _send_msg(message, response=False):
+
+    rc = None
     message.update({"cb_ip" : cfg.COUCHBASE_IP,
                     "cb_port" : cfg.COUCHBASE_PORT})
+    blocking = response
 
     try:
         port = randint(50008, 50011)
         sdk_client = eventlet.connect((SDK_IP, port))
-        sdk_client.setblocking(False)
+        sdk_client.setblocking(blocking)
         sdk_client.settimeout(5)
         sdk_client.sendall(json.dumps(message))
+        if response:
+            time.sleep(1)
+            sdk_client.sendall('\0')
+            rc = sdk_client.recv(1024)
+
     except Exception as ex:
         logger.error(ex)
         logger.error("message suppressed: %s" % message["command"])
 
+    return rc
+
+"""
+" op_latency task.
+"
+" op: (set,get,delete).
+" args: operation arguments. i.e set => ('key', 0, 0, 'val')
+"
+" returns amount of time required to complete operation
+"""
+@celery.task
+def op_latency(op, args, bucket = "default", password = ""):
+
+    message = {"command" : "latency",
+               "bucket" : bucket,
+               "password" : password,
+               "op" : op,
+               "args" : args}
+
+    latency = _send_msg(message, response = True)
+
+    return latency
 
 def decodeMajgicStrings(template):
 

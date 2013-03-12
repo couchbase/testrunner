@@ -80,11 +80,13 @@ class CouchClientManager():
                 pass
         client_sock.send(msg)
 
+
     def _requestHandler(self, c, retries = 0):
         try:
             data = json.loads(c)
             self.client_from_req(data)
             res = self.exec_request(data)
+            return res
         except ValueError as ex:
             print ex
             print "unable to decode json: %s" % c
@@ -117,6 +119,8 @@ class CouchClientManager():
         if data['command'] == 'query':
             return self.do_query(data)
 
+        if data['command'] == 'latency':
+            return self.get_op_latency(data)
 
     def do_mset(self, data):
 
@@ -167,6 +171,32 @@ class CouchClientManager():
         key, exp, flags, value = self._get_set_args(args)
         client.setq(key,exp, flags, value)
         return True
+
+    def get_op_latency(self, data):
+
+        # retrieve instance of sdk client
+        client = self.client_from_req(data)
+
+        # op_args pass in as tuple, i.e
+        # set => ('key', 0, 0, 'val')
+        op_args = data['args']
+
+        # select op
+        op = data['op']
+        if op == 'set':
+            func = client.set
+        if op == 'get':
+            func = client.get
+        if op == 'delete':
+            func = client.delete
+
+        # timed wrapper
+        start = time.time()
+        rc = func(*op_args)  # exec
+        end = time.time()
+
+        latency = end - start
+        return latency
 
     def do_set(self, data):
         key, exp, flags, value = self._get_set_args(data)
