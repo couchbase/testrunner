@@ -51,6 +51,7 @@ class BaseConfig(object):
             if type_ == "kv" or type_ == "all":
                 self.add_kvconfig()
                 self.add_kv_ops_manager()
+                self.add_report_kv_latency()
             if type_ == "query" or type_ == "all":
                 self.add_queryconfig()
             if type_ == "admin" or type_ == "all":
@@ -283,5 +284,27 @@ class BaseConfig(object):
             # route schedulable tasks both to same interal task queue
             {'app.workload_manager.kv_ops_manager':
                 self.route_args('kv_ops_mgr','kv.ops_mgr')},
+        )
+
+    def add_report_kv_latency(self):
+        direct_ex = Exchange("kv_ops_direct", type="direct", auto_delete = True, durable = True)
+
+        self.CELERYBEAT_SCHEDULE.update(
+        {
+            'report_kv_latency': {
+                'task': 'app.workload_manager.report_kv_latency',
+                'schedule': timedelta(seconds=10), # every 10s
+            },
+        })
+
+        self.CELERY_QUEUES = self.CELERY_QUEUES +\
+            (
+                self.make_queue('kv_latency',  'kv.latency', direct_ex),
+            )
+
+        self.CELERY_ROUTES = self.CELERY_ROUTES +\
+        (
+            {'app.workload_manager.report_kv_latency':
+                self.route_args('kv_latency','kv.latency')},
         )
 

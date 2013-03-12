@@ -184,6 +184,7 @@ class CouchClientManager():
         # select op
         op = data['op']
         if op == 'set':
+            op_args[3] = json.dumps(op_args[3])
             func = client.set
         if op == 'get':
             func = client.get
@@ -197,6 +198,7 @@ class CouchClientManager():
 
         latency = end - start
         return latency
+
 
     def do_set(self, data):
         key, exp, flags, value = self._get_set_args(data)
@@ -263,7 +265,6 @@ class CouchClientManager():
             password = str(data["password"])
         client = self.get_bucket_client(bucket, password)
         return client
-
 
 
 def monitorSubprocesses():

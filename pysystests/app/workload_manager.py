@@ -20,6 +20,8 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
+if cfg.SERIESLY_IP != '':
+    from seriesly import Seriesly
 
 @celery.task(base = PersistedMQ)
 def conn():
@@ -522,6 +524,44 @@ def generate_delete_tasks(count, docs_queue, bucket = "default", password = ""):
 
 
     return tasks
+
+@celery.task(base = PersistedMQ, ignore_result = True)
+def report_kv_latency(bucket = "default"):
+
+    if cfg.SERIESLY_IP == '':
+        # seriesly not configured
+        return
+
+    workloads = CacheHelper.workloads()
+    for workload in workloads:
+        if workload.active and workload.bucket == bucket:
+            # read template from active workload
+            template = Template.from_cache(str(workload.template))
+            template = template.__dict__
+            client.decodeMajgicStrings(template)
+
+            # setup key/val to use for timing
+            key = _random_string(12)
+            val = template['kv']
+
+            # define op args
+            set_args = (key, 0, 0, val)
+            get_args = (key,)
+            delete_args = (key,)
+
+            # collect op latency
+            set_latency = client.op_latency('set', set_args)
+            get_latency = client.op_latency('get', get_args)
+            delete_latency = client.op_latency('delete', delete_args)
+
+            # report to seriessly
+            seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
+            db='fast'
+            seriesly[db].append({'set_latency' : set_latency,
+                                 'get_latency' : get_latency,
+                                 'delete_latency' : delete_latency})
+
+
 
 @celery.task(base = PersistedMQ, ignore_result = True)
 def kv_ops_manager(max_msgs = 1000):
