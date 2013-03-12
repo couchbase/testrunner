@@ -433,6 +433,16 @@ class RemoteMachineShellConnection:
         finally:
             sftp.close()
 
+    def copy_file_remote_to_local(self, rem_path, des_path):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            sftp.get(rem_path, des_path)
+        except IOError:
+            log.error('Can not copy file')
+        finally:
+            sftp.close()
+
+
     # copy multi files from local to remote server
     def copy_files_local_to_remote(self, src_path, des_path):
         files = os.listdir(src_path)
@@ -444,6 +454,7 @@ class RemoteMachineShellConnection:
             full_src_path = os.path.join(src_path, file)
             full_des_path = os.path.join(des_path, file)
             self.copy_file_local_to_remote(full_src_path, full_des_path)
+
 
     # create a remote file from input string
     def create_file(self, remote_path, file_data):

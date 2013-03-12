@@ -18,12 +18,12 @@ if sys.hexversion < 0x02060000:
 import re
 import time
 import unittest
-import logger
 import logging.config
 from xunit import XUnitTestResult
 from TestInput import TestInputParser, TestInputSingleton
 from optparse import OptionParser, OptionGroup
 from scripts.collect_server_info import cbcollectRunner
+from scripts.measure_sched_delays import SchedDelays
 import signal
 
 
@@ -276,6 +276,12 @@ if __name__ == "__main__":
     if "EXCLUDE_GROUP" in test_params:
         print "Cases from GROUPs '{0}' will be excluded".format(test_params["EXCLUDE_GROUP"])
 
+
+    if TestInputSingleton.input.param("get-delays", False):
+        #start measure_sched_delays on all servers
+        sd = SchedDelays(TestInputSingleton.input.servers)
+        sd.start_measure_sched_delays()
+
     for name in names:
         start_time = time.time()
         argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", name)[1:]]
@@ -379,3 +385,7 @@ if __name__ == "__main__":
                 print result["name"], " pass"
         if fail_count > 0:
             sys.exit(1)
+
+    if TestInputSingleton.input.param("get-delays", False):
+        sd.stop_measure_sched_delay()
+        sd.fetch_logs()
