@@ -69,11 +69,12 @@ class NodeInitializeTask(Task):
                  rebalanceIndexPausingDisabled=None,
                  maxParallelIndexers=None,
                  maxParallelReplicaIndexers=None,
-                 port=None):
+                 port=None, quota_percent=None):
         Task.__init__(self, "node_init_task")
         self.server = server
         self.port = port or server.port
         self.quota = 0
+        self.quota_percent = quota_percent
         self.disable_consistent_view = disabled_consistent_view
         self.rebalanceIndexWaitingDisabled = rebalanceIndexWaitingDisabled
         self.rebalanceIndexPausingDisabled = rebalanceIndexPausingDisabled
@@ -116,6 +117,8 @@ class NodeInitializeTask(Task):
             self.set_exception(Exception('unable to get information on a server %s, it is available?' % (self.server.ip)))
             return
         self.quota = int(info.mcdMemoryReserved * 2 / 3)
+        if self.quota_percent:
+           self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
         rest.init_cluster_memoryQuota(username, password, self.quota)
         self.state = CHECKING
         task_manager.schedule(self)
@@ -127,7 +130,7 @@ class NodeInitializeTask(Task):
 
 class BucketCreateTask(Task):
     def __init__(self, server, bucket='default', replicas=1, size=0, port=11211,
-                 password=None):
+                 password=None, bucket_type='membase'):
         Task.__init__(self, "bucket_create_task")
         self.server = server
         self.bucket = bucket
@@ -135,6 +138,7 @@ class BucketCreateTask(Task):
         self.port = port
         self.size = size
         self.password = password
+        self.bucket_type = bucket_type
 
     def execute(self, task_manager):
         rest = RestConnection(self.server)
@@ -150,7 +154,8 @@ class BucketCreateTask(Task):
                                replicaNumber=self.replicas,
                                proxyPort=self.port,
                                authType=authType,
-                               saslPassword=self.password)
+                               saslPassword=self.password,
+                               bucketType=self.bucket_type)
             self.state = CHECKING
             task_manager.schedule(self)
         except BucketCreationException as e:
@@ -164,6 +169,10 @@ class BucketCreateTask(Task):
 
     def check(self, task_manager):
         try:
+            if self.bucket_type=='memcached':
+                self.set_result(True)
+                self.state = FINISHED
+                return
             if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
                 self.log.info("bucket '{0}' was created with per node RAM quota: {1}".format(self.bucket, self.size))
                 self.set_result(True)

@@ -34,6 +34,7 @@ class BaseTestCase(unittest.TestCase):
                 self.default_bucket_name = "default"
             self.standard_buckets = self.input.param("standard_buckets", 0)
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
+            self.memcached_buckets = self.input.param("memcached_buckets", 0)
             self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets
             self.num_servers = self.input.param("servers", len(self.servers))
             # initial number of items in the cluster
@@ -53,6 +54,7 @@ class BaseTestCase(unittest.TestCase):
             self.rebalanceIndexPausingDisabled = self.input.param("rebalanceIndexPausingDisabled", None)
             self.maxParallelIndexers = self.input.param("maxParallelIndexers", None)
             self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
+            self.quota_percent = self.input.param("quota_percent", None)
             self.port = None
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
@@ -150,13 +152,14 @@ class BaseTestCase(unittest.TestCase):
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
                           rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None,
-                          port=None):
+                          port=None, quota_percent=None):
         quota = 0
         init_tasks = []
         for server in servers:
             init_port = port or server.port or '8091'
             init_tasks.append(cluster.async_init_node(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
-                          rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers, init_port))
+                          rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers, init_port,
+                          quota_percent))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:
@@ -173,10 +176,11 @@ class BaseTestCase(unittest.TestCase):
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
+        self._create_memcached_buckets(self.master, self.memcached_buckets)
 
     def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
         return int(ratio / float(num_buckets) * float(mem_quota))
@@ -218,6 +222,29 @@ class BaseTestCase(unittest.TestCase):
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size, port=11214 + i, master_id=server_id));
+        for task in bucket_tasks:
+            task.result()
+
+    def _create_memcached_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
+        if not num_buckets:
+            return
+        if server_id is None:
+            server_id = RestConnection(server).get_nodes_self().id
+        if bucket_size is None:
+            bucket_size = self.bucket_size
+        bucket_tasks = []
+        for i in range(num_buckets):
+            name = 'memcached_bucket' + str(i)
+            bucket_tasks.append(self.cluster.async_create_memcached_bucket(server, name,
+                                                                          11214 + \
+                                                                          self.standard_buckets + i,
+                                                                          bucket_size,
+                                                                          self.num_replicas))
+            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+                                       num_replicas=self.num_replicas,
+                                       bucket_size=bucket_size, port=11214 + \
+                                                        self.standard_buckets + i,
+                                       master_id=server_id, type='memcached'));
         for task in bucket_tasks:
             task.result()
 
@@ -276,9 +303,12 @@ class BaseTestCase(unittest.TestCase):
         tasks = []
         for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
-            tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
+            if bucket.type != 'memcached':
+                tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                           bucket.kvs[kv_store],
                                                           op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs))
+            else:
+                self._load_memcached_bucket(server, gen, bucket.name)
         return tasks
 
     """Synchronously applys load generation to all bucekts in the cluster.
@@ -537,3 +567,19 @@ class BaseTestCase(unittest.TestCase):
                 self.sleep(10)
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
+
+    def _load_memcached_bucket(self, server, gen_load, bucket_name):
+        num_tries = 0
+        while num_tries < 6:
+            try:
+                num_tries += 1
+                client = MemcachedClientHelper.proxy_client(server, bucket_name)
+                break
+            except Exception as ex:
+                if num_tries < 5:
+                    self.log.info("unable to create memcached client due to {0}. Try again".format(ex))
+                else:
+                    self.log.error("unable to create memcached client due to {0}.".format(ex))
+        while gen_load.has_next():
+            key, value = gen_load.next()
+            client.set(key, 0, 0, value)

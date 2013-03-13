@@ -63,6 +63,22 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_create_memcached_bucket(self, server, name, port, size, replicas):
+        """Asynchronously creates a standard bucket
+
+        Parameters:
+            server - The server to create the bucket on. (TestInputServer)
+            name - The name of the bucket to be created. (String)
+            port - The port to create this bucket on. (String)
+            replicas - The number of replicas for this bucket. (int)
+            size - The size of the bucket to be created. (int)
+
+        Returns:
+            BucketCreateTask - A task future that is a handle to the scheduled task."""
+        _task = BucketCreateTask(server, name, replicas, size, port, bucket_type="memcached")
+        self.task_manager.schedule(_task)
+        return _task
+
     def async_bucket_delete(self, server, bucket='default'):
         """Asynchronously deletes a bucket
 
@@ -78,7 +94,8 @@ class Cluster(object):
 
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
-                        maxParallelIndexers=None, maxParallelReplicaIndexers=None, port=None):
+                        maxParallelIndexers=None, maxParallelReplicaIndexers=None, port=None,
+                        quota_percent=None):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -92,12 +109,12 @@ class Cluster(object):
             maxParallelIndexers - max parallel indexers threads(Int)
             maxParallelReplicaIndexers - max parallel replica indexers threads(int)
             port - port to initialize cluster
-
+            quota_percent - percent of memory to initialize
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
         _task = NodeInitializeTask(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                           rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers,
-                          port)
+                          port, quota_percent)
         self.task_manager.schedule(_task)
         return _task
 

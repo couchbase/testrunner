@@ -1605,10 +1605,11 @@ class NodeDiskStorage(object):
 
 
 class Bucket(object):
-    def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None):
+    def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None,
+                 type=''):
         self.name = name
         self.port = port
-        self.type = ''
+        self.type = type
         self.nodes = None
         self.stats = None
         self.servers = []
@@ -1806,7 +1807,8 @@ class RestParser(object):
         if 'diskFetches' in stats:
             bucketStats.diskFetches = stats['diskFetches']
         bucketStats.itemCount = stats['itemCount']
-        bucketStats.diskUsed = stats['diskUsed']
+        if bucket.type != "memcached":
+            bucketStats.diskUsed = stats['diskUsed']
         bucketStats.memUsed = stats['memUsed']
         quota = parsed['quota']
         bucketStats.ram = quota['ram']
