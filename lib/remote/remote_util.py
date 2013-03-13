@@ -721,7 +721,7 @@ class RemoteMachineShellConnection:
         self.stop_schedule_tasks()
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info("version to upgrade: {0}".format(output))
-        log.info('sleep for 5 seconds before running task schedule upgrade me')
+        log.info('sleep for 5 seconds before running task schedule upgrademe')
         time.sleep(5)
         if '1.8.0' in str(output):
             #run installer in second time as workaround for upgrade 1.8.0 only:
@@ -742,6 +742,15 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info('wait 60 seconds for server to start up completely')
         time.sleep(60)
+        ct = time.time()
+        while time.time() - ct < 10800:
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
+            if "Ready" in str(output):
+                log.info("upgrademe task complteted")
+                break
+            else:
+                log.info("upgrademe task still running:{0}".format(output))
+                time.sleep(30)
         output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
         self.log_command_output(output, error)
 
