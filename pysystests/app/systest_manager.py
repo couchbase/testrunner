@@ -9,7 +9,7 @@ from cache import ObjCacher, CacheHelper
 from rabbit_helper import PersistedMQ
 from app.workload_manager import Workload, sysTestRunner
 from app.query import QueryWorkload
-from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance
+from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance, perform_bucket_create_tasks
 from celery.utils.log import get_task_logger
 if cfg.SERIESLY_IP != '':
     from seriesly import Seriesly
@@ -152,12 +152,17 @@ def runPhase(name, phase):
         query = phase['query']
     if 'runtime' in phase:
         runTime = int(phase['runtime'])
+    if 'buckets' in phase:
+        buckets = phase['buckets']
 
     logger.error('\n')
     logger.error("Running Phase: %s (%s)" % (name, desc))
 
     # update stat objects with new phase
     setPhaseForStats(name)
+
+    if buckets is not None:
+        perform_bucket_create_tasks(buckets)
 
     if cluster is not None:
 

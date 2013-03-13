@@ -90,6 +90,86 @@ def _send_msg(message):
     sdk_client.sendall(json.dumps(message))
 
 @celery.task
+def perform_bucket_create_tasks(bucketMsg):
+    rest = create_rest()
+    if "default" in bucketMsg:
+        create_default_buckets(rest, bucketMsg["default"])
+
+    if "sasl" in bucketMsg:
+        create_sasl_buckets(rest, bucketMsg["sasl"])
+
+    if "standard" in bucketMsg:
+        create_standard_buckets(rest, bucketMsg["standard"])
+
+def parseBucketMsg(bucket):
+    bucketMsg = {'count': 1,
+                 'ramQuotaMB': 1000,
+                 'replicas': 1,
+                 'replica_index': 1,
+                 'type': 'couchbase'
+                 }
+
+    if "count" in bucket:
+        bucketMsg['count'] = int(bucket['count'])
+    if "quota" in bucket:
+        bucketMsg['ramQuotaMB'] = int(bucket['quota'])
+    if "replicas" in bucket:
+        bucketMsg['replicas'] = int(bucket['replicas'])
+    if "replica_index" in bucket:
+        bucketMsg['replica_index'] = int(bucket['replica_index'])
+    if "type" in bucket:
+        bucketMsg['type'] = bucket['type']
+
+    return bucketMsg
+
+def create_default_buckets(rest, bucketMsg):
+    bucketMsgParsed = parseBucketMsg(bucketMsg)
+
+    rest.create_bucket(bucket="default",
+                       ramQuotaMB = bucketMsgParsed['ramQuotaMB'],
+                       replicaNumber = bucketMsgParsed['replicas'],
+                       proxyPort = 11211,
+                       authType = "none",
+                       saslPassword = None,
+                       bucketType = bucketMsgParsed['type'],
+                       replica_index = bucketMsgParsed['replica_index'])
+
+def create_sasl_buckets(rest, bucketMsg):
+    bucketMsgParsed = parseBucketMsg(bucketMsg)
+
+    for i in range(bucketMsgParsed['count']):
+        if i == 0:
+            name = "saslbucket"
+        else:
+            name = "saslbucket" + str(i)
+        rest.create_bucket(bucket = name,
+                           ramQuotaMB = bucketMsgParsed['ramQuotaMB'],
+                           replicaNumber = bucketMsgParsed['replicas'],
+                           proxyPort = 11211,
+                           authType = "sasl",
+                           saslPassword = "password",
+                           bucketType = bucketMsgParsed['type'],
+                           replica_index = bucketMsgParsed['replica_index'])
+
+def create_standard_buckets(rest, bucketMsg):
+    bucketMsgParsed = parseBucketMsg(bucketMsg)
+
+    for i in range(bucketMsgParsed['count']):
+        if i == 0:
+            name = "standardbucket"
+        else:
+            name = "standardbucket" + str(i)
+        rest.create_bucket(bucket = name,
+                           ramQuotaMB = bucketMsgParsed['ramQuotaMB'],
+                           replicaNumber = bucketMsgParsed['replicas'],
+                           proxyPort = 11214+i,
+                           authType = "none",
+                           saslPassword = None,
+                           bucketType = bucketMsgParsed['type'],
+                           replica_index = bucketMsgParsed['replica_index'])
+
+
+@celery.task
 def perform_admin_tasks(adminMsg):
     rest = create_rest()
 
