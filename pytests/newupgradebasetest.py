@@ -14,6 +14,7 @@ from couchbase.document import DesignDocument, View
 from couchbase.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
+from pprint import pprint
 
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
@@ -62,6 +63,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         if test_failed:
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown()
+                self.log.info("Test Input params were:")
+                pprint(self.input.test_params)
+
                 if self.input.param('BUGS', False):
                     self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
         else:
