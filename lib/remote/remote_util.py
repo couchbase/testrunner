@@ -624,6 +624,8 @@ class RemoteMachineShellConnection:
             product_version = "2.1.0"
         elif "2.0.1" in version:
             product_version = "2.0.1"
+        elif "2.0.2" in version:
+            product_version = "2.0.2"
         elif "2.0.0" in version:
             product_version = "2.0.0"
         elif "1.8.0" in version:
@@ -656,11 +658,6 @@ class RemoteMachineShellConnection:
             f.write(content)
             log.info('Successful write to {0}'.format(found))
             sftp.close()
-#            else:
-#                log.info("write cb-install/uninstall.iss format")
-#                f.write('c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{0}-{2}.iss'.format(name,
-#                                                                                 version, task))
-
         except IOError:
             log.error('Can not write build name file to bat file {0}'.format(found))
 
@@ -696,8 +693,7 @@ class RemoteMachineShellConnection:
             pass
 
     def membase_upgrade(self, build, save_upgrade_config=False):
-        #install membase server ?
-        #run the right command
+        #upgrade couchbase server
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
