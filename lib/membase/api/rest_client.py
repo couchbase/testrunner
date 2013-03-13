@@ -252,7 +252,7 @@ class RestConnection(object):
 
     def open_sasl_streaming_connection(self, bucket, timeout=1000):
         log.info("Opening sasl streaming connection for bucket %s" %
-                 (bucket,bucket.name)[isinstance(bucket, Bucket)])
+                 (bucket, bucket.name)[isinstance(bucket, Bucket)])
         t = Thread(target=self.sasl_streaming_rq,
                           name="streaming_" + str(uuid.uuid4())[:4],
                           args=(bucket, timeout))
@@ -627,7 +627,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET')
         if status:
             settings = json.loads(content)
-        log.info('settings/web params on {0}:{1} :{2}'.format(self.ip, self.port, params))
+        log.info('settings/web params on {0}:{1} :{2}'.format(self.ip, self.port, settings))
         return settings
 
     def init_cluster_memoryQuota(self, username='Administrator',
