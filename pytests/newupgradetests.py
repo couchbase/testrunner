@@ -180,8 +180,13 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def offline_cluster_upgrade_non_default_path(self):
         try:
             num_nodes_with_not_default = self.input.param('num_nodes_with_not_default', 1)
-            data_path = self.input.param('data_path', '/tmp/data').replace('|', "/")
+            prefix_path = ''
+            if not self.is_linux:
+                prefix_path = "C:"
+            data_path = prefix_path + self.input.param('data_path', '/tmp/data').replace('|', "/")
             index_path = self.input.param('index_path', data_path).replace('|', "/")
+            if not self.is_linux and not index_path.startswith("C:"):
+                index_path = prefix_path + index_path
             num_nodes_remove_data = self.input.param('num_nodes_remove_data', 0)
             servers_with_not_default = self.servers[:num_nodes_with_not_default]
             old_paths = {}

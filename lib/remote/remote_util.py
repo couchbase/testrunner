@@ -659,13 +659,13 @@ class RemoteMachineShellConnection:
             sftp.stat(remote_path)
         except IOError, e:
             if e[0] == 2:
-                log.info("Directory at  {0} DOES NOT exist.  We will create on here".format(remote_path))
+                log.info("Directory at {0} DOES NOT exist. We will create on here".format(remote_path))
                 sftp.mkdir(remote_path)
                 sftp.close()
                 return False
             raise
         else:
-            log.error("Directory at  {0} DOES exist.  Fx returns True".format(remote_path))
+            log.error("Directory at {0} DOES exist. Fx returns True".format(remote_path))
             return True
 
     # this function will remove the automation directory in windows
