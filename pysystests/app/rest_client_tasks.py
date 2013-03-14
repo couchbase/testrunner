@@ -41,10 +41,12 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
                                                  design_doc_name, type_,
                                                  view_name, params)
 
+    qtime = None
+
     for qtime, data in pool.imap(send_query, [url for i in xrange(count)]):
         pass
 
-    if cfg.SERIESLY_IP != '':
+    if cfg.SERIESLY_IP != '' and qtime is not None:
         # store the most recent query response time 'qtime' into seriesly
         seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
         #TODO: do not hardcode fast...we should have per/testdbs
@@ -62,15 +64,18 @@ def send_query(url):
     headers = {'Content-Type': 'application/json',
                'Authorization': 'Basic %s' % authorization,
                'Accept': '*/*'}
+
+    qtime, data = None, None
     try:
         qtime, data = timed_url_request(url, headers)
 
         # log 500 chars to output
         logger.error(data.read()[:500])
-    except urllib2.URLError:
-        pass
+    except urllib2.URLError as ex:
+        logger.error("Request error: %s" % ex)
 
     return qtime, data
+
 
 def timed_url_request(url, headers):
     start = time.time()
