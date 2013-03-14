@@ -67,7 +67,7 @@ class DocsTests(BaseTestCase):
         self.log.info("Expire/Delete/update random items (ratio \
                         of expiration vs delete ~= 8:2)")
         current_num = 0
-        wait_task = self.cluster.async_wait_for_stats(self.servers[:self.node_init], bucket_to_load,
+        wait_task = self.cluster.async_wait_for_stats(self.servers[:self.nodes_init], bucket_to_load,
                                    'all', 'ep_total_del_items', '==', num_items * 3)
         while wait_task.state != "FINISHED":
             gen_update = BlobGenerator('mike', 'mike-', self.value_size, start=current_num,
