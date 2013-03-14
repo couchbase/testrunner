@@ -130,7 +130,7 @@ def setPhaseForStats(phase_name):
 
 def runPhase(name, phase):
 
-    workload = workloadIds = cluster = query = queryIds = None
+    workload = workloadIds = cluster = query = queryIds = buckets = None
     docTemplate = "default"
     rebalance_required = False
 
