@@ -59,41 +59,52 @@ class DocsTests(BaseTestCase):
         for bucket in self.buckets:
             if bucket.type != 'memcached':
                 bucket_to_load = bucket
+                break
         new_num_items = self.quota * 1024 * 0.15 / self.value_size
         gen_load = BlobGenerator('mike', 'mike-', self.value_size, start=num_items,
                                  end=new_num_items + num_items)
-        self.cluster.async_load_gen_docs(self.master, bucket_to_load.name, gen_load,
+        load = self.cluster.async_load_gen_docs(self.master, bucket_to_load.name, gen_load,
                                  bucket_to_load.kvs[1], 'create')
-        self.log.info("Expire/Delete/update random items (ratio \
-                        of expiration vs delete ~= 8:2)")
-        current_num = 0
-        wait_task = self.cluster.async_wait_for_stats(self.servers[:self.nodes_init], bucket_to_load,
-                                   'all', 'ep_total_del_items', '==', num_items * 3)
-        while wait_task.state != "FINISHED":
-            gen_update = BlobGenerator('mike', 'mike-', self.value_size, start=current_num,
-                                  end=current_num + 5000)
-            gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=current_num + 5000,
-                                  end=current_num + 6600)
-            gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=current_num + 6600,
-                                  end=current_num + 7000)
-            tasks = []
-            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
-                                 gen_update, bucket_to_load.kvs[1], 'update'))
-            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
-                                 gen_expire, bucket_to_load.kvs[1], 'update', exp=1))
-            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
-                                 gen_delete, bucket_to_load.kvs[1], 'delete'))
-            for task in tasks:
-                task.result()
-            current_num += 7000
+        load.result()
+        end_time = time.time() + 60*60*3
+        while time.time() < end_time:
+            self.log.info("check memUsed")
+            rest = RestConnection(self.master)
+            for bucket in rest.get_buckets():
+                self.log.info("*****************************\
+                                bucket %s: memUsed %s\
+                                ****************************" % (bucket.name,
+                                                                 bucket.stats.memUsed))
+            self.log.info("Expire/Delete/update random items (ratio \
+                            of expiration vs delete ~= 8:2)")
+            current_num = 0
+            wait_task = self.cluster.async_wait_for_stats(self.servers[:self.nodes_init], bucket_to_load,
+                                       'all', 'ep_total_del_items', '==', num_items * 3)
+            while wait_task.state != "FINISHED":
+                gen_update = BlobGenerator('mike', 'mike-', self.value_size, start=current_num,
+                                      end=current_num + 5000)
+                gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=current_num + 5000,
+                                      end=current_num + 6600)
+                gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=current_num + 6600,
+                                      end=current_num + 7000)
+                tasks = []
+                tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
+                                     gen_update, bucket_to_load.kvs[1], 'update'))
+                tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
+                                     gen_expire, bucket_to_load.kvs[1], 'update', exp=1))
+                tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
+                                     gen_delete, bucket_to_load.kvs[1], 'delete'))
+                for task in tasks:
+                    task.result()
+                current_num += 7000
         self.log.info("Expire 90% of remaining items")
         remain_keys, _ = bucket_to_load.kvs[1].key_set()
         last_key_to_expire = remain_keys[0.9 * len(remain_keys)][4:]
         gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=0,
                                   end=last_key_to_expire)
-        task = self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
+        load = self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
                                  gen_expire, bucket_to_load.kvs[1], 'update', exp=1)
-        task.result()
+        load.result()
         self.log.info("Insert new items or update existing items across buckets")
         gen_load = BlobGenerator('mike', 'mike-', self.value_size, start=new_num_items + num_items,
                                  end=new_num_items * 2 + num_items)

@@ -573,7 +573,7 @@ class BaseTestCase(unittest.TestCase):
         while num_tries < 6:
             try:
                 num_tries += 1
-                client = MemcachedClientHelper.proxy_client(server, bucket_name)
+                client = MemcachedClientHelper.direct_client(server, bucket_name)
                 break
             except Exception as ex:
                 if num_tries < 5:
@@ -582,4 +582,10 @@ class BaseTestCase(unittest.TestCase):
                     self.log.error("unable to create memcached client due to {0}.".format(ex))
         while gen_load.has_next():
             key, value = gen_load.next()
-            client.set(key, 0, 0, value)
+            for v in xrange(1024):
+                try:
+                    client.set(key, 0, 0, value, v)
+                    break
+                except:
+                    pass
+        client.close()
