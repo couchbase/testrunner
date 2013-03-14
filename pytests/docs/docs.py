@@ -62,7 +62,7 @@ class DocsTests(BaseTestCase):
         new_num_items = self.quota * 1024 * 0.15 / self.value_size
         gen_load = BlobGenerator('mike', 'mike-', self.value_size, start=num_items,
                                  end=new_num_items + num_items)
-        self.async_load_gen_docs(self.master, bucket_to_load.name, gen_load,
+        self.cluster.async_load_gen_docs(self.master, bucket_to_load.name, gen_load,
                                  bucket_to_load.kvs[1], 'create')
         self.log.info("Expire/Delete/update random items (ratio \
                         of expiration vs delete ~= 8:2)")
@@ -77,11 +77,11 @@ class DocsTests(BaseTestCase):
             gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=current_num + 6600,
                                   end=current_num + 7000)
             tasks = []
-            tasks.append(self.async_load_gen_docs(self.master, bucket_to_load.name,
+            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
                                  gen_update, bucket_to_load.kvs[1], 'update'))
-            tasks.append(self.async_load_gen_docs(self.master, bucket_to_load.name,
+            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
                                  gen_expire, bucket_to_load.kvs[1], 'update', exp=1))
-            tasks.append(self.async_load_gen_docs(self.master, bucket_to_load.name,
+            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
                                  gen_delete, bucket_to_load.kvs[1], 'delete'))
             for task in tasks:
                 task.result()
@@ -91,7 +91,7 @@ class DocsTests(BaseTestCase):
         last_key_to_expire = remain_keys[0.9 * len(remain_keys)][4:]
         gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=0,
                                   end=last_key_to_expire)
-        task = self.async_load_gen_docs(self.master, bucket_to_load.name,
+        task = self.cluster.async_load_gen_docs(self.master, bucket_to_load.name,
                                  gen_expire, bucket_to_load.kvs[1], 'update', exp=1)
         task.result()
         self.log.info("Insert new items or update existing items across buckets")
