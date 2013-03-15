@@ -21,7 +21,7 @@ class ConnectionTests(BaseTestCase):
 
         if servers_in:
             servs_in = self.servers[1:servers_in + 1]
-            rebalance = self.cluster.async_rebalance(self.master, servs_in, [])
+            rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         shell = RemoteMachineShellConnection(self.master)
         initial_rate = shell.get_mem_usage_by_process(process)
 
@@ -39,11 +39,9 @@ class ConnectionTests(BaseTestCase):
             self.assertTrue((result_rate - initial_rate) < mem_usage_delta,
                             "Delta %s is more that expected %s" % (result_rate - initial_rate,
                                                                    mem_usage_delta))
-
             self.log.info("Delta is inside %s" % mem_usage_delta)
             if servers_in:
                 rebalance.result()
         finally:
             for connection in connections:
                 connection.join()
-
