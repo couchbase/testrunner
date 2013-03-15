@@ -110,7 +110,6 @@ class CacheHelper():
     WORKLOADCACHEKEY = "WORKLOADCACHEKEY"
     TEMPLATECACHEKEY = "TEMPLATECACHEKEY"
     BUCKETSTATUSCACHEKEY = "BUCKETSTATUSCACHEKEY"
-    NODESTATSCACHEKEY = "NODESTATSCACHEKEY"
     QUERYCACHEKEY = "QUERYCACHEKEY"
     QBUILDCACHEKEY = "QBUILDCACHEKEY"
 
@@ -121,10 +120,6 @@ class CacheHelper():
     @staticmethod
     def templates():
         return ObjCacher().allinstances(CacheHelper.TEMPLATECACHEKEY)
-
-    @staticmethod
-    def allnodestats():
-        return ObjCacher().allinstances(CacheHelper.NODESTATSCACHEKEY)
 
     @staticmethod
     def queries():
@@ -174,7 +169,6 @@ class CacheHelper():
     def cacheClean():
         objCacheKeys = [CacheHelper.WORKLOADCACHEKEY,
                         CacheHelper.BUCKETSTATUSCACHEKEY,
-                        CacheHelper.NODESTATSCACHEKEY,
                         CacheHelper.QUERYCACHEKEY]
 
         for cacheKey in objCacheKeys:

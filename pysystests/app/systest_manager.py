@@ -121,13 +121,6 @@ def add_phase_to_db(phase, phase_key, name, desc):
         seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
         seriesly.event.append({str(phase_key): {str(phase['name']): str(time.time()), 'run_id': name+ '-' + desc}})
 
-def setPhaseForStats(phase_name):
-
-    allnodestats = CacheHelper.allnodestats()
-    if len(allnodestats) > 0:
-        for node_stats in allnodestats:
-            node_stats.phase = phase_name
-
 def runPhase(name, phase):
 
     workload = workloadIds = cluster = query = queryIds = buckets = None
@@ -157,9 +150,6 @@ def runPhase(name, phase):
 
     logger.error('\n')
     logger.error("Running Phase: %s (%s)" % (name, desc))
-
-    # update stat objects with new phase
-    setPhaseForStats(name)
 
     if buckets is not None:
         perform_bucket_create_tasks(buckets)

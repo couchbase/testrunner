@@ -8,7 +8,7 @@ import logging
 import testcfg as cfg
 
 
-celery = Celery(include=['app.sdk_client_tasks','app.rest_client_tasks','app.workload_manager','app.stats','app.admin_manager','app.query','app.systest_manager'])
+celery = Celery(include=['app.sdk_client_tasks','app.rest_client_tasks','app.workload_manager','app.admin_manager','app.query','app.systest_manager'])
 config = None
 
 
@@ -18,8 +18,8 @@ config = None
 
     examaple of starting 4 isolated workers on one vm with 2 process dedicated to each:
 
-        celeryd-multi start kv query admin stats -A app --purge -l ERROR  -B -I:kv app.init \
-        -n:kv kv -n:query query -n:admin admin -n:stats stats -c 2
+        celeryd-multi start kv query admin -A app --purge -l ERROR  -B -I:kv app.init \
+        -n:kv kv -n:query query -n:admin admin  -c 2
 
     Where syntax (-n:kv  kv) means for worker named kv, start the kv scheduler , create it's queues and routes
     Note also init is only started once along with the kv worker, although it can be started as standalone.
@@ -56,16 +56,7 @@ if config is None:
 celery.config_from_object(config)
 
 def setup_logging(**kw):
-    setup_stat_logger()
     setup_query_logger()
-
-def setup_stat_logger():
-    logger = logging.getLogger('app.stats')
-    handler = logging.FileHandler(cfg.LOGDIR+'/celery-stats.log')
-    formatter = logging.Formatter(logging.BASIC_FORMAT) # you may want to customize this.
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.propagate = False
 
 def setup_query_logger():
     logger = logging.getLogger('app.rest_client_tasks')

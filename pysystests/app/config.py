@@ -56,8 +56,6 @@ class BaseConfig(object):
                 self.add_queryconfig()
             if type_ == "admin" or type_ == "all":
                 self.add_adminconfig()
-            if type_ == "stats" or type_ == "all":
-                self.add_statsconfig()
 
 
     def make_queue(self, queue, routing_key = None, exchange = None):
@@ -218,48 +216,6 @@ class BaseConfig(object):
                 self.route_args('admin_tasks','admin_tasks.performxdcr')},
         )
 
-
-    def add_statsconfig(self):
-        topic_ex  = Exchange("admin_topic", type="topic", auto_delete = True, durable = True)
-
-        self.CELERYBEAT_SCHEDULE.update(
-        {
-            'cluster_resource_monitor': {
-                'task': 'app.stats.resource_monitor',
-                'schedule': timedelta(seconds=30), # every 30s 
-            },
-          # 'sync_time': {
-          #     'task': 'app.stats.sync_time',
-          #     'schedule': timedelta(seconds=10800),
-          # },
-          # 'atop_log_rollover': { # Execute every three hours
-          #     'task': 'app.stats.atop_log_rollover',
-          #     'schedule': timedelta(seconds=10800),
-          # },
-            'generate_node_stats_report': { # every 2 minutes print out report from collected stats
-                'task': 'app.stats.generate_node_stats_report',
-                'schedule': timedelta(seconds=120),
-            },
-        })
-
-        self.CELERY_QUEUES = self.CELERY_QUEUES +\
-            (
-                # schedulable queue for multiple tasks
-                self.make_queue('stats_tasks',  'stats_tasks.#', topic_ex),
-            )
-
-        self.CELERY_ROUTES = self.CELERY_ROUTES +\
-        (
-            # route schedulable tasks both to same interal task queue
-            {'app.stats.resource_monitor':
-                self.route_args('stats_tasks','stats_tasks.resourcemonitor')},
-            {'app.stats.sync_time':
-                self.route_args('stats_tasks','stats_tasks.synctime')},
-            {'app.stats.atop_log_rollover':
-                self.route_args('stats_tasks','stats_tasks.atop')},
-            {'app.stats.generate_node_stats_report':
-                self.route_args('stats_tasks','stats_tasks.genreport')},
-        )
 
     def add_kv_ops_manager(self):
         direct_ex = Exchange("kv_ops_direct", type="direct", auto_delete = True, durable = True)
