@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from app.celery import celery
 from celery.task.sets import TaskSet
-from app.stats import StatChecker
+import app.postcondition_handlers as phandler
 import app.sdk_client_tasks as client
 import json
 import uuid
@@ -278,10 +278,7 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
     if sender == run:
         workload = args[0]
         bucket = str(workload.bucket)
-        stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
-                                   bucket = bucket,
-                                   username = cfg.COUCHBASE_USER,
-                                   password = cfg.COUCHBASE_PWD)
+        stat_checker = phandler.BucketStatChecker(bucket)
 
         # convert item count postcondition's to curr_item conditions
         if workload.postconditions:
@@ -293,6 +290,11 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
                 curr_items = stat_checker.get_curr_items()
                 value = int(value) + int(curr_items)
                 workload.postconditions = "curr_items >= %s" % value
+
+            # setup postcondition hander
+            workload.postcondition_handler = "bucket_stat_checker"
+
+
 
         prevWorkload = None
         if len(args) > 1 and isinstance(args[1], Workload):
@@ -353,11 +355,11 @@ def postcondition_handler():
             bs = BucketStatus.from_cache(bucket)
             bs.block(bucket)
 
-            stat_checker = StatChecker(cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
-                                       bucket = bucket,
-                                       username = cfg.COUCHBASE_USER,
-                                       password = cfg.COUCHBASE_PWD)
-            status = stat_checker.check(workload.postconditions)
+            postcondition_handler = \
+                getattr(phandler,
+                        workload.postcondition_handler)
+
+            status = postcondition_handler(workload.postconditions)
             if status == True:
                 # unblock bucket and deactivate workload
                 bs = BucketStatus.from_cache(bucket)
@@ -605,6 +607,11 @@ def throttle_kv_ops(isovercommited=True):
                    logger.error("Cluster Overcommited: reduced ops to (%s)" % workload.ops_per_sec)
 
 class Workload(object):
+    AUTOCACHEKEYS = ['active',
+                     'ops_per_sec',
+                     'postconditions',
+                     'postcondition_handler']
+
     def __init__(self, params):
         self.id = "workload_"+str(uuid.uuid4())[:7]
         self.params = params
@@ -621,6 +628,7 @@ class Workload(object):
         self.miss_perc = params["miss_perc"]
         self.preconditions = params["preconditions"]
         self.postconditions = params["postconditions"]
+        self.postcondition_handler = None
         self.active = False
         self.consume_queue = params["consume_queue"]
         self.cc_queues = params["cc_queues"]
@@ -637,6 +645,7 @@ class Workload(object):
     def defaultSpec():
         return {'update_perc': 0,
                 'postconditions': None,
+                'postcondition_handler': None,
                 'del_perc': 0,
                 'create_perc': 0,
                 'exp_perc': 0,
@@ -656,8 +665,8 @@ class Workload(object):
     def __setattr__(self, name, value):
         super(Workload, self).__setattr__(name, value)
 
-        # cache when active key mutated
-        if name == 'active' or name == 'postconditions' or name == 'ops_per_sec':
+        # auto cache workload when certain attributes change
+        if name in Workload.AUTOCACHEKEYS:
             ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, self)
 
     @staticmethod
