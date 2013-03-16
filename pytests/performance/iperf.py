@@ -45,7 +45,7 @@ class PerfWrapper(object):
             else:
                 # Limit number of workers during load phase
                 if self.parami('load_phase', 0):
-                    total_clients = min(4, total_clients)
+                    total_clients = min(8, total_clients)
 
             self.input.test_params['num_clients'] = total_clients
 
