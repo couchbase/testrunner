@@ -207,6 +207,10 @@ class MultiClientTests(EVPerfClient):
     """
 
     @PerfWrapper.multiply
+    def test_kvperf(self):
+        super(MultiClientTests, self).test_eperf_mixed()
+
+    @PerfWrapper.multiply
     def test_vperf(self):
         super(MultiClientTests, self).test_vperf()
 
