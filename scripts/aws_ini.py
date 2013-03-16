@@ -5,6 +5,7 @@ from optparse import OptionParser
 from boto.ec2 import regions
 from boto.exception import NoAuthHandlerFound
 
+
 class AwsIni:
     """Auto-generated resource files (*.ini) for EC2 instances
     """
@@ -70,7 +71,7 @@ class AwsIni:
 
         for instance in self._get_instances():
             if (instance.tags.get(tag_key) == tag_value and
-                instance.state == "running"):
+                    instance.state == "running"):
                 yield instance
 
     def _print_header(self):
@@ -134,7 +135,11 @@ class AwsIni:
         # [membase] section
         self._print_footer()
 
-if __name__ == "__main__":
+
+def main():
     aws_ini = AwsIni()
     aws_ini.parse_args()
     aws_ini.print_file()
+
+if __name__ == "__main__":
+    main()
