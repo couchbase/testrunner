@@ -289,7 +289,7 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
         if workload.postconditions:
 
             stat, cmp_type, value = \
-                stat_checker.parse_condition(workload.postconditions)
+                phandler.default_condition_params(workload.postconditions)
 
             if stat == 'count':
                 curr_items = stat_checker.get_curr_items()
@@ -297,7 +297,8 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
                 workload.postconditions = "curr_items >= %s" % value
 
             # setup postcondition hander
-            workload.postcondition_handler = "bucket_stat_checker"
+            workload.postcondition_handler =\
+                phandler.getPostConditionMethod(workload)
 
 
 
@@ -355,22 +356,31 @@ def postcondition_handler():
 
     workloads = CacheHelper.workloads()
     for workload in workloads:
-        if workload.postconditions and workload.active:
+        if workload.postcondition_handler and workload.active:
             bucket = workload.bucket
             bs = BucketStatus.from_cache(bucket)
             bs.block(bucket)
+            status = True
 
-            postcondition_handler = \
-                getattr(phandler,
-                        workload.postcondition_handler)
+            try:
+                postcondition_handler = \
+                    getattr(phandler,
+                            workload.postcondition_handler)
 
-            status = postcondition_handler(workload.postconditions)
+                status = postcondition_handler(workload)
+
+            except AttributeError:
+                logger.error("Postcondition method %s doesn't exist" \
+                             % workload.postcondition_handler)
+                workload.postcondition = None
+                workload.postcondition_handler = None
+
+
             if status == True:
                 # unblock bucket and deactivate workload
                 bs = BucketStatus.from_cache(bucket)
                 bs.unblock(bucket)
                 workload.active = False
-
 
 @celery.task(base = PersistedMQ, ignore_result = True)
 def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
