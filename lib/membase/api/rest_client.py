@@ -1032,7 +1032,10 @@ class RestConnection(object):
             op = json_parsed["op"]
             samples = op["samples"]
             for stat_name in samples:
-                stats[stat_name] = samples[stat_name][-1]
+                if len(samples[stat_name]) == 0:
+                    stats[stat_name] = []
+                else:
+                    stats[stat_name] = samples[stat_name][-1]
         return stats
 
     def fetch_bucket_stats(self, bucket='default', zoom='minute'):
