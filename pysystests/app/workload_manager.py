@@ -11,7 +11,7 @@ from rabbit_helper import PersistedMQ
 from celery import current_task
 from celery import Task
 from cache import ObjCacher, CacheHelper
-from app.query import updateQueryBuilder
+from app.query import updateQueryBuilders
 import random
 import testcfg as cfg
 from celery.exceptions import TimeoutError
@@ -142,14 +142,17 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
         if isinstance(retval,tuple):
             isupdate = args[3]
             if isupdate == False:
+
                 # allow multi set keys to be consumed
                 keys = retval[0]
                 template = retval[1]
                 bucket = args[2]
 
-                if 'indexed_key' in args[1] and args[1]['indexed_key'] is not None:
+                indexed_keys = template['indexed_keys']
+
+                if len(indexed_keys) > 0:
                    if keys is not None and len(keys) > 0:
-                       updateQueryBuilder(template, bucket, keys[0])
+                       updateQueryBuilders.apply_async(args=[template, bucket, keys[0]])
 
                 # put created item into specified cc_queues (if specified)
                 # and item is not set to expire
@@ -196,6 +199,8 @@ def run(workload, prevWorkload = None):
                 if workload.cc_queues is not None:
                     # override template attribute with workload
                     template.cc_queues = workload.cc_queues
+                if len(workload.indexed_keys) > 0:
+                    template.indexed_keys = workload.indexed_keys
 
                 # read  workload settings
                 bucketInfo = {"bucket" : workload.bucket,
@@ -635,6 +640,8 @@ class Workload(object):
         self.miss_queue = None # internal use only
         self.wait = params["wait"]
         self.ttl = int(params["ttl"])
+        self.indexed_keys = []
+
 
         # consume from cc_queue by default if not specified
         if self.cc_queues != None:
@@ -660,7 +667,29 @@ class Workload(object):
                 'cc_queues': None,
                 'miss_queue': None,
                 'get_perc': 0,
-                'wait': None}
+                'wait': None,
+                'indexed_keys' : []}
+
+
+    def updateIndexKeys(self, key):
+
+        template = Template.from_cache(str(self.template))
+
+        # update workload with information about which keys being index
+        if key is not None:
+
+            # when indexed key does not exist in kv pair do not update
+            if key in template.kv:
+
+                # do not update if we are already traking index key
+                if key not in self.indexed_keys:
+
+                    # update and cache workload object
+                    self.indexed_keys.append(key)
+                    ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, self)
+            else:
+                logger.error("key: '%s' does not exist in kvpair.  Smart querying disabled" % key)
+
 
     def __setattr__(self, name, value):
         super(Workload, self).__setattr__(name, value)
@@ -683,23 +712,10 @@ class Template(object):
         self.cc_queues = params["cc_queues"]
         self.kv = params["kv"]
         self.size = params["size"]
-        self.indexed_key = self.set_indexed_key(params["indexed_key"])
+        self.indexed_keys = []
 
         # cache
         ObjCacher().store(CacheHelper.TEMPLATECACHEKEY, self)
-
-    def set_indexed_key(self, key):
-        indexed_key = None
-
-        # when indexed key does not exist in kv pair return null
-        # and wan user
-        if key is not None:
-            if key in self.kv:
-                indexed_key = key
-            else:
-                logger.error("key: '%s' does not exist in kvpair.  Smart querying disabled" % key)
-
-        return indexed_key
 
     @staticmethod
     def from_cache(id_):

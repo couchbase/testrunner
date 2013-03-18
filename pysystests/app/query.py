@@ -68,10 +68,13 @@ def queryRunner():
     queries = CacheHelper.active_queries()
     for query in queries:
 
+        # async update query workload object
+        updateQueryWorkload.apply_async(args=[query])
+
         count = int(query.qps)
         filters = list(set(query.include_filters) -\
                        set(query.exclude_filters))
-        params = generateQueryParams(query.template,
+        params = generateQueryParams(query.indexed_key,
                                      query.bucket,
                                      filters,
                                      query.limit,
@@ -90,7 +93,6 @@ def queryRunner():
 class QueryWorkload(object):
     def __init__(self, params):
         self.id = "query_workload_"+str(uuid.uuid4())[:7]
-        self.template = params["template"]
         self.active = False
         self.qps = params["queries_per_sec"]
         self.ddoc = params["ddoc"]
@@ -106,11 +108,11 @@ class QueryWorkload(object):
         self.endkey_docid = params.get("endkey_docid")
         self.limit = params.get("limit")
         self.task_queue = "%s_%s" % (self.bucket, self.id)
+        self.indexed_key = params.get("indexed_key")
 
     @staticmethod
     def defaultSpec():
-        return {"template" : "default",
-                "queries_per_sec" : 0,
+        return {"queries_per_sec" : 0,
                 "ddoc" : None,
                 "view" : None,
                 "bucket" : "default",
@@ -121,7 +123,9 @@ class QueryWorkload(object):
                 "endkey" : None,
                 "startkey_docid" : None,
                 "endkey_docid" : None,
-                "limit" : 10}
+                "limit" : 10,
+                "indexed_key" : None}
+
 
     def uniq_include_filters(self, ex_filters):
         include = ["startkey","endkey","limit"]
@@ -141,15 +145,36 @@ class QueryWorkload(object):
     def from_cache(id_):
         return ObjCacher().instance(CacheHelper.QUERYCACHEKEY, id_)
 
-def updateQueryBuilder(template, bucket, recent_id):
-    id_ = "%s_%s" % (template['name'], bucket)
-    qbuilder = QueryBuilder.from_cache(id_)
-    if qbuilder is None:
-        qbuilder = QueryBuilder(template['name'], bucket)
-    qbuilder.update(template, recent_id)
+"""
+" if any kv workload is running against the bucket
+" that is being queried, this method will update
+" its workload to include index information
+" so that we can track work being done in the kv workload
+"""
+@celery.task
+def updateQueryWorkload(query):
+    workloads = CacheHelper.workloads()
+
+    for workload in workloads:
+        if workload.active and workload.bucket == query.bucket:
+            key = query.indexed_key
+            workload.updateIndexKeys(key)
+
+@celery.task
+def updateQueryBuilders(template, bucket, recent_id):
+
+    for key in template['indexed_keys']:
+
+        id_ = "%s_%s" % (key, bucket)
+        qbuilder = QueryBuilder.from_cache(id_)
+        if qbuilder is None:
+            qbuilder = QueryBuilder(key, bucket)
+
+        new_id = template['kv'][key]
+        qbuilder.update(new_id, recent_id)
 
 
-def generateQueryParams(template_name,
+def generateQueryParams(indexed_key,
                         bucket,
                         filters,
                         limit = 10,
@@ -158,35 +183,48 @@ def generateQueryParams(template_name,
                         startkey_docid = None,
                         endkey_docid = None):
 
-    id_ = "%s_%s" % (template_name, bucket)
+    id_ = "%s_%s" % (indexed_key, bucket)
     qbuilder = QueryBuilder.from_cache(id_)
     params = {}
 
     if 'limit' in filters:
         params = {'limit' : limit}
 
-    if qbuilder is not None:
-        if 'startkey' in filters:
-            # if startkey filter selected without explicit value
-            # use most recent value
-            startkey = startkey or qbuilder.recentkey
+    if 'startkey' in filters:
+
+        # try to use startkey from query builder
+        # only if user startkey not supplied
+        if qbuilder and startkey is None:
+            startkey = qbuilder.recentkey
+
+        # user supplied startkey
+        if startkey:
             startkey = typecast(startkey)
             params.update({'startkey' : startkey})
-        if 'endkey' in filters:
-            endkey = endkey or qbuilder.endkey
+
+    if 'endkey' in filters:
+        if qbuilder and endkey is None:
+            endkey = qbuilder.endkey
+
+        if endkey:
             endkey = typecast(endkey)
             params.update({'endkey' : endkey})
-        if 'startkey_docid' in filters:
-            startkey_docid = startkey_docid or qbuilder.recentkey_docid
-            startkey_docid = typecast(startkey_docid)
-            params.update({'startkey_docid' : qbuilder.recentkey_docid})
-        if 'endkey_docid' in filters:
-            endkey_docid = endkey_docid or qbuilder.endkey_docid
-            endkey_docid = typecast(endkey_docid)
-            params.update({'endkey_docid' : qbuilder.endkey_docid})
 
-        if startkey > endkey:
-            params.update({'descending' : True})
+    if 'startkey_docid' in filters:
+        if qbuilder and startkey_docid is None:
+            startkey_docid = qbuilder.recentkey_docid
+
+        if startkey_docid:
+            startkey_docid = typecast(startkey_docid)
+            params.update({'startkey_docid' : startkey_docid})
+
+    if 'endkey_docid' in filters:
+        endkey_docid = endkey_docid or qbuilder.endkey_docid
+        endkey_docid = typecast(endkey_docid)
+        params.update({'endkey_docid' : qbuilder.endkey_docid})
+
+    if startkey > endkey:
+        params.update({'descending' : True})
 
     return params
 
@@ -211,8 +249,8 @@ def typecast(str_):
     return val
 
 class QueryBuilder(object):
-    def __init__(self, template_name, bucket = "default"):
-        self.id = "%s_%s" % (template_name, bucket)
+    def __init__(self, indexed_key, bucket = "default"):
+        self.id = "%s_%s" % (indexed_key, bucket)
         self.startkey = None
         self.startkey_docid = None
         self.endkey = None
@@ -221,21 +259,19 @@ class QueryBuilder(object):
         self.recentkey_docid = None
         self.params = {}
 
-    def update(self, template, recent_id):
+    def update(self, recent_key, recent_id):
 
-        kv = template['kv']
-        indexed_key = template['indexed_key']
-        key = kv[indexed_key]
 
-        if self.startkey is None or key < self.startkey:
-            self.startkey = key
+        if self.startkey is None or recent_key < self.startkey:
+            self.startkey = recent_key
             self.startkey_docid = recent_id
-        if self.endkey is None or key > self.endkey:
-            self.endkey = key
+        if self.endkey is None or recent_key > self.endkey:
+            self.endkey = recent_key
             self.endkey_docid = recent_id
 
-        self.recentkey = key
+        self.recentkey = recent_key
         self.recentkey_docid = recent_id
+
         ObjCacher().store(CacheHelper.QBUILDCACHEKEY, self)
 
 

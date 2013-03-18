@@ -238,11 +238,11 @@ def parseQueryStr(query):
             params['password'] = str(val)
         if key == 'include':
             val = [str(v) for v in val.split(' ')]
-            params['include_filters'] = val 
+            params['include_filters'] = val
         if key == 'exclude':
             params['exclude_filters'] = str(val)
-        if key == 't':
-            params['template'] = str(val)
+        if key == 'idx':
+            params['indexed_key'] = str(val)
         if key == 'start':
             params['startkey'] = str(val)
         if key == 'end':
