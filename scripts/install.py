@@ -95,6 +95,7 @@ class Installer(object):
         remote_client = RemoteMachineShellConnection(params["server"])
         remote_client.membase_uninstall()
         remote_client.couchbase_uninstall()
+        remote_client.disconnect()
 
     def build_url(self, params):
         _errors = []
@@ -232,6 +233,7 @@ class MembaseServerInstaller(Installer):
                     remote_client.execute_command('rm -rf {0}/*'.format(server.data_path))
                     # Make sure that data_path is writable by membase user
                     remote_client.execute_command("chown -R membase.membase {0}".format(server.data_path))
+                    remote_client.disconnect()
                     rest.set_data_path(data_path=server.data_path)
                 rest.init_cluster(username=server.rest_username, password=server.rest_password)
                 rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
@@ -275,6 +277,7 @@ class MembaseServerInstaller(Installer):
                 log.error("membase-server did not start...")
             log.info('wait 5 seconds for membase server to start')
             time.sleep(5)
+        remote_client.disconnect()
         if queue:
             queue.put(success)
         return success
@@ -332,6 +335,7 @@ class CouchbaseServerInstaller(Installer):
                 if mem_req_tap_env:
                     remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
                                                            mem_req_tap_env)
+                remote_client.disconnect()
                 #TODO: Make it work with windows
                 if "erlang_threads" in params:
                     num_threads = params.get('erlang_threads', testconstants.NUM_ERLANG_THREADS)
@@ -400,6 +404,7 @@ class CouchbaseServerInstaller(Installer):
             except BaseException, e:
                 success = False
                 log.error("installation failed: {0}".format(e))
+        remote_client.disconnect()
         if queue:
             queue.put(success)
         return success
@@ -422,6 +427,7 @@ class CouchbaseSingleServerInstaller(Installer):
             log.error('unable to download binaries : {0}'.format(build.url))
             return False
         success = remote_client.couchbase_single_install(build)
+        remote_client.disconnect()
         log.info('wait 5 seconds for couchbase-single server to start')
         time.sleep(5)
         if queue:
@@ -438,6 +444,7 @@ class CouchbaseSingleServerInstaller(Installer):
         remote_client.log_command_output(o, r)
         remote_client.stop_couchbase()
         remote_client.start_couchbase()
+        remote_client.disconnect()
         couchdb_ok = False
 
         while time.time() < (start_time + 60):
