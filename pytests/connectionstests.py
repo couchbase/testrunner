@@ -24,7 +24,7 @@ class ConnectionTests(BaseTestCase):
             rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         shell = RemoteMachineShellConnection(self.master)
         initial_rate = shell.get_mem_usage_by_process(process)
-
+        self.log.info("Usage of memory is %s" % initial_rate)
         connections = []
         try:
             for i in xrange(num_connections):
@@ -43,5 +43,10 @@ class ConnectionTests(BaseTestCase):
             if servers_in:
                 rebalance.result()
         finally:
+            try:
+                rate = shell.get_mem_usage_by_process(process)
+                self.log.info("Usage of memory is %s" % rate)
+            except:
+                pass
             for connection in connections:
                 connection.join()
