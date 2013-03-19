@@ -51,8 +51,8 @@
 					"template" : "default",
 					"spec" : "u:5,e:5,ttl:60000,g:75,d:5,ccq:default2keys,ops:30000"},
 					{"spec" : "b:saslbucket,pwd:password,e:70,d:20,s:5,g:5,ccq:sasl2keys,ops:30000"}],
-			"query" : ["ddoc:d1,view:v1,qps:200,limit:100,start:$int1",
-					"ddoc:d1,view:v2,qps:200,limit:100,start:$int1",
+			"query" : ["ddoc:d1,view:v1,qps:20,limit:10,start:$int1",
+					"ddoc:d1,view:v2,qps:20,limit:10,start:$int1",
 					"bucket:saslbucket,password:password,ddoc:d11,view:v1,qps:20,limit:10,start:$int1"
 					"bucket:saslbucket,password:password,ddoc:d11,view:v2,qps:20,limit:10,start:$int1"],
 			"runtime" : 10800
