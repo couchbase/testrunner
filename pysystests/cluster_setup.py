@@ -116,6 +116,8 @@ class SETUP(initialize):
         if self._default_bucket:
             num_buckets += 1
         num_buckets += self._sasl_buckets + self._standard_buckets
+        if num_buckets == 0:
+            return
         bucket_size = self._get_bucket_size(master_node, nodes, self._mem_quota_int, num_buckets)
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
