@@ -283,6 +283,10 @@ class BaseTestCase(unittest.TestCase):
             print e;
             for task in stats_tasks:
                 task.cancel()
+            self.log.error("unable to get expected stats for any node! Print taps for all nodes:")
+            rest = RestConnection(self.master)
+            for bucket in self.buckets:
+                RebalanceHelper.print_taps_from_all_nodes(rest, bucket)
             raise Exception("unable to get expected stats during {0} sec".format(timeout))
 
     """Asynchronously applys load generation to all bucekts in the cluster.
