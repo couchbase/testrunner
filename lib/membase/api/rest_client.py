@@ -73,7 +73,7 @@ class RestHelper(object):
         else:
             duration = time.time() - start
             log.info('rebalance reached >{0}% in {1} seconds '.format(progress, duration))
-            return True
+            return progress
 
     def is_cluster_rebalanced(self):
         #get the nodes and verify that all the nodes.status are healthy
