@@ -15,6 +15,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from results_helper import ResultsHelper
+from basetestcase import BaseTestCase
 
 class MemcapableTestBase(object):
     log = None
@@ -351,33 +352,27 @@ class GetlTests(unittest.TestCase):
         self.assertEquals(get_v, "*")
 
 
-class GetrTests(unittest.TestCase):
-    memcapableTestBase = None
-    log = logger.Logger.get_logger()
-
+class GetrTests(BaseTestCase):
     NO_REBALANCE = 0
     DURING_REBALANCE = 1
     AFTER_REBALANCE = 2
 
     def setUp(self):
-        self.servers = TestInputSingleton.input.servers
-        self.input = TestInputSingleton.input
-        self.master = self.servers[0]
-        self.bucket_name = "default"
+        super(GetrTests, self).setUp()
         self.memcapableTestBase = MemcapableTestBase()
         self.rest = RestConnection(self.master)
-        ClusterOperationHelper.cleanup_cluster([self.master])
-        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+        descr = self.input.param("descr", "")
+        if descr:
+            self.log.info("Test:{0}".format(descr))
 
     def tearDown(self):
-        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
-        ClusterOperationHelper.cleanup_cluster([self.master])
+        super(GetrTests, self).tearDown()
 
     def test_getr(self):
         item_count = self.input.param("item_count", 10000)
         replica_count = self.input.param("replica_count", 1)
         expiration = self.input.param("expiration", 0)
-        delay = self.input.param("delay", 0)
+        delay = float(self.input.param("delay", 0))
         eject = self.input.param("eject", 0)
         delete = self.input.param("delete", 0)
         mutate = self.input.param("mutate", 0)
@@ -396,7 +391,7 @@ class GetrTests(unittest.TestCase):
         prefix = str(uuid.uuid4())[:7]
 
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
-        BucketOperationHelper.create_bucket(self.master, name=self.bucket_name, replica=replica_count, port=11210, test_case=self, bucket_ram= -1, password="")
+        BucketOperationHelper.create_bucket(self.master, name=self.default_bucket_name, replica=replica_count, port=11210, test_case=self, bucket_ram= -1, password="")
 
         if rebalance == GetrTests.DURING_REBALANCE or rebalance == GetrTests.AFTER_REBALANCE:
             # leave 1 node unclustered for rebalance in
@@ -412,7 +407,7 @@ class GetrTests(unittest.TestCase):
         if not skipload:
             self._load_items(item_count=item_count, expiration=expiration, prefix=prefix, vprefix=vprefix)
             if not expiration:
-                RebalanceHelper.wait_for_stats_int_value(self.master, self.bucket_name, "curr_items_tot", item_count * (replica_count + 1), "<=", 600, True)
+                RebalanceHelper.wait_for_stats_int_value(self.master, self.default_bucket_name, "curr_items_tot", item_count * (replica_count + 1), "<=", 600, True)
 
         if delete:
             self._delete_items(item_count=item_count, prefix=prefix)
@@ -428,8 +423,7 @@ class GetrTests(unittest.TestCase):
             self._eject_items(item_count=item_count, prefix=prefix)
 
         if delay:
-            self.log.info("delaying for {0} seconds".format(delay))
-            time.sleep(delay)
+            self.sleep(delay)
 
         if rebalance == GetrTests.DURING_REBALANCE:
             ClusterOperationHelper.begin_rebalance_in(self.master, self.servers)
@@ -441,12 +435,12 @@ class GetrTests(unittest.TestCase):
             memcached_restarted = self.rest.diag_eval(command)
             #wait until memcached starts
             self.assertTrue(memcached_restarted, "unable to restart memcached process through diag/eval")
-            RebalanceHelper.wait_for_stats(self.master, self.bucket_name, "curr_items_tot", item_count * (replica_count + 1), 600)
+            RebalanceHelper.wait_for_stats(self.master, self.default_bucket_name, "curr_items_tot", item_count * (replica_count + 1), 600)
 
         count = self._getr_items(item_count=item_count, replica_count=replica_count, prefix=prefix, vprefix=vprefix)
 
         if negative_test:
-            self.assertTrue(count == 0, "found items, expected none")
+            self.assertTrue(count == 0, "found {0} items, expected none".format(count))
         else:
             self.assertTrue(count == replica_count * item_count, "expected {0} items, got {1} items".format(replica_count * item_count, count))
         if rebalance == GetrTests.DURING_REBALANCE:
@@ -454,7 +448,7 @@ class GetrTests(unittest.TestCase):
 
     def _load_items(self, item_count, expiration, prefix, vprefix=""):
         flags = 0
-        client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
+        client = MemcachedClientHelper.proxy_client(self.master, self.default_bucket_name)
         time_start = time.time()
         for i in range(item_count):
             timeout_end = time.time() + 10
@@ -470,7 +464,7 @@ class GetrTests(unittest.TestCase):
         self.log.info("loaded {0} items in {1} seconds".format(item_count, time.time() - time_start))
 
     def _get_items(self, item_count, prefix, vprefix=""):
-        client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
+        client = MemcachedClientHelper.proxy_client(self.master, self.default_bucket_name)
         time_start = time.time()
         get_count = 0
         last_error = ""
@@ -493,7 +487,7 @@ class GetrTests(unittest.TestCase):
         get_count = 0
         last_error = ""
         error_count = 0
-        awareness = VBucketAwareMemcached(self.rest, self.bucket_name)
+        awareness = VBucketAwareMemcached(self.rest, self.default_bucket_name)
         for r in range(replica_count):
             for i in range(item_count):
                 retry = True
@@ -525,7 +519,7 @@ class GetrTests(unittest.TestCase):
         return get_count
 
     def _delete_items(self, item_count, prefix):
-        client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
+        client = MemcachedClientHelper.proxy_client(self.master, self.default_bucket_name)
         time_start = time.time()
         for i in range(item_count):
             timeout_end = time.time() + 10
@@ -541,7 +535,7 @@ class GetrTests(unittest.TestCase):
         self.log.info("deleted {0} items in {1} seconds".format(item_count, time.time() - time_start))
 
     def _eject_items(self, item_count, prefix):
-        client = MemcachedClientHelper.proxy_client(self.master, self.bucket_name)
+        client = MemcachedClientHelper.proxy_client(self.master, self.default_bucket_name)
         time_start = time.time()
         for i in range(item_count):
             timeout_end = time.time() + 10
