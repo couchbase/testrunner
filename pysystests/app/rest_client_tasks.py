@@ -60,15 +60,9 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
 
 def send_query(url):
 
-    authorization = base64.encodestring('%s:%s' % (cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD))
-
-    headers = {'Content-Type': 'application/json',
-               'Authorization': 'Basic %s' % authorization,
-               'Accept': '*/*'}
-
     qtime, data = None, None
     try:
-        qtime, data = timed_url_request(url, headers)
+        qtime, data = timed_url_request(url)
 
         # log 500 chars to output
         logger.error(data.read()[:500])
@@ -78,14 +72,25 @@ def send_query(url):
     return qtime, data
 
 
-def timed_url_request(url, headers):
+def timed_url_request(url):
     start = time.time()
-    data = url_request(url, headers)
+    data = url_request(url)
     end = time.time()
     qtime = end - start
     return qtime, data
 
-def url_request(url, headers):
+def default_url_headers():
+    authorization = base64.encodestring('%s:%s' % (cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD))
+
+    headers = {'Content-Type': 'application/json',
+               'Authorization': 'Basic %s' % authorization,
+               'Accept': '*/*'}
+    return headers
+
+def url_request(url, headers = None):
+    if headers is None:
+        headers = default_url_headers()
+
     req = urllib2.Request(url, headers = headers)
     data = urllib2.urlopen(req)
     return data
@@ -419,6 +424,15 @@ def create_server_obj(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
     }
     node = _dict_to_obj(serverInfo)
     return node
+
+def http_ping(ip, port, timeout=5):
+    url = "http://%s:%s/nodes/self" % (ip,port)
+    try:
+        data = url_request(url)
+        return data.read()
+    except Exception as ex:
+        pass
+
 
 def create_rest(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
                 username=cfg.COUCHBASE_USER, password=cfg.COUCHBASE_PWD):

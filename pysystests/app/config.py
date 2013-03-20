@@ -65,7 +65,7 @@ class BaseConfig(object):
             {
                 'update_cluster_status': {
                     'task': 'app.workload_manager.updateClusterStatus',
-                    'schedule': timedelta(seconds=5),
+                    'schedule': timedelta(seconds=10),
                 },
             })
 

@@ -12,7 +12,7 @@ from celery import current_task
 from celery import Task
 from cache import ObjCacher, CacheHelper
 from app.query import updateQueryBuilders
-from app.rest_client_tasks import create_rest
+from app.rest_client_tasks import create_rest, http_ping
 import random
 import testcfg as cfg
 from celery.exceptions import TimeoutError
@@ -626,32 +626,38 @@ def throttle_kv_ops(isovercommited=True):
 
 @celery.task(ignore_result = True)
 def updateClusterStatus(ignore_result = True):
+
+    done = False
+
     clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status") or\
         ClusterStatus()
 
 
+    # check cluster nodes
+    cached_nodes = clusterStatus.nodes
+    new_cached_nodes = []
 
-    # check for rebalance in any cluster nodes
-    if clusterStatus.rebalancing == False:
 
-        for node in clusterStatus.nodes:
+    for node in cached_nodes:
 
-            tasks = clusterStatus.cluster_tasks(node)
+        # get an active node
+        if clusterStatus.http_ping_node(node) is not None:
 
-            for task in tasks:
+            # get remaining nodes
+            active_nodes = clusterStatus.get_cluster_nodes(node)
 
-                if 'type' in task and task['type'] == 'rebalance':
+            # populate cache with healthy nodes
+            for active_node in active_nodes:
+                if active_node.status == 'healthy':
+                    new_cached_nodes.append(active_node)
 
-                    if 'status' in task and task['status'] == 'running':
-                        clusterStatus.rebalancing = True
-                        try:
-                            clusterStatus.update_nodes(node, rebalancing = True)
+            break
 
-                        except Exception as ex:
-                            # probably rebalanced out master
-                            logger.error(ex)
+    clusterStatus.nodes = new_cached_nodes
 
-                        clusterStatus.rebalancing = False
+    if len(new_cached_nodes) > 0:
+        clusterStatus.master_node = new_cached_nodes[0]
+
 
 
 """
@@ -668,57 +674,20 @@ class ClusterStatus(object):
             self.master_node = self.nodes[0]
 
 
-    """
-    " make sure nodes match actual cluster nodes
-    """
-    def update_nodes(self, reference_node = None, rebalancing = False):
 
-        rest = self.node_rest(reference_node)
+    def http_ping_node(self, node = None):
+        if node:
+            ip, port = node.ip, node.port
+        else:
+            ip, port = self.master_node.ip, self.master_node.port
 
-        if rest is not None:
+        return http_ping(ip, port)
 
-            if rebalancing:
-                rest.monitorRebalance()
-
-                # check if all original nodes still active
-                for node in self.nodes:
-                    rest = self.node_rest(node)
-                    pools = rest.get_pools_info()['pools']
-
-                    if len(pools) == 0:
-
-                        # remove node from cluster status
-                        del self.nodes[self.nodes.index(node)]
-
-                        # elect new master if this node was master
-                        # but has been rebalanced out
-                        if node.ip == self.master_node.ip and\
-                            node.port == self.master_node.port:
-
-                                if len(self.nodes) == 0:
-                                    raise Exception("No more nodes left in cluster")
-
-                                self.master_node = self.nodes[0]
-
-                # update rest
-                rest = self.node_rest()
-
-            # update nodes
-            self.nodes = rest.node_statuses()
-
-
-    def get_cluster_nodes(self):
-        rest = self.node_rest()
+    def get_cluster_nodes(self, node = None):
+        rest = self.node_rest(node)
         if rest is not None:
             return rest.node_statuses()
 
-    def cluster_tasks(self, node = None):
-        if node is None:
-            node = self.master_node
-
-        rest = self.node_rest(node)
-        if rest is not None:
-            return rest.ns_server_tasks()
 
     def node_rest(self, node = None):
         rest = None

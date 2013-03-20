@@ -174,7 +174,8 @@ class CacheHelper():
     def cacheClean():
         objCacheKeys = [CacheHelper.WORKLOADCACHEKEY,
                         CacheHelper.BUCKETSTATUSCACHEKEY,
-                        CacheHelper.QUERYCACHEKEY]
+                        CacheHelper.QUERYCACHEKEY,
+                        CacheHelper.CLUSTERSTATUSKEY]
 
         for cacheKey in objCacheKeys:
             ObjCacher().clear(cacheKey)
