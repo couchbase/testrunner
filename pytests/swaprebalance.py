@@ -374,7 +374,13 @@ class SwapRebalanceBase(unittest.TestCase):
             ejectedNodes=optNodesIds)
 
         self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(self.percentage_progress))
-        RestHelper(rest).rebalance_reached(self.percentage_progress)
+        reached = RestHelper(rest).rebalance_reached(self.percentage_progress)
+        if reached == 100 and not RestHelper(rest).is_cluster_rebalanced():
+            #handle situation when rebalance failed at the beginning
+            self.log.error('seems rebalance failed!')
+            self.log.info("Latest logs from UI:")
+            for i in rest.get_logs(): self.log.error(i)
+            self.fail("rebalance failed even before killing memcached")
         bucket = rest.get_buckets()[0].name
         pid = None
         if self.swap_orchestrator:
