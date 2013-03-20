@@ -420,9 +420,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                       (self.nodes_init + (i + 1) * self.swap_num_servers)]
             servers_out = self.servers[(i * self.swap_num_servers):((i + 1) * self.swap_num_servers)]
             servers = old_servers + new_servers
-            self.cluster.rebalance(servers, servers_in, servers_out)
             self.log.info("Swap rebalance: rebalance out %s old version nodes, rebalance in %s 2.0 Nodes"
                           % (self.swap_num_servers, self.swap_num_servers))
+            self.cluster.rebalance(servers, servers_in, servers_out)
             self.sleep(self.sleep_time)
             old_servers = self.servers[((i + 1) * self.swap_num_servers):self.nodes_init]
             new_servers = new_servers + servers_in
