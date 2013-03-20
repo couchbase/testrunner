@@ -10,6 +10,7 @@ import sys
 sys.path=["../lib"] + sys.path
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from couchbase.document import View
 from app.celery import celery
 import testcfg as cfg
 import json
@@ -173,6 +174,74 @@ def create_standard_buckets(rest, bucketMsg):
                            bucketType = bucketMsgParsed['type'],
                            replica_index = bucketMsgParsed['replica_index'])
 
+
+@celery.task
+def perform_view_tasks(viewMsg):
+    rest = create_rest()
+
+    if "create" in viewMsg:
+        ddocMsg = parseDdocMsg(viewMsg['create'])
+        for ddoc_name, views in ddocMsg.iteritems():
+            view_list = []
+            bucket_name = ''
+            for view in views:
+                view_list.append(View(view['view_name'], view['map_func'], view['red_func'],
+                                      view['dev_view'], view['is_spatial']))
+                bucket_name = view['bucket_name']
+
+            bucket_obj = rest.get_bucket(bucket_name, 2, 2)
+            rest.create_ddoc(ddoc_name, bucket_obj, view_list)
+
+    if "delete" in viewMsg:
+        for view in viewMsg['delete']:
+            viewMsgParsed = parseViewMsg(view)
+            bucket_obj = rest.get_bucket(viewMsgParsed['bucket_name'], 2, 2)
+            rest.delete_view(bucket_obj, viewMsgParsed['ddoc_name'])
+
+def parseDdocMsg(views):
+    ddocs = {}
+    for view in views:
+        viewMsg = parseViewMsg(view)
+        if viewMsg['ddoc_name'] in ddocs:
+            ddocs[viewMsg['ddoc_name']].append(viewMsg)
+        else:
+            ddocs[viewMsg['ddoc_name']] = []
+            ddocs[viewMsg['ddoc_name']].append(viewMsg)
+    return ddocs
+
+def parseViewMsg(view):
+
+    viewMsg = {'ddoc_name': 'ddoc1',
+               'view_name': 'view1',
+               'map_func': 'function (doc) { emit(null, doc);}',
+               'red_func': None,
+               'dev_view': True,
+               'is_spatial': False,
+               'bucket_name': 'default'
+               }
+
+    if 'ddoc' in view:
+        viewMsg['ddoc_name'] = view['ddoc']
+    if 'view' in view:
+        viewMsg['view_name'] = view['view']
+    if 'map' in view:
+        viewMsg['map_func'] = view['map']
+    if 'reduce' in view:
+        viewMsg['red_func'] = view['reduce']
+    if 'dev' in view:
+        if view['dev'] == "True":
+            viewMsg['dev_view'] = True
+        elif view['dev'] == "False":
+            viewMsg['dev_view'] = False
+    if 'spatial' in view:
+        if view['spatial'] == "True":
+            viewMsg['is_spatial'] = True
+        elif view['spatial'] == "False":
+            viewMsg['is_spatial'] = False
+    if 'bucket' in view:
+        viewMsg['bucket_name'] = view['bucket']
+
+    return viewMsg
 
 @celery.task
 def perform_admin_tasks(adminMsg):

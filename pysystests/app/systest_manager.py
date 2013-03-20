@@ -9,7 +9,7 @@ from cache import ObjCacher, CacheHelper
 from rabbit_helper import PersistedMQ
 from app.workload_manager import Workload, sysTestRunner
 from app.query import QueryWorkload
-from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance, perform_bucket_create_tasks
+from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance, perform_bucket_create_tasks, perform_view_tasks
 from celery.utils.log import get_task_logger
 if cfg.SERIESLY_IP != '':
     from seriesly import Seriesly
@@ -123,7 +123,7 @@ def add_phase_to_db(phase, phase_key, name, desc):
 
 def runPhase(name, phase):
 
-    workload = workloadIds = cluster = query = queryIds = buckets = None
+    ddocs = workload = workloadIds = cluster = query = queryIds = buckets = None
     docTemplate = "default"
     rebalance_required = False
 
@@ -147,12 +147,17 @@ def runPhase(name, phase):
         runTime = int(phase['runtime'])
     if 'buckets' in phase:
         buckets = phase['buckets']
+    if 'ddocs' in phase:
+        ddocs = phase['ddocs']
 
     logger.error('\n')
     logger.error("Running Phase: %s (%s)" % (name, desc))
 
     if buckets is not None:
         perform_bucket_create_tasks(buckets)
+
+    if ddocs is not None:
+        perform_view_tasks(ddocs)
 
     if cluster is not None:
 
