@@ -16,16 +16,16 @@ class Cache(object):
         if isinstance(data, dict):
             data = json.dumps(data)
 
-        self._mc[key] = data 
-        
-        # update collection index 
+        self._mc[key] = data
+
+        # update collection index
         keyList = self.retrieve(collectionKey)
         if keyList is None:
             keyList = [key]
         elif key not in keyList:
             keyList.append(key)
 
-        self._mc[collectionKey] = keyList 
+        self._mc[collectionKey] = keyList
 
     def fetchCollection(self, collectionKey):
         keys = self.retrieve(collectionKey)
@@ -35,7 +35,7 @@ class Cache(object):
                 val = self.retrieve(key)
                 if val is not None:
                     data.append(val)
-        return data 
+        return data
 
     def retrieve(self, key, retry_count = 5):
         data = None
@@ -112,6 +112,7 @@ class CacheHelper():
     BUCKETSTATUSCACHEKEY = "BUCKETSTATUSCACHEKEY"
     QUERYCACHEKEY = "QUERYCACHEKEY"
     QBUILDCACHEKEY = "QBUILDCACHEKEY"
+    CLUSTERSTATUSKEY = "CLUSTERSTATUSKEY"
 
     @staticmethod
     def workloads():
@@ -128,6 +129,10 @@ class CacheHelper():
     @staticmethod
     def qbuilders():
         return ObjCacher().allinstances(CacheHelper.QBUILDCACHEKEY)
+
+    @staticmethod
+    def clusterstatus(_id):
+        return ObjCacher().instance(CacheHelper.CLUSTERSTATUSKEY, _id)
 
     @staticmethod
     def active_queries():

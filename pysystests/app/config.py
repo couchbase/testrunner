@@ -41,10 +41,14 @@ class BaseConfig(object):
 
             # queue for system test-case execution
             self.make_queue('systest_mgr_consumer', 'test.mgr', default_ex),
+
+            # queue for cluster status tasks
+            self.make_queue('cluster_status', 'cluster.status', default_ex),
         )
 
         self.CELERY_ROUTES = (
             {'app.systest_manager.systestManager'  : self.route_args('systest_mgr_consumer','test.mgr') },
+            {'app.workload_manager.updateClusterStatus'  : self.route_args('cluster_status','cluster.status') },
         )
 
         for type_ in types:
@@ -57,6 +61,13 @@ class BaseConfig(object):
             if type_ == "admin" or type_ == "all":
                 self.add_adminconfig()
 
+            self.CELERYBEAT_SCHEDULE.update(
+            {
+                'update_cluster_status': {
+                    'task': 'app.workload_manager.updateClusterStatus',
+                    'schedule': timedelta(seconds=5),
+                },
+            })
 
     def make_queue(self, queue, routing_key = None, exchange = None):
 

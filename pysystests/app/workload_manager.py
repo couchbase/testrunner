@@ -12,11 +12,13 @@ from celery import current_task
 from celery import Task
 from cache import ObjCacher, CacheHelper
 from app.query import updateQueryBuilders
+from app.rest_client_tasks import create_rest
 import random
 import testcfg as cfg
 from celery.exceptions import TimeoutError
 from celery.signals import task_prerun, task_postrun
 from celery.utils.log import get_task_logger
+
 logger = get_task_logger(__name__)
 
 
@@ -620,6 +622,128 @@ def throttle_kv_ops(isovercommited=True):
                if new_ops_per_sec > 5000:
                    workload.ops_per_sec = workload.ops_per_sec*0.90
                    logger.error("Cluster Overcommited: reduced ops to (%s)" % workload.ops_per_sec)
+
+
+@celery.task(ignore_result = True)
+def updateClusterStatus(ignore_result = True):
+    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status") or\
+        ClusterStatus()
+
+
+
+    # check for rebalance in any cluster nodes
+    if clusterStatus.rebalancing == False:
+
+        for node in clusterStatus.nodes:
+
+            tasks = clusterStatus.cluster_tasks(node)
+
+            for task in tasks:
+
+                if 'type' in task and task['type'] == 'rebalance':
+
+                    if 'status' in task and task['status'] == 'running':
+                        clusterStatus.rebalancing = True
+                        try:
+                            clusterStatus.update_nodes(node, rebalancing = True)
+
+                        except Exception as ex:
+                            # probably rebalanced out master
+                            logger.error(ex)
+
+                        clusterStatus.rebalancing = False
+
+
+"""
+" object used to keep track of active nodes in a cluster
+"""
+class ClusterStatus(object):
+    def __init__(self):
+        self.id = cfg.CB_CLUSTER_TAG+"_status"
+        self.master_node = None
+        self.nodes = self.get_cluster_nodes()
+        self.rebalancing = False
+
+        if len(self.nodes) > 0:
+            self.master_node = self.nodes[0]
+
+
+    """
+    " make sure nodes match actual cluster nodes
+    """
+    def update_nodes(self, reference_node = None, rebalancing = False):
+
+        rest = self.node_rest(reference_node)
+
+        if rest is not None:
+
+            if rebalancing:
+                rest.monitorRebalance()
+
+                # check if all original nodes still active
+                for node in self.nodes:
+                    rest = self.node_rest(node)
+                    pools = rest.get_pools_info()['pools']
+
+                    if len(pools) == 0:
+
+                        # remove node from cluster status
+                        del self.nodes[self.nodes.index(node)]
+
+                        # elect new master if this node was master
+                        # but has been rebalanced out
+                        if node.ip == self.master_node.ip and\
+                            node.port == self.master_node.port:
+
+                                if len(self.nodes) == 0:
+                                    raise Exception("No more nodes left in cluster")
+
+                                self.master_node = self.nodes[0]
+
+                # update rest
+                rest = self.node_rest()
+
+            # update nodes
+            self.nodes = rest.node_statuses()
+
+
+    def get_cluster_nodes(self):
+        rest = self.node_rest()
+        if rest is not None:
+            return rest.node_statuses()
+
+    def cluster_tasks(self, node = None):
+        if node is None:
+            node = self.master_node
+
+        rest = self.node_rest(node)
+        if rest is not None:
+            return rest.ns_server_tasks()
+
+    def node_rest(self, node = None):
+        rest = None
+        args = {'username' : cfg.COUCHBASE_USER,
+                'password' : cfg.COUCHBASE_PWD}
+
+        if self.master_node is None:
+            ip, port = cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT
+        elif node is None:
+            ip, port = self.master_node.ip, self.master_node.port
+        else:
+            ip, port = node.ip, node.port
+
+        args['server_ip'] = ip
+        args['port'] = port
+
+        rest = create_rest(**args)
+
+        return rest
+
+    def __setattr__(self, name, value):
+
+        # auto cache changes made to this object
+        super(ClusterStatus, self).__setattr__(name, value)
+        ObjCacher().store(CacheHelper.CLUSTERSTATUSKEY, self)
 
 class Workload(object):
     AUTOCACHEKEYS = ['active',
