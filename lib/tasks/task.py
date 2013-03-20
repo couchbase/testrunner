@@ -169,7 +169,7 @@ class BucketCreateTask(Task):
 
     def check(self, task_manager):
         try:
-            if self.bucket_type=='memcached':
+            if self.bucket_type == 'memcached':
                 self.set_result(True)
                 self.state = FINISHED
                 return
@@ -362,12 +362,12 @@ class StatsWaitTask(Task):
                 self.set_exception(ex)
                 return
         if not self._compare(self.comparison, str(stat_result), self.value):
-            self.log.warn("Not Ready: %s %s %s %s expected on %s" % (self.stat, stat_result,
-                      self.comparison, self.value, self._stringify_servers()))
+            self.log.warn("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
+                      self.comparison, self.value, self._stringify_servers(), self.bucket))
             task_manager.schedule(self, 5)
             return
-        self.log.info("Saw %s %s %s %s expected on %s" % (self.stat, stat_result,
-                      self.comparison, self.value, self._stringify_servers()))
+        self.log.info("Saw %s %s %s %s expected on %s,%s bucket" % (self.stat, stat_result,
+                      self.comparison, self.value, self._stringify_servers(), self.bucket))
 
         for server, conn in self.conns.items():
             conn.close()
