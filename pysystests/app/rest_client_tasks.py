@@ -193,8 +193,16 @@ def perform_admin_tasks(adminMsg):
 
     # Failover Node
     servers = adminMsg["failover"]
+    auto_failover_servers = adminMsg["auto_failover"]
     only_failover = adminMsg["only_failover"]
-    toBeEjectedNodes.extend(failover_nodes(rest, servers, only_failover))
+    add_back_servers = adminMsg["add_back"]
+    failoverNodes = failover_nodes(rest, servers, only_failover)
+    autoFailoverNodes = auto_failover_nodes(rest, auto_failover_servers, only_failover)
+    addBackNodes = add_back_nodes(rest, add_back_servers)
+    toBeEjectedNodes.extend(failoverNodes)
+    toBeEjectedNodes.extend(autoFailoverNodes)
+    for node in addBackNodes:
+        toBeEjectedNodes.remove(node)
 
     # SoftRestart a node
     servers = adminMsg["soft_restart"]
@@ -273,6 +281,38 @@ def failover_nodes(rest, servers='', only_failover=False):
                     toBeEjectedNodes.append(node.id)
     return toBeEjectedNodes
 
+def auto_failover_nodes(rest, servers='', only_failover=False):
+    toBeEjectedNodes = []
+    if servers != '':
+        rest.reset_autofailover()
+        rest.update_autofailover_settings(True, 30)
+
+    for server in servers.split():
+        for node in rest.node_statuses():
+            if "%s" % node.ip == "%s" % server:
+                logger.error("Failing node %s" % node.id)
+                failover_by_killing_mc(node.ip)
+                if not only_failover:
+                    toBeEjectedNodes.append(node.id)
+    return toBeEjectedNodes
+
+def failover_by_killing_mc(ip):
+    node_ssh, node = create_ssh_conn(ip)
+    cmd = "killall -9 memcached & killall -9 beam.smp"
+    logger.error(cmd)
+    result = node_ssh.execute_command(cmd, node)
+    logger.error(result)
+    time.sleep(40)
+
+def add_back_nodes(rest, servers=''):
+    addBackNodes = []
+    for server in servers.split():
+        for node in rest.node_statuses():
+            if "%s" % node.ip == "%s" % server:
+                logger.error("Add Back node %s" % node.id)
+                rest.add_back_node(node.id)
+                addBackNodes.append(node.id)
+    return addBackNodes
 
 def parse_server_arg(server):
     ip = server

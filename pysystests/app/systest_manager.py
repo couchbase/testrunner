@@ -259,11 +259,13 @@ def parseQueryStr(query):
 def parseClusterReq(cluster):
 
     clusterMsg = {'failover': '',
-                  'hard_restart': '',
-                  'rebalance_out': '',
-                  'only_failover': False,
-                  'soft_restart': '',
-                  'rebalance_in': ''}
+        'hard_restart': '',
+        'rebalance_out': '',
+        'only_failover': False,
+        'soft_restart': '',
+        'rebalance_in': '',
+        'add_back': '',
+        'auto_failover': ''}
 
 
     rebalance_required = True
@@ -273,6 +275,25 @@ def parseClusterReq(cluster):
 
     if 'rm' in cluster:
         clusterMsg['rebalance_out'] = cluster['rm']
+
+    if 'failover' in cluster:
+        clusterMsg['failover'] = cluster['failover']
+
+    if 'hard_restart' in cluster:
+        clusterMsg['hard_restart'] = cluster['hard_restart']
+
+    if 'only_failover' in cluster:
+        if cluster['only_failover'] == "True":
+            clusterMsg['only_failover'] = True
+
+    if 'soft_restart' in cluster:
+        clusterMsg['soft_restart'] = cluster['soft_restart']
+
+    if 'auto_failover' in cluster:
+        clusterMsg['auto_failover'] = cluster['auto_failover']
+
+    if 'add_back' in cluster:
+        clusterMsg['add_back'] = cluster['add_back']
 
     clusterMsg['rebalance_required'] = rebalance_required
     return clusterMsg
