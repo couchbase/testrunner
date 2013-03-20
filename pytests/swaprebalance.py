@@ -46,7 +46,6 @@ class SwapRebalanceBase(unittest.TestCase):
         self.failover_factor = self.num_swap = self.input.param("num-swap", 1)
         self.num_initial_servers = self.input.param("num-initial-servers", 3)
         self.fail_orchestrator = self.swap_orchestrator = self.input.param("swap-orchestrator", False)
-        self.skip_cleanup = self.input.param("skip-cleanup", False)
         self.do_access = self.input.param("do-access", True)
 
         # Make sure the test is setup correctly
@@ -67,15 +66,14 @@ class SwapRebalanceBase(unittest.TestCase):
     @staticmethod
     def common_tearDown(self):
         self.cluster_helper.shutdown()
-        if (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
-                    and TestInputSingleton.input.param("stop-on-failure", False))\
-                        or self.skip_cleanup:
+        test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
+                   or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
+        if test_failed and TestInputSingleton.input.param("stop-on-failure", False)\
+                        or self.input.param("skip_cleanup", False):
                     self.log.warn("CLEANUP WAS SKIPPED")
-
         else:
             SwapRebalanceBase.reset(self)
             SwapRebalanceBase._log_finish(self)
-
 
     @staticmethod
     def reset(self):
