@@ -56,7 +56,7 @@ class SchedDelays():
 
     def launch_measure_sched_delay(self, shell, file="sched-delay"):
         cmd = "cd {0}; nohup ./collect-sched-delays.rb {1} > /dev/null 2>&1 &".format(self.path, file)
-        output, error = shell.execute_command(cmd)
+        output, error = shell.execute_command_raw(cmd)
         shell.log_command_output(output, error)
 
     def stop_measure_sched_delay(self):
