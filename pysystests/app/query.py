@@ -11,6 +11,7 @@ from cache import ObjCacher, CacheHelper
 from app.rest_client_tasks import multi_query
 from app.sdk_client_tasks import _int_float_str_gen
 from celery.exceptions import TimeoutError
+import testcfg as cfg
 
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
@@ -64,6 +65,12 @@ Looks for active query workloads in the cache and runs them
 @celery.task
 def queryRunner():
 
+    hosts = None
+    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
+
+    if clusterStatus:
+        hosts = clusterStatus.get_all_hosts()
+
     # retreive all active query workloads
     queries = CacheHelper.active_queries()
     for query in queries:
@@ -87,7 +94,8 @@ def queryRunner():
                           query.view,
                           params,
                           query.bucket,
-                          query.password)
+                          query.password,
+                          hosts = hosts)
 
 
 class QueryWorkload(object):

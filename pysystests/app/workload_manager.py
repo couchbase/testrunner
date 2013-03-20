@@ -673,7 +673,8 @@ class ClusterStatus(object):
         if len(self.nodes) > 0:
             self.master_node = self.nodes[0]
 
-
+    def get_all_hosts(self):
+        return ["%s:%s" % (node.ip, node.port) for node in self.nodes]
 
     def http_ping_node(self, node = None):
         if node:

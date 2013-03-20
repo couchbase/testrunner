@@ -15,6 +15,7 @@ from app.celery import celery
 import testcfg as cfg
 import json
 import time
+import random
 import eventlet
 from eventlet.green import urllib2
 from celery.utils.log import get_task_logger
@@ -30,21 +31,21 @@ SDK_PORT = 50008
 
 
 @celery.task
-def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", password = "", type_ = "view", batch_size = 100):
+def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", password = "", type_ = "view", batch_size = 100, hosts = None):
 
     if params is not None:
         params = urllib2.urllib.urlencode(params)
 
     pool = eventlet.GreenPool(batch_size)
-    capiUrl = "http://%s:%s/couchBase/" % (cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT)
 
-    url = capiUrl + '%s/_design/%s/_%s/%s?%s' % (bucket,
-                                                 design_doc_name, type_,
-                                                 view_name, params)
+    api = '%s/_design/%s/_%s/%s?%s' % (bucket,
+                                       design_doc_name, type_,
+                                       view_name, params)
 
     qtime = None
 
-    for qtime, data in pool.imap(send_query, [url for i in xrange(count)]):
+    args = dict(api=api, hosts=hosts)
+    for qtime, data, url in pool.imap(send_query, [args for i in xrange(count)]):
         pass
 
     if cfg.SERIESLY_IP != '' and qtime is not None:
@@ -55,21 +56,37 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
         seriesly[db].append({'query_latency' : qtime})
 
     # log to logs/celery-query.log
-    logger.error(qtime)
-    logger.error(url)
+    try:
+        rc = data.read()[0:200]
+    except Exception:
+        rc = "exception reading query response"
 
-def send_query(url):
+    logger.error('\n')
+    logger.error('url: %s' % url)
+    logger.error('latency: %s' % qtime)
+    logger.error('data: %s' % rc)
+
+def send_query(args):
+
+    api = args['api']
+    hosts = args['hosts']
+
+    if hosts and len(hosts) > 0:
+        host = hosts[random.randint(0,len(hosts) - 1)]
+        capiUrl = "http://%s/couchBase/" % (host)
+    else:
+        capiUrl = "http://%s:%s/couchBase/" % (cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT)
+
+    url = capiUrl + api
 
     qtime, data = None, None
     try:
         qtime, data = timed_url_request(url)
 
-        # log 500 chars to output
-        logger.error(data.read()[:500])
     except urllib2.URLError as ex:
         logger.error("Request error: %s" % ex)
 
-    return qtime, data
+    return qtime, data, url
 
 
 def timed_url_request(url):
