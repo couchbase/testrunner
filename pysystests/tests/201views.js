@@ -53,7 +53,7 @@
 					{"spec" : "b:saslbucket,pwd:password,e:70,d:20,s:5,g:5,ccq:sasl2keys,ops:30000"}],
 			"query" : ["ddoc:d1,view:v1,qps:20,limit:10,start:$int1",
 					"ddoc:d1,view:v2,qps:20,limit:10,start:$int1",
-					"bucket:saslbucket,password:password,ddoc:d11,view:v1,qps:20,limit:10,start:$int1"
+					"bucket:saslbucket,password:password,ddoc:d11,view:v1,qps:20,limit:10,start:$int1",
 					"bucket:saslbucket,password:password,ddoc:d11,view:v2,qps:20,limit:10,start:$int1"],
 			"runtime" : 10800
 		},
