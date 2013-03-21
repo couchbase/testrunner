@@ -227,7 +227,7 @@ class RemoteMachineShellConnection:
                 self.log_command_output(o, r)
         elif os == "unix":
             if self.is_couchbase_installed():
-                o, r = self.execute_command("/etc/init.d/couchbase-server stop")
+                o, r = self.execute_command("/etc/init.d/couchbase-server stop", use_channel=True)
             else:
                 o, r = self.execute_command("/etc/init.d/membase-server stop")
             self.log_command_output(o, r)
@@ -1457,7 +1457,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             log.info("Wait 10 seconds to stop service completely")
             time.sleep(10)
         if info.type.lower() == "linux":
-            o, r = self.execute_command("/etc/init.d/couchbase-server stop", info)
+            o, r = self.execute_command("/etc/init.d/couchbase-server stop", info, use_channel=True)
             self.log_command_output(o, r)
 
     def start_couchbase(self):
