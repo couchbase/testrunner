@@ -293,6 +293,11 @@ class XDCRBaseTest(unittest.TestCase):
         self.disable_src_comp = self._input.param("disable_src_comp", True)
         self.disable_dest_comp = self._input.param("disable_dest_comp", True)
 
+        self._optimistic_xdcr = self._input.param("optimistic_xdcr", True)
+        if self.src_master.ip != self.dest_master.ip:       #Only if it's not a cluster_run
+            if self._optimistic_xdcr:
+                self.set_environ_param('XDCR_LATENCY_OPTIMIZATION',True)
+
         self.log.info("Initializing input parameters completed.")
 
     @staticmethod
@@ -870,14 +875,15 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 break
             self.log.info("Completed Load")
 
-    def set_environ_param(self, interval_time):
+    def set_environ_param(self, _parameter, value):
+        self.log.info("Setting {0} to {1} ..".format(_parameter, value))
         for server in self.src_nodes:
             shell = RemoteMachineShellConnection(server)
-            shell.set_environment_variable('XDCR_FAILURE_RESTART_INTERVAL', interval_time)
+            shell.set_environment_variable(_parameter, value)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
             for server in self.dest_nodes:
                 shell = RemoteMachineShellConnection(server)
-                shell.set_environment_variable('XDCR_FAILURE_RESTART_INTERVAL', interval_time)
+                shell.set_environment_variable(_parameter, value)
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         if src_master.ip != dest_master.ip:
