@@ -2,7 +2,7 @@
 
 """
 
-memcached tasks 
+memcached tasks
 
 """
 
@@ -14,6 +14,7 @@ import sys
 import copy
 import time
 
+from cache import CacheHelper
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
@@ -92,9 +93,22 @@ def mdelete(keys, bucket = "default", password = ""):
 
 def _send_msg(message, response=False):
 
+    hostConfig =  {"cb_ip" : cfg.COUCHBASE_IP,
+                   "cb_port" : cfg.COUCHBASE_PORT}
+
+    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
+
+    if clusterStatus:
+        host = clusterStatus.get_random_host()
+        if host is not None:
+            hostConfig["cb_ip"], hostConfig["cb_port"] = host.split(":")
+        else:
+            # cluster status with no hosts means cluster down
+            return
+
+    message.update(hostConfig)
+
     rc = None
-    message.update({"cb_ip" : cfg.COUCHBASE_IP,
-                    "cb_port" : cfg.COUCHBASE_PORT})
     blocking = response
 
     try:

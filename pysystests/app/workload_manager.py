@@ -637,7 +637,6 @@ def updateClusterStatus(ignore_result = True):
     cached_nodes = clusterStatus.nodes
     new_cached_nodes = []
 
-
     for node in cached_nodes:
 
         # get an active node
@@ -657,6 +656,9 @@ def updateClusterStatus(ignore_result = True):
 
     if len(new_cached_nodes) > 0:
         clusterStatus.master_node = new_cached_nodes[0]
+    else:
+        clusterStatus.master_node = None
+        ObjCacher().delete(CacheHelper.CLUSTERSTATUSKEY, clusterStatus)
 
 
 
@@ -665,16 +667,25 @@ def updateClusterStatus(ignore_result = True):
 """
 class ClusterStatus(object):
     def __init__(self):
+        self.initialized = False
+
         self.id = cfg.CB_CLUSTER_TAG+"_status"
         self.master_node = None
-        self.nodes = self.get_cluster_nodes()
+        self.nodes = self.get_cluster_nodes() or []
         self.rebalancing = False
 
         if len(self.nodes) > 0:
             self.master_node = self.nodes[0]
 
+        self.initialized = True
+
     def get_all_hosts(self):
         return ["%s:%s" % (node.ip, node.port) for node in self.nodes]
+
+    def get_random_host(self):
+        all_hosts = self.get_all_hosts()
+        if len(all_hosts) > 0:
+            return all_hosts[random.randint(0,len(all_hosts) - 1)]
 
     def http_ping_node(self, node = None):
         if node:
@@ -713,7 +724,9 @@ class ClusterStatus(object):
 
         # auto cache changes made to this object
         super(ClusterStatus, self).__setattr__(name, value)
-        ObjCacher().store(CacheHelper.CLUSTERSTATUSKEY, self)
+
+        if self.initialized:
+            ObjCacher().store(CacheHelper.CLUSTERSTATUSKEY, self)
 
 class Workload(object):
     AUTOCACHEKEYS = ['active',

@@ -38,17 +38,23 @@ class CouchClientManager():
         self.client_map = {}
         self.accport = accport
 
-    def add_bucket_client(self, bucket = "default", password = ""):
-        ip = cfg.COUCHBASE_IP
-        port = cfg.COUCHBASE_PORT
+    def add_bucket_client(self, bucket = "default",
+                          password = "",
+                          ip = cfg.COUCHBASE_IP,
+                          port = cfg.COUCHBASE_PORT):
+
         url = "http://%s:%s/pools/default"  % (ip, port)
         client = SysCouchClient(url, bucket, password, self.accport)
         if client.ready == True:
             self.client_map[bucket] = client
 
-    def get_bucket_client(self, bucket, password = ""):
+    def get_bucket_client(self, bucket,
+                          password = "",
+                          ip = cfg.COUCHBASE_IP,
+                          port = cfg.COUCHBASE_PORT):
+
         if bucket not in self.client_map:
-            self.add_bucket_client(bucket, password)
+            self.add_bucket_client(bucket, password, ip, port)
 
         return self.client_map[bucket]
 
@@ -149,7 +155,7 @@ class CouchClientManager():
             for msg in rc:
                 if isinstance(msg, dict) and 'error' in msg and int(msg["error"]) != 0:
                    if int(msg["error"]) == 7:
-                       client.reconfig_vbucket_map(True)
+                       client.reconfig_vbucket_map(forward=True)
                    else:
                        ts = time.localtime()
                        ts_string = "%s/%s/%s %s:%s:%s" %\
@@ -227,7 +233,7 @@ class CouchClientManager():
                 for msg in rc:
                     if isinstance(msg, dict) and 'error' in msg and int(msg["error"]) != 0:
                         if int(msg["error"]) == 7:
-                            client.reconfig_vbucket_map(True)
+                            client.reconfig_vbucket_map(forward=True)
                         else:
                             ts = time.localtime()
                             ts_string = "%s/%s/%s %s:%s:%s" %\
@@ -263,7 +269,9 @@ class CouchClientManager():
         bucket = str(data["bucket"])
         if "password" in data:
             password = str(data["password"])
-        client = self.get_bucket_client(bucket, password)
+        ip = data['cb_ip']
+        port = data['cb_port']
+        client = self.get_bucket_client(bucket, password, ip, port)
         return client
 
 
@@ -292,7 +300,6 @@ def start_listener(port):
     processMap[port] = {"process" : p,
                         "connected" : True,
                         "alt_nodes" : []}
-    # TODO: alt_nodes for orchestrator rebalance detection
 
     print "sdk_%s: starting" % port
     p.start()
