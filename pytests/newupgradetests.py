@@ -92,7 +92,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             while not self.queue.empty():
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
-                self.fail("Upgrade failed!")
+                self.fail("Upgrade failed. See logs above!")
             self.sleep(self.expire_time)
             if self.during_ops:
                 if "add_back_failover" in self.during_ops:

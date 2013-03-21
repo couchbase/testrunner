@@ -2,6 +2,7 @@ import re
 import testconstants
 import gc
 import sys
+import traceback
 from threading import Thread
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedError
@@ -135,7 +136,6 @@ class NewUpgradeBaseTest(BaseTestCase):
             appropriate_build = BuildQuery().\
                 find_membase_build(builds, '%s-enterprise' % (self.product), info.deliverable_type,
                                    info.architecture_type, version.strip(), is_amazon=is_amazon)
-
         return appropriate_build
 
     def _upgrade(self, upgrade_version, server, queue=None, skip_init=False):
@@ -145,6 +145,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
             remote.download_build(appropriate_build)
             remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
+            self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             remote.disconnect()
             self.sleep(10)
             if self.is_linux:
@@ -155,6 +156,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             self.sleep(self.sleep_time)
         except Exception, e:
+            print traceback.extract_stack()
             if queue is not None:
                 queue.put(False)
                 if not self.is_linux:
@@ -171,6 +173,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             queue.put(True)
 
     def _async_update(self, upgrade_version, servers, queue=None, skip_init=False):
+        self.log.info("servers {0} will be upgraded to {1} version".
+                      format([server.ip for server in servers], upgrade_version))
         q = queue or self.queue
         upgrade_threads = []
         for server in servers:
