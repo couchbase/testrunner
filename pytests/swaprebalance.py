@@ -97,7 +97,6 @@ class SwapRebalanceBase(unittest.TestCase):
         self.log.info("==============  SwapRebalanceBase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
 
-
     @staticmethod
     def _log_start(self):
         try:
@@ -113,6 +112,10 @@ class SwapRebalanceBase(unittest.TestCase):
             RestConnection(self.servers[0]).log_client_error(msg)
         except:
             pass
+
+    def sleep(self, timeout=1, message=""):
+        self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
+        time.sleep(timeout)
 
     @staticmethod
     def _create_default_bucket(self, replica=1):
@@ -285,22 +288,23 @@ class SwapRebalanceBase(unittest.TestCase):
 
         if do_stop_start:
             # Rebalance is stopped at 20%, 40% and 60% completion
-            self.log.info("STOP/START SWAP REBALANCE PHASE")
             retry = 0
             for expected_progress in (20, 40, 60):
+                self.log.info("STOP/START SWAP REBALANCE PHASE WITH PROGRESS {0}%".
+                              format(expected_progress))
                 while True:
                     progress = rest._rebalance_progress()
                     if progress < 0:
                         self.log.error("rebalance progress code : {0}".format(progress))
                         break
                     elif progress == 100:
-                        self.log.warn("Rebalance is already reached")
+                        self.log.warn("Rebalance has already reached 100%")
                         break
                     elif progress >= expected_progress:
                         self.log.info("Rebalance will be stopped with {0}%".format(progress))
                         stopped = rest.stop_rebalance()
                         self.assertTrue(stopped, msg="unable to stop rebalance")
-                        time.sleep(20)
+                        self.sleep(20)
                         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
                                        ejectedNodes=optNodesIds)
                         break
@@ -309,12 +313,9 @@ class SwapRebalanceBase(unittest.TestCase):
                     else:
                         retry += 1
                         time.sleep(1)
-                #self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
-
         SwapRebalanceBase.verification_phase(self, master)
-
 
     @staticmethod
     def _common_test_body_failed_swap_rebalance(self):
@@ -372,7 +373,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.log.info("SWAP REBALANCE PHASE")
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
             ejectedNodes=optNodesIds)
-
+        self.sleep(10, "Rebalance should start")
         self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(self.percentage_progress))
         reached = RestHelper(rest).rebalance_reached(self.percentage_progress)
         if reached == 100 and not RestHelper(rest).is_cluster_rebalanced():
@@ -405,7 +406,7 @@ class SwapRebalanceBase(unittest.TestCase):
         killed = rest.diag_eval(command)
         self.log.info("killed {0}:{1}??  {2} ".format(master.ip, master.port, killed))
         self.log.info("sleep for 10 sec after kill memcached")
-        time.sleep(10)
+        self.sleep(10)
         # we can't get stats for new node when rebalance falls
         if not self.swap_orchestrator:
             ClusterOperationHelper._wait_warmup_completed(self, [master], bucket, wait_time=600)
