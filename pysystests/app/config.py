@@ -153,7 +153,6 @@ class BaseConfig(object):
 
     def add_queryconfig(self):
 
-        topic_ex  = Exchange("query_topic", type="topic", auto_delete = True, durable = True)
         direct_ex = Exchange("query_direct", type="direct", auto_delete = True, durable = True)
 
         self.CELERYBEAT_SCHEDULE.update(
@@ -171,17 +170,24 @@ class BaseConfig(object):
 
         self.CELERY_QUEUES = self.CELERY_QUEUES +\
             (
-                # schedulable queue for multiple tasks
-                self.make_queue('query_tasks',  'query_tasks.#', topic_ex),
+                # schedulable queue for the consumer task
+                self.make_queue('query_consumer',  'query.consumer', direct_ex),
 
                 # high performance direct exhcnage for multi_query tasks
                 self.make_queue('query_multi',  'query.multi', direct_ex),
+
+                # dedicated queues
+                self.make_queue('query_runner',  'query.runner', direct_ex),
+                self.make_queue('query_upt_builder',  'query.updateqb', direct_ex),
+                self.make_queue('query_upt_workload',  'query.updateqw', direct_ex),
             )
 
         self.CELERY_ROUTES = self.CELERY_ROUTES +\
         (   # route schedulable tasks both to same interal task queue
-            {'app.query.queryConsumer': self.route_args('query_tasks','query_tasks.consumer')},
-            {'app.query.activeRunner': self.route_args('query_tasks','query_tasks.runner')},
+            {'app.query.queryConsumer': self.route_args('query_consumer','query.consumer')},
+            {'app.query.queryRunner': self.route_args('query_runner','query.runner')},
+            {'app.query.updateQueryBuilders': self.route_args('query_upt_builder','query.updateqb')},
+            {'app.query.updateQueryWorkload': self.route_args('query_upt_workload','query.updateqw')},
             {'app.rest_client_tasks.multi_query': self.route_args('query_multi','query.multi')},
         )
 
