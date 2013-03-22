@@ -110,7 +110,6 @@ class BaseConfig(object):
     def add_kvconfig(self):
 
         direct_ex = Exchange("kv_direct", type="direct", auto_delete = True, durable = True)
-        topic_ex  = Exchange("kv_topic", type="topic", auto_delete = True, durable = True)
 
         self.CELERYBEAT_SCHEDULE.update(
         {
@@ -135,7 +134,13 @@ class BaseConfig(object):
             self.make_queue('delete',   'kv.delete', direct_ex),
             self.make_queue('set',      'kv.set', direct_ex),
             self.make_queue('get',      'kv.get', direct_ex),
-            self.make_queue('kv_tasks',     'kv_tasks.#', topic_ex),
+            self.make_queue('kv_consumer',     'kv.consumer', direct_ex),
+            self.make_queue('kv_scheduler',     'kv.scheduler', direct_ex),
+            self.make_queue('kv_postcondition',     'kv.postcondition', direct_ex),
+            self.make_queue('kv_postrun',     'kv.postrun', direct_ex),
+            self.make_queue('kv_run',     'kv.run', direct_ex),
+            self.make_queue('kv_task_gen',     'kv.taskgen', direct_ex),
+            self.make_queue('kv_systestrunner',     'kv.systestrunner', direct_ex),
         )
 
 
@@ -144,10 +149,13 @@ class BaseConfig(object):
             {'app.sdk_client_tasks.mdelete': self.route_args('delete','kv.delete') },
             {'app.sdk_client_tasks.mset'   : self.route_args('set','kv.set') },
             {'app.sdk_client_tasks.mget'  : self.route_args('get','kv.get') },
-            {'app.workload_manager.workloadConsumer' : self.route_args('kv_tasks','kv_tasks.consumer') },
-            {'app.workload_manager.taskScheduler' : self.route_args('kv_tasks','kv_tasks.scheduler') },
-            {'app.workload_manager.postcondition_handler' : self.route_args('kv_tasks','kv_tasks.postcondition') },
-            {'app.workload_manager.sysTestRunner' : self.route_args('kv_tasks','kv_tasks.systestrunner') },
+            {'app.workload_manager.workloadConsumer' : self.route_args('kv_consumer','kv.consumer') },
+            {'app.workload_manager.taskScheduler' : self.route_args('kv_scheduler','kv.scheduler') },
+            {'app.workload_manager.postcondition_handler' : self.route_args('kv_postcondition','kv.postcondition') },
+            {'app.workload_manager.postrun' : self.route_args('kv_postrun','kv.postrun') },
+            {'app.workload_manager.run' : self.route_args('kv_run','kv.run') },
+            {'app.workload_manager.generate_pending_tasks' : self.route_args('kv_task_gen','kv.taskgen') },
+            {'app.workload_manager.sysTestRunner' : self.route_args('kv_systestrunner','kv.systestrunner') },
         )
 
 

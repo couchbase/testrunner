@@ -25,9 +25,7 @@ logger = get_task_logger(__name__)
 if cfg.SERIESLY_IP != '':
     from seriesly import Seriesly
 
-@celery.task(base = PersistedMQ)
-def conn():
-    pass
+
 
 """Monitors the workload queue for new messages sent from clients.
 When a message is received it is caached and sent to sysTestRunner for processing
@@ -123,7 +121,7 @@ def sysTestRunner(workload):
     runTask = run.apply_async(args=[workload, prevWorkload])
 
 
-@celery.task(base = PersistedMQ)
+@celery.task(base = PersistedMQ, ignore_result = True)
 def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None,
                          state = None, signal = None, retval = None):
 
@@ -353,7 +351,7 @@ runs checks against bucket stats.  If postcondition
 is met, the workload is deactivated and bucket put
 back into nonblocking mode
 """
-@celery.task
+@celery.task(ignore_result = True)
 def postcondition_handler():
 
     workloads = CacheHelper.workloads()
@@ -390,7 +388,7 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
                            exp_count, consume_queue, ttl = 0,
                            miss_perc = 0, miss_queue = None):
 
-    rabbitHelper = generate_delete_tasks.rabbitHelper
+    rabbitHelper = generate_pending_tasks.rabbitHelper
     bucket = bucketInfo['bucket']
     password = bucketInfo['password']
 
@@ -462,7 +460,7 @@ def generate_set_tasks(template, count, bucket = "default", password = "", batch
 
     return tasks
 
-@celery.task(base = PersistedMQ)
+@celery.task(base = PersistedMQ, ignore_result = True)
 def generate_get_tasks(count, docs_queue, bucket="default", password = ""):
 
     rabbitHelper = generate_get_tasks.rabbitHelper
@@ -489,7 +487,7 @@ def generate_get_tasks(count, docs_queue, bucket="default", password = ""):
     return tasks
 
 
-@celery.task(base = PersistedMQ)
+@celery.task(base = PersistedMQ, ignore_result = True)
 def generate_update_tasks(template, count, docs_queue, bucket = "default", password = ""):
 
     rabbitHelper = generate_update_tasks.rabbitHelper
@@ -516,7 +514,7 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default", passw
     return tasks
 
 
-@celery.task(base = PersistedMQ)
+@celery.task(base = PersistedMQ, ignore_result = True)
 def generate_delete_tasks(count, docs_queue, bucket = "default", password = ""):
 
 
@@ -605,10 +603,9 @@ def kv_ops_manager(max_msgs = 1000):
     if isovercommited:
         throttle_kv_ops()
 
-@celery.task(base = PersistedMQ, ignore_result = True)
 def throttle_kv_ops(isovercommited=True):
 
-    rabbitHelper = throttle_kv_ops.rabbitHelper
+    rabbitHelper = kv_ops_manager.rabbitHelper
 
     workloads = CacheHelper.workloads()
     for workload in workloads:
