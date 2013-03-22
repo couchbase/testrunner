@@ -1738,6 +1738,27 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         self.log_command_output(output, error)
         return output, error
 
+    def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='', cluster_port=None, user='Administrator', password='password'):
+        cb_client = "%scouchbase-cli" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows':
+            cbstat_command = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+
+        cluster_param = (" --cluster={0}".format(cluster_host), "")[cluster_host is None]
+        if cluster_param is not None:
+            cluster_param += (":{0}".format(cluster_port), "")[cluster_port is None]
+
+        user_param = (" -u {0}".format(user), "")[user is None]
+        passwd_param = (" -p {0}".format(password), "")[password is None]
+        # now we can run command in format where all parameters are optional
+        #{PATH}/couchbase-cli [COMMAND] [CLUSTER:[PORT]] [USER] [PASWORD] [OPTIONS]
+        command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
+
+        output, error = self.execute_command(command, use_channel=True)
+        self.log_command_output(output, error)
+        return output, error
+
     def execute_batch_command(self, command):
         remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
         o, r = self.execute_command_raw(remote_command)
