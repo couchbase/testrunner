@@ -178,6 +178,7 @@ class BaseTestCase(unittest.TestCase):
                 remote_client = RemoteMachineShellConnection(server)
                 ram = remote_client.extract_remote_info().ram
                 self.log.info("{0}: {1} MB".format(server.ip, ram))
+                remote_client.disconnect()
         return quota
 
     def _bucket_creation(self):
