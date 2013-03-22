@@ -42,7 +42,7 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
                                        design_doc_name, type_,
                                        view_name, params)
 
-    qtime = None
+    qtime = data = url = None
 
     args = dict(api=api, hosts=hosts)
     for qtime, data, url in pool.imap(send_query, [args for i in xrange(count)]):
