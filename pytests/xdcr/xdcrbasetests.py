@@ -888,7 +888,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         if src_master.ip != dest_master.ip:
             if self._failover is not None or self._warmup is not None:
-                self.set_environ_param(1)
+                self.set_environ_param('XDCR_FAILURE_RESTART_INTERVAL',1)
         self.sleep(self._timeout / 2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)

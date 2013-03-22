@@ -414,7 +414,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self.verify_results()
 
     def replication_while_rebooting_a_non_master_destination_node(self):
-        self.set_environ_param(1)
+        self.set_environ_param('XDCR_FAILURE_RESTART_INTERVAL',1)
 
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._async_modify_data()
@@ -448,7 +448,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self.verify_results()
 
     def replication_with_firewall_enabled(self):
-        self.set_environ_param(1)
+        self.set_environ_param('XDCR_FAILURE_RESTART_INTERVAL',1)
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.sleep(self._timeout / 6)
         self._async_modify_data()
