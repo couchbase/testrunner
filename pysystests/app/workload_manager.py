@@ -183,16 +183,21 @@ def run(workload, prevWorkload = None):
 
     workload.active = True
 
+    # read doc template
+    template = Template.from_cache(str(workload.template))
+
     bucket = str(workload.bucket)
     task_queue = workload.task_queue
-
+    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
     inflight = 0
     while workload.active:
+        active_hosts = None
+
+        if clusterStatus is not None:
+            active_hosts = clusterStatus.get_all_hosts()
 
         if inflight < 20:
 
-            # read doc template
-            template = Template.from_cache(str(workload.template))
 
             if template != None:
 
@@ -221,20 +226,21 @@ def run(workload, prevWorkload = None):
 
                 generate_pending_tasks.delay(task_queue, template, bucketInfo, create_count,
                                               update_count, get_count, del_count, exp_count,
-                                              consume_queue, ttl, miss_perc, miss_queue)
+                                              consume_queue, ttl, miss_perc, miss_queue, active_hosts)
                 inflight = inflight + 1
 
         else:
             inflight = rabbitHelper.qsize(task_queue)
             time.sleep(1)
+            clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
 
-        _backup_workload = workload
+            _backup_workload = workload
 
-        workload = Workload.from_cache(workload.id)
+            workload = Workload.from_cache(workload.id)
 
-        # when cache returns None use previous workload object
-        if workload is None:
-            workload = _backup_workload
+            # when cache returns None use previous workload object
+            if workload is None:
+                workload = _backup_workload
 
 
     return workload
@@ -386,7 +392,7 @@ def postcondition_handler():
 def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
                            update_count, get_count, del_count,
                            exp_count, consume_queue, ttl = 0,
-                           miss_perc = 0, miss_queue = None):
+                           miss_perc = 0, miss_queue = None, active_hosts = None):
 
     rabbitHelper = generate_pending_tasks.rabbitHelper
     bucket = bucketInfo['bucket']
@@ -396,25 +402,25 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
     if create_count > 0:
         set_template = copy.deepcopy(template)
         set_template.ttl = 0 # override template level ttl
-        create_tasks = generate_set_tasks(set_template, create_count, bucket, password = password)
+        create_tasks = generate_set_tasks(set_template, create_count, bucket, password = password, hosts = active_hosts)
 
     if update_count > 0:
 
-        update_tasks = generate_update_tasks(template, update_count, consume_queue, bucket, password = password)
+        update_tasks = generate_update_tasks(template, update_count, consume_queue, bucket, password = password, hosts = active_hosts)
 
     if get_count > 0:
 
         if miss_queue is not None:
             # generate miss tasks
             miss_count = int(miss_perc/float(100) * get_count)
-            get_tasks = generate_get_tasks(miss_count, miss_queue, bucket, password = password)
+            get_tasks = generate_get_tasks(miss_count, miss_queue, bucket, password = password, hosts = active_hosts)
             get_count = get_count - miss_count
 
-        get_tasks = get_tasks + generate_get_tasks(get_count, consume_queue, bucket, password = password)
+        get_tasks = get_tasks + generate_get_tasks(get_count, consume_queue, bucket, password = password, hosts = active_hosts)
 
     if del_count > 0:
 
-        del_tasks = generate_delete_tasks(del_count, consume_queue, bucket, password = password)
+        del_tasks = generate_delete_tasks(del_count, consume_queue, bucket, password = password, hosts = active_hosts)
 
     if exp_count > 0:
         # set ttl from workload level ttl
@@ -423,7 +429,7 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
         if ttl > 0:
             exp_template.ttl = ttl
         create_tasks = create_tasks + \
-            generate_set_tasks(exp_template, exp_count, bucket, password = password)
+            generate_set_tasks(exp_template, exp_count, bucket, password = password, hosts = active_hosts)
 
     pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks
     pending_tasks = json.dumps(pending_tasks)
@@ -432,7 +438,7 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
 
-def generate_set_tasks(template, count, bucket = "default", password = "", batch_size = 1000):
+def generate_set_tasks(template, count, bucket = "default", password = "", hosts = None, batch_size = 1000):
 
 
     if batch_size > count:
@@ -455,13 +461,13 @@ def generate_set_tasks(template, count, bucket = "default", password = "", batch
             batch_counter = batch_counter + 1
             i = i + 1
 
-        tasks.append(client.mset.s(key_batch, template.__dict__, bucket, False, password))
+        tasks.append(client.mset.s(key_batch, template.__dict__, bucket, False, password, hosts))
         batch_counter = 0
 
     return tasks
 
 @celery.task(base = PersistedMQ, ignore_result = True)
-def generate_get_tasks(count, docs_queue, bucket="default", password = ""):
+def generate_get_tasks(count, docs_queue, bucket="default", password = "", hosts = None):
 
     rabbitHelper = generate_get_tasks.rabbitHelper
 
@@ -482,13 +488,13 @@ def generate_get_tasks(count, docs_queue, bucket="default", password = ""):
             if keys_retrieved > count:
                 end_idx = keys_retrieved - count
                 keys = keys[:-end_idx]
-            tasks.append(client.mget.s(keys, bucket, password))
+            tasks.append(client.mget.s(keys, bucket, password, hosts))
 
     return tasks
 
 
 @celery.task(base = PersistedMQ, ignore_result = True)
-def generate_update_tasks(template, count, docs_queue, bucket = "default", password = ""):
+def generate_update_tasks(template, count, docs_queue, bucket = "default", password = "", hosts = None):
 
     rabbitHelper = generate_update_tasks.rabbitHelper
     val = json.dumps(template.kv)
@@ -509,13 +515,13 @@ def generate_update_tasks(template, count, docs_queue, bucket = "default", passw
             if keys_updated > count:
                 end_idx = keys_updated - count
                 keys = keys[:-end_idx]
-            tasks.append(client.mset.s(keys, template.__dict__, bucket, True, password = ""))
+            tasks.append(client.mset.s(keys, template.__dict__, bucket, True, password = "", hosts = hosts))
 
     return tasks
 
 
 @celery.task(base = PersistedMQ, ignore_result = True)
-def generate_delete_tasks(count, docs_queue, bucket = "default", password = ""):
+def generate_delete_tasks(count, docs_queue, bucket = "default", password = "", hosts = None):
 
 
     rabbitHelper = generate_delete_tasks.rabbitHelper
@@ -537,7 +543,7 @@ def generate_delete_tasks(count, docs_queue, bucket = "default", password = ""):
             if keys_deleted > count:
                 end_idx = keys_deleted - count
                 keys = keys[:-end_idx]
-            tasks.append(client.mdelete.s(keys, bucket, password))
+            tasks.append(client.mdelete.s(keys, bucket, password, hosts = hosts))
 
 
     return tasks
@@ -552,6 +558,7 @@ def report_kv_latency(bucket = "default"):
     workloads = CacheHelper.workloads()
     for workload in workloads:
         if workload.active and workload.bucket == bucket:
+
             # read template from active workload
             template = Template.from_cache(str(workload.template))
             template = template.__dict__
@@ -649,10 +656,18 @@ def updateClusterStatus(ignore_result = True):
 
             break
 
-    clusterStatus.nodes = new_cached_nodes
+
 
     if len(new_cached_nodes) > 0:
-        clusterStatus.master_node = new_cached_nodes[0]
+
+        # check for update
+        new_node_list = ["%s:%s" % (n.ip, n.port) for n in new_cached_nodes]
+
+        if len(new_node_list) != len(cached_nodes) or\
+            len(set(clusterStatus.get_all_hosts()).intersection(new_node_list)) !=\
+                len(cached_nodes):
+            clusterStatus.master_node = new_cached_nodes[0]
+            clusterStatus.nodes = new_cached_nodes
     else:
         clusterStatus.master_node = None
         ObjCacher().delete(CacheHelper.CLUSTERSTATUSKEY, clusterStatus)

@@ -33,7 +33,7 @@ SDK_PORT2 = 50009
 
 
 @celery.task
-def mset(keys, template, bucket = "default", isupdate = False, password = ""):
+def mset(keys, template, bucket = "default", isupdate = False, password = "", hosts = None):
 
     # decode magic strings in template before sending to sdk
     # python pass-by-reference updates attribute in function
@@ -44,17 +44,19 @@ def mset(keys, template, bucket = "default", isupdate = False, password = ""):
                "args" : keys,
                "template" : rawTemplate,
                "bucket" : bucket,
-               "password" : password}
+               "password" : password,
+               "hosts"  : hosts}
     rc = _send_msg(message)
 
     return keys, rawTemplate
 
 @celery.task
-def mget(keys, bucket = "default", password = ""):
+def mget(keys, bucket = "default", password = "", hosts = None):
     message = {"command" : "mget",
                "bucket" : bucket,
                "password" : password,
-               "args" : keys}
+               "args" : keys,
+               "hosts" : hosts}
     return  _send_msg(message)
 
 @celery.task
@@ -84,11 +86,12 @@ def delete(key, bucket = "default", password = ""):
     return  _send_msg(message)
 
 @celery.task
-def mdelete(keys, bucket = "default", password = ""):
+def mdelete(keys, bucket = "default", password = "", hosts = None):
     message = {"command" : "mdelete",
                "bucket" : bucket,
                "password" : password,
-               "args" : keys}
+               "args" : keys,
+               "hosts" : hosts}
     return  _send_msg(message)
 
 def _send_msg(message, response=False):
@@ -96,15 +99,17 @@ def _send_msg(message, response=False):
     hostConfig =  {"cb_ip" : cfg.COUCHBASE_IP,
                    "cb_port" : cfg.COUCHBASE_PORT}
 
-    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
 
-    if clusterStatus:
-        host = clusterStatus.get_random_host()
-        if host is not None:
-            hostConfig["cb_ip"], hostConfig["cb_port"] = host.split(":")
-        else:
-            # cluster status with no hosts means cluster down
-            return
+    if 'hosts' in message and message['hosts'] is not None:
+        if len(message['hosts']) > 0:
+                hosts = message['hosts']
+                host = hosts[random.randint(0,len(hosts) - 1)]
+
+                if host is not None:
+                    hostConfig["cb_ip"], hostConfig["cb_port"] = host.split(":")
+                else:
+                    # cluster status with no hosts means cluster down
+                    return
 
     message.update(hostConfig)
 
