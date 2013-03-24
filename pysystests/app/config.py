@@ -137,8 +137,9 @@ class BaseConfig(object):
             self.make_queue('kv_consumer',     'kv.consumer', direct_ex),
             self.make_queue('kv_scheduler',     'kv.scheduler', direct_ex),
             self.make_queue('kv_postcondition',     'kv.postcondition', direct_ex),
+            self.make_queue('kv_prerun',     'kv.prerun', direct_ex),
             self.make_queue('kv_postrun',     'kv.postrun', direct_ex),
-            self.make_queue('kv_run',     'kv.run', direct_ex),
+            self.make_queue('kv_queueops',     'kv.queueops', direct_ex),
             self.make_queue('kv_task_gen',     'kv.taskgen', direct_ex),
             self.make_queue('kv_systestrunner',     'kv.systestrunner', direct_ex),
         )
@@ -152,8 +153,9 @@ class BaseConfig(object):
             {'app.workload_manager.workloadConsumer' : self.route_args('kv_consumer','kv.consumer') },
             {'app.workload_manager.taskScheduler' : self.route_args('kv_scheduler','kv.scheduler') },
             {'app.workload_manager.postcondition_handler' : self.route_args('kv_postcondition','kv.postcondition') },
+            {'app.workload_manager.task_prerun_handler' : self.route_args('kv_prerun','kv.prerun') },
             {'app.workload_manager.postrun' : self.route_args('kv_postrun','kv.postrun') },
-            {'app.workload_manager.run' : self.route_args('kv_run','kv.run') },
+            {'app.workload_manager.queue_op_cycles' : self.route_args('kv_queueops','kv.queueops') },
             {'app.workload_manager.generate_pending_tasks' : self.route_args('kv_task_gen','kv.taskgen') },
             {'app.workload_manager.sysTestRunner' : self.route_args('kv_systestrunner','kv.systestrunner') },
         )

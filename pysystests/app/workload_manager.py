@@ -16,7 +16,7 @@ from app.rest_client_tasks import create_rest, http_ping
 import random
 import testcfg as cfg
 from celery.exceptions import TimeoutError
-from celery.signals import task_prerun, task_postrun
+from celery.signals import task_postrun
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
@@ -118,7 +118,14 @@ def sysTestRunner(workload):
             if workload.preconditions is None:
                 prevWorkload.active = False
 
-    runTask = run.apply_async(args=[workload, prevWorkload])
+    # print out workload params
+    logger.error(workload.params)
+
+    if workload.miss_perc > 0:
+        setupCacheMissQueues(workload)
+
+
+    task_prerun_handler.delay(workload, prevWorkload)
 
 
 @celery.task(base = PersistedMQ, ignore_result = True)
@@ -126,17 +133,19 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
                          state = None, signal = None, retval = None):
 
     rabbitHelper = task_postrun_handler.rabbitHelper
-    if sender == run:
-        # cleanup workload after handled by test runner
-        if isinstance(retval, Workload):
-            workload = retval
-            try:
-                rabbitHelper.delete(workload.task_queue)
-            except:
-                pass # queue already deleted
-        else:
-            logger.error(retval)
-
+#
+#   TODO: do in garbage collection task
+#   if sender == run:
+#       # cleanup workload after handled by test runner
+#       if isinstance(retval, Workload):
+#           workload = retval
+#           try:
+#               rabbitHelper.delete(workload.task_queue)
+#           except:
+#               pass # queue already deleted
+#       else:
+#           logger.error(retval)
+#
     if sender == client.mset:
 
         if isinstance(retval,tuple):
@@ -167,83 +176,61 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
 
 task_postrun.connect(task_postrun_handler)
 
-"""Generates list of tasks to run based on params passed in to workload
-until post conditions(if any) are hit
+"""
+Generates list of tasks to run based on params passed in to workload
 """
 @celery.task(base = PersistedMQ)
-def run(workload, prevWorkload = None):
+def queue_op_cycles(workload):
 
-    rabbitHelper = run.rabbitHelper
-
-    # print out workload params
-    logger.error(workload.params)
-
-    if workload.miss_perc > 0:
-        setupCacheMissQueues(workload)
-
-    workload.active = True
+    workload.ops_building = True
 
     # read doc template
     template = Template.from_cache(str(workload.template))
+    if template is None:
+        logger.error("no doc template imported")
+        return
 
+    rabbitHelper = queue_op_cycles.rabbitHelper
     bucket = str(workload.bucket)
     task_queue = workload.task_queue
+
+    active_hosts = None
     clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
-    inflight = 0
-    while workload.active:
-        active_hosts = None
+    if clusterStatus is not None:
+        active_hosts = clusterStatus.get_all_hosts()
 
-        if clusterStatus is not None:
-            active_hosts = clusterStatus.get_all_hosts()
+    # create 30 op cycles
+    for i in xrange(20):
 
-        if inflight < 20:
+        if workload.cc_queues is not None:
+            # override template attribute with workload
+            template.cc_queues = workload.cc_queues
 
+        if len(workload.indexed_keys) > 0:
+            template.indexed_keys = workload.indexed_keys
 
-            if template != None:
+        # read  workload settings
+        bucketInfo = {"bucket" : workload.bucket,
+                      "password" : workload.password}
 
-                if workload.cc_queues is not None:
-                    # override template attribute with workload
-                    template.cc_queues = workload.cc_queues
-                if len(workload.indexed_keys) > 0:
-                    template.indexed_keys = workload.indexed_keys
+        ops_sec = workload.ops_per_sec
 
-                # read  workload settings
-                bucketInfo = {"bucket" : workload.bucket,
-                              "password" : workload.password}
+        create_count = int(ops_sec *  workload.create_perc/100)
+        update_count = int(ops_sec *  workload.update_perc/100)
+        get_count = int(ops_sec *  workload.get_perc/100)
+        del_count = int(ops_sec *  workload.del_perc/100)
+        exp_count = int(ops_sec *  workload.exp_perc/100)
+        consume_queue =  workload.consume_queue
 
-                ops_sec = workload.ops_per_sec
+        ttl = workload.ttl
+        miss_queue = workload.miss_queue
+        miss_perc = workload.miss_perc
 
-                create_count = int(ops_sec *  workload.create_perc/100)
-                update_count = int(ops_sec *  workload.update_perc/100)
-                get_count = int(ops_sec *  workload.get_perc/100)
-                del_count = int(ops_sec *  workload.del_perc/100)
-                exp_count = int(ops_sec *  workload.exp_perc/100)
-                consume_queue =  workload.consume_queue
+        generate_pending_tasks(task_queue, template, bucketInfo, create_count,
+                               update_count, get_count, del_count, exp_count,
+                               consume_queue, ttl, miss_perc, miss_queue, active_hosts)
 
-                ttl = workload.ttl
-                miss_queue = workload.miss_queue
-                miss_perc = workload.miss_perc
-
-                generate_pending_tasks.delay(task_queue, template, bucketInfo, create_count,
-                                              update_count, get_count, del_count, exp_count,
-                                              consume_queue, ttl, miss_perc, miss_queue, active_hosts)
-                inflight = inflight + 1
-
-        else:
-            inflight = rabbitHelper.qsize(task_queue)
-            time.sleep(1)
-            clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
-
-            _backup_workload = workload
-
-            workload = Workload.from_cache(workload.id)
-
-            # when cache returns None use previous workload object
-            if workload is None:
-                workload = _backup_workload
-
-
-    return workload
+    workload.ops_building = False
 
 def setupCacheMissQueues(workload):
     """ assuming misses will come from keys in
@@ -282,52 +269,50 @@ def setupCacheMissQueues(workload):
     # save changes
     ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, workload)
 
-# function triggered before any task is handled
-def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, signal = None):
+@celery.task(ignore_result = True)
+def task_prerun_handler(workload, prevWorkload):
+
+    # set workload to active
+    # will be picked up by taskScheduler
+    workload.active = True
+
+    bucket = str(workload.bucket)
+    stat_checker = phandler.BucketStatChecker(bucket)
+
+    # convert item count postcondition's to curr_item conditions
+    if workload.postconditions:
+
+        stat, cmp_type, value = \
+            phandler.default_condition_params(workload.postconditions)
+
+        if stat == 'count':
+            curr_items = stat_checker.get_curr_items()
+            value = int(value) + int(curr_items)
+            workload.postconditions = "curr_items >= %s" % value
+
+        # setup postcondition hander
+        workload.postcondition_handler =\
+            phandler.getPostConditionMethod(workload)
 
 
-    if sender == run:
-        workload = args[0]
-        bucket = str(workload.bucket)
-        stat_checker = phandler.BucketStatChecker(bucket)
 
-        # convert item count postcondition's to curr_item conditions
-        if workload.postconditions:
+    # WARNING PRECONDITIONS ARE DEPRECIATED
+    if workload.preconditions is not None:
 
-            stat, cmp_type, value = \
-                phandler.default_condition_params(workload.postconditions)
-
-            if stat == 'count':
-                curr_items = stat_checker.get_curr_items()
-                value = int(value) + int(curr_items)
-                workload.postconditions = "curr_items >= %s" % value
-
-            # setup postcondition hander
-            workload.postcondition_handler =\
-                phandler.getPostConditionMethod(workload)
+        # block tasks against bucket until pre-conditions met
+        bs = BucketStatus.from_cache(bucket)
+        bs.block(bucket)
 
 
+        while not stat_checker.check(workload.preconditions):
+            time.sleep(1)
 
-        prevWorkload = None
-        if len(args) > 1 and isinstance(args[1], Workload):
-            prevWorkload = args[1]
-
-        if workload.preconditions is not None:
-
-            # block tasks against bucket until pre-conditions met
-            bs = BucketStatus.from_cache(bucket)
-            bs.block(bucket)
-
-
-            while not stat_checker.check(workload.preconditions):
-                time.sleep(1)
-
+        if prevWorkload is not None:
             prevWorkload.active = False
-            bs = BucketStatus.from_cache(bucket)
-            bs.unblock(bucket)
 
+        bs = BucketStatus.from_cache(bucket)
+        bs.unblock(bucket)
 
-task_prerun.connect(task_prerun_handler)
 
 
 
@@ -343,14 +328,22 @@ def taskScheduler():
 
     for workload in workloads:
         if workload.active:
+
             task_queue = workload.task_queue
+            num_ready_tasks = rabbitHelper.qsize(task_queue)
             # dequeue subtasks
-            if rabbitHelper.qsize(task_queue) > 0:
+            if num_ready_tasks > 0:
                 tasks = rabbitHelper.getJsonMsg(task_queue)
                 if tasks is not None and len(tasks) > 0:
 
                     # apply async
                     result = TaskSet(tasks = tasks).apply_async()
+
+
+            # check if more subtasks need to be queued
+            if num_ready_tasks < 10 and workload.ops_building == False:
+                queue_op_cycles.delay(workload)
+
 
 """ scans active workloads for postcondition flags and
 runs checks against bucket stats.  If postcondition
@@ -744,9 +737,11 @@ class Workload(object):
     AUTOCACHEKEYS = ['active',
                      'ops_per_sec',
                      'postconditions',
-                     'postcondition_handler']
+                     'postcondition_handler',
+                     'ops_building']
 
     def __init__(self, params):
+        self.initialized = False
         self.id = "workload_"+str(uuid.uuid4())[:7]
         self.params = params
         self.bucket = str(params["bucket"])
@@ -770,12 +765,14 @@ class Workload(object):
         self.wait = params["wait"]
         self.ttl = int(params["ttl"])
         self.indexed_keys = []
-
+        self.ops_building = False
 
         # consume from cc_queue by default if not specified
         if self.cc_queues != None:
             if self.consume_queue == None:
                 self.consume_queue = self.cc_queues[0]
+
+        self.initialized = True 
 
     @staticmethod
     def defaultSpec():
@@ -824,7 +821,7 @@ class Workload(object):
         super(Workload, self).__setattr__(name, value)
 
         # auto cache workload when certain attributes change
-        if name in Workload.AUTOCACHEKEYS:
+        if name in Workload.AUTOCACHEKEYS and self.initialized:
             ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, self)
 
     @staticmethod
