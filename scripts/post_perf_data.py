@@ -60,16 +60,19 @@ def post_to_cbm(input_json):
         env = "unknown"
 
     metrics = {}
+    if "xperf" in testcase and "ns_server_data" in input_json:
+        mean = lambda samples: float(sum(samples)) / (len(samples) or 1)
+        xdcr_stats = {"Avg. XDCR Queue": "replication_changes_left",
+                      "Avg. XDCR ops/sec": "xdc_ops"}
+        for title, metric in xdcr_stats.iteritems():
+            metrics[title] = mean(
+                mean(sample["op"]["samples"].get(metric, []))
+                for sample in input_json["ns_server_data"]
+            )
     if "reb_dur" in input_json["info"]:
         metrics["Rebalance Time, s"] = int(input_json["info"]["reb_dur"])
     elif testcase.startswith("reb"):
         metrics["Rebalance Time, s"] = 0
-    elif testcase.startswith("xperf"):
-        xdcr_stats = {"Avg. XDCR Queue": "avg_replication_changes_left",
-                      "Avg. XDCR ops/sec": "avg_xdc_ops"}
-        for title, metric in xdcr_stats.iteritems():
-            if metric in input_json["info"]:
-                metrics[title] = input_json["info"][metric]
     else:
         if "latency-get-90th-avg" in input_json["info"]:
             metrics["90th Get Latency, us"] = int(input_json["info"]["latency-get-90th-avg"])
