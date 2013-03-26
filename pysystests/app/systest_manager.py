@@ -379,12 +379,16 @@ def createWorkload(workload):
             workloadSpec['template'] = str(workload['template'])
 
         if 'conditions' in workload:
-            for condition in workload['conditions'].split(','):
-                stage, equality = condition.split(':')
-                if stage == "pre":
-                    workloadSpec['preconditions'] = equality
-                if stage == "post":
-                    workloadSpec['postconditions'] = equality
+            if isinstance(workload['conditions'], dict):
+                if "post" in workload['conditions']:
+                    workloadSpec['postconditions'] = workload['conditions']['post']
+            else:
+                for condition in workload['conditions'].split(','):
+                    stage, equality = condition.split(':')
+                    if stage == "pre":
+                        workloadSpec['preconditions'] = equality
+                    if stage == "post":
+                        workloadSpec['postconditions'] = equality
 
     else:
         # simple spec

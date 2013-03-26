@@ -22,6 +22,7 @@ GREATER_THAN_EQ = '>='
 
 
 """ default_condition_params method helps interpret postcondition string.
+    The following syntax only works for "python cbsystest.py run workload"
     accepted syntax:
         "<ip:port> , <condition>, <condition_method>"
 
@@ -52,6 +53,10 @@ def parse_condition(postconditions):
         if match_equality(condition_str, condition_map):
             continue
 
+        # attempt to match against active tasks type, like indexer, bucket compaction
+        if match_active_task_type(condition_str, condition_map):
+            continue
+
         # method match
         if match_method(condition_str, condition_map):
             pass
@@ -62,11 +67,43 @@ def parse_condition(postconditions):
 
     return condition_map
 
+
+""" This parser works for systest_manager"""
+
+def parse_condition_dict(postconditions):
+    condition_map = {}
+
+    if "conditions" in postconditions:
+        match_equality(postconditions['conditions'], condition_map)
+
+    if "method" in postconditions:
+        condition_map['method'] = postconditions['method']
+
+    if "port" in postconditions:
+        condition_map['port'] = postconditions['port']
+
+    if "ip" in postconditions:
+        condition_map['ip'] = postconditions['ip']
+
+    if "type" in postconditions:
+        condition_map['active_task_type'] = postconditions['type']
+
+    if "target" in postconditions:
+        condition_map['target_value'] = postconditions['target']
+
+    return condition_map
+
+
 def match_ip(condition_str, condition_map):
     m = re.match(r"\s*?(\d+.\d+.\d+.\d+):?(\d+)?\s*?", condition_str)
     if not isinstance(m, types.NoneType):
         condition_map["ip"], condition_map["port"] = m.groups()
 
+def match_active_task_type(condition_str, condition_map):
+    m = re.match(r"\s*?(?P<active_task_type>\w+):(?P<target_value>\w+)\s*?", condition_str)
+    if not isinstance(m, types.NoneType):
+        condition_map["active_task_type"] = m.group('type').strip()
+        condition_map["target_value"] = m.group('target_value').strip()
 
 def match_equality(condition_str, condition_map):
     m = re.match(r"\s*?(?P<stat>[\w]+)(?P<cmp>[\s=<>]+)(?P<value>\w+)\s*?",
@@ -83,7 +120,11 @@ def match_method(condition_str, condition_map):
 
 
 def default_condition_params(postconditions):
-    _map = parse_condition(postconditions)
+    if isinstance(postconditions, dict):
+        _map = parse_condition_dict(postconditions)
+    else:
+        _map = parse_condition(postconditions)
+
     return _map['stat'],_map['cmp_type'],_map['value']
 
 
@@ -93,7 +134,11 @@ def default_condition_params(postconditions):
 def getPostConditionMethod(workload):
     bucket = str(workload.bucket)
     postcondition = workload.postconditions
-    params = parse_condition(postcondition)
+
+    if isinstance(postcondition, dict):
+        params = parse_condition_dict(postcondition)
+    else:
+        params = parse_condition(postcondition)
 
     method = None
     if 'method' in params:
@@ -105,6 +150,12 @@ def getPostConditionMethod(workload):
             method = "bucket_stat_checker"
         elif stat in EPStatChecker().stat_keys:
             method = "epengine_stat_checker"
+
+        if "active_task_type" in params and "target_value" in params:
+            type = params['active_task_type']
+            target_value = params['active_task_type']
+            if type in ActiveTaskChecker(type, target_value).type_keys():
+                method = "active_tasks_stat_checker"
 
     return method
 
@@ -122,7 +173,10 @@ def epengine_stat_checker(workload):
 
     postcondition = workload.postconditions
 
-    params = default_condition_params(postcondition)
+    if isinstance(postcondition, dict):
+        params = parse_condition_dict(postcondition)
+    else:
+        params = parse_condition(postcondition)
 
     ip = cfg.COUCHBASE_IP
     port = 11210
@@ -132,6 +186,28 @@ def epengine_stat_checker(workload):
         port = params['port']
 
     statChecker = EPStatChecker(ip, port)
+    return statChecker.check(postcondition)
+
+def active_tasks_stat_checker(workload):
+
+    postcondition = workload.postconditions
+    equality = None
+
+    if isinstance(postcondition, dict):
+        params = parse_condition_dict(postcondition)
+        postcondition = postcondition['conditions']
+    else:
+        params = parse_condition(postcondition)
+
+    active_task_type = "indexer"
+    target_value = "_design/ddoc1"
+
+    if 'active_task_type' in params:
+        active_task_type = params['active_task_type']
+    if 'target_value' in params:
+        target_value = params['target_value']
+
+    statChecker = ActiveTaskChecker(active_task_type, target_value)
     return statChecker.check(postcondition)
 
 class StatChecker(object):
@@ -151,7 +227,6 @@ class StatChecker(object):
             pass # leave as string
 
         stats = self.get_stats()
-
         if stats is None:
             return False
 
@@ -248,8 +323,68 @@ class EPStatChecker(StatChecker):
         if self.client:
             try:
                 stats = self.client.stats()
-            except ValueError:
-                logger.error("unable to get stats from host: %s" % self.host)
+            except Exception:
+                logger.info("unable to get stats from host: %s:%s" %\
+                    (self.host, self.port))
 
         return stats
 
+class ActiveTaskChecker(StatChecker):
+
+    def __init__(self, active_task_type = "indexer", target_value = "_design/ddoc1",
+                 addr = cfg.COUCHBASE_IP +":"+cfg.COUCHBASE_PORT,
+                 username = cfg.COUCHBASE_USER,
+                 password = cfg.COUCHBASE_PWD):
+
+        self.ip, self.port = addr.split(":")
+        self.username = username
+        self.password = password
+        self.type = active_task_type
+        self.target_value = target_value
+        self.rest = create_rest(self.ip, self.port, self.username, self.password)
+
+    def type_keys(self):
+        keys = []
+
+        try:
+            stats = self.rest.active_tasks()
+
+        except ValueError:
+            logger.error("unable to get stats for active tasks")
+
+        for stat in stats:
+            keys.append(stat["type"])
+
+        return keys
+
+    def get_stats(self):
+        stats = None
+        target_key = ""
+
+        if self.type == "indexer":
+            target_key = "design_documents"
+            if self.target_value.lower() in ['true', 'false']:
+                #track initial_build indexer task
+                target_key = "initial_build"
+        elif self.type == "bucket_compaction":
+            target_key = "original_target"
+        elif self.type == "view_compaction":
+            target_key = "design_documents"
+        else:
+            raise Exception("type %s is not defined!" % self.type)
+
+        try:
+            tasks = self.rest.active_tasks()
+            for task in tasks:
+                if task["type"] == self.type and ((
+                    target_key == "design_documents" and\
+                        self.target_value in [ddoc for ddoc in task[target_key]]) or (
+                    target_key == "original_target" and task[target_key] == self.target_value) or (
+                    target_key == "initial_build" and str(task[target_key]) == self.target_value)):
+                    stats = task
+                    break
+
+        except ValueError:
+            logger.error("unable to get stats for active tasks")
+
+        return stats
