@@ -142,6 +142,8 @@ def getPostConditionMethod(workload):
     else:
         params = parse_condition(postcondition)
 
+    host, port = get_ep_hostip_from_params(params)
+
     method = None
     if 'method' in params:
         method = params['method']
@@ -150,7 +152,7 @@ def getPostConditionMethod(workload):
         stat = params['stat']
         if stat in BucketStatChecker(bucket).stat_keys:
             method = "bucket_stat_checker"
-        elif stat in EPStatChecker().stat_keys:
+        elif stat in EPStatChecker(host, port).stat_keys:
             method = "epengine_stat_checker"
 
         if "active_task_type" in params and "target_value" in params:
@@ -181,14 +183,9 @@ def epengine_stat_checker(workload):
     else:
         params = parse_condition(postcondition)
 
-    ip = cfg.COUCHBASE_IP
-    port = 11210
-    if 'ip' in params:
-        ip = params['ip']
-    if 'port' in params:
-        port = params['port']
+    host, port = get_ep_hostip_from_params(params)
 
-    statChecker = EPStatChecker(ip, port)
+    statChecker = EPStatChecker(host, port)
     return statChecker.check(postcondition)
 
 def active_tasks_stat_checker(workload):
@@ -218,6 +215,11 @@ def active_tasks_stat_checker(workload):
         status = statChecker.check(postcondition)
 
     return status
+
+def get_ep_hostip_from_params(params):
+    host = params['ip'] or cfg.COUCHBASE_IP
+    port = params['port'] or 11210
+    return host, int(port)
 
 class StatChecker(object):
 
