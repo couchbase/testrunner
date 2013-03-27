@@ -11,7 +11,9 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-
+from builds.build_query import BuildQuery
+import testconstants
+import copy
 
 class BackupRestoreTests(unittest.TestCase):
     input = None
@@ -476,6 +478,176 @@ class BackupRestoreTests(unittest.TestCase):
         self.assertTrue(BucketOperationHelper.verify_data(self.master, inserted_keys, False, False, 11212, debug=False,
                                                           bucket=bucket_after_backup), "Missing keys")
 
+
+    def test_backup_upgrade_restore_default(self):
+        if len(self.servers) < 2:
+            self.log.error("At least 2 servers required for this test ..")
+            return
+        original_set = copy.copy(self.servers)
+        worker = self.servers[len(self.servers) - 1]
+        self.servers = self.servers[:len(self.servers)-1]
+        shell = RemoteMachineShellConnection(self.master)
+        o, r = shell.execute_command("cat /opt/couchbase/VERSION.txt")
+        fin = o[0]
+        shell.disconnect()
+        initial_version = self.input.param("initial_version", fin)
+        final_version = self.input.param("final_version", fin)
+        if initial_version==final_version:
+            self.log.error("Same initial and final versions ..")
+            return
+        if not final_version.startswith('2.0'):
+            self.log.error("Upgrade test not set to run from 1.8.1 -> 2.0 ..")
+            return
+        builds, changes = BuildQuery().get_all_builds()
+        product = 'couchbase-server-enterprise'
+        #CASE where the worker isn't a 2.0+
+        worker_flag = 0
+        shell = RemoteMachineShellConnection(worker)
+        o, r = shell.execute_command("cat /opt/couchbase/VERSION.txt")
+        temp = o[0]
+        if not temp.startswith('2.0'):
+            worker_flag = 1
+        if worker_flag == 1:
+            self.log.info("Loading version {0} on worker.. ".format(final_version))
+            remote = RemoteMachineShellConnection(worker)
+            info = remote.extract_remote_info()
+            older_build = BuildQuery().find_build(builds, product, info.deliverable_type,
+                                                  info.architecture_type, final_version)
+            remote.stop_couchbase()
+            remote.couchbase_uninstall()
+            remote.download_build(older_build)
+            remote.install_server(older_build)
+            remote.disconnect()
+
+        remote_tmp = "{1}/{0}".format("backup", "/root")
+        perm_comm = "mkdir -p {0}".format(remote_tmp)
+        if not initial_version == fin:
+            for server in self.servers:
+                remote = RemoteMachineShellConnection(server)
+                info = remote.extract_remote_info()
+                self.log.info("Loading version ..  {0}".format(initial_version))
+                older_build = BuildQuery().find_build(builds, product, info.deliverable_type,
+                                                      info.architecture_type, initial_version)
+                remote.stop_couchbase()
+                remote.couchbase_uninstall()
+                remote.download_build(older_build)
+                remote.install_server(older_build)
+                rest = RestConnection(server)
+                RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
+                rest.init_cluster(server.rest_username, server.rest_password)
+                rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+                remote.disconnect()
+
+        self.common_setUp()
+        bucket = "default"
+        if len(self.servers) > 1:
+            self.add_nodes_and_rebalance()
+        rest = RestConnection(self.master)
+        info = rest.get_nodes_self()
+        size = int(info.memoryQuota * 2.0 / 3.0)
+        rest.create_bucket(bucket, ramQuotaMB=size)
+        ready = BucketOperationHelper.wait_for_memcached(self.master, bucket)
+        self.assertTrue(ready, "wait_for_memcached_failed")
+        distribution = {10: 0.2, 20: 0.5, 30: 0.25, 40: 0.05}
+        inserted_keys, rejected_keys = MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.master],
+                                                                                             name=bucket,
+                                                                                             ram_load_ratio=0.5,
+                                                                                             value_size_distribution=distribution,
+                                                                                             moxi=True,
+                                                                                             write_only=True,
+                                                                                             delete_ratio=0.1,
+                                                                                             number_of_threads=2)
+        if len(self.servers) > 1:
+            rest = RestConnection(self.master)
+            self.assertTrue(RebalanceHelper.wait_for_replication(rest.get_nodes(), timeout=180),
+                            msg="replication did not complete")
+
+        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_queue_size', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_flusher_todo', 0)
+        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        node = RestConnection(self.master).get_nodes_self()
+        shell = RemoteMachineShellConnection(worker)
+        o, r = shell.execute_command(perm_comm)
+        shell.log_command_output(o, r)
+        shell.disconnect()
+
+        #Backup
+        #BackupHelper(self.master, self).backup(bucket, node, remote_tmp)
+        shell = RemoteMachineShellConnection(worker)
+        shell.execute_command("/opt/couchbase/bin/cbbackup http://{0}:{1} {2}".format(
+                                                            self.master.ip, self.master.port, remote_tmp))
+        shell.disconnect()
+        BucketOperationHelper.delete_bucket_or_assert(self.master, bucket, self)
+        time.sleep(30)
+
+        #Upgrade
+        for server in self.servers:
+            self.log.info("Upgrading to current version {0}".format(final_version))
+            remote = RemoteMachineShellConnection(server)
+            info = remote.extract_remote_info()
+            new_build = BuildQuery().find_build(builds, product, info.deliverable_type,
+                                                info.architecture_type, final_version)
+            remote.stop_couchbase()
+            remote.couchbase_uninstall()
+            remote.download_build(new_build)
+            remote.install_server(new_build)
+            rest = RestConnection(server)
+            RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
+            rest.init_cluster(server.rest_username, server.rest_password)
+            rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+            remote.disconnect()
+        time.sleep(30)
+
+        #Restore
+        rest = RestConnection(self.master)
+        info = rest.get_nodes_self()
+        size = int(info.memoryQuota * 2.0 / 3.0)
+        rest.create_bucket(bucket, ramQuotaMB=size)
+        ready = BucketOperationHelper.wait_for_memcached(server, bucket)
+        self.assertTrue(ready, "wait_for_memcached_failed")
+        #BackupHelper(self.master, self).restore(backup_location=remote_tmp, moxi_port=info.moxi)
+        shell = RemoteMachineShellConnection(worker)
+        shell.execute_command("/opt/couchbase/bin/cbrestore {2} http://{0}:{1} -b {3}".format(
+                                                            self.master.ip, self.master.port, remote_tmp, bucket))
+        shell.disconnect()
+        time.sleep(60)
+        keys_exist = BucketOperationHelper.keys_exist_or_assert_in_parallel(inserted_keys, self.master, bucket, self, concurrency=4)
+        self.assertTrue(keys_exist, msg="unable to verify keys after restore")
+        time.sleep(30)
+        BucketOperationHelper.delete_bucket_or_assert(self.master, bucket, self)
+        rest = RestConnection(self.master)
+        helper = RestHelper(rest)
+        nodes = rest.node_statuses()
+        master_id = rest.get_nodes_self().id
+        if len(self.servers) > 1:
+                removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
+                                          ejectedNodes=[node.id for node in nodes if node.id != master_id],
+                                          wait_for_rebalance=True   )
+
+        shell = RemoteMachineShellConnection(worker)
+        shell.remove_directory(remote_tmp)
+        shell.disconnect()
+
+        self.servers = copy.copy(original_set)
+        if initial_version == fin:
+            builds, changes = BuildQuery().get_all_builds()
+            for server in self.servers:
+                remote = RemoteMachineShellConnection(server)
+                info = remote.extract_remote_info()
+                self.log.info("Loading version ..  {0}".format(initial_version))
+                older_build = BuildQuery().find_build(builds, product, info.deliverable_type,
+                                                      info.architecture_type, initial_version)
+                remote.stop_couchbase()
+                remote.couchbase_uninstall()
+                remote.download_build(older_build)
+                remote.install_server(older_build)
+                rest = RestConnection(server)
+                RestHelper(rest).is_ns_server_running(testconstants.NS_SERVER_TIMEOUT)
+                rest.init_cluster(server.rest_username, server.rest_password)
+                rest.init_cluster_memoryQuota(memoryQuota=rest.get_nodes_self().mcdMemoryReserved)
+                remote.disconnect()
+
     def test_backup_add_restore_default_bucket_started_server(self):
         self.common_setUp()
         self._test_backup_add_restore_bucket_body("default", 180, True, True)
@@ -551,9 +723,9 @@ class BackupHelper(object):
 
     #data_file = default-data/default
     def backup(self, bucket, node, backup_location):
-        mbbackup_path = "{0}/{1}".format("/opt/couchbase/bin/", "cbbackup")
+        mbbackup_path = "{0}/{1}".format("/opt/couchbase/bin", "cbbackup")
         if self.test.is_membase:
-            mbbackup_path = "{0}/{1}".format("/opt/membase/bin/", "mbbackup")
+            mbbackup_path = "{0}/{1}".format("/opt/membase/bin", "mbbackup")
         data_directory = "{0}/{1}-{2}/{3}".format(node.storage[0].path, bucket, "data", bucket)
         command = "{0} {1} {2}".format(mbbackup_path,
                                        data_directory,
@@ -562,9 +734,9 @@ class BackupHelper(object):
         self.test.shell.log_command_output(output, error)
 
     def restore(self, backup_location, moxi_port=None, overwrite_flag=False, username=None, password=None):
-        command = "{0}/{1}".format("/opt/couchbase/bin/", "cbrestore")
+        command = "{0}/{1}".format("/opt/couchbase/bin", "cbrestore")
         if self.test.is_membase:
-            command = "{0}/{1}".format("/opt/membase/bin/", "mbrestore")
+            command = "{0}/{1}".format("/opt/membase/bin", "mbrestore")
 
         if not overwrite_flag:
             command += " -a"
