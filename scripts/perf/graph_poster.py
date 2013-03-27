@@ -6,6 +6,7 @@ import time
 from os import path
 from optparse import OptionParser
 
+from restkit.errors import RequestFailed
 from couchdbkit import Server
 
 
@@ -95,5 +96,8 @@ if __name__ == "__main__":
                       help="pdf file to be posted to couchdb")
     options, args = parser.parse_args()
 
-    poster = GraphPoster(options.node, options.db)
-    poster.post_to_couchdb(options.filename)
+    try:
+        poster = GraphPoster(options.node, options.db)
+        poster.post_to_couchdb(options.filename)
+    except RequestFailed as error:
+        print error
