@@ -329,8 +329,7 @@ def monitorPhase(runTime, workloadIds, rebalancing = False, queryIds = None):
             else:
                 running = False
 
-        else:
-            time.sleep(2)
+        time.sleep(2)
 
     if queryIds != None:
         # stop queries
