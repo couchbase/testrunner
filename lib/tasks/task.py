@@ -457,6 +457,13 @@ class GenericLoadingTask(Thread, Task):
                 self.state = FINISHED
                 self.set_exception(error)
 
+    def _unlocked_replica_read(self, partition, key):
+        try:
+            o, c, d = self.client.getr(key)
+        except Exception as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
     def _unlocked_update(self, partition, key):
         try:
             o, c, value = self.client.get(key)
@@ -524,6 +531,8 @@ class LoadDocumentsTask(GenericLoadingTask):
             self._unlocked_create(partition, key, value)
         elif self.op_type == 'read':
             self._unlocked_read(partition, key)
+        elif self.op_type == 'read_replica':
+            self._unlocked_replica_read(partition, key)
         elif self.op_type == 'update':
             self._unlocked_update(partition, key)
         elif self.op_type == 'delete':
@@ -745,7 +754,7 @@ class WorkloadTask(GenericLoadingTask):
         self.kv_store.release_partition(part_num)
 
 class ValidateDataTask(GenericLoadingTask):
-    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True):
+    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, replica_to_read=None):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
@@ -753,6 +762,7 @@ class ValidateDataTask(GenericLoadingTask):
         self.itr = 0
         self.max_verify = self.num_valid_keys + self.num_deleted_keys
         self.only_store_hash = only_store_hash
+        self.replica_to_read = replica_to_read
         if max_verify is not None:
             self.max_verify = min(max_verify, self.max_verify)
         self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
@@ -786,7 +796,10 @@ class ValidateDataTask(GenericLoadingTask):
             return
 
         try:
-            o, c, d = self.client.get(key)
+            if self.replica_to_read is None:
+                o, c, d = self.client.get(key)
+            else:
+                o, c, d = self.client.getr(key, replica_index=self.replica_to_read)
             if self.only_store_hash:
                 if crc32.crc32_hash(d) != int(value):
                     self.state = FINISHED

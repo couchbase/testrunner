@@ -363,12 +363,14 @@ class BaseTestCase(unittest.TestCase):
         kv_store - The kv store index to check. (int)
         timeout - Waiting the end of the thread. (str)
     """
-    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1000):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True, batch_size=1000,
+                            replica_to_read=None):
         tasks = []
         if len(self.buckets) > 1:
             batch_size = 1
         for bucket in self.buckets:
-            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
+            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
+                                                        only_store_hash, batch_size, replica_to_read))
         for task in tasks:
             task.result(timeout)
 
@@ -426,7 +428,8 @@ class BaseTestCase(unittest.TestCase):
         self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size=batch_size)
         return gen_load
 
-    def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True):
+    def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True,
+                             only_store_hash=True, replica_to_read=None):
         if servers is None:
             servers = self.servers
         if master is None:
@@ -436,7 +439,8 @@ class BaseTestCase(unittest.TestCase):
 
         self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120))
         if check_items:
-            self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify)
+            self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify,
+                                     only_store_hash=only_store_hash, replica_to_read=replica_to_read)
             self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
             verified = True
