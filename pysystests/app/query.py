@@ -227,9 +227,12 @@ def generateQueryParams(indexed_key,
             params.update({'startkey_docid' : startkey_docid})
 
     if 'endkey_docid' in filters:
-        endkey_docid = endkey_docid or qbuilder.endkey_docid
-        endkey_docid = typecast(endkey_docid)
-        params.update({'endkey_docid' : qbuilder.endkey_docid})
+        if qbuilder and endkey_docid is None:
+            endkey_docid = endkey_docid or qbuilder.endkey_docid
+
+        if endkey_docid:
+            endkey_docid = typecast(endkey_docid)
+            params.update({'endkey_docid' : endkey_docid})
 
     if startkey > endkey:
         params.update({'descending' : True})
