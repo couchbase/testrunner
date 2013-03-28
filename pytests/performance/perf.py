@@ -83,7 +83,7 @@ class PerfBase(unittest.TestCase):
 
         # Rebalance
         if self.input.clusters:
-            for cluster in self.input.cluster.values():
+            for cluster in self.input.clusters.values():
                 num_nodes = self.parami("num_nodes", len(cluster))
                 self.rebalance_nodes(num_nodes, cluster)
         else:
