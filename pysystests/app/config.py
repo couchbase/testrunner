@@ -282,12 +282,18 @@ class BaseConfig(object):
 
         self.CELERY_QUEUES = self.CELERY_QUEUES +\
             (
-                self.make_queue('kv_latency',  'kv.latency', direct_ex),
+                self.make_queue('kv_mng_latency',  'kv.mnglatency', direct_ex),
+                self.make_queue('kv_sdk_latency',  'kv.sdklatency', direct_ex),
+                self.make_queue('kv_mc_latency',  'kv.mclatency', direct_ex),
             )
 
         self.CELERY_ROUTES = self.CELERY_ROUTES +\
         (
             {'app.workload_manager.report_kv_latency':
-                self.route_args('kv_latency','kv.latency')},
+                self.route_args('kv_mng_latency','kv.mnglatency')},
+            {'app.sdk_client_tasks.mc_op_latency':
+                self.route_args('kv_mc_latency','kv.mclatency')},
+            {'app.sdk_client_tasks.sdk_op_latency':
+                self.route_args('kv_sdk_latency','kv.sdklatency')},
         )
 

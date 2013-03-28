@@ -19,6 +19,7 @@ from celery.exceptions import TimeoutError
 from celery.signals import task_postrun
 from celery.utils.log import get_task_logger
 
+
 logger = get_task_logger(__name__)
 
 
@@ -548,9 +549,22 @@ def report_kv_latency(bucket = "default"):
         # seriesly not configured
         return
 
+    rabbitHelper = report_kv_latency.rabbitHelper
+    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status") or\
+        ClusterStatus()
+
+    host = clusterStatus.get_random_host()
+    if host is None: return
+
+    ip, port = host.split(':')
+
     workloads = CacheHelper.workloads()
     for workload in workloads:
         if workload.active and workload.bucket == bucket:
+
+            # read workload params
+            bucket = str(workload.bucket)
+            password = str(workload.password)
 
             # read template from active workload
             template = Template.from_cache(str(workload.template))
@@ -559,17 +573,23 @@ def report_kv_latency(bucket = "default"):
 
             # setup key/val to use for timing
             key = _random_string(12)
-            val = template['kv']
+            value = json.dumps(template['kv'])
+            get_key = key
 
-            # define op args
-            set_args = (key, 0, 0, val)
-            get_args = (key,)
-            delete_args = (key,)
+
+            # for get op, try to pull from consume_queue
+            # so that we can calc impact of dgm
+            consume_queue = workload.consume_queue
+            if consume_queue is not None:
+                keys = rabbitHelper.getJsonMsg(str(consume_queue), requeue = True)
+                if len(keys) > 0:
+                    get_key = str(keys[0])
 
             # collect op latency
-            set_latency = client.op_latency('set', set_args)
-            get_latency = client.op_latency('get', get_args)
-            delete_latency = client.op_latency('delete', delete_args)
+            set_latency = client.mc_op_latency('set', key, value, ip, port, bucket, password)
+            get_latency = client.mc_op_latency('get', get_key, value, ip, port, bucket, password)
+            delete_latency = client.mc_op_latency('delete', key, value, ip, port, bucket, password)
+
 
             # report to seriessly
             seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
@@ -772,7 +792,7 @@ class Workload(object):
             if self.consume_queue == None:
                 self.consume_queue = self.cc_queues[0]
 
-        self.initialized = True 
+        self.initialized = True
 
     @staticmethod
     def defaultSpec():

@@ -13,6 +13,11 @@ import string
 import sys
 import copy
 import time
+import zlib
+
+sys.path=["../lib"] + sys.path
+from mc_bin_client import MemcachedClient, MemcachedError
+from app.rest_client_tasks import create_rest
 
 from cache import CacheHelper
 from celery.utils.log import get_task_logger
@@ -134,15 +139,15 @@ def _send_msg(message, response=False):
     return rc
 
 """
-" op_latency task.
+" sdk op_latency task.
 "
 " op: (set,get,delete).
 " args: operation arguments. i.e set => ('key', 0, 0, 'val')
 "
-" returns amount of time required to complete operation
+" returns amount of time required to complete operation via sdks
 """
 @celery.task
-def op_latency(op, args, bucket = "default", password = ""):
+def sdk_op_latency(op, args, bucket = "default", password = ""):
 
     message = {"command" : "latency",
                "bucket" : bucket,
@@ -153,6 +158,79 @@ def op_latency(op, args, bucket = "default", password = ""):
     latency = _send_msg(message, response = True)
 
     return latency
+
+"""
+" raw mc op_latency task.
+"
+" op: (set,get,delete).
+" args: operation arguments. i.e set => ('key', 0, 0, 'val')
+"
+" returns amount of time required to complete operation
+"""
+@celery.task
+def mc_op_latency(op, key, val, ip, port = 8091, bucket = "default", password = ""):
+
+
+
+    latency = 0
+    args = None
+
+    # define op args
+    try:
+
+
+        # get mc for vbucket
+        mc = getDirectMC(key, ip, port, bucket, password)
+        if mc is None: return
+
+        # select op and create args
+        if op == 'set':
+            func = mc.set
+            args = (key, 0, 0, val)
+        if op == 'get':
+            func = mc.get
+            args = (key,)
+        if op == 'delete':
+            func = mc.delete
+            args = (key,)
+
+        # timed wrapper
+        start = time.time()
+        rc = func(*args)  # exec
+        end = time.time()
+
+        latency = end - start
+
+    except MemcachedError as ex:
+        msg = "error connecting to host %s:%s for gathering latency"\
+               %  (ip, port)
+        logger.error(msg)
+
+    return latency
+
+def getDirectMC(key, ip, port = 8091, bucket = "default", password = ""):
+
+    real_mc_client = None
+
+    # get initial mc client
+    client = MemcachedClient(ip, int(port))
+    vbId = (((zlib.crc32(key)) >> 16) & 0x7fff) & (client.vbucket_count - 1)
+
+    # get vbucket map
+    rest = create_rest(ip, port)
+    vbuckets = rest.get_vbuckets(bucket)
+
+    # find vbucket responsible to this key and mapping host
+    if vbuckets is not None:
+
+        vbucket = [vbucket for vbucket in vbuckets if vbucket.id == vbId]
+
+        if len(vbucket) == 1:
+            mc_ip, mc_port = vbucket[0].master.split(":")
+            real_mc_client = MemcachedClient(mc_ip, int(mc_port))
+            real_mc_client.sasl_auth_plain(bucket, password)
+
+    return real_mc_client
 
 def decodeMajgicStrings(template):
 
