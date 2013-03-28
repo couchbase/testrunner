@@ -113,6 +113,7 @@ class CacheHelper():
     QUERYCACHEKEY = "QUERYCACHEKEY"
     QBUILDCACHEKEY = "QBUILDCACHEKEY"
     CLUSTERSTATUSKEY = "CLUSTERSTATUSKEY"
+    ACTIVETASKCACHEKEY = "ACTIVETASKCACHEKEY"
 
     @staticmethod
     def workloads():
@@ -175,7 +176,8 @@ class CacheHelper():
         objCacheKeys = [CacheHelper.WORKLOADCACHEKEY,
                         CacheHelper.BUCKETSTATUSCACHEKEY,
                         CacheHelper.QUERYCACHEKEY,
-                        CacheHelper.CLUSTERSTATUSKEY]
+                        CacheHelper.CLUSTERSTATUSKEY,
+                        CacheHelper.ACTIVETASKCACHEKEY]
 
         for cacheKey in objCacheKeys:
             ObjCacher().clear(cacheKey)

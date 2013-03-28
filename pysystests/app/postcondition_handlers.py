@@ -9,6 +9,8 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from app.rest_client_tasks import create_rest
 import testcfg as cfg
 from app.celery import celery
+from cache import ObjCacher, CacheHelper
+
 from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
@@ -153,8 +155,9 @@ def getPostConditionMethod(workload):
 
         if "active_task_type" in params and "target_value" in params:
             type = params['active_task_type']
-            target_value = params['active_task_type']
-            if type in ActiveTaskChecker(type, target_value).type_keys():
+            target_value = params['target_value']
+            keys = ActiveTaskChecker(type, target_value).type_keys()
+            if type in keys:
                 method = "active_tasks_stat_checker"
 
     return method
@@ -190,6 +193,7 @@ def epengine_stat_checker(workload):
 
 def active_tasks_stat_checker(workload):
 
+    status = False
     postcondition = workload.postconditions
     equality = None
 
@@ -207,8 +211,13 @@ def active_tasks_stat_checker(workload):
     if 'target_value' in params:
         target_value = params['target_value']
 
-    statChecker = ActiveTaskChecker(active_task_type, target_value)
-    return statChecker.check(postcondition)
+    statChecker = ActiveTaskChecker.from_cache()
+    if statChecker is None:
+        status = False
+    else:
+        status = statChecker.check(postcondition)
+
+    return status
 
 class StatChecker(object):
 
@@ -336,15 +345,27 @@ class ActiveTaskChecker(StatChecker):
                  username = cfg.COUCHBASE_USER,
                  password = cfg.COUCHBASE_PWD):
 
+        self.initialized = False
+        self.id = cfg.CB_CLUSTER_TAG+"active_task_status"
         self.ip, self.port = addr.split(":")
         self.username = username
         self.password = password
         self.type = active_task_type
         self.target_value = target_value
         self.rest = create_rest(self.ip, self.port, self.username, self.password)
+        self.task_started = False
+        self.empty_stat_count = 0
+        self.known_types = ["design_documents",
+                            "view_compaction",
+                            "bucket_compaction",
+                            "indexer",
+                            "initial_build",
+                            "original_target"]
+
+        self.initialized = True
 
     def type_keys(self):
-        keys = []
+        types = self.known_types
 
         try:
             stats = self.rest.active_tasks()
@@ -353,9 +374,13 @@ class ActiveTaskChecker(StatChecker):
             logger.error("unable to get stats for active tasks")
 
         for stat in stats:
-            keys.append(stat["type"])
+            # append any new keys returned by the server
+            # not part of known list of supported keys
+            type_ = stat["type"]
+            if type_ not in types:
+                types.append(type_)
 
-        return keys
+        return types
 
     def get_stats(self):
         stats = None
@@ -387,4 +412,30 @@ class ActiveTaskChecker(StatChecker):
         except ValueError:
             logger.error("unable to get stats for active tasks")
 
+        if stats is None:
+            if (self.empty_stat_count == 5 and self.task_started)\
+                or self.empty_stat_count == 20:
+                    # assume progress is complete if task started
+                    # but is no longer reporting stats
+                    # or if we've retrieved 20 empty stat results
+                    stats = {'progress' : 100}
+            else:
+                self.empty_stat_count = self.empty_stat_count + 1
+        else:
+            # retrieved stats from task, therefore it has started
+            self.task_started = True
+
         return stats
+
+
+    def __setattr__(self, name, value):
+        super(ActiveTaskChecker, self).__setattr__(name, value)
+
+        # auto cache object when certain keys change
+        if self.initialized and name in ("initialized","task_started","empty_stat_count"):
+            ObjCacher().store(CacheHelper.ACTIVETASKCACHEKEY, self)
+
+    @staticmethod
+    def from_cache():
+        id_ = cfg.CB_CLUSTER_TAG+"active_task_status"
+        return ObjCacher().instance(CacheHelper.ACTIVETASKCACHEKEY, id_)
