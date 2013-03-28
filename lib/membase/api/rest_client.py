@@ -137,13 +137,15 @@ class RestHelper(object):
 
 class RestConnection(object):
 
-    def __new__(self, serverInfo):
+    def __new__(self, serverInfo = {}):
+
+
         # allow port to determine
         # behavior of restconnection
-
         port = None
         if isinstance(serverInfo, dict):
-            port = serverInfo['port']
+            if 'port' in serverInfo:
+                port = serverInfo['port']
         else:
             port = serverInfo.port
 
