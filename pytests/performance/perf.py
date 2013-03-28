@@ -82,8 +82,13 @@ class PerfBase(unittest.TestCase):
             self.set_up_cluster(master)
 
         # Rebalance
-        num_nodes = self.parami("num_nodes", 10)
-        self.rebalance_nodes(num_nodes)
+        if self.input.clusters:
+            for cluster in self.input.cluster.values():
+                num_nodes = self.parami("num_nodes", len(cluster))
+                self.rebalance_nodes(num_nodes, cluster)
+        else:
+            num_nodes = self.parami("num_nodes", 10)
+            self.rebalance_nodes(num_nodes)
 
         if self.input.clusters:
             for cluster in self.input.clusters.values():
@@ -785,9 +790,8 @@ class PerfBase(unittest.TestCase):
                           bucket=bucket,
                           backups=backups)
 
-    def rebalance_nodes(self, num_nodes):
+    def rebalance_nodes(self, num_nodes, cluster=None):
         """Rebalance cluster(s) if more than 1 node provided"""
-
         if len(self.input.servers) == 1 or num_nodes == 1:
             self.log.warn("running on single node cluster")
             return
@@ -795,17 +799,11 @@ class PerfBase(unittest.TestCase):
             self.log.info("rebalancing nodes - num_nodes = {0}"
                           .format(num_nodes))
 
-        if self.input.clusters:
-            for cluster in self.input.clusters.values():
-                status, _ = RebalanceHelper.rebalance_in(cluster,
-                                                         num_nodes - 1,
-                                                         do_shuffle=False)
-                self.assertTrue(status)
-        else:
-            status, _ = RebalanceHelper.rebalance_in(self.input.servers,
-                                                     num_nodes - 1,
-                                                     do_shuffle=False)
-            self.assertTrue(status)
+        if not cluster:
+            cluster = self.input.servers
+        status, _ = RebalanceHelper.rebalance_in(cluster, num_nodes - 1,
+                                                 do_shuffle=False)
+        self.assertTrue(status)
 
     def delayed_rebalance_worker(self, servers, num_nodes, delay_seconds, sc,
                                  max_retries=PerfDefaults.reb_max_retries,
