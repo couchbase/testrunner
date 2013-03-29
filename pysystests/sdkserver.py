@@ -156,6 +156,8 @@ class CouchClientManager():
                 if isinstance(msg, dict) and 'error' in msg and int(msg["error"]) != 0:
                    if int(msg["error"]) == 7:
                        client.reconfig_vbucket_map(forward=True)
+                   if int(msg["error"]) == 134:
+                       pass # temp failure (oom) ignore
                    else:
                        ts = time.localtime()
                        ts_string = "%s/%s/%s %s:%s:%s" %\
@@ -234,6 +236,8 @@ class CouchClientManager():
                     if isinstance(msg, dict) and 'error' in msg and int(msg["error"]) != 0:
                         if int(msg["error"]) == 7:
                             client.reconfig_vbucket_map(forward=True)
+                        if int(msg["error"]) == 134:
+                            pass # temp failure (oom) ignore
                         else:
                             ts = time.localtime()
                             ts_string = "%s/%s/%s %s:%s:%s" %\
