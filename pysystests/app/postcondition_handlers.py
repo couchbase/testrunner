@@ -217,8 +217,8 @@ def active_tasks_stat_checker(workload):
     return status
 
 def get_ep_hostip_from_params(params):
-    host = params['ip'] or cfg.COUCHBASE_IP
-    port = params['port'] or 11210
+    host = params.get('ip') or cfg.COUCHBASE_IP
+    port = params.get('port') or 11210
     return host, int(port)
 
 class StatChecker(object):
