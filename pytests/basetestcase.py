@@ -438,7 +438,7 @@ class BaseTestCase(unittest.TestCase):
         return gen_load
 
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True,
-                             only_store_hash=True, replica_to_read=None):
+                             only_store_hash=True, replica_to_read=None, batch_size=1000):
         if servers is None:
             servers = self.servers
         if master is None:
@@ -449,7 +449,8 @@ class BaseTestCase(unittest.TestCase):
         self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120))
         if check_items:
             self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify,
-                                     only_store_hash=only_store_hash, replica_to_read=replica_to_read)
+                                     only_store_hash=only_store_hash, replica_to_read=replica_to_read,
+                                     batch_size=batch_size)
             self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
             verified = True

@@ -3,12 +3,16 @@ from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 
 class GetrTests(BaseTestCase):
 
-    NO_REBALANCE = 0
     DURING_REBALANCE = 1
     AFTER_REBALANCE = 2
+
+    FAILOVER_NO_REBALANCE = 1
+    FAILOVER_ADD_BACK = 2
+    FAILOVER_REBALANCE = 3
 
     def setUp(self):
         super(GetrTests, self).setUp()
@@ -22,6 +26,8 @@ class GetrTests(BaseTestCase):
         self.flags = self.input.param("flags", 0)
         self.warmup_nodes = self.input.param("warmup", 0)
         self.rebalance = self.input.param("rebalance", 0)
+        self.failover = self.input.param("failover", 0)
+        self.failover_factor = self.input.param("failover-factor", 1)
         self.error = self.input.param("error", None)
         self.replica_to_read = self.input.param("replica_to_read", 0)
 
@@ -47,17 +53,26 @@ class GetrTests(BaseTestCase):
                             [])
         if self.warmup_nodes:
             self.perform_warm_up()
+        if self.failover:
+            self.perform_failover()
         if self.wait_expiration:
             self.sleep(self.expiration)
         try:
             self.log.info("READ REPLICA PHASE")
+            servrs = self.servers[:self.nodes_init]
+            if self.failover in [GetrTests.FAILOVER_NO_REBALANCE, GetrTests.FAILOVER_REBALANCE]:
+                servrs = self.servers[:self.nodes_init - self.failover_factor]
+            self.log.info("Checking replica read")
             self.verify_cluster_stats(self.servers[:self.nodes_init], only_store_hash=False,
-                                      replica_to_read=self.replica_to_read)
+                                      replica_to_read=self.replica_to_read, batch_size=1)
         except Exception, ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
             else:
                 raise ex
+        else:
+            if self.error:
+                self.fail("Expected error %s didn't appear as expected" % self.error)
         if self.rebalance == GetrTests.DURING_REBALANCE:
             rebalance.result()
 
@@ -78,7 +93,8 @@ class GetrTests(BaseTestCase):
         if self.data_ops == 'recreate':
             self._load_all_buckets(server, gen_ops, 'create', self.expiration, kv_store=kv_store,
                               flag=self.flags, only_store_hash=only_store_hash, batch_size=batch_size)
-        self.verify_cluster_stats(self.servers[:self.nodes_init], only_store_hash=only_store_hash)
+        self.verify_cluster_stats(self.servers[:self.nodes_init], only_store_hash=only_store_hash,
+                                  batch_size=batch_size)
 
     def perform_warm_up(self):
         warmup_nodes = self.servers[-self.warmup_nodes:]
@@ -92,3 +108,23 @@ class GetrTests(BaseTestCase):
             shell.start_couchbase()
             shell.disconnect()
         ClusterOperationHelper.wait_for_ns_servers_or_assert(warmup_nodes, self)
+
+    def perform_failover(self):
+        rest = RestConnection(self.master)
+        nodes = rest.node_statuses()
+        failover_servers = self.servers[-self.failover_factor:]
+        failover_nodes = []
+        for server in failover_servers:
+            for node in nodes:
+                if node.ip == server.ip and str(node.port) == server.port:
+                    failover_nodes.append(node)
+        for node in failover_nodes:
+            rest.fail_over(node.id)
+        if self.failover == GetrTests.FAILOVER_REBALANCE:
+            self.cluster.rebalance(self.servers[:self.nodes_init],
+                               [], failover_servers)
+        if self.failover == GetrTests.FAILOVER_ADD_BACK:
+            for node in failover_nodes:
+                rest.add_back_node(node.id)
+            self.cluster.rebalance(self.servers[:self.nodes_init],
+                                   [], [])
