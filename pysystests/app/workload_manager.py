@@ -7,7 +7,7 @@ import json
 import uuid
 import time
 import copy
-from rabbit_helper import PersistedMQ
+from rabbit_helper import PersistedMQ, RabbitHelper
 from celery import current_task
 from celery import Task
 from cache import ObjCacher, CacheHelper
@@ -843,6 +843,30 @@ class Workload(object):
         # auto cache workload when certain attributes change
         if name in Workload.AUTOCACHEKEYS and self.initialized:
             ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, self)
+
+        # check if workload is being deactivated
+        if name == "active" and self.active == False and self.initialized:
+            self.requeueNonDeletedKeys()
+
+    def requeueNonDeletedKeys(self):
+        rabbitHelper = RabbitHelper()
+        task_type = 'app.sdk_client_tasks.mdelete'
+
+        # requeue pending delete keys so that they may be deleted in another workload
+        while rabbitHelper.qsize(self.task_queue) > 0:
+            task_set = rabbitHelper.getJsonMsg(self.task_queue)
+
+            if len(task_set) > 0:
+                keys = [task['args'] for task in task_set \
+                            if task['task'] == task_type]
+                if len(keys) > 0:
+                    # put back on to consume_queue
+                    msg = json.dumps(keys[0][0])
+                    rabbitHelper.putMsg(self.consume_queue, msg)
+        try:
+            rabbitHelper.delete(self.task_queue)
+        except:
+            pass
 
     @staticmethod
     def from_cache(id_):
