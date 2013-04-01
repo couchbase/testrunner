@@ -305,7 +305,7 @@ class SwapRebalanceBase(unittest.TestCase):
                         self.log.info("Rebalance will be stopped with {0}%".format(progress))
                         stopped = rest.stop_rebalance()
                         self.assertTrue(stopped, msg="unable to stop rebalance")
-                        SwapRebalanceBase.sleep(20)
+                        SwapRebalanceBase.sleep(self, 20)
                         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
                                        ejectedNodes=optNodesIds)
                         break
@@ -313,7 +313,7 @@ class SwapRebalanceBase(unittest.TestCase):
                         break
                     else:
                         retry += 1
-                        SwapRebalanceBase.sleep(1)
+                        SwapRebalanceBase.sleep(self, 1)
         self.assertTrue(rest.monitorRebalance(),
             msg="rebalance operation failed after adding node {0}".format(optNodesIds))
         SwapRebalanceBase.verification_phase(self, master)
@@ -374,7 +374,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.log.info("SWAP REBALANCE PHASE")
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
             ejectedNodes=optNodesIds)
-        SwapRebalanceBase.sleep(10, "Rebalance should start")
+        SwapRebalanceBase.sleep(self, 10, "Rebalance should start")
         self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(self.percentage_progress))
         reached = RestHelper(rest).rebalance_reached(self.percentage_progress)
         if reached == 100 and not RestHelper(rest).is_cluster_rebalanced():
@@ -399,7 +399,7 @@ class SwapRebalanceBase(unittest.TestCase):
                     break
                 except EOFError as e:
                     self.log.error("{0}.Retry in 2 sec".format(e))
-                    SwapRebalanceBase.sleep(1)
+                    SwapRebalanceBase.sleep(self, 1)
         if pid is None:
             self.fail("impossible to get a PID")
         command = "os:cmd(\"kill -9 {0} \")".format(pid)
@@ -407,7 +407,7 @@ class SwapRebalanceBase(unittest.TestCase):
         killed = rest.diag_eval(command)
         self.log.info("killed {0}:{1}??  {2} ".format(master.ip, master.port, killed))
         self.log.info("sleep for 10 sec after kill memcached")
-        SwapRebalanceBase.sleep(10)
+        SwapRebalanceBase.sleep(self, 10)
         # we can't get stats for new node when rebalance falls
         if not self.swap_orchestrator:
             ClusterOperationHelper._wait_warmup_completed(self, [master], bucket, wait_time=600)
