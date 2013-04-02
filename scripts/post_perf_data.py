@@ -37,7 +37,7 @@ def flatten(keys, json):
 
 
 def post_to_cbm(input_json):
-    """Collect and post results to cbmonitor dashboard"""
+    """Collect and post results to litmus dashboard"""
     if not input_json:
         return
 
@@ -51,7 +51,7 @@ def post_to_cbm(input_json):
         return
 
     if phase != "loop":
-        log.error("cbmonitor only cares about access phase for now")
+        log.error("litmus dashboard only cares about access phase for now")
         return
 
     if "cluster_name" in input_json["info"]:

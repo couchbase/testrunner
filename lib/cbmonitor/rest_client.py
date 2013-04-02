@@ -17,15 +17,15 @@ class CbmonitorClient(RestConnection):
     def __init__(self, hostname="127.0.0.1", port=80):
         """Create rest client.
 
-        hostname: cbmonitor dashboard hostname/ip address
-        port: cbmonitor dashboard port
+        hostname: litmus dashboard hostname/ip address
+        port: litmus dashboard port
         """
         self.username = ''
         self.password = ''
         self.baseUrl = 'http://%s:%s/' % (hostname, port)
 
     def post_results(self, build, testcase, env, metrics):
-        """Post litmus test result to cbmonitor dashboard
+        """Post test result to litmus dashboard
 
         build -- build version (e.g., '2.0.0-1723-rel-enterprise')
         testcase -- testcase (e.g: 'lucky6')
@@ -40,7 +40,7 @@ class CbmonitorClient(RestConnection):
             logging.error("param metrics must be dict type")
             return
 
-        logging.info("posting metrics %s for build %s to cbmonitor"
+        logging.info("posting metrics %s for build %s to litmus dashboard"
                      % (metrics, build))
         api = self.baseUrl + 'litmus/post/'
 
@@ -53,6 +53,6 @@ class CbmonitorClient(RestConnection):
             self._http_request(api, 'POST', urllib.urlencode(params),
                                timeout=30)
         except ServerUnavailableException:
-            logging.error("cbmonitor server %s is not available"
+            logging.error("litmus dashboard server %s is not available"
                           % self.baseUrl)
             return

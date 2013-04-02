@@ -24,7 +24,7 @@ class PerfDefaults:
     mem_low_wat             =    75          # percentage
     mutation_mem_threshold  =    95          # percentage, tmp oom threshold
 
-    # publish results to cbmonitor dashboard
+    # publish results to litmus dashboard
     cbm                     =    0
     cbm_host                =    "dashboard.hq.couchbase.com"
     cbm_port                =    80
