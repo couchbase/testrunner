@@ -906,7 +906,11 @@ class RestConnection(object):
     def _rebalance_progress(self):
         avg_percentage = -1
         api = self.baseUrl + "pools/default/rebalanceProgress"
-        status, content, header = self._http_request(api)
+        try:
+            status, content, header = self._http_request(api)
+        except ServerUnavailableException as e:
+            log.error(e)
+            return -100
         json_parsed = json.loads(content)
         if status:
             if "status" in json_parsed:
