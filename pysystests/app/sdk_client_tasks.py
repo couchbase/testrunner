@@ -133,8 +133,8 @@ def _send_msg(message, response=False):
             rc = sdk_client.recv(1024)
 
     except Exception as ex:
-        logger.error(ex)
-        logger.error("message suppressed: %s" % message["command"])
+        logger.info(ex)
+        logger.info("message suppressed: %s" % message["command"])
 
     return rc
 
@@ -204,7 +204,7 @@ def mc_op_latency(op, key, val, ip, port = 8091, bucket = "default", password = 
     except MemcachedError as ex:
         msg = "error connecting to host %s:%s for gathering latency"\
                %  (ip, port)
-        logger.error(msg)
+        logger.info(msg)
 
     return latency
 
