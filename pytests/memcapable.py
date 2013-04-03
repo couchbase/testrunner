@@ -431,7 +431,7 @@ class GetrTests(BaseTestCase):
             ClusterOperationHelper.end_rebalance(self.master)
         if warmup:
             self.log.info("restarting memcached")
-            command = "[rpc:multicall(ns_port_sup, restart_port_by_name, [memcached], 20000)]."
+            command = "rpc:multicall(erlang, apply, [fun () -> try ns_server_testrunner_api:restart_memcached(20000) catch _:_ -> ns_port_sup:restart_port_by_name(memcached) end end, []], 20000)."
             memcached_restarted = self.rest.diag_eval(command)
             #wait until memcached starts
             self.assertTrue(memcached_restarted, "unable to restart memcached process through diag/eval")
@@ -1065,7 +1065,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
         self.log.info("sleeping for 10 seconds")
         time.sleep(10)
         rest = RestConnection(self.master)
-        command = "[erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)]."
+        command = "try ns_server_testrunner_api:kill_memcached(20000) catch _:_ -> [erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)] end."
         memcached_restarted = rest.diag_eval(command)
         self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
 
