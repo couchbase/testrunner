@@ -126,7 +126,7 @@ def sysTestRunner(workload):
         setupCacheMissQueues(workload)
 
 
-    task_prerun_handler.delay(workload, prevWorkload)
+    workload.active = True
 
 
 @celery.task(base = PersistedMQ, ignore_result = True)
@@ -183,7 +183,6 @@ Generates list of tasks to run based on params passed in to workload
 @celery.task(base = PersistedMQ)
 def queue_op_cycles(workload):
 
-    workload.ops_building = True
 
     # read doc template
     template = Template.from_cache(str(workload.template))
@@ -231,7 +230,6 @@ def queue_op_cycles(workload):
                                update_count, get_count, del_count, exp_count,
                                consume_queue, ttl, miss_perc, miss_queue, active_hosts)
 
-    workload.ops_building = False
 
 def setupCacheMissQueues(workload):
     """ assuming misses will come from keys in
@@ -273,31 +271,8 @@ def setupCacheMissQueues(workload):
 @celery.task(ignore_result = True)
 def task_prerun_handler(workload, prevWorkload):
 
-    # set workload to active
-    # will be picked up by taskScheduler
-    workload.active = True
-
-    bucket = str(workload.bucket)
-    stat_checker = phandler.BucketStatChecker(bucket)
-
-    # convert item count postcondition's to curr_item conditions
-    if workload.postconditions:
-
-        stat, cmp_type, value = \
-            phandler.default_condition_params(workload.postconditions)
-
-        if stat == 'count':
-            curr_items = stat_checker.get_curr_items()
-            value = int(value) + int(curr_items)
-            workload.postconditions = "curr_items >= %s" % value
-
-        # setup postcondition hander
-        workload.postcondition_handler =\
-            phandler.getPostConditionMethod(workload)
-
-
-
     # WARNING PRECONDITIONS ARE DEPRECIATED
+    # this method is used to disable a previously running workload
     if workload.preconditions is not None:
 
         # block tasks against bucket until pre-conditions met
@@ -342,7 +317,7 @@ def taskScheduler():
 
 
             # check if more subtasks need to be queued
-            if num_ready_tasks < 10 and workload.ops_building == False:
+            if num_ready_tasks < 10:
                 queue_op_cycles.delay(workload)
 
 
@@ -758,7 +733,7 @@ class Workload(object):
                      'ops_per_sec',
                      'postconditions',
                      'postcondition_handler',
-                     'ops_building']
+                     'initialized']
 
     def __init__(self, params):
         self.initialized = False
@@ -785,14 +760,33 @@ class Workload(object):
         self.wait = params["wait"]
         self.ttl = int(params["ttl"])
         self.indexed_keys = []
-        self.ops_building = False
 
         # consume from cc_queue by default if not specified
         if self.cc_queues != None:
             if self.consume_queue == None:
                 self.consume_queue = self.cc_queues[0]
 
+        # setup postcondition handler
+        self.setupPostconditionHandler()
         self.initialized = True
+
+    def setupPostconditionHandler(self):
+
+        if self.postconditions:
+
+            stat, cmp_type, value = \
+                phandler.default_condition_params(self.postconditions)
+
+            if stat == 'count':
+                stat_checker = phandler.BucketStatChecker(bucket)
+                curr_items = stat_checker.get_curr_items()
+                value = int(value) + int(curr_items)
+                self.postconditions = "curr_items >= %s" % value
+
+            # setup postcondition hander
+            self.postcondition_handler =\
+                phandler.getPostConditionMethod(self)
+
 
     @staticmethod
     def defaultSpec():
@@ -840,7 +834,9 @@ class Workload(object):
     def __setattr__(self, name, value):
         super(Workload, self).__setattr__(name, value)
 
+
         # auto cache workload when certain attributes change
+        # if object has been fully setup
         if name in Workload.AUTOCACHEKEYS and self.initialized:
             ObjCacher().store(CacheHelper.WORKLOADCACHEKEY, self)
 
