@@ -660,3 +660,17 @@ class Cluster(object):
             boolean - Whether or not the bucket was flushed."""
         _task = self.async_bucket_flush(server, bucket)
         return _task.result(timeout)
+
+    def async_monitor_db_fragmentation(self, server, fragmentation, bucket):
+        """Asyncronously monitor db fragmentation
+
+        Parameters:
+            servers - server to check(TestInputServers)
+            bucket - bucket to check
+            fragmentation - fragmentation to reach
+
+        Returns:
+            MonitorDBFragmentationTask - A task future that is a handle to the scheduled task"""
+        _task = MonitorDBFragmentationTask(server, fragmentation, bucket)
+        self.task_manager.schedule(_task)
+        return _task

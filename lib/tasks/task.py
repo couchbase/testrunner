@@ -2219,3 +2219,52 @@ class BucketFlushTask(Task):
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
             self.set_exception(e)
+
+class MonitorDBFragmentationTask(Task):
+
+    """
+        Attempt to monitor fragmentation that is occurring for a given bucket.
+
+        Note: If autocompaction is enabled and user attempts to monitor for fragmentation
+        value higher than level at which auto_compaction kicks in a warning is sent and
+        it is best user to use lower value as this can lead to infinite monitoring.
+    """
+
+    def __init__(self, server, fragmentation_value=10, bucket="default"):
+
+        Task.__init__(self, "monitor_frag_db_task")
+        self.server = server
+        self.bucket = bucket
+        self.fragmentation_value = fragmentation_value
+
+
+    def execute(self, task_manager):
+
+        # sanity check of fragmentation value
+        if  self.fragmentation_value < 0 or self.fragmentation_value > 100:
+            err_msg = \
+                "Invalid value for fragmentation %d" % self.fragmentation_value
+            self.state = FINISHED
+            self.set_exception(Exception(err_msg))
+
+        self.state = CHECKING
+        task_manager.schedule(self, 5)
+
+    def check(self, task_manager):
+
+        try:
+            rest = RestConnection(self.server)
+            stats = rest.fetch_bucket_stats(bucket=self.bucket)
+            new_frag_value = stats["op"]["samples"]["couch_docs_fragmentation"][-1]
+
+            self.log.info("current amount of fragmentation = %d" % new_frag_value)
+            if new_frag_value >= self.fragmentation_value:
+                self.state = FINISHED
+                self.set_result(True)
+            else:
+                # try again
+                task_manager.schedule(self, 2)
+        except Exception, ex:
+            self.state = FINISHED
+            self.set_result(False)
+            self.set_exception(ex)
