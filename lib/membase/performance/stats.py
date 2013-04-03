@@ -614,18 +614,23 @@ class StatsCollector(object):
                 # System stats
                 ns_server_stats_system = rest.fetch_system_stats()
                 self._task["ns_server_stats_system"].append(ns_server_stats_system)
+            except ServerUnavailableException, e:
+                log.error(e)
             except (ValueError, TypeError), e:
-                retries += 1
                 log.error("unable to parse json object {0}: {1}".format(node, e))
+            else:
+                continue
+            retries += 1
+            if retries <= RETRIES:
                 log.warning("retries: {0} of {1}".format(retries, RETRIES))
-                if retries == RETRIES:
-                    try:
-                        node = nodes_iterator.next()
-                        rest = RestConnection(node)
-                        retries = 0
-                    except StopIteration:
-                        log.error("no nodes available: stop collecting ns_server_stats")
-                        return
+            else:
+                try:
+                    node = nodes_iterator.next()
+                    rest = RestConnection(node)
+                    retries = 0
+                except StopIteration:
+                    log.error("no nodes available: stop collecting ns_server_stats")
+                    return
 
         log.info("finished ns_server_stats")
 
