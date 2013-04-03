@@ -1311,53 +1311,65 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
     def extract_remote_info(self):
         #use ssh to extract remote machine info
         #use sftp to if certain types exists or not
-        sftp = self._ssh_client.open_sftp()
-        filenames = sftp.listdir('/etc/')
-        os_distro = ""
-        os_version = ""
-        is_linux_distro = False
-        for name in filenames:
-            if name == 'issue':
-                #it's a linux_distro . let's downlaod this file
-                #format Ubuntu 10.04 LTS \n \l
-                filename = 'etc-issue-{0}'.format(uuid.uuid4())
-                sftp.get(localpath=filename, remotepath='/etc/issue')
-                file = open(filename)
-                etc_issue = ''
-                #let's only read the first line
-                for line in file.xreadlines():
-                    etc_issue = line
+        mac_check_cmd = "sw_vers | grep ProductVersion | awk '{ print $2 }'"
+        stdin, stdout, stderro = self._ssh_client.exec_command(mac_check_cmd)
+        stdin.close()
+        ver, err = stdout.read(), stderro.read()
+        if not err:
+            os_distro = "Mac"
+            os_version = ver
+            is_linux_distro = True
+            is_mac = True
+            self.use_sudo = False
+        else:
+            is_mac = False
+            sftp = self._ssh_client.open_sftp()
+            filenames = sftp.listdir('/etc/')
+            os_distro = ""
+            os_version = ""
+            is_linux_distro = False
+            for name in filenames:
+                if name == 'issue':
+                    #it's a linux_distro . let's downlaod this file
+                    #format Ubuntu 10.04 LTS \n \l
+                    filename = 'etc-issue-{0}'.format(uuid.uuid4())
+                    sftp.get(localpath=filename, remotepath='/etc/issue')
+                    file = open(filename)
+                    etc_issue = ''
+                    #let's only read the first line
+                    for line in file.xreadlines():
+                        etc_issue = line
+                        break
+                        #strip all extra characters
+                    etc_issue = etc_issue.rstrip('\n').rstrip('\\l').rstrip('\\n')
+                    if etc_issue.lower().find('ubuntu') != -1:
+                        os_distro = 'Ubuntu'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                    elif etc_issue.lower().find('debian') != -1:
+                        os_distro = 'Ubuntu'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                    elif etc_issue.lower().find('mint') != -1:
+                        os_distro = 'Ubuntu'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                    elif etc_issue.lower().find('amazon linux ami') != -1:
+                        os_distro = 'CentOS'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                    elif etc_issue.lower().find('centos') != -1:
+                        os_distro = 'CentOS'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                    elif etc_issue.lower().find('red hat') != -1:
+                        os_distro = 'Red Hat'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                    file.close()
+                    # now remove this file
+                    os.remove(filename)
                     break
-                    #strip all extra characters
-                etc_issue = etc_issue.rstrip('\n').rstrip('\\l').rstrip('\\n')
-                if etc_issue.lower().find('ubuntu') != -1:
-                    os_distro = 'Ubuntu'
-                    os_version = etc_issue
-                    is_linux_distro = True
-                elif etc_issue.lower().find('debian') != -1:
-                    os_distro = 'Ubuntu'
-                    os_version = etc_issue
-                    is_linux_distro = True
-                elif etc_issue.lower().find('mint') != -1:
-                    os_distro = 'Ubuntu'
-                    os_version = etc_issue
-                    is_linux_distro = True
-                elif etc_issue.lower().find('amazon linux ami') != -1:
-                    os_distro = 'CentOS'
-                    os_version = etc_issue
-                    is_linux_distro = True
-                elif etc_issue.lower().find('centos') != -1:
-                    os_distro = 'CentOS'
-                    os_version = etc_issue
-                    is_linux_distro = True
-                elif etc_issue.lower().find('red hat') != -1:
-                    os_distro = 'Red Hat'
-                    os_version = etc_issue
-                    is_linux_distro = True
-                file.close()
-                # now remove this file
-                os.remove(filename)
-                break
         if not is_linux_distro:
             arch = ''
             os_version = 'unknown windows'
@@ -1380,10 +1392,12 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             stdin, stdout, stderro = self._ssh_client.exec_command('uname -m')
             stdin.close()
             os_arch = ''
-            for line in stdout.read().splitlines():
+            text = stdout.read().splitlines()
+            for line in text:
                 os_arch += line
                 # at this point we should know if its a linux or windows ditro
-            ext = {'Ubuntu': 'deb', 'CentOS': 'rpm', 'Red Hat': 'rpm'}.get(os_distro, '')
+            ext = {'Ubuntu': 'deb', 'CentOS': 'rpm',
+                   'Red Hat': 'rpm', "Mac": "zip"}.get(os_distro, '')
             arch = {'i686': 'x86', 'i386': 'x86'}.get(os_arch, os_arch)
             info = RemoteMachineInfo()
             info.type = "Linux"
@@ -1392,9 +1406,9 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.ip = self.ip
             info.distribution_version = os_version
             info.deliverable_type = ext
-            info.cpu = self.get_cpu_info()
-            info.disk = self.get_disk_info()
-            info.ram = self.get_ram_info()
+            info.cpu = self.get_cpu_info(mac=is_mac)
+            info.disk = self.get_disk_info(mac=is_mac)
+            info.ram = self.get_ram_info(mac=is_mac)
             info.hostname = self.get_hostname()
             return info
 
@@ -1416,34 +1430,40 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if o:
             return o
 
-    def get_cpu_info(self, win_info=None):
+    def get_cpu_info(self, win_info=None, mac=False):
         if win_info:
             if 'Processor(s)' not in win_info:
                 win_info = self.create_windows_info()
             o = win_info['Processor(s)']
+        elif mac:
+            o, r = self.execute_command_raw('sysctl -n machdep.cpu.brand_string')
         else:
             o, r = self.execute_command_raw('sudo cat /proc/cpuinfo')
         if o:
             return o
 
-    def get_ram_info(self, win_info=None):
+    def get_ram_info(self, win_info=None, mac=False):
         if win_info:
             if 'Virtual Memory Max Size' not in win_info:
                 win_info = self.create_windows_info()
             o = "Virtual Memory Max Size =" + win_info['Virtual Memory Max Size'] + '\n'
             o += "Virtual Memory Available =" + win_info['Virtual Memory Available'] + '\n'
             o += "Virtual Memory In Use =" + win_info['Virtual Memory In Use']
+        elif mac:
+            o, r = self.execute_command_raw('sysctl -n hw.memsize')
         else:
             o, r = self.execute_command_raw('sudo cat /proc/meminfo')
         if o:
             return o
 
-    def get_disk_info(self, win_info=None):
+    def get_disk_info(self, win_info=None, mac=False):
         if win_info:
             if 'Total Physical Memory' not in win_info:
                 win_info = self.create_windows_info()
             o = "Total Physical Memory =" + win_info['Total Physical Memory'] + '\n'
             o += "Available Physical Memory =" + win_info['Available Physical Memory']
+        elif mac:
+            o, r = self.execute_command_raw('df -h')
         else:
             o, r = self.execute_command_raw('sudo df -Th')
         if o:
