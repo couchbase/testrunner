@@ -160,6 +160,14 @@ class CacheHelper():
         return queues
 
     @staticmethod
+    def miss_queues():
+        queues = []
+        for workload in CacheHelper.workloads():
+            if workload.miss_queue is not None and workload.consume_queue is not None:
+                queues.append(workload.consume_queue)
+        return queues
+
+    @staticmethod
     def task_queues():
         kv = [workload.task_queue for workload in CacheHelper.workloads()]
         query = [workload.task_queue for workload in CacheHelper.queries()]
@@ -169,7 +177,8 @@ class CacheHelper():
     def queues():
         return CacheHelper.task_queues() +\
             CacheHelper.cc_queues() +\
-            CacheHelper.consume_queues()
+            CacheHelper.consume_queues() +\
+            CacheHelper.miss_queues()
 
     @staticmethod
     def cacheClean():

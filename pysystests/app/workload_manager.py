@@ -834,7 +834,6 @@ class Workload(object):
     def __setattr__(self, name, value):
         super(Workload, self).__setattr__(name, value)
 
-
         # auto cache workload when certain attributes change
         # if object has been fully setup
         if name in Workload.AUTOCACHEKEYS and self.initialized:
@@ -859,10 +858,17 @@ class Workload(object):
                     # put back on to consume_queue
                     msg = json.dumps(keys[0][0])
                     rabbitHelper.putMsg(self.consume_queue, msg)
+
         try:
+            # delete task queue
             rabbitHelper.delete(self.task_queue)
+
+            # delete consume queue if it was a miss_queue
+            if self.miss_queue is not None and self.consume_queue is not None:
+                rabbitHelper.delete(self.consume_queue)
         except:
             pass
+
 
     @staticmethod
     def from_cache(id_):
@@ -906,6 +912,8 @@ class BucketStatus(object):
         if len(self.history) > 0 and bucket in self.history:
             taskId, workload = self.history[bucket]["tasks"][-1]
 
+        # retrieve latest workload in case it has changed since last cached
+        workload = Workload.from_cache(workload.id)
         return workload
 
     def mode(self, bucket):

@@ -46,7 +46,7 @@ if cfg.CLUSTER:
         os.system("cd .. && ./testrunner -i " + cfg.CLUSTER['ini'] + " -t cluster_setup.SETUP." + function + " && cd pysystests")
 
 # delete queues (note using --purge will remove cc_queues)
-queues = CacheHelper.task_queues()
+queues = CacheHelper.task_queues() + CacheHelper.miss_queues()
 
 # when --purge set delete cc_queue's as well
 # as seriesly db
