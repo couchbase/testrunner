@@ -296,7 +296,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._optimistic_xdcr = self._input.param("optimistic_xdcr", True)
         if self.src_master.ip != self.dest_master.ip:       #Only if it's not a cluster_run
             if self._optimistic_xdcr:
-                self.set_environ_param('XDCR_LATENCY_OPTIMIZATION',True)
+                self.set_environ_param('XDCR_LATENCY_OPTIMIZATION', True)
 
         self.log.info("Initializing input parameters completed.")
 
@@ -906,7 +906,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         if src_master.ip != dest_master.ip:
             if self._failover is not None or self._warmup is not None:
-                self.set_environ_param('XDCR_FAILURE_RESTART_INTERVAL',1)
+                self.set_environ_param('XDCR_FAILURE_RESTART_INTERVAL', 1)
         self.sleep(self._timeout / 2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)
@@ -1041,8 +1041,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     for bucket in buckets:
                         tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, '',
                             'ep_queue_size', '==', 0))
-                        tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, '',
-                            'ep_flusher_todo', '==', 0))
                 for task in tasks:
                     task.result(timeout)
                 return True

@@ -135,8 +135,6 @@ class WarmUpTests(BaseTestCase):
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                    'ep_queue_size', '==', 0))
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
-                                   'ep_flusher_todo', '==', 0))
-                tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                    'ep_uncommitted_items', '==', 0))
         for task in tasks:
             task.result()
@@ -274,7 +272,7 @@ class WarmUpTests(BaseTestCase):
     def test_warmup_with_expiration(self):
         self.num_items = self.input.param("items", 1000)
         expiry = self.input.param("expiry", 120)
-        self._load_doc_data_all_buckets('create', expiry = expiry)
+        self._load_doc_data_all_buckets('create', expiry=expiry)
         # wait for draining of data before restart and warm up
         rest = RestConnection(self.servers[0])
         self.nodes_server = rest.get_nodes()

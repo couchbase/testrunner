@@ -351,19 +351,16 @@ class BaseTestCase(unittest.TestCase):
     Args:
         servers - A list of all of the servers in the cluster. ([TestInputServer])
         ep_queue_size - expected ep_queue_size (int)
-        ep_flusher_todo - expected ep_flusher_todo (int)
         ep_queue_size_cond - condition for comparing (str)
         timeout - Waiting the end of the thread. (str)
     """
-    def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, ep_flusher_todo=0, \
+    def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, \
                                      ep_queue_size_cond='==', timeout=360):
         tasks = []
         for server in servers:
             for bucket in self.buckets:
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                    'ep_queue_size', ep_queue_size_cond, ep_queue_size))
-                tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
-                                   'ep_flusher_todo', '==', ep_flusher_todo))
         for task in tasks:
             task.result(timeout)
 
