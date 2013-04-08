@@ -47,12 +47,30 @@ class BucketTests(BaseUITestCase):
 class InitializeTest(BaseUITestCase):
     def setUp(self):
         super(InitializeTest, self).setUp()
+        self._deinitialize_api()
 
     def tearDown(self):
         super(InitializeTest, self).tearDown()
+        self._initialize_api()
 
     def test_initialize(self):
         NodeInitializeHelper(self).initialize(self.input)
+
+    def _initialize_api(self):
+        init_tasks = []
+        for server in self.servers:
+            init_port = server.port or '8091'
+            init_tasks.append(self.cluster.async_init_node(server, port=init_port))
+        for task in init_tasks:
+            task.result()
+
+    def _deinitialize_api(self):
+        for server in self.servers:
+            try:
+                rest = RestConnection(server)
+                rest.force_eject_node()
+            except BaseException, e:
+                self.fail(e)
 
 class DocumentsTest(BaseUITestCase):
     def setUp(self):
@@ -876,7 +894,7 @@ class DocsHelper():
         self.controls.lookup_btn.click()
         self.wait.until(lambda fn:
                         self.controls.edit_document_screen(doc=doc.name).name.is_displayed(),
-                        "Doc %s is not found" % doc_name)
+                        "Doc %s is not found" % doc.name)
 
 class SettingsHelper():
     def __init__(self, tc):

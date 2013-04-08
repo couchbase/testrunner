@@ -32,6 +32,10 @@ class BaseUITestCase(unittest.TestCase):
         else:
             self.shell.execute_command('{0}start-selenium.bat > {0}selenium.log 2>&1 &'.format(self.input.ui_conf['selenium_path']))
 
+    def _kill_old_drivers(self):
+        if self.shell.extract_remote_info().type.lower() == 'windows':
+            self.shell.execute_command('taskkill /F /IM chromedriver.exe')
+
     def _wait_for_selenium_is_started(self, timeout=10):
         if self.machine.ip in ['localhost', '127.0.0.1']:
             start_time = time.time()
@@ -86,6 +90,7 @@ class BaseUITestCase(unittest.TestCase):
                                             or self.case_number == 1:
                 self.tearDown()
             self._log_start(self)
+            self._kill_old_drivers()
             #thread for selenium server
             if not self._is_selenium_running():
                 self.log.info('start selenium')
