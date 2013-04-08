@@ -19,7 +19,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
     """Rebalances nodes out and in of the cluster while doing mutations with max
     number of buckets in the cluster.
 
-    This test begins by creating max number of buckets with bucket_size=100( by default):
+    This test begins by creating max number of buckets with bucket_size=100( by default).
+    no we have limitation in 10 buckets:
     one default bucket, all other are sasl and standart buckets. Then we load
     a given number of items into the cluster. It then removes two nodes,
     rebalances that nodes out the cluster, and then rebalances them back
@@ -30,7 +31,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
     where we are adding back and removing at least half of the nodes."""
     def incremental_rebalance_in_out_with_max_buckets_number(self):
         self.bucket_size = self.input.param("bucket_size", 100)
-        bucket_num = self.quota / self.bucket_size
+        bucket_num = max(10, self.quota / self.bucket_size)
         self.log.info('total %s buckets will be created with size %s MB' % (bucket_num, self.bucket_size))
         self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
