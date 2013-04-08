@@ -65,10 +65,11 @@ def post_to_cbm(input_json):
         xdcr_stats = {"Avg. XDCR Queue": "replication_changes_left",
                       "Avg. XDCR ops/sec": "xdc_ops"}
         for title, metric in xdcr_stats.iteritems():
-            metrics[title] = mean([
+            value = mean([
                 mean(sample["op"]["samples"].get(metric, []))
                 for sample in input_json["ns_server_data"]
             ])
+            metrics[title] = round(value, 1)
     if "reb_dur" in input_json["info"]:
         metrics["Rebalance Time, s"] = int(input_json["info"]["reb_dur"])
     elif testcase.startswith("reb"):
