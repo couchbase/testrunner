@@ -1696,7 +1696,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if type == 'windows':
             cbcollect_command = "%scbcollect_info.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         command = "%s %s" % (cbcollect_command, file)
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command.format(command), use_channel=True)
         self.log_command_output(output, error)
         return output, error
 
