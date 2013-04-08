@@ -51,10 +51,12 @@ class InitializeTest(BaseUITestCase):
 
     def tearDown(self):
         super(InitializeTest, self).tearDown()
-        self._initialize_api()
 
     def test_initialize(self):
-        NodeInitializeHelper(self).initialize(self.input)
+        try:
+            NodeInitializeHelper(self).initialize(self.input)
+        except:
+            self._initialize_api()
 
     def _initialize_api(self):
         init_tasks = []
@@ -69,6 +71,7 @@ class InitializeTest(BaseUITestCase):
             try:
                 rest = RestConnection(server)
                 rest.force_eject_node()
+                self.driver.refresh()
             except BaseException, e:
                 self.fail(e)
 
