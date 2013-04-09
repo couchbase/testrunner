@@ -727,7 +727,6 @@ class VBucketAwareMemcached(object):
             self.reset(rest)
             forward_map = rest.get_vbuckets(self.bucket)
         nodes = rest.get_nodes()
-
         for vBucket in forward_map:
             if vBucket.id in vbucketids_set:
                 self.vBucketMap[vBucket.id] = vBucket.master
@@ -752,6 +751,9 @@ class VBucketAwareMemcached(object):
                 for rm_cl in rm_clients:
                     self.memcacheds[rm_cl].close()
                     del self.memcacheds[rm_cl]
+                self.vBucketMapReplica[vBucket.id] = vBucket.replica
+                for replica in vBucket.replica:
+                    self.add_memcached(replica, self.memcacheds, self.rest, self.bucket)
         return True
 
     def request_map(self, rest, bucket):
@@ -915,6 +917,7 @@ class VBucketAwareMemcached(object):
         vb_error = 0
         while True:
             try:
+                vBucketId = self._get_vBucket_id(key)
                 return self._send_op(self.memcached(key, replica_index=replica_index).getr, key)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:

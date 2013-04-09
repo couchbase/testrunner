@@ -4,11 +4,13 @@ from couchbase.documentgenerator import DocumentGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import VBucketAwareMemcached
 
 class GetrTests(BaseTestCase):
 
     DURING_REBALANCE = 1
     AFTER_REBALANCE = 2
+    SWAP_REBALANCE = 3
 
     FAILOVER_NO_REBALANCE = 1
     FAILOVER_ADD_BACK = 2
@@ -51,6 +53,11 @@ class GetrTests(BaseTestCase):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                             self.servers[self.nodes_init : self.nodes_init + self.nodes_in],
                             [])
+        if self.rebalance == GetrTests.SWAP_REBALANCE:
+            self.cluster.rebalance(self.servers[:self.nodes_init],
+                                   self.servers[self.nodes_init :
+                                                self.nodes_init + self.nodes_in],
+                                   self.servers[self.nodes_init - self.nodes_in : self.nodes_init])
         if self.warmup_nodes:
             self.perform_warm_up()
         if self.failover:
@@ -62,9 +69,45 @@ class GetrTests(BaseTestCase):
             servrs = self.servers[:self.nodes_init]
             if self.failover in [GetrTests.FAILOVER_NO_REBALANCE, GetrTests.FAILOVER_REBALANCE]:
                 servrs = self.servers[:self.nodes_init - self.failover_factor]
+            if self.rebalance == GetrTests.AFTER_REBALANCE:
+                servrs = self.servers
+            if self.rebalance == GetrTests.SWAP_REBALANCE:
+                servrs = self.servers[:self.nodes_init - self.nodes_in]
+                servrs.extend(self.servers[self.nodes_init :
+                                           self.nodes_init + self.nodes_in])
+
             self.log.info("Checking replica read")
-            self.verify_cluster_stats(self.servers[:self.nodes_init], only_store_hash=False,
-                                      replica_to_read=self.replica_to_read, batch_size=1)
+            if self.failover == GetrTests.FAILOVER_NO_REBALANCE:
+                self._verify_all_buckets(self.master, only_store_hash=False,
+                                         replica_to_read=self.replica_to_read,
+                                         batch_size=1)
+            else:
+                self.verify_cluster_stats(servrs, only_store_hash=False,
+                                          replica_to_read=self.replica_to_read, batch_size=1)
+        except Exception, ex:
+            if self.error and str(ex).find(self.error) != -1:
+                self.log.info("Expected error %s appeared as expected" % self.error)
+            else:
+                raise ex
+        if self.rebalance == GetrTests.DURING_REBALANCE:
+            rebalance.result()
+
+    def getr_negative_test(self):
+        gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                      start=0, end=self.num_items/2)
+        gen_2 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                      start=self.num_items/2, end=self.num_items)
+        self.log.info("LOAD PHASE")
+        if not self.skipload:
+            self.perform_docs_ops(self.master, [gen_1, gen_2], self.data_ops)
+
+        if self.wait_expiration:
+            self.sleep(self.expiration)
+
+        self.log.info("READ REPLICA PHASE")
+        self.log.info("Checking replica read")
+        try:
+            self._load_all_buckets(self.master, gen_1, 'read_replica', self.expiration, batch_size=1)
         except Exception, ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
@@ -73,9 +116,70 @@ class GetrTests(BaseTestCase):
         else:
             if self.error:
                 self.fail("Expected error %s didn't appear as expected" % self.error)
-        if self.rebalance == GetrTests.DURING_REBALANCE:
-            rebalance.result()
 
+    def getr_negative_corrupted_keys_test(self):
+        key = self.input.param("key", '')
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                      start=0, end=self.num_items)
+        self.perform_docs_ops(self.master, [gen], 'create')
+        self.log.info("Checking replica read")
+        client = VBucketAwareMemcached(RestConnection(self.master), self.default_bucket_name)
+        try:
+            o, c, d = client.getr(key)
+        except Exception, ex:
+            if self.error and str(ex).find(self.error) != -1:
+                self.log.info("Expected error %s appeared as expected" % self.error)
+            else:
+                raise ex
+        else:
+            if self.error:
+                self.fail("Expected error %s didn't appear as expected" % self.error)
+
+    def test_getr_bucket_ops(self):
+        bucket_to_delete_same_read = self.input.param("bucket_to_delete_same_read", True)
+        gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                      start=0, end=self.num_items)
+        self.log.info("LOAD PHASE")
+        self.perform_docs_ops(self.master, [gen_1], self.data_ops)
+
+        self.log.info("Start bucket ops")
+        bucket_read = self.buckets[0]
+        bucket_delete = (self.buckets[1], self.buckets[0])[bucket_to_delete_same_read]
+        try:
+            self.log.info("READ REPLICA PHASE")
+            self.log.info("Checking replica read")
+            task_verify = self.cluster.async_verify_data(self.master, bucket_read,
+                                                         bucket_read.kvs[1],
+                                                         only_store_hash=False,
+                                                         replica_to_read=self.replica_to_read)
+            task_delete_bucket = self.cluster.async_bucket_delete(self.master, bucket_delete.name)
+            task_verify.result()
+            task_delete_bucket.result()
+        except Exception, ex:
+            task_delete_bucket.result()
+            if self.error and str(ex).find(self.error) != -1:
+                self.log.info("Expected error %s appeared as expected" % self.error)
+            else:
+                raise ex
+        else:
+            if self.error:
+                self.fail("Expected error %s didn't appear as expected" % self.error)
+
+    def getr_rebalance_test(self):
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                      start=0, end=self.num_items)
+        self.perform_docs_ops(self.master, [gen], 'create')
+        self.log.info("Checking replica read")
+        client = VBucketAwareMemcached(RestConnection(self.master), self.default_bucket_name)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                            self.servers[self.nodes_init : self.nodes_init + self.nodes_in],
+                            [])
+        try:
+            while gen.has_next():
+                key, _ = gen.next()
+                o, c, d = client.getr(key)
+        finally:
+            rebalance.result()
 
     def perform_docs_ops(self, server, gens, op_type, kv_store=1, only_store_hash=False,
                          batch_size=1):
@@ -112,7 +216,7 @@ class GetrTests(BaseTestCase):
     def perform_failover(self):
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
-        failover_servers = self.servers[-self.failover_factor:]
+        failover_servers = self.servers[:self.nodes_init][-self.failover_factor:]
         failover_nodes = []
         for server in failover_servers:
             for node in nodes:
@@ -120,6 +224,7 @@ class GetrTests(BaseTestCase):
                     failover_nodes.append(node)
         for node in failover_nodes:
             rest.fail_over(node.id)
+            self.sleep(5)
         if self.failover == GetrTests.FAILOVER_REBALANCE:
             self.cluster.rebalance(self.servers[:self.nodes_init],
                                [], failover_servers)

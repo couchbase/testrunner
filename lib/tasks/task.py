@@ -857,6 +857,10 @@ class ValidateDataTask(GenericLoadingTask):
             else:
                 self.state = FINISHED
                 self.set_exception(error)
+        except Exception as error:
+            self.log.error("Unexpected error: %s" % str(error))
+            self.state = FINISHED
+            self.set_exception(error)
         self.kv_store.release_partition(key)
 
     def _check_deleted_key(self, key):
