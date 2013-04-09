@@ -149,9 +149,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             remote.disconnect()
             self.sleep(10)
             if self.is_linux:
-                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4)
+                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
             else:
-                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, check_service=True)
+                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, wait_if_warmup=True, check_service=True)
             if not skip_init:
                 self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             self.sleep(self.sleep_time)
