@@ -666,12 +666,13 @@ def updateClusterStatus(ignore_result = True):
 " object used to keep track of active nodes in a cluster
 """
 class ClusterStatus(object):
-    def __init__(self):
+    def __init__(self, id = cfg.CB_CLUSTER_TAG+"_status"):
         self.initialized = False
 
-        self.id = cfg.CB_CLUSTER_TAG+"_status"
+        self.id = id
         self.master_node = None
         self.nodes = self.get_cluster_nodes() or []
+        self.all_available_hosts = []
         self.rebalancing = False
 
         if len(self.nodes) > 0:

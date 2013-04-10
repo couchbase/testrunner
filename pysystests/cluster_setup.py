@@ -13,6 +13,9 @@ from couchbase.cluster import Cluster
 from TestInput import TestInputSingleton
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from cache import ObjCacher, CacheHelper
+import testcfg as cfg
+from app.workload_manager import ClusterStatus
 
 class initialize(unittest.TestCase):
     def setUp(self):
@@ -20,8 +23,12 @@ class initialize(unittest.TestCase):
         self._input = TestInputSingleton.input
         self._clusters_dic = self._input.clusters
         self._clusters_keys_olst = range(len(self._clusters_dic))
+        try:
+            self._num_initial_nodes = self._input.param("initial_nodes", '1').split(',')
+        except:
+            self._num_initial_nodes = [self._input.param("initial_nodes", '1')]
         self._buckets = []
-        self._default_bucket = self._input.param("default_bucket", True)
+        self._default_bucket = self._input.param("default_bucket", False)
         if self._default_bucket:
             self.default_bucket_name = "default"
         self._standard_buckets = self._input.param("standard_buckets", 0)
@@ -44,9 +51,27 @@ class initialize(unittest.TestCase):
 
 class SETUP(initialize):
     def setitup(self):
+        # if user forget to assign the number of initial nodes for any cluster
+        # use 1 node as default
+        if len(self._num_initial_nodes) < len(self._clusters_keys_olst):
+            diff = len(self._clusters_keys_olst) - len(self._num_initial_nodes)
+            for i in range(diff):
+                self._num_initial_nodes.append('1')
+
         for key in self._clusters_keys_olst:
-            self.set_the_cluster_up(self._clusters_dic[key])
+            clusterStatus = None
+            if key == 0:
+                clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status") or ClusterStatus()
+            else:
+                clusterStatus = CacheHelper.clusterstatus(cfg.CB_REMOTE_CLUSTER_TAG[key-1]+"_status") or\
+                    ClusterStatus(cfg.CB_REMOTE_CLUSTER_TAG[key-1]+"_status")
+
+            clusterStatus.all_available_hosts = ["%s:%s" % (node.ip, node.port) for node in self._clusters_dic[key]]
+
+            self.set_the_cluster_up(self._clusters_dic[key][:int(self._num_initial_nodes[key])])
+
         time.sleep(20)
+
         if self._xdcr:
             self._link_create_replications(self._s_master, self._d_master, "cluster1")
             if self._rdirection == "bidirection":
