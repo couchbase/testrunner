@@ -16,6 +16,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from cache import ObjCacher, CacheHelper
 import testcfg as cfg
 from app.workload_manager import ClusterStatus
+ObjCacher().clear(CacheHelper.CLUSTERSTATUSKEY)
 
 class initialize(unittest.TestCase):
     def setUp(self):

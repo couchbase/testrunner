@@ -185,7 +185,6 @@ class CacheHelper():
         objCacheKeys = [CacheHelper.WORKLOADCACHEKEY,
                         CacheHelper.BUCKETSTATUSCACHEKEY,
                         CacheHelper.QUERYCACHEKEY,
-                        CacheHelper.CLUSTERSTATUSKEY,
                         CacheHelper.ACTIVETASKCACHEKEY]
 
         for cacheKey in objCacheKeys:

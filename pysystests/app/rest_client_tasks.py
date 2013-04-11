@@ -19,6 +19,7 @@ import random
 import eventlet
 from eventlet.green import urllib2
 from celery.utils.log import get_task_logger
+from cache import ObjCacher, CacheHelper
 logger = get_task_logger(__name__)
 
 if cfg.SERIESLY_IP != '':
@@ -343,8 +344,20 @@ def xdcr_start_replication(src_master, dest_cluster_name):
                                                                      bucket.name, dest_cluster_name)
             logger.error("rep_database: %s rep_id: %s" % (rep_database, rep_id))
 
-def add_nodes(rest, servers=''):
-    for server in servers.split():
+def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
+    if servers.find('.') != -1:
+        servers = servers.split()
+    else:
+        clusterStatus = CacheHelper.clusterstatus(cluster_id)
+        count = int(servers)
+        if (len(clusterStatus.all_available_hosts) - len(clusterStatus.nodes)) >= int(count):
+            servers = list(set(clusterStatus.all_available_hosts) - set(clusterStatus.get_all_hosts()))
+        else:
+            logger.error("Rebalance in request invalid. # of nodes outside cluster is not enough")
+            return
+        servers = servers[:count]
+
+    for server in servers:
         logger.error("Adding node %s" % server)
         ip, port = parse_server_arg(server)
         rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port)
