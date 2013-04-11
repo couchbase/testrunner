@@ -320,7 +320,16 @@ def monitorRebalance():
 def perform_xdcr_tasks(xdcrMsg):
     logger.error(xdcrMsg)
     src_master = create_server_obj()
-    dest_master = create_server_obj(server_ip=xdcrMsg['dest_cluster_ip'], username=xdcrMsg['dest_cluster_rest_username'],
+    remote_id = ''
+    if len(cfg.CB_REMOTE_CLUSTER_TAG) > 0:
+        remote_id = cfg.CB_REMOTE_CLUSTER_TAG[0]+"_status"
+    else:
+        logger.error("No remote cluster tag. Can not create xdcr")
+        return
+    clusterStatus = CacheHelper.clusterstatus(remote_id) or ClusterStatus(remote_id)
+    remote_ip = clusterStatus.get_random_host().split(":")[0]
+
+    dest_master = create_server_obj(server_ip=remote_ip, username=xdcrMsg['dest_cluster_rest_username'],
                                     password=xdcrMsg['dest_cluster_rest_pwd'])
     dest_cluster_name = xdcrMsg['dest_cluster_name']
     xdcr_link_cluster(src_master, dest_master, dest_cluster_name)
@@ -348,7 +357,7 @@ def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     if servers.find('.') != -1:
         servers = servers.split()
     else:
-        clusterStatus = CacheHelper.clusterstatus(cluster_id)
+        clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
         count = int(servers)
         if (len(clusterStatus.all_available_hosts) - len(clusterStatus.nodes)) >= int(count):
             servers = list(set(clusterStatus.all_available_hosts) - set(clusterStatus.get_all_hosts()))
