@@ -1231,7 +1231,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         success = True
         for line in error:
             log.error(line)
-            if not track_words:
+            if track_words:
                 success = False
         for line in output:
             log.info(line)
