@@ -24,7 +24,8 @@ LOGDIR="logs"  # relative to current dir
 #If you have multiple cluster to setup (xdcr use case), 'initial_nodes' should be a multiple value
 #string seperated by ','. For example, 2 clusters to setup, 1 src, 1 dest, 'initial_nodes': '2,3'
 CLUSTER = {'ini':'pysystests/cluster.ini', 'sasl_buckets':0, 'standard_buckets':0, 'default_bucket':False,
-           'default_mem_quota':12000, 'sasl_mem_quota':7000, 'xdcr':False, 'initial_nodes': "1"}
+           'default_mem_quota':12000, 'sasl_mem_quota':7000, 'xdcr':False, 'initial_nodes': "1",
+           'ips': '127.0.0.1'}
 
 #Backup Config
 ENABLE_BACKUPS = False

@@ -672,7 +672,7 @@ class ClusterStatus(object):
         self.id = id
         self.master_node = None
         self.nodes = self.get_cluster_nodes() or []
-        self.all_available_hosts = []
+        self.all_available_hosts = self.get_available_hosts() or []
         self.rebalancing = False
 
         if len(self.nodes) > 0:
@@ -682,6 +682,12 @@ class ClusterStatus(object):
 
     def get_all_hosts(self):
         return ["%s:%s" % (node.ip, node.port) for node in self.nodes]
+
+    def get_available_hosts(self):
+        if 'ips' in cfg.CLUSTER:
+            return ["%s:%s" % (ip.split(':')[0], ip.split(';')[1] if len(ip.split(':'))>1
+                               else cfg.COUCHBASE_PORT) for ip in cfg.CLUSTER['ips'].split()]
+        return []
 
     def get_random_host(self):
         all_hosts = self.get_all_hosts()
