@@ -813,7 +813,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             success &= self.log_command_output(output, error, track_words)
         return success
 
-    def install_server(self, build, startserver=True, path='/tmp', vbuckets=None):
+    def install_server(self, build, startserver=True, path='/tmp', vbuckets=None, swappiness=10):
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -854,6 +854,10 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             self.create_directory(path)
             output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
                                     format(server_type, abbr_product, path))
+            success &= self.log_command_output(output, error, track_words)
+
+            # set default swappiness to 10 unless specify in params in all unix environment
+            output, error = self.execute_command('sysctl vm.swappiness={0}'.format(swappiness))
             success &= self.log_command_output(output, error, track_words)
 
             if vbuckets:
