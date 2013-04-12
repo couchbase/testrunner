@@ -184,7 +184,7 @@ def run_workload(args):
                  "template"  : args.template}
     cluster = args.cluster
 
-    rabbitHelper = RabbitHelper(args.broker)
+    rabbitHelper = RabbitHelper(args.broker, cluster)
     workload['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("workload_"+cluster, json.dumps(workload))
     receiveResponse(rabbitHelper, workload['rcq'])
@@ -217,7 +217,7 @@ def import_template(args):
                 "kv" : val}
     cluster = args.cluster
 
-    rabbitHelper = RabbitHelper(args.broker)
+    rabbitHelper = RabbitHelper(args.broker, cluster)
     template['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("workload_template_"+cluster, json.dumps(template))
     receiveResponse(rabbitHelper, template['rcq'])
@@ -234,7 +234,7 @@ def perform_admin_tasks(args):
     cluster = args.cluster
 
     #TODO: Validate the user inputs, before passing to rabbit
-    rabbitHelper = RabbitHelper(args.broker)
+    rabbitHelper = RabbitHelper(args.broker, cluster)
     actions['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("admin_"+cluster, json.dumps(actions))
     receiveResponse(rabbitHelper, actions['rcq'])
@@ -251,7 +251,7 @@ def perform_xdcr_tasks(args):
 
     #TODO: Validate the user inputs, before passing to rabbit
     print xdcrMsg
-    rabbitHelper = RabbitHelper(args.broker)
+    rabbitHelper = RabbitHelper(args.broker, cluster)
     xdcrMsg['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("xdcr_"+cluster, json.dumps(xdcrMsg))
     receiveResponse(rabbitHelper, xdcrMsg['rcq'])
@@ -273,15 +273,15 @@ def perform_query_tasks(args):
 
     cluster = args.cluster
 
-    rabbitHelper = RabbitHelper(args.broker)
+    rabbitHelper = RabbitHelper(args.broker, cluster)
     queryMsg['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg('query_'+cluster, json.dumps(queryMsg))
     receiveResponse(rabbitHelper, queryMsg['rcq'])
 
 def run_systemtest(args):
 
-    rabbitHelper = RabbitHelper(args.broker)
     cluster = args.cluster
+    rabbitHelper = RabbitHelper(args.broker, cluster)
 
     test = {'suffix' : args.filesuffix}
 
