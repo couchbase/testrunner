@@ -7,6 +7,7 @@ import json
 import uuid
 import time
 import copy
+import re
 from rabbit_helper import PersistedMQ, RabbitHelper
 from celery import current_task
 from celery import Task
@@ -624,7 +625,6 @@ def updateClusterStatus(ignore_result = True):
     clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status") or\
         ClusterStatus()
 
-
     # check cluster nodes
     cached_nodes = clusterStatus.nodes
     new_cached_nodes = []
@@ -654,12 +654,11 @@ def updateClusterStatus(ignore_result = True):
         if len(new_node_list) != len(cached_nodes) or\
             len(set(clusterStatus.get_all_hosts()).intersection(new_node_list)) !=\
                 len(cached_nodes):
-            clusterStatus.master_node = new_cached_nodes[0]
             clusterStatus.nodes = new_cached_nodes
+            clusterStatus.update_orchestrator()
     else:
-        clusterStatus.master_node = None
+        clusterStatus.orchestrator = None
         ObjCacher().delete(CacheHelper.CLUSTERSTATUSKEY, clusterStatus)
-
 
 
 """
@@ -670,13 +669,13 @@ class ClusterStatus(object):
         self.initialized = False
 
         self.id = id
-        self.master_node = None
+        self.orchestrator = None
         self.nodes = self.get_cluster_nodes() or []
         self.all_available_hosts = self.get_available_hosts() or []
         self.rebalancing = False
 
         if len(self.nodes) > 0:
-            self.master_node = self.nodes[0]
+            self.update_orchestrator()
 
         self.initialized = True
 
@@ -698,7 +697,7 @@ class ClusterStatus(object):
         if node:
             ip, port = node.ip, node.port
         else:
-            ip, port = self.master_node.ip, self.master_node.port
+            ip, port = self.orchestrator.ip, self.orchestrator.port
 
         return http_ping(ip, port)
 
@@ -707,16 +706,38 @@ class ClusterStatus(object):
         if rest is not None:
             return rest.node_statuses()
 
+    def update_orchestrator(self):
+
+        if len(self.nodes) > 0:
+
+            ref_node = self.nodes[0]
+            address = {'server_ip' : ref_node.ip, 'port' : ref_node.port}
+            rest = create_rest(**address)
+
+            command = "node(global:whereis_name(ns_orchestrator))"
+            status, content = rest.diag_eval(command)
+
+            if status == True:
+                content = re.sub(r".*@", "", content).strip("'").split(':')
+                orchestrator_ip, orchestrator_port = \
+                    content[0], content[1] if len(content) > 1 else cfg.COUCHBASE_PORT
+
+                # look up matching node in self nodes
+                for node in self.nodes:
+                    if node.ip == orchestrator_ip and \
+                        int(node.port) == int(orchestrator_port):
+                            self.orchestrator = node
+                            break
 
     def node_rest(self, node = None):
         rest = None
         args = {'username' : cfg.COUCHBASE_USER,
                 'password' : cfg.COUCHBASE_PWD}
 
-        if self.master_node is None:
+        if self.orchestrator is None:
             ip, port = cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT
         elif node is None:
-            ip, port = self.master_node.ip, self.master_node.port
+            ip, port = self.orchestrator.ip, self.orchestrator.port
         else:
             ip, port = node.ip, node.port
 
@@ -731,7 +752,6 @@ class ClusterStatus(object):
 
         # auto cache changes made to this object
         super(ClusterStatus, self).__setattr__(name, value)
-
         if self.initialized:
             ObjCacher().store(CacheHelper.CLUSTERSTATUSKEY, self)
 
