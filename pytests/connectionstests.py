@@ -65,7 +65,7 @@ class ConnectionTests(BaseTestCase):
             self.run_mcsoda_localy(self.master.ip, moxi_port, "default", mcsoda_items=mcsoda_items)
             self.sleep(30)
             sd = MemcachetestRunner(self.master, num_items=memcachetest_items, extra_params="-W 320 -t 320 -c 0 -M 2")
-            statu = sd.start_memcachetest()
+            status = sd.start_memcachetest()
             if not status:
                 self.fail("see logs above!")
         finally:
