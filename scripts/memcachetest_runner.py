@@ -45,7 +45,6 @@ class MemcachetestRunner():
         self.memcached_port = memcached_port
         self.num_items = num_items
         self.extra_params = extra_params
-        logging.config.fileConfig("run_measure_sched_delays.logging.conf")
         self.log = logger.Logger.get_logger()
 
     def start_memcachetest(self):
