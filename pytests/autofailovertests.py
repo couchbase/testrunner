@@ -74,7 +74,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
             testcase.fail("{0} nodes failed over, expected {1} in {2} seconds".
                             format(failover_count, autofailover_count, time.time() - time_start))
         else:
-            testcase.log.info("{O} nodes failed over as expected")
+            testcase.log.info("{0} nodes failed over as expected".format(failover_count))
 
     @staticmethod
     def wait_for_no_failover_or_assert(master, autofailover_count, timeout, testcase):
