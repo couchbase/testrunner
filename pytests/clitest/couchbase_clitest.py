@@ -96,16 +96,11 @@ help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index
 
 class CouchbaseCliTest(CliBaseTest):
     def setUp(self):
-        self.log = logger.Logger.get_logger()
-        self.input = TestInputSingleton.input
-        self.servers = self.input.servers
-        self.master = self.servers[0]
-        pass
-        #super(CouchbaseCliTest, self).setUp()
+        TestInputSingleton.input.test_params["default_bucket"] = False
+        super(CouchbaseCliTest, self).setUp()
 
     def tearDown(self):
-        pass
-        #super(CouchbaseCliTest, self).tearDown()
+        super(CouchbaseCliTest, self).tearDown()
 
 
     def _get_dict_from_output(self, output):
@@ -163,19 +158,84 @@ class CouchbaseCliTest(CliBaseTest):
                 self.fail(line)
         return result
 
+    def _get_cluster_info(self, remote_client, cluster_host="localhost", user="Administrator", password="password"):
+        command = "server-info"
+        output, error = remote_client.execute_couchbase_cli(command, cluster_host=cluster_host, user=user, password=password)
+        if not error:
+            content = ""
+            for line in output:
+                content += line
+            return json.loads(content)
+        else:
+
+            self.fail("server-info return error output")
+
     def testHelp(self):
         remote_client = RemoteMachineShellConnection(self.master)
-        command_param = self.input.param('command_param', "")
-
-        output, error = remote_client.execute_couchbase_cli(command_param, cluster_host=None, user=None, password=None)
+        options = self.input.param('options', "")
+        output, error = remote_client.execute_couchbase_cli(cli_command="", cluster_host=None, user=None, password=None, options=options)
         result = self._get_dict_from_output(output)
         expected_result = help_short
-        if "-h" in command_param:
+        if "-h" in options:
             expected_result = help_short
         pprint(result)
         if result == expected_result:
             self.log.info("Correct help info was found")
         else:
             self.log.fail(set(result.keys()) - set(help.keys()))
+        remote_client.disconnect()
 
+    def testInfoCommands(self):
+        remote_client = RemoteMachineShellConnection(self.master)
+
+        cli_command = "server-list"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        server_info = self._get_cluster_info(remote_client)
+        result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
+        self.assertEqual(result, "ns_1@127.0.0.1 127.0.0.1:8091 healthy active")
+
+        cli_command = "bucket-list"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual([], output)
+        remote_client.disconnect()
+
+    def testAddRemoveNodes(self):
+        nodes_add = self.input.param("nodes_add", 1)
+        nodes_rem = self.input.param("nodes_rem", 1)
+        nodes_failover = self.input.param("nodes_failover", 0)
+        nodes_readd = self.input.param("nodes_readd", 0)
+        remote_client = RemoteMachineShellConnection(self.master)
+        cli_command = "server-add"
+        for num in xrange(nodes_add):
+            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+
+        cli_command = "rebalance"
+        for num in xrange(nodes_rem):
+            options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
+
+        if nodes_rem == 0 and nodes_add > 0:
+            cli_command = "rebalance"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
+
+
+        cli_command = "failover"
+        for num in xrange(nodes_failover):
+            options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: failover ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
+
+        cli_command = "server-readd"
+        for num in xrange(nodes_readd):
+            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num ].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num ].ip)])
+
+        cli_command = "rebalance"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
 

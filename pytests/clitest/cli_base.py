@@ -16,8 +16,9 @@ class CliBaseTest(BaseTestCase):
         self.command_options = self.input.param("command_options", None)
         if self.command_options is not None:
             self.command_options = self.command_options.split(";")
-        servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
-        self.cluster.rebalance(self.servers[:1], servers_in, [])
+        if str(self.__class__).find('couchbase_clitest.CouchbaseCliTest') == -1:
+            servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
+            self.cluster.rebalance(self.servers[:1], servers_in, [])
 
     def tearDown(self):
         if not self.input.param("skip_cleanup", True):
