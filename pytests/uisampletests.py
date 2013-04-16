@@ -944,7 +944,9 @@ class SettingsHelper():
         self.wait.until(lambda fn: self.controls.auto_failover_info().save_btn.is_displayed(),
                         "Save tab is not displayed in %s sec" % (self.wait._timeout))
         self.controls.auto_failover_info().save_btn.click()
-        self.wait.until(lambda fn: self.controls.auto_failover_info().done_btn.is_displayed(),
+        self.wait.until(lambda fn: self.controls.auto_failover_info().done_btn.is_displayed() or
+                        (self.controls.auto_failover_info().save_btn.is_displayed() and\
+                         self.controls.auto_failover_info().save_btn.get_attribute('disabled') == 'disabled'),
                         "Save btn is not selected in %d sec" % (self.wait._timeout))
         self.tc.log.info("Save btn is selected")
 '''
