@@ -263,6 +263,8 @@ class MembaseServerInstaller(Installer):
             vbuckets = None
         if "swappiness" in params:
             swappiness = int(params["swappiness"])
+        else:
+            swappiness = 10
 
         if type == "windows":
             build = self.build_url(params)
@@ -385,6 +387,8 @@ class CouchbaseServerInstaller(Installer):
         server = params["server"]
         if "swappiness" in params:
             swappiness = int(params["swappiness"])
+        else:
+            swappiness = 10
 
         if "vbuckets" in params:
             vbuckets = int(params["vbuckets"][0])
