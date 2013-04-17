@@ -932,7 +932,9 @@ class SettingsHelper():
         self.wait.until(lambda fn: self.controls.alerts_info().save_btn.is_displayed(),
                         "Save btn is not displayed in %d sec" % (self.wait._timeout))
         self.controls.alerts_info().save_btn.click()
-        self.wait.until(lambda fn: self.controls.alerts_info().done_btn.is_displayed(),
+        self.wait.until(lambda fn: self.controls.alerts_info().done_btn.is_displayed() or
+                        (self.controls.alerts_info().save_btn.is_displayed() and\
+                         self.controls.alerts_info().save_btn.get_attribute('disabled') == 'disabled'),
                         "Save btn is not selected in %d sec" % (self.wait._timeout))
         self.tc.log.info("Save btn is selected")
 
