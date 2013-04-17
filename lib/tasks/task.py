@@ -276,6 +276,11 @@ class RebalanceTask(Task):
                 else:
                     if server.ip == node.ip and int(server.port) == int(node.port):
                         ejectedNodes.append(node.id)
+        if self.rest.is_cluster_mixed():
+            #workaround MB-8094
+            self.log.warn("cluster is mixed. sleep for 10 seconds before rebalance")
+            time.sleep(10)
+
         self.rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
         self.start_time = time.time()
 
