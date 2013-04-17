@@ -71,6 +71,7 @@ class InitializeTest(BaseUITestCase):
             try:
                 rest = RestConnection(server)
                 rest.force_eject_node()
+                time.sleep(5)
                 self.driver.refresh()
             except BaseException, e:
                 self.fail(e)
