@@ -706,11 +706,13 @@ class ClusterStatus(object):
         if rest is not None:
             return rest.node_statuses()
 
-    def update_orchestrator(self):
+    def update_orchestrator(self, ref_node = None, retry = 5):
 
         if len(self.nodes) > 0:
 
-            ref_node = self.nodes[0]
+            if ref_node is None:
+                ref_node = self.nodes[0]
+
             address = {'server_ip' : ref_node.ip, 'port' : ref_node.port}
             rest = create_rest(**address)
 
@@ -728,6 +730,15 @@ class ClusterStatus(object):
                         int(node.port) == int(orchestrator_port):
                             self.orchestrator = node
                             break
+            elif retry > 0:
+               # wait
+               time.sleep(5)
+
+               # select random node and retry
+               ref_node = self.nodes[random.randint(0, len(self.nodes))]
+               retry = retry - 1
+               return self.update_orchestrator(ref_node, retry)
+
 
     def node_rest(self, node = None):
         rest = None

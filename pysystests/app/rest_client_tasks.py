@@ -526,10 +526,16 @@ def create_server_obj(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
     return node
 
 def http_ping(ip, port, timeout=5):
-    url = "http://%s:%s/nodes/self" % (ip,port)
+    url = "http://%s:%s/pools" % (ip,port)
     try:
         data = url_request(url)
-        return data.read()
+        pools_info = json.loads(data.read())
+
+        if 'pools' in pools_info:
+            pools =  pools_info["pools"]
+
+            if len(pools) > 0:
+                return True
     except Exception as ex:
         pass
 
