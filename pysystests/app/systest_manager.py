@@ -123,7 +123,7 @@ def add_phase_to_db(phase, phase_key, name, desc):
 
 def runPhase(name, phase):
 
-    ddocs = workload = workloadIds = cluster = query = queryIds = buckets = None
+    ddocs = workload = workloadIds = cluster = query = queryIds = buckets = xdcr = None
     docTemplate = "default"
     rebalance_required = False
 
@@ -275,7 +275,8 @@ def parseClusterReq(cluster):
         'soft_restart': '',
         'rebalance_in': '',
         'add_back': '',
-        'auto_failover': ''}
+        'auto_failover': '',
+        'involve_orchestrator': False}
 
 
     rebalance_required = True
@@ -304,6 +305,10 @@ def parseClusterReq(cluster):
 
     if 'add_back' in cluster:
         clusterMsg['add_back'] = cluster['add_back']
+
+    if 'orchestrator' in cluster:
+        if cluster['orchestrator'] == "True":
+            clusterMsg['involve_orchestrator'] = True
 
     clusterMsg['rebalance_required'] = rebalance_required
     return clusterMsg

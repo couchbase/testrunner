@@ -12,6 +12,7 @@ from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.document import View
 from app.celery import celery
+import app
 import testcfg as cfg
 import json
 import time
@@ -267,12 +268,14 @@ def parseViewMsg(view):
     return viewMsg
 
 @celery.task
-def perform_admin_tasks(adminMsg):
-    rest = create_rest()
+def perform_admin_tasks(adminMsg, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
+    app.workload_manager.updateClusterStatus()
+    clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
+    rest = clusterStatus.node_rest()
 
     # Add nodes
     servers = adminMsg["rebalance_in"]
-    add_nodes(rest, servers)
+    add_nodes(rest, servers, cluster_id)
 
     # Get all nodes
     allNodes = []
@@ -281,16 +284,20 @@ def perform_admin_tasks(adminMsg):
 
     # Remove nodes
     servers = adminMsg["rebalance_out"]
-    toBeEjectedNodes  = remove_nodes(rest, servers)
+    toBeEjectedNodes  = remove_nodes(rest, servers, adminMsg["involve_orchestrator"], cluster_id)
 
     # Failover Node
     servers = adminMsg["failover"]
     auto_failover_servers = adminMsg["auto_failover"]
     only_failover = adminMsg["only_failover"]
     add_back_servers = adminMsg["add_back"]
-    failoverNodes = failover_nodes(rest, servers, only_failover)
-    autoFailoverNodes = auto_failover_nodes(rest, auto_failover_servers, only_failover)
-    addBackNodes = add_back_nodes(rest, add_back_servers)
+    failoverNodes = failover_nodes(rest, servers, only_failover, adminMsg["involve_orchestrator"], cluster_id)
+    autoFailoverNodes = auto_failover_nodes(rest, auto_failover_servers, only_failover, adminMsg["involve_orchestrator"], cluster_id)
+
+    app.workload_manager.updateClusterStatus()
+    clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
+    rest = clusterStatus.node_rest()
+    addBackNodes = add_back_nodes(rest, add_back_servers, autoFailoverNodes+failoverNodes)
     toBeEjectedNodes.extend(failoverNodes)
     toBeEjectedNodes.extend(autoFailoverNodes)
     for node in addBackNodes:
@@ -298,17 +305,18 @@ def perform_admin_tasks(adminMsg):
 
     # SoftRestart a node
     servers = adminMsg["soft_restart"]
-    restart(servers)
+    restart(servers, cluster_id=cluster_id)
 
     # HardRestart a node
     servers = adminMsg["hard_restart"]
-    restart(servers, type='hard')
+    restart(servers, type='hard', cluster_id=cluster_id)
 
     if not only_failover and (len(allNodes) > 0 or len(toBeEjectedNodes) > 0):
         logger.error("Rebalance")
         logger.error(allNodes)
         logger.error(toBeEjectedNodes)
         rest.rebalance(otpNodes=allNodes, ejectedNodes=toBeEjectedNodes)
+
 
 def monitorRebalance():
     rest = create_rest()
@@ -354,7 +362,7 @@ def xdcr_start_replication(src_master, dest_cluster_name):
             logger.error("rep_database: %s rep_id: %s" % (rep_database, rep_id))
 
 def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
-    if servers.find('.') != -1:
+    if servers.find('.') != -1 or servers == '':
         servers = servers.split()
     else:
         clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
@@ -362,7 +370,7 @@ def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
         if (len(clusterStatus.all_available_hosts) - len(clusterStatus.nodes)) >= int(count):
             servers = list(set(clusterStatus.all_available_hosts) - set(clusterStatus.get_all_hosts()))
         else:
-            logger.error("Rebalance in request invalid. # of nodes outside cluster is not enough")
+            logger.error("Add nodes request invalid. # of nodes outside cluster is not enough")
             return
         servers = servers[:count]
 
@@ -371,9 +379,33 @@ def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
         ip, port = parse_server_arg(server)
         rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port)
 
-def remove_nodes(rest, servers=''):
+def pick_nodesToRemove(servers='', involve_orchestrator=False, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
+    if servers.find('.') != -1 or servers == '':
+        servers = servers.split()
+    else:
+        clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
+        count = int(servers)
+        temp_count = count
+        servers = []
+        if involve_orchestrator:
+            servers.append("%s:%s" % (clusterStatus.orchestrator.ip, clusterStatus.orchestrator.port))
+            temp_count = temp_count -1
+
+        if len(clusterStatus.nodes) > count:
+            non_orchestrator_servers = list(set(clusterStatus.get_all_hosts()) -
+                               set(["%s:%s" % (clusterStatus.orchestrator.ip, clusterStatus.orchestrator.port)]))
+            servers.extend(non_orchestrator_servers[:temp_count])
+        else:
+            logger.error("Remove nodes request invalid. # of nodes in cluster is not enough")
+            return []
+
+    return servers
+
+def remove_nodes(rest, servers='', remove_orchestrator=False, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     toBeEjectedNodes = []
-    for server in servers.split():
+    servers = pick_nodesToRemove(servers, remove_orchestrator, cluster_id)
+
+    for server in servers:
         ip, port = parse_server_arg(server)
         for node in rest.node_statuses():
             if "%s" % node.ip == "%s" % ip and\
@@ -383,9 +415,11 @@ def remove_nodes(rest, servers=''):
 
     return toBeEjectedNodes
 
-def failover_nodes(rest, servers='', only_failover=False):
+def failover_nodes(rest, servers='', only_failover=False, failover_orchestrator=False, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     toBeEjectedNodes = []
-    for server in servers.split():
+    servers = pick_nodesToRemove(servers, failover_orchestrator, cluster_id)
+
+    for server in servers:
         for node in rest.node_statuses():
             if "%s" % node.ip == "%s" % server:
                 logger.error("Failing node %s" % node.id)
@@ -394,13 +428,14 @@ def failover_nodes(rest, servers='', only_failover=False):
                     toBeEjectedNodes.append(node.id)
     return toBeEjectedNodes
 
-def auto_failover_nodes(rest, servers='', only_failover=False):
+def auto_failover_nodes(rest, servers='', only_failover=False, failover_orchestrator=False, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     toBeEjectedNodes = []
     if servers != '':
         rest.reset_autofailover()
         rest.update_autofailover_settings(True, 30)
+    servers = pick_nodesToRemove(servers, failover_orchestrator, cluster_id)
 
-    for server in servers.split():
+    for server in servers:
         for node in rest.node_statuses():
             if "%s" % node.ip == "%s" % server:
                 logger.error("Failing node %s" % node.id)
@@ -417,9 +452,15 @@ def failover_by_killing_mc(ip):
     logger.error(result)
     time.sleep(40)
 
-def add_back_nodes(rest, servers=''):
+def add_back_nodes(rest, servers='', nodes=[]):
     addBackNodes = []
-    for server in servers.split():
+    if servers.find('.') != -1 or servers == '':
+        servers = servers.split()
+    else:
+        count = int(servers)
+        servers = nodes[:count]
+
+    for server in servers:
         for node in rest.node_statuses():
             if "%s" % node.ip == "%s" % server:
                 logger.error("Add Back node %s" % node.id)
@@ -439,9 +480,20 @@ def parse_server_arg(server):
 def _dict_to_obj(dict_):
     return type('OBJ', (object,), dict_)
 
-def restart(servers='', type='soft'):
+def restart(servers='', type='soft', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
+    if servers.find('.') != -1 or servers == '':
+        servers = servers.split()
+    else:
+        clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
+        count = int(servers)
+        if len(clusterStatus.nodes) >= int(count):
+            servers = clusterStatus.get_all_hosts()
+        else:
+            logger.error("Restart nodes request invalid. # of nodes in cluster is not enough")
+            return
+        servers = servers[:count]
 
-    for server in servers.split():
+    for server in servers:
         node_ssh, node = create_ssh_conn(server)
         if type is not 'soft':
             logger.error('Hard Restart')
