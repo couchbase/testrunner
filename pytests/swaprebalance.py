@@ -418,6 +418,7 @@ class SwapRebalanceBase(unittest.TestCase):
         except RebalanceFailedException:
             #retry rebalance if it failed
             self.log.warn("Rebalance failed but it's expected")
+            SwapRebalanceBase.sleep(self, 10)
             self.assertFalse(RestHelper(rest).is_cluster_rebalanced(), msg="cluster need rebalance")
             knownNodes = rest.node_statuses();
             self.log.info("nodes are still in cluster: {0}".format([(node.ip, node.port) for node in knownNodes]))
