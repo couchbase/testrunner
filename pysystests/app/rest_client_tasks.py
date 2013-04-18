@@ -420,8 +420,10 @@ def failover_nodes(rest, servers='', only_failover=False, failover_orchestrator=
     servers = pick_nodesToRemove(servers, failover_orchestrator, cluster_id)
 
     for server in servers:
+        ip, port = parse_server_arg(server)
         for node in rest.node_statuses():
-            if "%s" % node.ip == "%s" % server:
+            if "%s" % node.ip == "%s" % ip and\
+                "%s" % node.port == "%s" % port:
                 logger.error("Failing node %s" % node.id)
                 rest.fail_over(node.id)
                 if not only_failover:
@@ -436,8 +438,10 @@ def auto_failover_nodes(rest, servers='', only_failover=False, failover_orchestr
     servers = pick_nodesToRemove(servers, failover_orchestrator, cluster_id)
 
     for server in servers:
+        ip, port = parse_server_arg(server)
         for node in rest.node_statuses():
-            if "%s" % node.ip == "%s" % server:
+            if "%s" % node.ip == "%s" % ip and\
+                "%s" % node.port == "%s" % port:
                 logger.error("Failing node %s" % node.id)
                 failover_by_killing_mc(node.ip)
                 if not only_failover:
@@ -456,16 +460,20 @@ def add_back_nodes(rest, servers='', nodes=[]):
     addBackNodes = []
     if servers.find('.') != -1 or servers == '':
         servers = servers.split()
+        for server in servers:
+            for node in rest.node_statuses():
+                if "%s" % node.ip == "%s" % server:
+                    logger.error("Add Back node %s" % node.id)
+                    rest.add_back_node(node.id)
+                    addBackNodes.append(node.id)
     else:
         count = int(servers)
         servers = nodes[:count]
+        for server in servers:
+            logger.error("Add Back node %s" % server)
+            rest.add_back_node(server)
+            addBackNodes.append(server)
 
-    for server in servers:
-        for node in rest.node_statuses():
-            if "%s" % node.ip == "%s" % server:
-                logger.error("Add Back node %s" % node.id)
-                rest.add_back_node(node.id)
-                addBackNodes.append(node.id)
     return addBackNodes
 
 def parse_server_arg(server):
@@ -494,7 +502,8 @@ def restart(servers='', type='soft', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
         servers = servers[:count]
 
     for server in servers:
-        node_ssh, node = create_ssh_conn(server)
+        ip, port = parse_server_arg(server)
+        node_ssh, node = create_ssh_conn(ip)
         if type is not 'soft':
             logger.error('Hard Restart')
             cmd = "reboot"
