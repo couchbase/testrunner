@@ -1,5 +1,9 @@
 import json
 import logger
+
+from threading import Thread
+
+from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
@@ -167,8 +171,16 @@ class CouchbaseCliTest(CliBaseTest):
                 content += line
             return json.loads(content)
         else:
-
             self.fail("server-info return error output")
+
+    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_port=11211, bucket_ramsize=200, bucket_replica=1, bucket_wait=False):
+        options = "--bucket={0} --bucket-type={1} --bucket-port={2} --bucket-ramsize={3} --bucket-replica={4}".\
+            format(bucket, bucket_type, bucket_port, bucket_ramsize, bucket_replica)
+        cli_command = "bucket-create"
+
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output[0], "SUCCESS: bucket-create")
+
 
     def testHelp(self):
         remote_client = RemoteMachineShellConnection(self.master)
@@ -192,7 +204,7 @@ class CouchbaseCliTest(CliBaseTest):
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
         server_info = self._get_cluster_info(remote_client)
         result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
-        self.assertEqual(result, "ns_1@127.0.0.1 127.0.0.1:8091 healthy active")
+        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active".format(self.master.ip))
 
         cli_command = "bucket-list"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
@@ -238,4 +250,70 @@ class CouchbaseCliTest(CliBaseTest):
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
+        remote_client.disconnect()
 
+    def testStartStopRebalance(self):
+        nodes_add = self.input.param("nodes_add", 1)
+        nodes_rem = self.input.param("nodes_rem", 1)
+        remote_client = RemoteMachineShellConnection(self.master)
+
+        cli_command = "rebalance-status"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["(u'none', None)"])
+
+        cli_command = "server-add"
+        for num in xrange(nodes_add):
+            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+
+        cli_command = "rebalance-status"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["(u'none', None)"])
+
+        self._create_bucket(remote_client)
+
+        cli_command = "rebalance"
+        t = Thread(target=remote_client.execute_couchbase_cli, name="rebalance_after_add",
+                       args=(cli_command, "localhost", '', None, "Administrator", "password"))
+        t.start()
+        self.sleep(10)
+
+        cli_command = "rebalance-status"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["(u'running', None)"])
+
+        t.join()
+
+        cli_command = "rebalance"
+        for num in xrange(nodes_rem):
+            options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
+            t = Thread(target=remote_client.execute_couchbase_cli, name="rebalance_after_add",
+                       args=(cli_command, "localhost", options, None, "Administrator", "password"))
+            t.start()
+            self.sleep(5)
+            cli_command = "rebalance-status"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["(u'running', None)"])
+
+
+            cli_command = "rebalance-stop"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+
+
+            t.join()
+
+            cli_command = "rebalance"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
+
+
+            cli_command = "rebalance-status"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["(u'none', None)"])
+
+    def bucketCreation(self):
+        remote_client = RemoteMachineShellConnection(self.master)
+        self._create_bucket(remote_client)
+        remote_client.disconnect()
+        remote_client.disconnect()
