@@ -1,5 +1,6 @@
 from librabbitmq import Connection, Message
 import json
+import pickle
 from celery import Task
 import testcfg as cfg
 from celery.utils.log import get_task_logger
@@ -107,3 +108,61 @@ class RabbitHelper(object):
     def __del__(self):
         self.close()
 
+
+"""
+" rawTaskPublisher
+"
+" This method assembles a celery tasks and sends it to the requested broker.
+" It can be useful for special cases (i.e cli or xdcr) where sender wants to
+" trigger a task that is listening for messages from outside to perform work
+"
+" task: full task string method. this must be a string with the name of a
+"       defined method with @celery.task annotations. i.e (app.systest_manager.getWorkloadStatus)
+" args: tuple of task args  ('abc',)
+" server: broker to run task against
+" vhost: vhost in broker where task should be routed to
+" userid: userid to access broker
+" password: password to access broker
+" exchange: name of exchange in broker to send message
+" routing_key: routing key that will put message in appropriate queue.  see app.config for a map
+"              of queue's to routing keys
+"
+" example:
+"    task = "app.systest_manager.getWorkloadStatus"
+"    args = ('abc',)
+"    rabbit_helper.rawTaskPublisher(task, args, 'kv_workload_status_default',
+"                                   exchange="kv_direct",
+"                                   routing_key="default.kv.workloadstatus")
+"
+"""
+def rawTaskPublisher(task, args, queue,
+                    broker = cfg.RABBITMQ_IP,
+                    vhost = cfg.CB_CLUSTER_TAG,
+                    exchange = "",
+                    userid="guest",
+                    password="guest",
+                    routing_key = None):
+
+    # setup broker connection
+    connection = Connection(host = broker, userid=userid, password=password, virtual_host = vhost)
+    channel = connection.channel()
+
+    # construct task body
+    body={'retries': 0, 'task': task, 'errbacks': None, 'callbacks': None, 'kwargs': {},
+         'eta': None, 'args': args, 'id': 'e7cb7ff5-acd3-4060-8f7e-2ef85f810fe5',
+         'expires': None, 'utc': True}
+    header = {'exclusive': False, 'name': queue, 'headers': {}, 'durable': True, 'delivery_mode': 2,
+              'no_ack': False, 'priority': None, 'alias': None, 'queue_arguments': None,
+              'content_encoding': 'binary', 'content_type': 'application/x-python-serialize',
+              'binding_arguments': None, 'auto_delete': True}
+
+    # prepare message
+    body = pickle.dumps(body)
+    message = (body, header)
+
+    if routing_key is None:
+        routing_key = queue
+
+    # publish!
+    rc = channel.basic_publish(message, exchange = exchange,
+                               routing_key = routing_key)
