@@ -1437,10 +1437,12 @@ class ViewQueryTests(BaseTestCase):
         for bucket in self.buckets:
             data_sets.append(EmployeeDataSet(self.master, self.cluster, self.docs_per_day, bucket=bucket))
             generators.append(data_set.generate_docs(data_set.views[0]))
+        iterator = 0
         for data_set in data_sets:
             data_set.add_startkey_endkey_queries()
-            self.load(data_set, generator_load)
-            self._query_all_views(data_set.views, generator_load)
+            self.load(data_set, generators[iterator])
+            self._query_all_views(generators[iterator])
+            iterator += 1
 
         query_bucket_threads = []
         iterator = 0
@@ -1640,18 +1642,18 @@ class ViewQueryTests(BaseTestCase):
             2. start querying multiply buckets, buckets are sasl with password
         '''
         data_sets = []
-        for test_bucket in test_buckets:
-            data_sets.append(EmployeeDataSet(self._rconn(), docs_per_day,
-                                             bucket=test_bucket))
+        for test_bucket in self.buckets:
+            data_sets.append(self.master, self.cluster, self.docs_per_day, bucket=test_bucket)
+        gen_load = data_set.generate_docs(data_set.views[0])
         for data_set in data_sets:
             data_set.add_startkey_endkey_queries()
-            self._query_test_init(data_set, False)
+            self.load(data_set, gen_load)
 
         query_bucket_threads = []
         for data_set in data_sets:
             t = StoppableThread(target=self._query_all_views,
                                 name="query-bucket-{0}".format(data_set.bucket.name),
-                                args=(data_set.views,))
+                                args=(data_set.views, gen_load))
             query_bucket_threads.append(t)
             t.start()
 
@@ -1666,6 +1668,100 @@ class ViewQueryTests(BaseTestCase):
             else:
                 query_bucket_threads = [d for d in query_bucket_threads if d.is_alive()]
                 self.thread_stopped.clear()
+
+    def test_boudary_rebalance_queries(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            http://hub.internal.couchbase.com/confluence/display/QA/QE+Test+Enhancements+for+2.0.2
+            Presetup: 1 bucket, 1 node
+            10 production ddocs, 1 view per ddoc(different map functions with and without reduce function)
+            Start load/mutate items, 10M items
+            Add to cluster 2 nodes and start rebalance
+            Run queries with startkey/endkey for views without reduce and group/group_level for views with reduce fn
+        '''
+        views = [QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.age, [doc.name,doc.age]);}}'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.name, doc.age);}}'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.name, "value");}}'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.name, 100);}}'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.age, "value");}}'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.age, 100);}}'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.name, doc.age);}}',
+                          reduce_fn='_stats'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.name, doc.age);}}',
+                          reduce_fn='_sum'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.name, doc.age);}}',
+                          reduce_fn='_count')]
+        data_set = SimpleDataSet(self.master, self.cluster, self.num_docs)
+        data_set.views.extend(views)
+        generator_load = data_set.generate_docs(data_set.views[0])
+        self.load(data_set, generator_load)
+        data_set.add_startkey_endkey_queries(limit=self.limit)
+        data_set.add_group_queries(limit=self.limit)
+        rebalance = self.cluster.async_rebalance([self.servers[0]], self.servers[1:self.nodes_in + 1], [])
+        self._query_all_views(data_set.views, generator_load)
+        rebalance.result()
+
+    def test_boudary_failover_queries(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            http://hub.internal.couchbase.com/confluence/display/QA/QE+Test+Enhancements+for+2.0.2
+            Presetup: 5 nodes, 1 bucket with 2 replica
+            10 production ddocs, 1 view per ddoc(different map functions with and without reduce function), put minChangesUpdate param to 6M
+            Load 5M items
+            Perform queries with stale=false param for each view
+            Stop server on 2 nodes, failover both, add back one of them, start rebalance
+            Run queries with stale=false param
+        '''
+        options = {"updateMinChanges" : self.docs_per_day * 1009,
+                   "replicaUpdateMinChanges" : self.docs_per_day * 1009}
+        views = [QueryView(self.master, self.cluster,
+                           fn_str='function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, 100] ); }'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], ["name", doc.name] ); }'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], ["email", doc.email] ); }'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], doc.join_day); }',
+                          reduce_fn='_stats'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], doc.join_day); }',
+                          reduce_fn='_sum'),
+                 QueryView(self.master, self.cluster,
+                           fn_str='function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], doc.join_day); }',
+                          reduce_fn='_count')]
+        failover_factor = self.input.param("failover-factor", 1)
+        failover_nodes = self.servers[1 : failover_factor + 1]
+        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day, ddoc_options=options)
+        data_set.views.extend(views)
+        generator_load = data_set.generate_docs(data_set.views[0])
+        self.load(data_set, generator_load)
+        data_set.add_stale_queries(stale_param="false", limit=self.limit)
+
+        nodes_all = self._rconn().node_statuses()
+        nodes = []
+        for failover_node in failover_nodes:
+            nodes.extend([node for node in nodes_all
+                if node.ip != failover_node.ip or str(node.port) != failover_node.port])
+        self.cluster.failover(self.servers, failover_nodes)
+        for node in nodes:
+            self._rconn().add_back_node(node.id)
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        self._query_all_views(data_set.views, generator_load, retries=200)
+        rebalance.result()
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
@@ -2365,6 +2461,8 @@ class SimpleDataSet:
             views = self.views
 
         for view in views:
+            if view.reduce_fn:
+                continue
             start_key = self.num_docs/2
             end_key = self.num_docs - 2
 
@@ -2429,6 +2527,16 @@ class SimpleDataSet:
             if limit:
                 for q in view.queries:
                     q.params["limit"] = limit
+
+    def add_group_queries(self, views=None, limit=None):
+
+        for view in self.views:
+            if view.reduce_fn is None:
+                continue
+            view.queries += [QueryHelper({"group" : "true"})]
+            if limit:
+                for q in view.queries:
+                    q.params['limit'] = limit
 
     def add_all_query_sets(self, views=None, limit=None):
         self.add_startkey_endkey_queries(views, limit)

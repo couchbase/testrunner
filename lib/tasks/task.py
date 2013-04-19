@@ -2160,8 +2160,10 @@ class GenerateExpectedViewResultsTask(Task):
             self.type_filter = {"filter_what" : filter_what,
                                "filter_expr" : re.sub(r'[ +]?"\);.*', '',
                                  re.sub(r'.*.new RegExp\("\^', '', self.view.map_func))}
-        if self.is_reduced and self.view.red_func != "_count":
-            emit_value = re.sub(r'\);*', '', re.sub(r'.*emit\([ +]?\[*],[ +]?doc\.', '', self.view.map_func))
+        if self.is_reduced and self.view.red_func !="_count":
+            emit_value = re.sub(r'\);.*', '', re.sub(r'.*emit\([ +]?\[*],[ +]?doc\.', '', self.view.map_func))
+            if self.view.map_func.count("[") <= 1:
+                emit_value = re.sub(r'\);.*', '', re.sub(r'.*emit\([ +]?.*,[ +]?doc\.', '', self.view.map_func))
         for doc_gen in self.doc_generators:
 
             query_doc_gen = copy.deepcopy(doc_gen)
@@ -2189,7 +2191,11 @@ class GenerateExpectedViewResultsTask(Task):
                         self.emitted_rows.append({'id' : _id, 'key' : _id})
                 else:
                     val_emit_value = val[emit_value]
+<<<<<<< HEAD
                     self.emitted_rows.append({'value' : val_emit_value, 'key' : key, 'id' : _id, })
+=======
+                    self.emitted_rows.append({'value' : val_emit_value, 'key' : val_emit_key, 'id' : _id,})
+>>>>>>> 7046678... CBQE-1222: boundary tests
 
     def filter_emitted_rows(self):
 
@@ -2302,14 +2308,19 @@ class GenerateExpectedViewResultsTask(Task):
             gr_level = None
             if not 'group' in query and\
                not 'group_level' in query:
+               if len(expected_rows) == 0:
+                   expected_rows = []
+                   self.emitted_rows = expected_rows
+                   return
                if self.view.red_func == '_count':
                    groups[None] = len(expected_rows)
                elif self.view.red_func == '_sum':
                    groups[None] = 0
                    groups[None] = math.fsum([row['value']
-                                               for row['value'] in expected_rows])
+                                               for row in expected_rows])
                elif self.view.red_func == '_stats':
                    groups[None] = {}
+<<<<<<< HEAD
                    values = [row['value'] for row['value'] in expected_rows]
                    group[None]['count'] = len(expected_rows)
                    group[None]['sum'] = math.fsum(values)
@@ -2317,6 +2328,15 @@ class GenerateExpectedViewResultsTask(Task):
                    group[None]['min'] = min(values)
                    group[None]['sumsqr'] = math.fsum(map(lambda x: x * x, values))
             elif 'group' in query and query['group'] == 'true':
+=======
+                   values = [row['value'] for row in expected_rows]
+                   groups[None]['count'] = len(expected_rows)
+                   groups[None]['sum'] = math.fsum(values)
+                   groups[None]['max'] = max(values)
+                   groups[None]['min'] = min(values)
+                   groups[None]['sumsqr'] = math.fsum(map(lambda x: x * x, values))
+            elif 'group' in query and query['group']=='true':
+>>>>>>> 7046678... CBQE-1222: boundary tests
                 if not 'group_level' in query:
                     gr_level = len(expected_rows) - 1
             elif 'group_level' in query:
@@ -2330,6 +2350,7 @@ class GenerateExpectedViewResultsTask(Task):
                         elif self.view.red_func == '_sum':
                             groups[key] = row['value']
                         elif self.view.red_func == '_stats':
+                            groups[key] = {}
                             groups[key]['count'] = 1
                             groups[key]['sum'] = row['value']
                             groups[key]['max'] = row['value']
