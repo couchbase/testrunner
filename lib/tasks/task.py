@@ -234,6 +234,7 @@ class RebalanceTask(Task):
         self.to_remove = to_remove
         self.start_time = None
         self.rest = RestConnection(self.servers[0])
+        self.retry_get_progress = 0
 
     def execute(self, task_manager):
         try:
@@ -291,6 +292,7 @@ class RebalanceTask(Task):
         except RebalanceFailedException as ex:
             self.state = FINISHED
             self.set_exception(ex)
+            self.retry_get_progress += 1
         #catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
@@ -298,7 +300,11 @@ class RebalanceTask(Task):
                           format(time.time() - self.start_time))
             self.set_exception(e)
         if progress != -1 and progress != 100:
-            task_manager.schedule(self, 10)
+            if self.retry_get_progress < 20:
+                task_manager.schedule(self, 10)
+            else:
+                self.state = FINISHED
+                self.set_result(False)
         else:
             success_cleaned = []
             for removed in self.to_remove:
@@ -1472,7 +1478,7 @@ class MonitorViewQueryResultsTask(Task):
                 self.state = CHECKING
                 task_manager.schedule(self)
         except QueryViewException, ex:
-            self.log.error("During query run (ddoc=%s, query=%s, server=%s) error is: %s" %(
+            self.log.error("During query run (ddoc=%s, query=%s, server=%s) error is: %s" % (
                                 self.design_doc_name, self.query, self.servers[0].ip, str(ex)))
             if self.error and str(ex).find(self.error) != -1:
                 self.state = FINISHED
@@ -1516,11 +1522,11 @@ class MonitorViewQueryResultsTask(Task):
     def check(self, task_manager):
         try:
             if self.view.red_func and (('reduce' in self.query and\
-                        self.query['reduce']=="true") or (not 'reduce' in self.query)):
+                        self.query['reduce'] == "true") or (not 'reduce' in self.query)):
                 if len(self.expected_docs) != len(self.results.get(u'rows', [])):
                     if self.current_retry == self.retries:
                         self.state = FINISHED
-                        msg = "ddoc=%s, query=%s, server=%s" %(
+                        msg = "ddoc=%s, query=%s, server=%s" % (
                             self.design_doc_name, self.query, self.servers[0].ip)
                         msg += "Number of groups expected:%s, actual:%s" % (
                              len(self.expected_docs), len(self.results.get(u'rows', [])))
@@ -1537,7 +1543,7 @@ class MonitorViewQueryResultsTask(Task):
                         if not (key_expected in [key['key'] for key in self.results.get(u'rows', [])]):
                             if self.current_retry == self.retries:
                                 self.state = FINISHED
-                                msg = "ddoc=%s, query=%s, server=%s" %(
+                                msg = "ddoc=%s, query=%s, server=%s" % (
                                     self.design_doc_name, self.query, self.servers[0].ip)
                                 msg += "Key expected but not present :%s" % (key_expected)
                                 self.set_result({"passed" : False,
@@ -1551,7 +1557,7 @@ class MonitorViewQueryResultsTask(Task):
                                 if key_expected == res['key']:
                                     value = res['value']
                                     break
-                            msg = "ddoc=%s, query=%s, server=%s\n" %(
+                            msg = "ddoc=%s, query=%s, server=%s\n" % (
                                     self.design_doc_name, self.query, self.servers[0].ip)
                             msg += "Key %s: expected value %s, actual: %s" % (
                                                                 key_expected, row['value'], value)
@@ -1582,7 +1588,7 @@ class MonitorViewQueryResultsTask(Task):
                     RestHelper(self.rest)._wait_for_indexer_ddoc(self.servers, self.design_doc_name)
                     if self.current_retry == 70:
                         self.query["stale"] = 'false'
-                    self.log.info("View result is still not expected (ddoc=%s, query=%s, server=%s). retry in 10 sec" %(
+                    self.log.info("View result is still not expected (ddoc=%s, query=%s, server=%s). retry in 10 sec" % (
                                     self.design_doc_name, self.query, self.servers[0].ip))
                     self.state = EXECUTING
                     task_manager.schedule(self, 10)
@@ -2119,7 +2125,7 @@ class GenerateExpectedViewResultsTask(Task):
         self.view = view
         self.query = query
         self.emitted_rows = []
-        self.is_reduced = self.view.red_func is not None and (('reduce' in query and query['reduce']=="true") or\
+        self.is_reduced = self.view.red_func is not None and (('reduce' in query and query['reduce'] == "true") or\
                          (not 'reduce' in query))
         self.type_filter = None
         self.type_query = type_query
@@ -2151,10 +2157,10 @@ class GenerateExpectedViewResultsTask(Task):
         if re.match(r'.*new RegExp\("\^.*', self.view.map_func):
             filter_what = re.sub(r'.*new RegExp\(.*\)*doc\.', '',
                                  re.sub(r'\.match\(.*', '', self.view.map_func))
-            self.type_filter ={"filter_what" : filter_what,
+            self.type_filter = {"filter_what" : filter_what,
                                "filter_expr" : re.sub(r'[ +]?"\);.*', '',
                                  re.sub(r'.*.new RegExp\("\^', '', self.view.map_func))}
-        if self.is_reduced and self.view.red_func !="_count":
+        if self.is_reduced and self.view.red_func != "_count":
             emit_value = re.sub(r'\);*', '', re.sub(r'.*emit\([ +]?\[*],[ +]?doc\.', '', self.view.map_func))
         for doc_gen in self.doc_generators:
 
@@ -2183,7 +2189,7 @@ class GenerateExpectedViewResultsTask(Task):
                         self.emitted_rows.append({'id' : _id, 'key' : _id})
                 else:
                     val_emit_value = val[emit_value]
-                    self.emitted_rows.append({'value' : val_emit_value, 'key' : key, 'id' : _id,})
+                    self.emitted_rows.append({'value' : val_emit_value, 'key' : key, 'id' : _id, })
 
     def filter_emitted_rows(self):
 
@@ -2209,7 +2215,7 @@ class GenerateExpectedViewResultsTask(Task):
                 start_key = start_key[1:-1]
             if isinstance(start_key, str) and start_key.find('[') == 0:
                 start_key = start_key[1:-1].split(',')
-                start_key = map(lambda x:int(x) if x!= 'null' else None, start_key)
+                start_key = map(lambda x:int(x) if x != 'null' else None, start_key)
         else:
             start_key = expected_rows[0]['key']
             if isinstance(start_key, str) and start_key.find('"') == 0:
@@ -2220,7 +2226,7 @@ class GenerateExpectedViewResultsTask(Task):
                 end_key = end_key[1:-1]
             if isinstance(end_key, str) and end_key.find('[') == 0:
                 end_key = end_key[1:-1].split(',')
-                end_key = map(lambda x:int(x) if x!= 'null' else None, end_key)
+                end_key = map(lambda x:int(x) if x != 'null' else None, end_key)
         else:
             end_key = expected_rows[-1]['key']
             if isinstance(end_key, str) and end_key.find('"') == 0:
@@ -2240,7 +2246,7 @@ class GenerateExpectedViewResultsTask(Task):
             key_ = query['key']
             if isinstance(key_, str) and key_.find('[') == 0:
                 key_ = key_[1:-1].split(',')
-                key_ = map(lambda x:int(x) if x!= 'null' else None, key_)
+                key_ = map(lambda x:int(x) if x != 'null' else None, key_)
             start_key, end_key = key_, key_
             expected_rows = [row for row in expected_rows if row['key'] == key_]
 
@@ -2310,7 +2316,7 @@ class GenerateExpectedViewResultsTask(Task):
                    group[None]['max'] = max(values)
                    group[None]['min'] = min(values)
                    group[None]['sumsqr'] = math.fsum(map(lambda x: x * x, values))
-            elif 'group' in query and query['group']=='true':
+            elif 'group' in query and query['group'] == 'true':
                 if not 'group_level' in query:
                     gr_level = len(expected_rows) - 1
             elif 'group_level' in query:
@@ -2328,7 +2334,7 @@ class GenerateExpectedViewResultsTask(Task):
                             groups[key]['sum'] = row['value']
                             groups[key]['max'] = row['value']
                             groups[key]['min'] = row['value']
-                            groups[key]['sumsqr'] = row['value']**2
+                            groups[key]['sumsqr'] = row['value'] ** 2
                     else:
                         if self.view.red_func == '_count':
                            groups[key] += 1
@@ -2339,7 +2345,7 @@ class GenerateExpectedViewResultsTask(Task):
                             groups[key]['sum'] += row['value']
                             groups[key]['max'] = max(row['value'], groups[key]['max'])
                             groups[key]['min'] = min(row['value'], groups[key]['min'])
-                            groups[key]['sumsqr'] += row['value']**2
+                            groups[key]['sumsqr'] += row['value'] ** 2
             expected_rows = []
             for group, value in groups.iteritems():
                 if isinstance(group, str) and group.find("[") == 0:
