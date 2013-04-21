@@ -308,6 +308,7 @@ class CreateDeleteViewTests(ViewBaseTest):
         self._load_doc_data_all_buckets()
         for i in xrange(2):
             self._execute_ddoc_ops('create', True, 1, 1)
+        self._wait_for_stats_all_buckets([self.master])
         self._verify_ddoc_ops_all_buckets()
         self._verify_ddoc_data_all_buckets()
 
@@ -317,6 +318,7 @@ class CreateDeleteViewTests(ViewBaseTest):
             tasks = self._async_execute_ddoc_ops('create', True, 1, 1)
         for task in tasks:
             task.result(self.wait_timeout * 2)
+        self._wait_for_stats_all_buckets([self.master])
         self._verify_ddoc_ops_all_buckets()
         self._verify_ddoc_data_all_buckets()
 
@@ -331,6 +333,7 @@ class CreateDeleteViewTests(ViewBaseTest):
         self.view_list.append(view.name)
         self.ddoc_view_map[self.default_design_doc_name] = self.view_list
         self.bucket_ddoc_map['default'] = self.ddoc_view_map
+        self._wait_for_stats_all_buckets([self.master])
         self._verify_ddoc_ops_all_buckets()
         self._verify_ddoc_data_all_buckets()
 
