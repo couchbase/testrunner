@@ -1,4 +1,5 @@
 import copy
+import random
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -180,6 +181,42 @@ class GetrTests(BaseTestCase):
                 o, c, d = client.getr(key)
         finally:
             rebalance.result()
+
+    def getr_negative_corrupted_vbucket_test(self):
+        vbucket_state = self.input.param("vbucket_state", '')
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                start=0, end=self.num_items)
+        self.perform_docs_ops(self.master, [gen], 'create')
+        self.log.info("Checking replica read")
+        client = VBucketAwareMemcached(RestConnection(self.master), self.default_bucket_name)
+        vbuckets_num = RestConnection(self.master).get_vbuckets(self.buckets[0])
+        while gen.has_next():
+            try:
+                key, _ = gen.next()
+                vBucketId = client._get_vBucket_id(key)
+                mem = client.memcached_for_replica_vbucket(vBucketId)
+                if vbucket_state:
+                    mem.set_vbucket_state(vBucketId, vbucket_state)
+                    msg = "Vbucket %s set to pending state" % vBucketId
+                    mem_to_read = mem
+                else:
+                    wrong_vbucket = [v for v in client.vBucketMapReplica
+                                   if mem.host != client.vBucketMapReplica[v][0].split(':')[0] or\
+                                   str(mem.port) != client.vBucketMapReplica[v][0].split(':')[1]][0]
+                    mem_to_read = client.memcached_for_replica_vbucket(wrong_vbucket)
+                    msg = "Key: %s. Correct host is %s, test try to get from %s host. " %(
+                                                        key, mem.host, mem_to_read.host)
+                    msg += "Correct vbucket %s, wrong vbucket %s" % (vBucketId, wrong_vbucket)
+                self.log.info(msg)
+                client._send_op(mem_to_read.getr, key)
+            except Exception, ex:
+                if self.error and str(ex).find(self.error) != -1:
+                    self.log.info("Expected error %s appeared as expected" % self.error)
+                else:
+                    raise ex
+            else:
+                if self.error:
+                    self.fail("Expected error %s didn't appear as expected" % self.error)
 
     def perform_docs_ops(self, server, gens, op_type, kv_store=1, only_store_hash=False,
                          batch_size=1):
