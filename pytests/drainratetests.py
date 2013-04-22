@@ -24,6 +24,7 @@ class DrainRateTests(unittest.TestCase):
         self._log_start()
 
     def tearDown(self):
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
         self._log_finish()
 
     def _log_start(self):
