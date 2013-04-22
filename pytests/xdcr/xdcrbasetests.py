@@ -445,13 +445,20 @@ class XDCRBaseTest(unittest.TestCase):
             if mem_quota_node < self._mem_quota_int or self._mem_quota_int == 0:
                 self._mem_quota_int = mem_quota_node
 
+    def _existing_bucket_list(self, buckets):
+        bucket_names = []
+        for bucket in buckets:
+            bucket_names.append(bucket.name)
+        return bucket_names
+
     def _create_sasl_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
             bucket_tasks.append(self._cluster_helper.async_create_sasl_bucket(server, name, 'password',
                                                                               bucket_size, self._num_replicas))
-            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
+            if name not in self._existing_bucket_list(self.buckets):
+                self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
                                         num_replicas=self._num_replicas, bucket_size=bucket_size,
                                         master_id=server_id))
 
@@ -466,7 +473,8 @@ class XDCRBaseTest(unittest.TestCase):
                                                                                   11214 + i,
                                                                                   bucket_size,
                                                                                   self._num_replicas))
-            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+            if name not in self._existing_bucket_list(self.buckets):
+                self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                         num_replicas=self._num_replicas, bucket_size=bucket_size,
                                         port=11214 + i, master_id=server_id))
 
@@ -482,12 +490,15 @@ class XDCRBaseTest(unittest.TestCase):
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
 
-        self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
-        self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
+        if self._sasl_buckets > 0:
+            self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
+        if self._standard_buckets > 0:
+            self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
             self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
+            if "default" not in self._existing_bucket_list(self.buckets):
+                self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                    num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
 
     def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
         return int(ratio / float(num_buckets) * float(mem_quota))
