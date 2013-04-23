@@ -1,5 +1,6 @@
 import copy
 import random
+import unittest
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -38,6 +39,11 @@ class GetrTests(BaseTestCase):
         super(GetrTests, self).tearDown()
 
     def getr_test(self):
+        if self.nodes_init > len(self.servers):
+            result = unittest.TextTestRunner(verbosity=2)._makeResult()
+            result.skipped=[('getr_test', "There is not enough VMs!!!")]
+            return result
+
         gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
                                       start=0, end=self.num_items/2)
         gen_2 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
