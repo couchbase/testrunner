@@ -108,6 +108,9 @@ class BaseTestCase(unittest.TestCase):
                         or self.input.param("skip_cleanup", False):
                     self.log.warn("CLEANUP WAS SKIPPED")
                 else:
+                    if test_failed and self.input.param('BUGS', False):
+                        self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
+
                     self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
                     rest = RestConnection(self.master)
