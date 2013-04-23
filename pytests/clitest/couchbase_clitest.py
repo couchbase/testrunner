@@ -311,9 +311,59 @@ class CouchbaseCliTest(CliBaseTest):
             cli_command = "rebalance-status"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ["(u'none', None)"])
+        remote_client.disconnect()
+
 
     def bucketCreation(self):
         remote_client = RemoteMachineShellConnection(self.master)
         self._create_bucket(remote_client)
         remote_client.disconnect()
+
+
+    def clusterEdit(self):
+        remote_client = RemoteMachineShellConnection(self.master)
+        self._create_bucket(remote_client)
+        rest = RestConnection(server)
+        rest.force_eject_node()
+        server = self.servers[-1]
         remote_client.disconnect()
+
+    def clusterInit(self):
+        cluster_init_username = self.input.param("cluster_init_username", "Administrator")
+        cluster_init_password = self.input.param("cluster_init_password", "password")
+        cluster_init_port = self.input.param("cluster_init_port", 8091)
+        cluster_init_ramsize = self.input.param("cluster_init_ramsize", 300)
+
+        remote_client = RemoteMachineShellConnection(self.master)
+        server = self.servers[-1]
+        rest = RestConnection(server)
+        rest.force_eject_node()
+
+        cli_command = "cluster-init"
+        options = "--cluster-init-username={0} --cluster-init-password={1} --cluster-init-port={2} --cluster-init-ramsize={3}".\
+                format(cluster_init_username, cluster_init_password, cluster_init_port, cluster_init_ramsize)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=None, password=None)
+        self.assertEqual(output[0], "SUCCESS: init localhost")
+
+        options = "--cluster-init-username={0} --cluster-init-password={1}".\
+                format(cluster_init_username + "1", cluster_init_password + "1", cluster_init_port + "1")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
+        self.assertEqual(output[0], "SUCCESS: init localhost")
+
+        cli_command = "server-list"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        server_info = self._get_cluster_info(remote_client)
+        result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
+        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active".format(self.master.ip))
+
+
+        options = "--cluster-init-username={0} --cluster-init-password={1}".\
+                format(cluster_init_username, cluster_init_password, cluster_init_port)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=(cluster_init_username + "1"), password=cluster_init_password + "1")
+        self.assertEqual(output[0], "SUCCESS: init localhost")
+
+
+
+        self._create_bucket(remote_client)
+        remote_client.disconnect()
+
