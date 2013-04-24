@@ -34,6 +34,7 @@ class GetrTests(BaseTestCase):
         self.failover_factor = self.input.param("failover-factor", 1)
         self.error = self.input.param("error", None)
         self.replica_to_read = self.input.param("replica_to_read", 0)
+        self.value_size = self.input.param("value_size", 0)
 
     def tearDown(self):
         super(GetrTests, self).tearDown()
@@ -47,6 +48,13 @@ class GetrTests(BaseTestCase):
         gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
                                       start=0, end=self.num_items/2)
         gen_2 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                      start=self.num_items/2, end=self.num_items)
+        if self.value_size:
+            gen_1 = DocumentGenerator('test_docs', '{{"name": "{0}"}}',
+                                      [self.value_size * 'a'],
+                                      start=0, end=self.num_items/2)
+            gen_2 = DocumentGenerator('test_docs', '{{"name": "{0}"}}',
+                                      [self.value_size * 'a'],
                                       start=self.num_items/2, end=self.num_items)
         self.log.info("LOAD PHASE")
         if not self.skipload:
