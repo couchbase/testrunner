@@ -2191,11 +2191,7 @@ class GenerateExpectedViewResultsTask(Task):
                         self.emitted_rows.append({'id' : _id, 'key' : _id})
                 else:
                     val_emit_value = val[emit_value]
-<<<<<<< HEAD
-                    self.emitted_rows.append({'value' : val_emit_value, 'key' : key, 'id' : _id, })
-=======
                     self.emitted_rows.append({'value' : val_emit_value, 'key' : val_emit_key, 'id' : _id,})
->>>>>>> 7046678... CBQE-1222: boundary tests
 
     def filter_emitted_rows(self):
 
@@ -2320,23 +2316,13 @@ class GenerateExpectedViewResultsTask(Task):
                                                for row in expected_rows])
                elif self.view.red_func == '_stats':
                    groups[None] = {}
-<<<<<<< HEAD
-                   values = [row['value'] for row['value'] in expected_rows]
-                   group[None]['count'] = len(expected_rows)
-                   group[None]['sum'] = math.fsum(values)
-                   group[None]['max'] = max(values)
-                   group[None]['min'] = min(values)
-                   group[None]['sumsqr'] = math.fsum(map(lambda x: x * x, values))
-            elif 'group' in query and query['group'] == 'true':
-=======
                    values = [row['value'] for row in expected_rows]
                    groups[None]['count'] = len(expected_rows)
                    groups[None]['sum'] = math.fsum(values)
                    groups[None]['max'] = max(values)
                    groups[None]['min'] = min(values)
                    groups[None]['sumsqr'] = math.fsum(map(lambda x: x * x, values))
-            elif 'group' in query and query['group']=='true':
->>>>>>> 7046678... CBQE-1222: boundary tests
+            elif 'group' in query and query['group'] == 'true':
                 if not 'group_level' in query:
                     gr_level = len(expected_rows) - 1
             elif 'group_level' in query:
