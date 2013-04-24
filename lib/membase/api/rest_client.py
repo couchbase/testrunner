@@ -1059,6 +1059,16 @@ class RestConnection(object):
             parsed = json.loads(content)
         return parsed
 
+    def fetch_vbucket_map(self, bucket="default"):
+        """Return vbucket map for bucket
+        Keyword argument:
+        bucket -- bucket name
+        """
+        api = self.baseUrl + 'pools/default/buckets/' + bucket
+        status, content, header = self._http_request(api)
+        _stats = json.loads(content)
+        return _stats['vBucketServerMap']['vBucketMap']
+
     def get_pools_info(self):
         parsed = {}
         api = self.baseUrl + 'pools'
