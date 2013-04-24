@@ -1,12 +1,13 @@
 import copy
 import random
 import unittest
+import time
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import VBucketAwareMemcached
+from memcached.helper.data_helper import VBucketAwareMemcached,MemcachedClientHelper
 
 class GetrTests(BaseTestCase):
 
@@ -231,6 +232,36 @@ class GetrTests(BaseTestCase):
             else:
                 if self.error:
                     self.fail("Expected error %s didn't appear as expected" % self.error)
+
+    def getr_dgm_test(self):
+        resident_ratio = self.input.param("resident_ratio", 50)
+        gens = []
+        delta_items = 200000
+        self.num_items = 0
+        mc = MemcachedClientHelper.direct_client(self.master, self.default_bucket_name)
+
+        self.log.info("LOAD PHASE")
+        end_time = time.time() + self.wait_timeout * 30
+        while (int(mc.stats()["vb_active_perc_mem_resident"]) == 0 or\
+               int(mc.stats()["vb_active_perc_mem_resident"]) > resident_ratio) and\
+              time.time() < end_time:
+            self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
+            gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                    start=self.num_items, end=(self.num_items + delta_items))
+            gens.append(copy.deepcopy(gen))
+            self._load_all_buckets(self.master, gen, 'create', self.expiration, kv_store=1,
+                                   flag=self.flags, only_store_hash=False, batch_size=1)
+            self.num_items += delta_items
+            self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
+        self.assertTrue(int(mc.stats()["vb_active_perc_mem_resident"]) < resident_ratio,
+                        "Resident ratio is not reached")
+        self.verify_cluster_stats(self.servers[:self.nodes_init], only_store_hash=False,
+                                  batch_size=1)
+        self.log.info("Currently loaded items: %s" % self.num_items)
+
+        self.log.info("READ REPLICA PHASE")
+        self.verify_cluster_stats(self.servers[:self.nodes_init], only_store_hash=False,
+                                  replica_to_read=self.replica_to_read, batch_size=1)
 
     def perform_docs_ops(self, server, gens, op_type, kv_store=1, only_store_hash=False,
                          batch_size=1):
