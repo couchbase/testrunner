@@ -627,7 +627,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
             self._process_values_for_create(key_val)
             self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
             self._populate_kvstore(partition_keys_dic, key_val)
-        except (MemcachedError, ServerUnavailableException, socket.error) as error:
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError) as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -637,7 +637,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
             self._process_values_for_update(partition_keys_dic, key_val)
             self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
             self._populate_kvstore(partition_keys_dic, key_val)
-        except (MemcachedError, ServerUnavailableException, socket.error) as error:
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError) as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -655,7 +655,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
                         self.state = FINISHED
                         self.set_exception(error)
                         return
-                except (ServerUnavailableException, socket.error) as error:
+                except (ServerUnavailableException, socket.error, EOFError) as error:
                     self.state = FINISHED
                     self.set_exception(error)
 
@@ -2160,7 +2160,7 @@ class GenerateExpectedViewResultsTask(Task):
             self.type_filter = {"filter_what" : filter_what,
                                "filter_expr" : re.sub(r'[ +]?"\);.*', '',
                                  re.sub(r'.*.new RegExp\("\^', '', self.view.map_func))}
-        if self.is_reduced and self.view.red_func !="_count":
+        if self.is_reduced and self.view.red_func != "_count":
             emit_value = re.sub(r'\);.*', '', re.sub(r'.*emit\([ +]?\[*],[ +]?doc\.', '', self.view.map_func))
             if self.view.map_func.count("[") <= 1:
                 emit_value = re.sub(r'\);.*', '', re.sub(r'.*emit\([ +]?.*,[ +]?doc\.', '', self.view.map_func))
@@ -2191,7 +2191,7 @@ class GenerateExpectedViewResultsTask(Task):
                         self.emitted_rows.append({'id' : _id, 'key' : _id})
                 else:
                     val_emit_value = val[emit_value]
-                    self.emitted_rows.append({'value' : val_emit_value, 'key' : val_emit_key, 'id' : _id,})
+                    self.emitted_rows.append({'value' : val_emit_value, 'key' : val_emit_key, 'id' : _id, })
 
     def filter_emitted_rows(self):
 

@@ -844,7 +844,7 @@ class VBucketAwareMemcached(object):
                     raise error
             except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket send." in error.message or \
+                   "Timeout waiting for socket" in error.message or \
                    "Broken pipe" in error.message or "Connection reset by peer" in error.message \
                     and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
@@ -871,7 +871,7 @@ class VBucketAwareMemcached(object):
                     raise error
             except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket send." in error.message or \
+                   "Timeout waiting for socket" in error.message or \
                    "Broken pipe" in error.message or "Connection reset by peer" in error.message \
                     and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
@@ -899,7 +899,7 @@ class VBucketAwareMemcached(object):
                     raise error
             except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket send." in error.message or\
+                   "Timeout waiting for socket" in error.message or\
                    "Broken pipe" in error.message or "Connection reset by peer" in error.message \
                     and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
@@ -927,7 +927,7 @@ class VBucketAwareMemcached(object):
                     raise error
             except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket send." in error.message or\
+                   "Timeout waiting for socket" in error.message or\
                    "Broken pipe" in error.message or "Connection reset by peer" in error.message \
                     and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
@@ -1005,7 +1005,7 @@ class VBucketAwareMemcached(object):
                 return []  # Note: If used for async,too many recursive threads could get spawn here.
         except (EOFError, socket.error) , error:
             if "Got empty data (remote died?)" in error.message or \
-               "Timeout waiting for socket send." in error.message or \
+               "Timeout waiting for socket" in error.message or \
                "Broken pipe" in error.message or "Connection reset by peer" in error.message\
                 and timeout > 0:
                 time.sleep(pause)
@@ -1076,7 +1076,7 @@ class VBucketAwareMemcached(object):
             return memcached_client.getMulti(keys)
         except (EOFError, socket.error), error:
             if "Got empty data (remote died?)" in error.message or \
-               "Timeout waiting for socket send." in error.message or \
+               "Timeout waiting for socket" in error.message or \
                "Broken pipe" in error.message or "Connection reset by peer" in error.message \
                 and timeout > 0:
                 time.sleep(pause)
@@ -1134,7 +1134,7 @@ class VBucketAwareMemcached(object):
                     raise error
             except (EOFError, socket.error), error:
                 if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket send." in error.message or \
+                   "Timeout waiting for socket" in error.message or \
                    "Broken pipe" in error.message or "Connection reset by peer" in error.message \
                     and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([key]))
