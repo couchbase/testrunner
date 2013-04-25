@@ -300,7 +300,6 @@ class CouchbaseCliTest(CliBaseTest):
             cli_command = "rebalance-stop"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
 
-
             t.join()
 
             cli_command = "rebalance"
@@ -314,12 +313,52 @@ class CouchbaseCliTest(CliBaseTest):
         remote_client.disconnect()
 
 
-    def bucketCreation(self):
+    def testBucketCreation(self):
         remote_client = RemoteMachineShellConnection(self.master)
         self._create_bucket(remote_client)
         remote_client.disconnect()
 
-    def clusterInit(self):
+    def testNodeInit(self):
+        server = self.servers[-1]
+        remote_client = RemoteMachineShellConnection(server)
+        prefix = ''
+        type = remote_client.extract_remote_info().distribution_type
+        if type.lower() == 'windows':
+            prefix_path = "C:"
+
+        data_path = self.input.param("data_path", None)
+        index_path = self.input.param("index_path", None)
+
+
+        if data_path is not None:
+            data_path = prefix + data_path.replace('|', "/")
+        if index_path is not None:
+            index_path = prefix + index_path.replace('|', "/")
+
+        server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
+        data_path_before = server_info["storage"]["hdd"][0]["path"]
+        index_path_before = server_info["storage"]["hdd"][0]["index_path"]
+
+        try:
+            cli_command = "node-init"
+            options = ""
+            options += ("--node-init-data-path={0} ".format(data_path), "")[data_path is None]
+            options += ("--node-init-index-path={0} ".format(index_path), "")[index_path is None]
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "SUCCESS: init localhost")
+            server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
+            data_path_after = server_info["storage"]["hdd"][0]["path"]
+            index_path_after = server_info["storage"]["hdd"][0]["path"]
+            self.assertEqual((data_path, data_path_before)[data_path is None], data_path_after)
+            self.assertEqual((index_path, index_path_before)[index_path is None], data_path_after)
+
+
+        except Exception, e:
+            rest = RestConnection(server)
+            rest.force_eject_node()
+            raise e
+
+    def testClusterInit(self):
         cluster_init_username = self.input.param("cluster_init_username", "Administrator")
         cluster_init_password = self.input.param("cluster_init_password", "password")
         cluster_init_port = self.input.param("cluster_init_port", 8091)
@@ -373,5 +412,3 @@ class CouchbaseCliTest(CliBaseTest):
             rest = RestConnection(server)
             rest.force_eject_node()
             raise e
-
-
