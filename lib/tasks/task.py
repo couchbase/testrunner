@@ -2127,6 +2127,7 @@ class GenerateExpectedViewResultsTask(Task):
         self.emitted_rows = []
         self.is_reduced = self.view.red_func is not None and (('reduce' in query and query['reduce'] == "true") or\
                          (not 'reduce' in query))
+        self.custom_red_fn = self.is_reduced and not self.view.red_func in ['_count', '_sum', '_stats']
         self.type_filter = None
         self.type_query = type_query
 
@@ -2184,7 +2185,7 @@ class GenerateExpectedViewResultsTask(Task):
                         continue
                 if isinstance(val_emit_key, unicode):
                     val_emit_key = val_emit_key.encode('utf-8')
-                if not self.is_reduced or self.view.red_func == "_count":
+                if not self.is_reduced or self.view.red_func == "_count" or self.custom_red_fn:
                     if self.type_query == 'view':
                         self.emitted_rows.append({'id' : _id, 'key' : val_emit_key})
                     else:
@@ -2322,6 +2323,12 @@ class GenerateExpectedViewResultsTask(Task):
                    groups[None]['max'] = max(values)
                    groups[None]['min'] = min(values)
                    groups[None]['sumsqr'] = math.fsum(map(lambda x: x * x, values))
+               elif self.custom_red_fn:
+                   custom_action = re.sub(r'.*return[ +]', '', re.sub(r'.*return[ +]', '', self.view.red_func))
+                   if custom_action.find('String') != -1:
+                       groups[None] = str(len(expected_rows))
+                   elif custom_action.find('-') != -1:
+                       groups[None] = -len(expected_rows)
             elif 'group' in query and query['group'] == 'true':
                 if not 'group_level' in query:
                     gr_level = len(expected_rows) - 1

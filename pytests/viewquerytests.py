@@ -1,8 +1,9 @@
 from TestInput import TestInputSingleton
 from autocompaction import AutoCompactionTests
+from basetestcase import BaseTestCase
 from couchbase.cluster import Cluster
-from couchbase.documentgenerator import DocumentGenerator
 from couchbase.document import View
+from couchbase.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
@@ -13,16 +14,15 @@ from old_tasks import task, taskmanager
 from remote.remote_util import RemoteMachineShellConnection
 from threading import Thread, Event
 from viewtests import ViewBaseTests
-from basetestcase import BaseTestCase
-import threading
 import copy
-import re
 import datetime
 import json
 import logger
 import math
 import random
+import re
 import sys
+import threading
 import time
 import types
 import unittest
@@ -1762,6 +1762,49 @@ class ViewQueryTests(BaseTestCase):
         self._query_all_views(data_set.views, generator_load, retries=200)
         rebalance.result()
 
+    def test_MB_7978_reproducer(self):
+        '''
+        MB-7978 reproducer
+            Certain combinations of views in the same design document
+            with the same map function and different reduce functions are not working
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. load data
+            2. start querying with stale=false
+        '''
+        new_views = [QueryView(self.master, self.cluster,
+                               fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.name, doc.age);}}',
+                               reduce_fn='_count',
+                               name='test_view_0', ddoc_name='test_ddoc'),
+                     QueryView(self.master, self.cluster,
+                               fn_str='function (doc) {if(doc.age !== undefined) { emit(doc.name, doc.age);}}',
+                               reduce_fn='function(key, values, rereduce) { if (rereduce) {var s = 0;for (var i = 0; i < values.length; ++i) {s += Number(values[i]);} return String(s);} return String(values.length);}',
+                               name='test_view_1', ddoc_name='test_ddoc'),
+                     QueryView(self.master, self.cluster,
+                               fn_str='function (doc) {if(doc.age !== undefined) { emit([doc.name, doc.age], doc.age);}}',
+                               reduce_fn='_sum',
+                               name='test_view_2', ddoc_name='test_ddoc'),
+                     QueryView(self.master, self.cluster,
+                               fn_str='function (doc) {if(doc.age !== undefined) { emit([doc.name, doc.age], doc.age);}}',
+                               reduce_fn='function(key, values, rereduce) { if (rereduce) return sum(values); return -values.length;}',
+                               name='test_view_3', ddoc_name='test_ddoc'),
+                     QueryView(self.master, self.cluster,
+                               fn_str='function (doc) {if(doc.age !== undefined) { emit([doc.name, doc.age], doc.age);}}',
+                               reduce_fn='_count',
+                               name='test_view_4', ddoc_name='test_ddoc')]
+        # init dataset for test
+        data_set = SimpleDataSet(self.master, self.cluster, self.num_docs)
+        data_set.views.extend(new_views)
+        data_set.add_stale_queries(stale_param="false", limit=self.limit)
+        #  generate items
+        generator_load = data_set.generate_docs(data_set.views[0], start=0,
+                                                end=self.num_docs)
+        self.load(data_set, generator_load)
+
+        self._query_all_views(data_set.views, generator_load,
+                              verify_expected_keys=True)
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
@@ -1925,7 +1968,8 @@ class QueryView:
                  consistent_view=False,
                  ddoc_options=None,
                  wait_timeout=60,
-                 is_dev_view=False):
+                 is_dev_view=False,
+                 ddoc_name=None):
         self.cluster = cluster
         default_prefix = str(uuid.uuid4())[:7]
         self.prefix = (prefix, default_prefix)[prefix is None]
@@ -1947,14 +1991,14 @@ class QueryView:
         self.view = View(self.name, self.fn_str, self.reduce_fn, dev_view=is_dev_view)
         # queries defined for this view
         self.queries = (queries, list())[queries is None]
-
+        self.ddoc_name = ddoc_name or self.name
         if create_on_init:
-            task = self.cluster.async_create_view(self.server, self.name, self.view,
+            task = self.cluster.async_create_view(self.server, self.ddoc_name, self.view,
                                                  bucket, ddoc_options=ddoc_options)
             task.result()
 
     def __str__(self):
-        return "DDoc=%s; View=%s;" % (self.name, str(self.view))
+        return "DDoc=%s; View=%s;" % (self.ddoc_name, str(self.view))
 
     def run_queries(self, tc, kv_store=None,
                     verify_expected_keys=False, doc_gens=None,
@@ -1977,8 +2021,7 @@ class QueryView:
                 tc.log.info("%s:%s: Generated results contains %s items" % (
                                                                 self, query, len(expected_results)))
                 prefix = ("", "dev_")[self.is_dev_view]
-
-                task = tc.cluster.async_monitor_view_query(tc.servers, self.name, self.view,
+                task = tc.cluster.async_monitor_view_query(tc.servers, self.ddoc_name, self.view,
                                          query.params, expected_docs=expected_results, bucket=self.bucket,
                                          retries=retries, error=query.error, verify_rows=verify_expected_keys,
                                          server_to_query=server_to_query, type_query=query.type_)
@@ -1995,10 +2038,9 @@ class QueryView:
                         msg = "%s:%s: ERROR: %s" % (self, query, result_query["errors"])
                         self.log.error(msg)
                     if result_query["results"]:
-                        task = self.cluster.async_view_query_verification(
-                                                   self.name, self.name,
+                        task = self.cluster.async_view_query_verification(tc.servers[0],
+                                                   self.ddoc_name, self.name,
                                                    query.params, expected_results,
-                                                   tc.servers[0],
                                                    num_verified_docs=len(expected_results),
                                                    bucket=self.bucket,
                                                    results=result_query["results"])
