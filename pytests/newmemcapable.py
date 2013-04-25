@@ -99,7 +99,8 @@ class GetrTests(BaseTestCase):
                                          batch_size=1)
             else:
                 self.verify_cluster_stats(servrs, only_store_hash=False,
-                                          replica_to_read=self.replica_to_read, batch_size=1)
+                                          replica_to_read=self.replica_to_read, batch_size=1,
+                                          timeout=(self.wait_timeout * 10))
         except Exception, ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
@@ -280,7 +281,7 @@ class GetrTests(BaseTestCase):
             self._load_all_buckets(server, gen_ops, 'create', self.expiration, kv_store=kv_store,
                               flag=self.flags, only_store_hash=only_store_hash, batch_size=batch_size)
         self.verify_cluster_stats(self.servers[:self.nodes_init], only_store_hash=only_store_hash,
-                                  batch_size=batch_size)
+                                  batch_size=batch_size, timeout=(self.wait_timeout * 10))
 
     def perform_warm_up(self):
         warmup_nodes = self.servers[-self.warmup_nodes:]
