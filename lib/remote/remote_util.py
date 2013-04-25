@@ -1743,7 +1743,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         info = self.extract_remote_info()
         type = info.type.lower()
         if type == 'windows':
-            cbstat_command = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
         cluster_param = (" --cluster={0}".format(cluster_host), "")[cluster_host is None]
         if cluster_param is not None:
