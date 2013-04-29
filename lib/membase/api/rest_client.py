@@ -175,7 +175,7 @@ class RestHelper(object):
 
 class RestConnection(object):
 
-    def __new__(self, serverInfo = {}):
+    def __new__(self, serverInfo={}):
 
 
         # allow port to determine
@@ -1166,12 +1166,9 @@ class RestConnection(object):
                         log.info("Node {0} not part of cluster {1}".format(node.ip, node.clusterMembership))
         return nodes
 
-
     def get_bucket_stats(self, bucket='default'):
         stats = {}
-        api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
-        status, content, header = self._http_request(api)
-        json_parsed = json.loads(content)
+        status, json_parsed = self.get_bucket_stats_json(bucket)
         if status:
             op = json_parsed["op"]
             samples = op["samples"]
@@ -1181,6 +1178,15 @@ class RestConnection(object):
                     if last_sample:
                         stats[stat_name] = samples[stat_name][last_sample]
         return stats
+
+    def get_bucket_stats_json(self, bucket='default'):
+        stats = {}
+        api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
+        if isinstance(bucket, Bucket):
+            api = '{0}{1}{2}{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name, "/stats")
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        return status, json_parsed
 
     def get_bucket_json(self, bucket='default'):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
