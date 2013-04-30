@@ -1465,7 +1465,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         elif mac:
             o, r = self.execute_command_raw('df -h')
         else:
-            o, r = self.execute_command_raw('sudo df -Th')
+            o, r = self.execute_command_raw('df -Th')
         if o:
             return o
 

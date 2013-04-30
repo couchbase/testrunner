@@ -173,9 +173,14 @@ class CouchbaseCliTest(CliBaseTest):
         else:
             self.fail("server-info return error output")
 
-    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_port=11211, bucket_ramsize=200, bucket_replica=1, bucket_wait=False):
+    def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_port=11211, bucket_password=None, \
+                        bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
         options = "--bucket={0} --bucket-type={1} --bucket-port={2} --bucket-ramsize={3} --bucket-replica={4}".\
             format(bucket, bucket_type, bucket_port, bucket_ramsize, bucket_replica)
+        options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
+        options += (" --enable-index-replica={0}".format(enable_index_replica), "")[enable_index_replica is None]
+        options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
+        options += (" --wait", "")[bucket_wait]
         cli_command = "bucket-create"
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
@@ -314,8 +319,19 @@ class CouchbaseCliTest(CliBaseTest):
 
 
     def testBucketCreation(self):
+        bucket = self.input.param("bucket", "default")
+        bucket_type = self.input.param("bucket", "couchbase")
+        bucket_port = self.input.param("bucket_port", 11211)
+        bucket_password = self.input.param("bucket_password", None)
+        bucket_ramsize = self.input.param("bucket_ramsize", 200)
+        wait = self.input.param("wait", False)
+        enable_flush = self.input.param("enable_flush", None)
+        enable_index_replica = self.input.param("enable_index_replica", None)
+
         remote_client = RemoteMachineShellConnection(self.master)
+        rest = RestConnection(server)
         self._create_bucket(remote_client)
+        buckets = rest.get_buckets()
         remote_client.disconnect()
 
     def testNodeInit(self):
@@ -351,8 +367,6 @@ class CouchbaseCliTest(CliBaseTest):
             index_path_after = server_info["storage"]["hdd"][0]["path"]
             self.assertEqual((data_path, data_path_before)[data_path is None], data_path_after)
             self.assertEqual((index_path, index_path_before)[index_path is None], data_path_after)
-
-
         except Exception, e:
             rest = RestConnection(server)
             rest.force_eject_node()
