@@ -293,10 +293,10 @@ class XDCRBaseTest(unittest.TestCase):
         self.disable_src_comp = self._input.param("disable_src_comp", True)
         self.disable_dest_comp = self._input.param("disable_dest_comp", True)
 
-        self._optimistic_xdcr = self._input.param("optimistic_xdcr", True)
+        self._optimistic_xdcr_threshold = self._input.param("optimistic_xdcr_threshold", 256)
         if self.src_master.ip != self.dest_master.ip:       #Only if it's not a cluster_run
-            if self._optimistic_xdcr:
-                self.set_environ_param('XDCR_LATENCY_OPTIMIZATION', True)
+            if self._optimistic_xdcr_threshold != 256:
+                self.set_environ_param('XDCR_OPTIMISTIC_REPLICATION_THRESHOLD', self._optimistic_xdcr_threshold)
 
         self.log.info("Initializing input parameters completed.")
 
