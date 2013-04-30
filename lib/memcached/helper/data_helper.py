@@ -515,21 +515,20 @@ class WorkerThread(threading.Thread):
         msg += " with moxi ? {2}"
         msg = msg.format(self.write_only, self.async_write, self.moxi)
         self.log.info(msg)
-        awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), self.name)
-        client = None
-        if self.moxi:
-            try:
+        try:
+            awareness = VBucketAwareMemcached(RestConnection(self.serverInfo), self.name)
+            client = None
+            if self.moxi:
                 client = MemcachedClientHelper.proxy_client(self.serverInfo, self.name)
-            except Exception as ex:
-                self.log.info("unable to create memcached client due to {0}. stop thread...".format(ex))
-                import traceback
-
-                traceback.print_exc()
-                return
-                # keeping keys in the memory is not such a good idea because
-                # we run out of memory so best is to just keep a counter ?
-                # if someone asks for the keys we can give them the formula which is
-            # baseuuid-{0}-{1} , size and counter , which is between n-0 except those
+        except Exception as ex:
+            self.log.info("unable to create memcached client due to {0}. stop thread...".format(ex))
+            import traceback
+            traceback.print_exc()
+            return
+        # keeping keys in the memory is not such a good idea because
+        # we run out of memory so best is to just keep a counter ?
+        # if someone asks for the keys we can give them the formula which is
+        # baseuuid-{0}-{1} , size and counter , which is between n-0 except those
         # keys which were rejected
         # let's print out some status every 5 minutes..
 
