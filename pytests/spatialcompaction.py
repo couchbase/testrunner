@@ -18,10 +18,13 @@ class SpatialCompactionTests(BaseTestCase):
         if self.sasl_buckets:
             self.bucket_name = "bucket0"
         self.helper = SpatialHelper(self, self.bucket_name)
-        if self.start_cluster > 1:
-            rebalance = self.cluster.async_rebalance(self.servers[:1],
-                                                     self.servers[1:start_cluster], [])
-            rebalance.result()
+        try:
+            if self.start_cluster > 1:
+                rebalance = self.cluster.async_rebalance(self.servers[:1],
+                                                         self.servers[1:self.start_cluster], [])
+                rebalance.result()
+        except:
+            super(SpatialCompactionTests, self).tearDown()
 
     def tearDown(self):
         super(SpatialCompactionTests, self).tearDown()
