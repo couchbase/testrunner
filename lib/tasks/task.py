@@ -141,7 +141,12 @@ class BucketCreateTask(Task):
         self.bucket_type = bucket_type
 
     def execute(self, task_manager):
-        rest = RestConnection(self.server)
+        try:
+            rest = RestConnection(self.server)
+        except ServerUnavailableException as error:
+                self.state = FINISHED
+                self.set_exception(error)
+                return
         if self.size <= 0:
             info = rest.get_nodes_self()
             self.size = info.memoryQuota * 2 / 3
@@ -193,8 +198,8 @@ class BucketDeleteTask(Task):
         self.bucket = bucket
 
     def execute(self, task_manager):
-        rest = RestConnection(self.server)
         try:
+            rest = RestConnection(self.server)
             if rest.delete_bucket(self.bucket):
                 self.state = CHECKING
                 task_manager.schedule(self)
@@ -212,8 +217,8 @@ class BucketDeleteTask(Task):
 
 
     def check(self, task_manager):
-        rest = RestConnection(self.server)
         try:
+            rest = RestConnection(self.server)
             if BucketOperationHelper.wait_for_bucket_deletion(self.bucket, rest, 200):
                 self.set_result(True)
             else:
@@ -1294,10 +1299,8 @@ class ViewDeleteTask(Task):
         self.design_doc_name = prefix + design_doc_name
 
     def execute(self, task_manager):
-
-        rest = RestConnection(self.server)
-
         try:
+            rest = RestConnection(self.server)
             if self.view:
                 # remove view from existing design doc
                 content, header = rest.get_ddoc(self.bucket, self.design_doc_name)
@@ -1332,9 +1335,8 @@ class ViewDeleteTask(Task):
             self.set_exception(e)
 
     def check(self, task_manager):
-        rest = RestConnection(self.server)
-
         try:
+            rest = RestConnection(self.server)
             # make sure view was deleted
             query = {"stale" : "ok"}
             content = \
@@ -1367,10 +1369,8 @@ class ViewQueryTask(Task):
         self.timeout = 900
 
     def execute(self, task_manager):
-
-        rest = RestConnection(self.server)
-
         try:
+            rest = RestConnection(self.server)
             # make sure view can be queried
             content = \
                 rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query, self.timeout)
@@ -1394,9 +1394,8 @@ class ViewQueryTask(Task):
             self.set_exception(e)
 
     def check(self, task_manager):
-        rest = RestConnection(self.server)
-
         try:
+            rest = RestConnection(self.server)
             # query and verify expected num of rows returned
             content = \
                 rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query, self.timeout)
@@ -1656,9 +1655,8 @@ class ModifyFragmentationConfigTask(Task):
             self.config[key] = config[key]
 
     def execute(self, task_manager):
-        rest = RestConnection(self.server)
-
         try:
+            rest = RestConnection(self.server)
             rest.set_auto_compaction(parallelDBAndVC=self.config["parallelDBAndVC"],
                                      dbFragmentThreshold=self.config["dbFragmentThreshold"],
                                      viewFragmntThreshold=self.config["viewFragmntThreshold"],
@@ -1680,9 +1678,8 @@ class ModifyFragmentationConfigTask(Task):
 
 
     def check(self, task_manager):
-
-        rest = RestConnection(self.server)
         try:
+            rest = RestConnection(self.server)
             # verify server accepted settings
             content = rest.get_bucket_json(self.bucket)
             if content["autoCompactionSettings"] == False:
@@ -2582,8 +2579,8 @@ class BucketFlushTask(Task):
             self.bucket = bucket.name
 
     def execute(self, task_manager):
-        rest = RestConnection(self.server)
         try:
+            rest = RestConnection(self.server)
             if rest.flush_bucket(self.bucket):
                 self.state = CHECKING
                 task_manager.schedule(self)
@@ -2645,7 +2642,6 @@ class MonitorDBFragmentationTask(Task):
         task_manager.schedule(self, 5)
 
     def check(self, task_manager):
-
         try:
             rest = RestConnection(self.server)
             stats = rest.fetch_bucket_stats(bucket=self.bucket)
