@@ -51,7 +51,7 @@ class WarmUpTests(BaseTestCase):
                 # Get the wamrup time for each server
                     try:
                         warmup_time = int(stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_time')[server])
-                        if warmup_time is not None:                            
+                        if warmup_time is not None:
                             self.log.info("ep_warmup_time is %s for %s in bucket %s" % (warmup_time, server.ip, bucket.name))
                             break
                         else:
@@ -66,7 +66,7 @@ class WarmUpTests(BaseTestCase):
                     if stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_thread')[server] == "complete":
                         self.log.info("warmup completed for %s in bucket %s" % (server.ip, bucket.name))
                         time.sleep(5)
-                        if stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server] ==\
+                        if stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server] == \
                            self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]:
                             self._stats_report(server, bucket.name, stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup')[server])
                             warmed_up[bucket.name][server] = True
@@ -117,7 +117,7 @@ class WarmUpTests(BaseTestCase):
         stats_all_buckets = {}
         for bucket in self.buckets:
             stats_all_buckets[bucket.name] = StatsCommon()
-        
+
         for bucket in self.buckets:
             threshold_reached = False
             while not threshold_reached :
@@ -127,7 +127,7 @@ class WarmUpTests(BaseTestCase):
                         self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
                                       (active_resident, self.active_resident_threshold, server.ip, bucket.name))
                         random_key = key_generator()
-                        generate_load = BlobGenerator(random_key, '%s-'%random_key, self.value_size, end=self.num_items)
+                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=self.num_items)
                         self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
                     else:
                         threshold_reached = True
@@ -141,16 +141,14 @@ class WarmUpTests(BaseTestCase):
 
         for bucket in self.buckets:
             scanner_runs_all_servers = stats_all_buckets[bucket.name].get_stats(self.servers, bucket, '', 'ep_num_access_scanner_runs')
-            for server in self.servers: 
+            for server in self.servers:
                 self.log.info("current access scanner run for %s in bucket %s is %s times" % (server.ip, bucket.name, scanner_runs_all_servers[server]))
                 self.log.info("setting access scanner time %s minutes for %s in bucket %s" % (self.access_log_time, server.ip, bucket.name))
                 ClusterOperationHelper.flushctl_set(server, "alog_sleep_time", self.access_log_time , bucket.name)
                 if not self._wait_for_access_run(self.access_log_time, scanner_runs_all_servers[server], server, bucket, stats_all_buckets[bucket.name]):
                     self.fail("Not able to create access log within %s minutes" % self.access_log_time)
 
-
     def warmup_with_access_log(self):
-
         self._load_dgm()
 
         # wait for draining of data before restart and warm up
@@ -171,3 +169,36 @@ class WarmUpTests(BaseTestCase):
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
+        rest = RestConnection(self.servers[0])
+        self.nodes_server = rest.get_nodes()
+        self._wait_for_stats_all_buckets(self.nodes_server)
+        self._stats_befor_warmup()
+        time.sleep(120)
+        self._restart_memcache()
+        self._warmup()
+
+    def test_restart_node_with_full_disk(self):
+        def _get_disk_usage_percentage(remote_client):
+            disk_info = remote_client.get_disk_info()
+            percentage = disk_info[1] + disk_info[2];
+            for item in percentage.split():
+                if "%" in item:
+                    self.log.info("disk usage {0}".format(item))
+                    return item[:-1]
+
+        remote_client = RemoteMachineShellConnection(self.master)
+        output, error = remote_client.execute_command_raw("rm -rf full_disk*", use_channel=True)
+        remote_client.log_command_output(output, error)
+        percentage = _get_disk_usage_percentage(remote_client)
+        try:
+            while int(percentage) < 99:
+                output, error = remote_client.execute_command("dd if=/dev/zero of=full_disk{0} bs=3G count=1".format(percentage + str(time.time())), use_channel=True)
+                remote_client.log_command_output(output, error)
+                percentage = _get_disk_usage_percentage(remote_client)
+            processes1 = remote_client.get_running_processes()
+            output, error = remote_client.execute_command("/etc/init.d/couchbase-server restart", use_channel=True)
+            remote_client.log_command_output(output, error)
+        finally:
+            output, error = remote_client.execute_command_raw("rm -rf full_disk*", use_channel=True)
+            remote_client.log_command_output(output, error)
+            remote_client.disconnect()
