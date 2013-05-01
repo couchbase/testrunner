@@ -41,7 +41,7 @@
                 {
                     "name" : "access_hotset",
                     "desc" : "eject_nonhotset_from_memory",
-                    "workload" :[{"spec": "g:100,coq:defaultph2keys:,ops:20000"},
+                    "workload" :[{"spec": "g:100,coq:defaultph2keys,ops:20000"},
                                  {"spec": "b:saslbucket,pwd:password,g:100,coq:saslph2keys,ops:20000"}],
                     "runtime": 1800
                 },
