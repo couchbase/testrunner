@@ -1625,6 +1625,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         if type == 'windows':
             backup_command = "%scbbackup.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
             backup_file_location = "/cygdrive/c%s" % (backup_location)
+        if info.distribution_type.lower() == 'mac':
+            backup_command = "%scbbackup" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
         self.delete_files(backup_file_location)
         self.create_directory(backup_file_location)
@@ -1647,6 +1649,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         type = info.type.lower()
         if type == 'windows':
             restore_command = "%scbrestore.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if info.distribution_type.lower() == 'mac':
+            restore_command = "%scbrestore" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
         for bucket in buckets:
             command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_location, "http://",
@@ -1665,6 +1669,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         type = info.type.lower()
         if type == 'windows':
             transfer_command = "%scbtransfer.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if type.distribution_type.lower() == 'mac':
+            transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
         command = "%s %s %s" % (transfer_command, source, destination)
         output, error = self.execute_command(command.format(command))
@@ -1678,6 +1684,13 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
                                                                             testconstants.LINUX_CB_PATH, file)
+        if info.distribution_type.lower() == 'mac':
+            cbdocloader_command = "%stools/cbdocloader" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
+                                                                            username, password, self.ip,
+                                                                            self.port, bucket, memory_quota,
+                                                                            testconstants.MAC_CB_PATH, file)
+
         if type == 'windows':
             cbdocloader_command = "%stools/cbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
             WIN_COUCHBASE_SAMPLES_PATH = "C:/Program\ Files/Couchbase/Server/samples/"
@@ -1695,6 +1708,9 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         type = info.type.lower()
         if type == 'windows':
             cbcollect_command = "%scbcollect_info.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if info.distribution_type.lower() == 'mac':
+            cbcollect_command = "%scbcollect_info" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+
         command = "%s %s" % (cbcollect_command, file)
         output, error = self.execute_command(command.format(command), use_channel=True)
         self.log_command_output(output, error)
@@ -1706,6 +1722,9 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         type = info.type.lower()
         if type == 'windows':
             cbepctl_command = "%scbepctl.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if info.distribution_type.lower() == 'mac':
+            cbepctl_command = "%scbepctl" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+
         if bucket.saslPassword == None:
             bucket.saslPassword = ''
         if persistence != "":
@@ -1726,6 +1745,9 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         type = info.type.lower()
         if type == 'windows':
             cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if info.distribution_type.lower() == 'mac':
+            cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+
         if bucket.saslPassword == None:
             bucket.saslPassword = ''
         if command != "key":
@@ -1744,6 +1766,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         type = info.type.lower()
         if type == 'windows':
             cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if info.distribution_type.lower() == 'mac':
+            cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
         cluster_param = (" --cluster={0}".format(cluster_host), "")[cluster_host is None]
         if cluster_param is not None:
