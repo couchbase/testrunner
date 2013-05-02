@@ -21,11 +21,10 @@ class WarmUpTests(BaseTestCase):
         self.pre_warmup_stats = {}
         self.timeout = 120
         self.access_log = self.input.param("access_log", False)
-        self.servers_in = [self.servers[i + 1] for i in range(self.nodes_in)]
+        self.servers_in = [self.servers[i + 1] for i in range(self.self.num_servers - 1)]
         self.cluster.rebalance(self.servers[:1], self.servers_in, [])
         self.active_resident_threshold = int(self.input.param("active_resident_threshold", 90))
         self.access_log_time = self.input.param("access_log_time", 2)
-        self.nodes_init = self.num_servers
 
     def tearDown(self):
         super(WarmUpTests, self).tearDown()

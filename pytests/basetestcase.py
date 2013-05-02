@@ -470,7 +470,7 @@ class BaseTestCase(unittest.TestCase):
             self.stat_str = "warmup"
         self.stats_monitor = self.input.param("stats_monitor", "curr_items_tot")
         self.stats_monitor = self.stats_monitor.split(";")
-        for server in self.servers[:self.nodes_init]:
+        for server in self.servers:
             mc_conn = MemcachedClientHelper.direct_client(server, bucket_name, self.timeout)
             self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)] = {}
             self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["uptime"] = mc_conn.stats("")["uptime"]
