@@ -144,7 +144,7 @@ class WarmUpTests(BaseTestCase):
             for server in self.servers: 
                 self.log.info("current access scanner run for %s in bucket %s is %s times" % (server.ip, bucket.name, scanner_runs_all_servers[server]))
                 self.log.info("setting access scanner time %s minutes for %s in bucket %s" % (self.access_log_time, server.ip, bucket.name))
-                ClusterOperationHelper.flushctl_set(server, "alog_sleep_time", self.access_log_time , bucket.fname)
+                ClusterOperationHelper.flushctl_set(server, "alog_sleep_time", self.access_log_time , bucket.name)
                 if not self._wait_for_access_run(self.access_log_time, scanner_runs_all_servers[server], server, bucket, stats_all_buckets[bucket.name]):
                     self.fail("Not able to create access log within %s minutes" % self.access_log_time)
 
