@@ -816,7 +816,7 @@ class Workload(object):
                 phandler.default_condition_params(self.postconditions)
 
             if stat == 'count':
-                stat_checker = phandler.BucketStatChecker(bucket)
+                stat_checker = phandler.BucketStatChecker(self.bucket)
                 curr_items = stat_checker.get_curr_items()
                 value = int(value) + int(curr_items)
                 self.postconditions = "curr_items >= %s" % value
