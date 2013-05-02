@@ -1466,7 +1466,7 @@ class MonitorViewQueryResultsTask(Task):
                 self.results = \
                     self.rest.query_view(self.design_doc_name, self.view_name, self.bucket,
                                          self.query, self.timeout)
-            raised_error = self.results.get(u'error', '') or ''.join(self.results.get(u'errors', []))
+            raised_error = self.results.get(u'error', '') or ''.join([str(item) for item in self.results.get(u'errors', [])])
             if raised_error:
                 raise QueryViewException(self.view_name, raised_error)
             else:
