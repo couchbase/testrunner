@@ -44,10 +44,15 @@ class BaseConfig(object):
 
             # queue for cluster status tasks
             self.make_queue('cluster_status', 'cluster.status', default_ex),
+
+            self.make_queue('phase_status', 'phase.status', default_ex),
+            self.make_queue('run_phase', 'run.phase', default_ex),
         )
 
         self.CELERY_ROUTES = (
             {'app.systest_manager.systestManager'  : self.route_args('systest_mgr_consumer','test.mgr') },
+            {'app.systest_manager.get_phase_status'  : self.route_args('phase_status','phase.status') },
+            {'app.systest_manager.runPhase'  : self.route_args('run_phase','run.phase') },
             {'app.workload_manager.updateClusterStatus'  : self.route_args('cluster_status','cluster.status') },
         )
 

@@ -2,15 +2,18 @@ from __future__ import absolute_import
 from app.celery import celery
 import json
 import time
+import copy
 import datetime
-from celery.task.control import revoke
+from celery.task.control import inspect
 import testcfg as cfg
 from cache import ObjCacher, CacheHelper
-from rabbit_helper import PersistedMQ
+from rabbit_helper import PersistedMQ, RabbitHelper, rawTaskPublisher
 from app.workload_manager import Workload, sysTestRunner
 from app.query import QueryWorkload
 from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance, perform_bucket_create_tasks, perform_view_tasks, perform_xdcr_tasks
 from celery.utils.log import get_task_logger
+from cbsystest import getResponseQueue
+
 if cfg.SERIESLY_IP != '':
     from seriesly import Seriesly
 
@@ -100,13 +103,28 @@ def launchSystest(testMsg):
 
     for phase_key in keys:
 
-        # run phase
         phase = testMsg['phases'][str(phase_key)]
         add_phase_to_db(phase, phase_key, name, desc)
-        phase_status = runPhase(name, phase)
 
+        # parse remote phases from local phase
+        remote_phases, new_local_phase = parseRemotePhases(phase)
+        remotePhaseIds = []
+        if len(remote_phases) > 0:
+
+            # run remote phases
+            remotePhaseIds = runRemotePhases(remote_phases)
+
+        # run local phase
+        phase_status = runPhase(new_local_phase)
         if phase_status == False:
             break
+
+        # monitor remote phases
+        for remoteIP, taskID in remotePhaseIds:
+            remote_running = get_remote_phase_status(remoteIP, taskID)
+            while remote_running != False:
+                time.sleep(2)
+                remote_running = get_remote_phase_status(remoteIP, taskID)
 
     if 'loop' in testMsg and testMsg['loop']:
         launchSystest(testMsg)
@@ -115,13 +133,121 @@ def launchSystest(testMsg):
     logger.error('###### Test Complete!  ######')
     # TODO, some kind of pass/fail and/or stat info
 
+
+"""
+" given a phase definition this method will extract
+" tasks that should be ran on remote clusters
+" and create additional remote phases
+"""
+def parseRemotePhases(phase):
+    remotePhaseMap = {}
+    newLocalPhase = copy.deepcopy(phase)
+
+    for task in phase:
+
+        if isinstance(phase[task], dict) and 'remote' in phase[task]:
+            remoteIP = phase[task]['remote']
+
+            # create remote if remote phase spec if necessary
+            if  remoteIP not in remotePhaseMap:
+                remotePhase = { 'name' : 'remote_' + phase.get('name') or 'remote_phase',
+                                'desc' : 'remote_' + phase.get('desc') or 'remote_phase_description',
+                                'runtime' : phase.get('runtime') or 10}
+                remotePhaseMap[remoteIP] = remotePhase
+
+            # delete the 'remote' tag from this task
+            del phase[task]['remote']
+
+            # add task to new remote phase
+            remotePhaseMap[remoteIP].update({task : phase[task]})
+
+            # remote this task from new local phase
+            del newLocalPhase[task]
+
+        # mutli-bucket workload/query support
+        elif isinstance(phase[task], list):
+            idx = 0
+            updated_local_phase = False
+            for phase_task_spec in phase[task]:
+
+                if 'remote' in phase_task_spec:
+                    remoteIP = phase_task_spec['remote']
+
+                    if  remoteIP not in remotePhaseMap:
+                        remotePhase = { 'name' : 'remote_' + phase.get('name') or\
+                                                 'remote_phase',
+                                        'desc' : 'remote_' + phase.get('desc') or\
+                                                 'remote_phase_description',
+                                        'runtime' : phase.get('runtime') or 10,
+                                        task : []}
+
+                        remotePhaseMap[remoteIP] = remotePhase
+
+                    # delete the 'remote' tag from this task spec
+                    del phase_task_spec['remote']
+
+                    # add task to new remote phase
+                    remotePhaseMap[remoteIP][task].append(phase_task_spec)
+
+                    # remote this task from new local phase
+                    del newLocalPhase[task][idx]
+                    updated_local_phase = True
+
+                # move to nex index
+                if not updated_local_phase:
+                    idx = idx + 1
+
+    return remotePhaseMap, newLocalPhase
+
+
+"""
+" runRemotePhases: for each remote_phase this method will make a
+"                  call to runPhase method on remote broker.
+"                  Each remote phase returns it's taskid into a
+"                  response queue for later monitoring
+"""
+def runRemotePhases(remote_phases, retry = 5):
+
+    taskIds = []
+
+    for remoteIP in remote_phases:
+
+        # get handler to remote broker
+        rabbitHelper = RabbitHelper(mq_server = remoteIP)
+        rcq = getResponseQueue(rabbitHelper)
+        args = (remote_phases[remoteIP], rcq)
+
+        # call runPhase on remoteIP
+        rawTaskPublisher("app.systest_manager.runPhase",
+                         args,
+                         "run_phase_"+cfg.CB_CLUSTER_TAG,
+                         broker = remoteIP,
+                         exchange = "default",
+                         routing_key = cfg.CB_CLUSTER_TAG+".run.phase")
+
+        # get taskID of phase running on remote broker
+        taskId = None
+        while taskId is None and retry > 0:
+            time.sleep(2)
+            taskId = rabbitHelper.getMsg(rcq)
+            taskIds.append((remoteIP, taskId))
+            retry = retry - 1
+
+    return taskIds
+
 def add_phase_to_db(phase, phase_key, name, desc):
 
     if cfg.SERIESLY_IP != '':
         seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
         seriesly.event.append({str(phase_key): {str(phase['name']): str(time.time()), 'run_id': name+ '-' + desc}})
 
-def runPhase(name, phase):
+@celery.task(base = PersistedMQ, ignore_result=True)
+def runPhase(phase, rcq = None):
+
+    # if this task is run by a remote client return
+    # task id for monitoring
+    if rcq is not None:
+        runPhase.rabbitHelper.putMsg(rcq, runPhase.request.id)
 
     ddocs = workload = workloadIds = cluster = query = queryIds = buckets = xdcr = None
     docTemplate = "default"
@@ -438,3 +564,66 @@ def createWorkload(workload):
 
     workloadRunnable = Workload(workloadSpec)
     return workloadRunnable
+
+"""
+" get_remote_phase_status: this method will call the get_phase_status task
+"                          running on a worker in the remote cluster.
+"""
+def get_remote_phase_status(remoteIP, taskID, retry = 5):
+
+    # assemble a request to remoteIP phase_status method
+    rabbitHelper = RabbitHelper(mq_server = remoteIP)
+    rcq = getResponseQueue(rabbitHelper)
+    task_method = "app.systest_manager.get_phase_status"
+    task_queue = "phase_status_"+cfg.CB_CLUSTER_TAG
+    task_routing_queue = cfg.CB_CLUSTER_TAG+".phase.status"
+    args = (taskID, rcq)
+
+    # call phase_status task
+    rawTaskPublisher(task_method,
+                     args,
+                     task_queue,
+                     broker = remoteIP,
+                     exchange="default",
+                     routing_key = task_routing_queue)
+
+    # retrieve status of phase
+    rc = None
+    while rc is None and retry > 0:
+        rc = rabbitHelper.getMsg(rcq)
+        time.sleep(2)
+        retry = retry - 1
+
+    rabbitHelper.delete(rcq)
+    return rc == 'True'
+
+"""
+" get_phase_status: retreives the status of any phase currently running in
+"                   the context of local worker(s).  Uses celery's inspect
+"                   object to query the runtime status.
+"""
+@celery.task(base = PersistedMQ, ignore_result = True)
+def get_phase_status(taskId, rcq = None):
+
+    running = False
+
+    try:
+        # instantiate inspect object and get active tasks
+        inspector = inspect()
+        active_task_info = inspector.active()
+
+        # search for runPhase method among active tasks
+        for host in active_task_info:
+            for active_task in active_task_info[host]:
+                if active_task['name'] == 'app.systest_manager.runPhase':
+                    if active_task['id'] == taskId:
+                        running = True  # phase running
+
+    except Exception as ex:
+        print ex
+        logger.error(ex)
+
+    # put result into response queue for any remote client requesting this status
+    if rcq is not None:
+        get_phase_status.rabbitHelper.putMsg(rcq, str(running))
+
