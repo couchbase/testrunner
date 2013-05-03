@@ -167,6 +167,8 @@ class SpatialHelper:
                         expected_docs.append({'key' : doc['name'], 'value' : doc[value]})
                     else:
                         expected_docs.append(doc)
+        else:
+            expected_docs = [{'key' : doc['name'], 'value' : doc[value]} for doc in docs_inserted]
         if 'skip' in params:
             if int(params['skip']) > len(expected_docs):
                 expected_docs = expected_docs[int(params['skip']):]
