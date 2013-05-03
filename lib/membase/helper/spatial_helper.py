@@ -159,10 +159,10 @@ class SpatialHelper:
         expected_docs = []
         if 'bbox' in params:
             for doc in docs_inserted:
-                if doc['geometry']['coordinates'][0] < params['bbox'][2] and\
-                doc['geometry']['coordinates'][0] > params['bbox'][0] and\
-                doc['geometry']['coordinates'][1] < params['bbox'][3] and\
-                doc['geometry']['coordinates'][1] > params['bbox'][1]:
+                if doc['geometry']['coordinates'][0] <= params['bbox'][2] and\
+                doc['geometry']['coordinates'][0] >= params['bbox'][0] and\
+                doc['geometry']['coordinates'][1] <= params['bbox'][3] and\
+                doc['geometry']['coordinates'][1] >= params['bbox'][1]:
                     if value:
                         expected_docs.append({'key' : doc['name'], 'value' : doc[value]})
                     else:
