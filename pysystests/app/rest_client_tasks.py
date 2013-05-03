@@ -200,27 +200,31 @@ def create_standard_buckets(rest, bucketMsg):
 
 
 @celery.task
-def perform_view_tasks(viewMsg):
+def perform_view_tasks(viewMsgList):
     rest = create_rest()
 
-    if "create" in viewMsg:
-        ddocMsg = parseDdocMsg(viewMsg['create'])
-        for ddoc_name, views in ddocMsg.iteritems():
-            view_list = []
-            bucket_name = ''
-            for view in views:
-                view_list.append(View(view['view_name'], view['map_func'], view['red_func'],
-                                      view['dev_view'], view['is_spatial']))
-                bucket_name = view['bucket_name']
+    if isinstance(viewMsgList,dict):
+        viewMsgList = [viewMsgList]
 
-            bucket_obj = rest.get_bucket(bucket_name, 2, 2)
-            rest.create_ddoc(ddoc_name, bucket_obj, view_list)
+    for viewMsg in viewMsgList:
+        if "create" in viewMsg:
+            ddocMsg = parseDdocMsg(viewMsg['create'])
+            for ddoc_name, views in ddocMsg.iteritems():
+                view_list = []
+                bucket_name = ''
+                for view in views:
+                    view_list.append(View(view['view_name'], view['map_func'], view['red_func'],
+                                          view['dev_view'], view['is_spatial']))
+                    bucket_name = view['bucket_name']
 
-    if "delete" in viewMsg:
-        for view in viewMsg['delete']:
-            viewMsgParsed = parseViewMsg(view)
-            bucket_obj = rest.get_bucket(viewMsgParsed['bucket_name'], 2, 2)
-            rest.delete_view(bucket_obj, viewMsgParsed['ddoc_name'])
+                bucket_obj = rest.get_bucket(bucket_name, 2, 2)
+                rest.create_ddoc(ddoc_name, bucket_obj, view_list)
+
+        if "delete" in viewMsg:
+            for view in viewMsg['delete']:
+                viewMsgParsed = parseViewMsg(view)
+                bucket_obj = rest.get_bucket(viewMsgParsed['bucket_name'], 2, 2)
+                rest.delete_view(bucket_obj, viewMsgParsed['ddoc_name'])
 
 def parseDdocMsg(views):
     ddocs = {}
