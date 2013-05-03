@@ -785,21 +785,20 @@ class RestConnection(object):
 
     def get_replications(self):
         replications = []
-        api = self.capiBaseUrl + '_replicator/_design/_replicator_info/_view/infos?group_level=1'
-        params = urllib.urlencode({})
-        status, content, header = self._http_request(api, 'GET', params)
-        if status:
-            replications = json.loads(content)["rows"]
+        content = self.ns_server_tasks()
+        for item in content:
+            if item["type"]=="xdcr":
+                replications.append(item)
         return replications
 
     def remove_all_replications(self):
         replications = self.get_replications()
         for replication in replications:
-            if replication["value"]["have_replicator_doc"] == True:
-                self.stop_replication(self.capiBaseUrl + '_replicator', replication["value"]["replication_fields"]["_id"].replace("/", "%2F"))
+            self.stop_replication(replication["cancelURI"])
 
-    def stop_replication(self, database, rep_id):
-        self._http_request(database + "/{0}".format(rep_id), 'DELETE', None, self._create_capi_headers())
+    def stop_replication(self, uri):
+        api = self.baseUrl + uri
+        self._http_request(api, 'DELETE')
 
     #params serverIp : the server to add to this cluster
     #raises exceptions when
