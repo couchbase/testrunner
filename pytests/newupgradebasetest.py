@@ -23,12 +23,16 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '1.8.1-942-rel')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
-        self.upgrade_versions = self.input.param('upgrade_version', '2.0.0-1870-rel')
+        self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
         upgrade_path = self.input.param('upgrade_path', [])
         if upgrade_path:
             upgrade_path = upgrade_path.split(",")
         self.upgrade_versions = upgrade_path + self.upgrade_versions
+        if self.input.param('released_upgrade_version', None) is not None:
+            self.upgrade_versions = [self.input.param('released_upgrade_version', None)]
+
+        self.initial_build_type = self.input.param('initial_build_type', None)
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None
@@ -92,6 +96,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         params['product'] = self.product
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
+        if self.initial_build_type is not None:
+            params['type'] = self.initial_build_type
         InstallerJob().parallel_install(servers, params)
         if self.product in ["couchbase", "couchbase-server", "cb"]:
             success = True

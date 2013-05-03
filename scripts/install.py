@@ -99,7 +99,6 @@ class Installer(object):
 
     def build_url(self, params):
         _errors = []
-        #vars
         version = ''
         server = ''
         names = []
@@ -116,6 +115,7 @@ class Installer(object):
             else:
                 tmp[k] = value
         params = tmp
+
         ok = True
         if not "version" in params:
             _errors.append(errors["INVALID-PARAMS"])
@@ -140,6 +140,7 @@ class Installer(object):
             else:
                 toy = ""
 
+
         if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
@@ -148,7 +149,12 @@ class Installer(object):
             if params["product"] in mb_alias:
                 names = ['membase-server-enterprise', 'membase-server-community']
             elif params["product"] in cb_alias:
-                names = ['couchbase-server-enterprise', 'couchbase-server-community']
+                if "type" in params and params["type"].lower() in "couchbase-server-community":
+                    names = ['couchbase-server-community']
+                elif "type" in params and params["type"].lower() in "couchbase-server-enterprise":
+                    names = ['couchbase-server-enterprise']
+                else:
+                    names = ['couchbase-server-enterprise', 'couchbase-server-community']
             elif params["product"] in css_alias:
                 names = ['couchbase-single-server-enterprise', 'couchbase-single-server-community']
             else:
