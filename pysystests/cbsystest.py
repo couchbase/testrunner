@@ -300,16 +300,18 @@ def run_systemtest(args):
     receiveResponse(rabbitHelper, test['rcq'])
 
 
-### setup main arg parsers
-setup_run_parser()
-setup_list_parser()
-setup_import_parser()
+if __name__ == "__main__":
 
-## PARSE ARGS ##
-args = parser.parse_args()
+    ### setup main arg parsers
+    setup_run_parser()
+    setup_list_parser()
+    setup_import_parser()
 
-# setup parser callbacks
-if args.subparsers == "run" or\
-    args.subparsers == "import":
-    args.handler(args)
+    ## PARSE ARGS ##
+    args = parser.parse_args()
+
+    # setup parser callbacks
+    if args.subparsers == "run" or\
+        args.subparsers == "import":
+        args.handler(args)
 
