@@ -8,7 +8,8 @@ from celery.task.control import inspect
 import testcfg as cfg
 from cache import ObjCacher, CacheHelper
 from rabbit_helper import PersistedMQ, RabbitHelper, rawTaskPublisher
-from app.workload_manager import Workload, sysTestRunner
+from app.workload_manager import Workload, sysTestRunner, getClusterStat, replace_magic_vars
+
 from app.query import QueryWorkload
 from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance, perform_bucket_create_tasks, perform_view_tasks, perform_xdcr_tasks
 from celery.utils.log import get_task_logger
@@ -126,6 +127,10 @@ def launchSystest(testMsg):
                 time.sleep(2)
                 remote_running = get_remote_phase_status(remoteIP, taskID)
 
+        if 'cache' in phase:
+            cacheVariable(phase['cache'])
+
+
     if 'loop' in testMsg and testMsg['loop']:
         launchSystest(testMsg)
 
@@ -158,6 +163,10 @@ def parseRemotePhases(phase):
             # delete the 'remote' tag from this task
             del phase[task]['remote']
 
+            # replace any magic variables from condition phases
+            if 'conditions' in phase[task] and phase[task]['conditions'].find("$") >= 0:
+                phase[task]['conditions'] = replace_magic_vars(phase[task]['conditions'])
+
             # add task to new remote phase
             remotePhaseMap[remoteIP].update({task : phase[task]})
 
@@ -172,7 +181,6 @@ def parseRemotePhases(phase):
 
                 if 'remote' in phase_task_spec:
                     remoteIP = phase_task_spec['remote']
-
                     if  remoteIP not in remotePhaseMap:
                         remotePhase = { 'name' : 'remote_' + phase.get('name') or\
                                                  'remote_phase',
@@ -188,6 +196,19 @@ def parseRemotePhases(phase):
 
                     # add task to new remote phase
                     remotePhaseMap[remoteIP][task].append(phase_task_spec)
+
+                    # replace any magic variables from condition phases
+                    for workload in remotePhaseMap[remoteIP][task]:
+                        if 'conditions' in workload and workload['conditions'].find("$") >= 0:
+
+                            # number of workloads defined in thisremote  phase
+                            num_workloads = len(remotePhaseMap[remoteIP][task])
+
+                            # for each workload containing postcondition key using
+                            # a magic variable replace it with actual value
+                            for i in range(0, num_workloads):
+                                remotePhaseMap[remoteIP][task][i]['conditions'] =\
+                                    replace_magic_vars(workload['conditions'])
 
                     # remote this task from new local phase
                     del newLocalPhase[task][idx]
@@ -309,6 +330,17 @@ def runPhase(phase, rcq = None):
     time.sleep(5)
 
     return phase_status
+
+"""
+" cacheVariable: stores some variable or state into the object cache
+"                for later use in other phases
+"""
+def cacheVariable(cacheMsg):
+    bucket = cacheMsg.get("bucket") or "default"
+    ref = str(cacheMsg.get("reference") or "default_key")
+    stat = cacheMsg.get("stat") or "curr_items"
+    value = getClusterStat(bucket, stat)
+    CacheHelper.cachePhaseVar(ref, value)
 
 def activateWorkloads(workload):
 

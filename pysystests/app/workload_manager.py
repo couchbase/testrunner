@@ -660,6 +660,26 @@ def updateClusterStatus(ignore_result = True):
         clusterStatus.orchestrator = None
         ObjCacher().delete(CacheHelper.CLUSTERSTATUSKEY, clusterStatus)
 
+def getClusterStat(bucket, stat):
+
+    val = 0
+    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status") or\
+        ClusterStatus()
+    host = clusterStatus.get_random_host()
+    stat_checker = phandler.BucketStatChecker(bucket, addr = host)
+    stats = stat_checker.get_stats()
+    if len(stats) > 0:
+        if stat in stats:
+            val = stats[stat]
+
+    return val
+
+def replace_magic_vars(str_):
+    ref = re.match(r".*\$(?P<var>\w+)",str_).group('var')
+    ref = str(ref.strip())
+    value = CacheHelper.getPhaseVar(ref) or 0
+    str_  = str_.replace("$"+ref, str(value))
+    return str_
 
 """
 " object used to keep track of active nodes in a cluster

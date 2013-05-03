@@ -112,6 +112,7 @@ class CacheHelper():
     BUCKETSTATUSCACHEKEY = "BUCKETSTATUSCACHEKEY"
     QUERYCACHEKEY = "QUERYCACHEKEY"
     QBUILDCACHEKEY = "QBUILDCACHEKEY"
+    VARCACHEKEY = "VARCACHEKEY"
     CLUSTERSTATUSKEY = "CLUSTERSTATUSKEY"
     ACTIVETASKCACHEKEY = "ACTIVETASKCACHEKEY"
 
@@ -179,6 +180,14 @@ class CacheHelper():
             CacheHelper.cc_queues() +\
             CacheHelper.consume_queues() +\
             CacheHelper.miss_queues()
+
+    @staticmethod
+    def cachePhaseVar(key, value):
+        Cache().store(key, value, CacheHelper.VARCACHEKEY)
+
+    @staticmethod
+    def getPhaseVar(key):
+        return Cache().retrieve(key)
 
     @staticmethod
     def cacheClean():
