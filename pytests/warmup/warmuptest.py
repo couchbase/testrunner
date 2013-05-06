@@ -7,6 +7,7 @@ from mc_bin_client import MemcachedError
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase.documentgenerator import BlobGenerator
 from couchbase.stats_tools import StatsCommon
+from remote.remote_util import RemoteMachineShellConnection
 import string
 import random
 
@@ -25,6 +26,11 @@ class WarmUpTests(BaseTestCase):
         self.cluster.rebalance(self.servers[:1], self.servers_in, [])
         self.active_resident_threshold = int(self.input.param("active_resident_threshold", 90))
         self.access_log_time = self.input.param("access_log_time", 2)
+        self.expire_time = self.input.param("expire_time", 30)
+        self.doc_ops = self.input.param("doc_ops", None)
+        if self.doc_ops is not None:
+            self.doc_ops = self.doc_ops.split(";")
+        self.load_gen_list = []
 
     def tearDown(self):
         super(WarmUpTests, self).tearDown()
@@ -70,6 +76,9 @@ class WarmUpTests(BaseTestCase):
                            self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]:
                             self._stats_report(server, bucket.name, stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup')[server])
                             warmed_up[bucket.name][server] = True
+                        else:
+                            self.log.info("curr_items_tot is %s not equal to %s" % (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server],
+                                                                                   self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]))
 
                     elif stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_thread')[server] == "running":
                         self.log.info("warming up is still running for %s in bucket %s....curr_items_tot : %s" %
@@ -113,6 +122,7 @@ class WarmUpTests(BaseTestCase):
     def _load_dgm(self):
         generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+        self.load_gen_list.append(generate_load)
 
         stats_all_buckets = {}
         for bucket in self.buckets:
@@ -129,10 +139,32 @@ class WarmUpTests(BaseTestCase):
                         random_key = key_generator()
                         generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=self.num_items)
                         self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                        self.load_gen_list.append(generate_load)
                     else:
                         threshold_reached = True
                         self.log.info("DGM state achieved for %s in bucket %s!" % (server.ip, bucket.name))
                         break
+
+
+        if(self.doc_ops is not None):
+            if("update" in self.doc_ops):
+                for gen in self.load_gen_list[:int(len(self.load_gen_list)*0.5)]:
+                    self._load_all_buckets(self.master, gen, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("delete" in self.doc_ops):
+                for gen in self.load_gen_list[int(len(self.load_gen_list)*0.5):]:
+                    self._load_all_buckets(self.master, gen, "delete", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("expire" in self.doc_ops):
+                for gen in self.load_gen_list[:int(len(self.load_gen_list)*0.8)]:
+                    self._load_all_buckets(self.master, gen, "update", self.expire_time, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                time.sleep(self.expire_time*2)
+
+                for server in self.servers:
+                    shell = RemoteMachineShellConnection(server)
+                    for bucket in self.buckets:
+                        shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+                    shell.disconnect()
+                time.sleep(30)
+
 
     def _update_access_log(self):
         stats_all_buckets = {}
@@ -151,7 +183,7 @@ class WarmUpTests(BaseTestCase):
     def warmup_with_access_log(self):
         self._load_dgm()
 
-        # wait for draining of data before restart and warm up
+        # wait for draining of data before restart and warmup
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         for bucket in self.buckets:
             self._stats_befor_warmup(bucket.name)
@@ -163,9 +195,12 @@ class WarmUpTests(BaseTestCase):
 
         if self._warmup_check():
             generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-            self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("delete" in self.doc_ops) or ("expire" in self.doc_ops):
+                self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            else:
+                self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
         else:
-            raise Exception("warmup test failed in some node")
+            raise Exception("Warmup check failed. Warmup test failed in some node")
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
