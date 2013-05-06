@@ -720,6 +720,18 @@ class XDCRBaseTest(unittest.TestCase):
                     self.log.info("ERROR: ep_warmup_thread's status not complete")
                 mc.close
 
+    def _wait_for_replication_to_catchup(self):
+        rest1 = RestConnection(self.src_master)
+        rest2 = RestConnection(self.dest_master)
+        for bucket in self.buckets:
+            _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+            while _count1 != _count2:
+                self.sleep(60, "Waiting for replication to catch up ..")
+                _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+            self.log.info("Replication caught up for bucket: {0}".format(bucket.name))
+
     def wait_node_restarted(self, server, wait_time=120, wait_if_warmup=False, check_service=False):
         now = time.time()
         if check_service:
@@ -819,6 +831,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             rest = RestConnection(clusters[0])
             rest.remove_all_remote_clusters()
             rest.remove_all_replications()
+            rest.remove_all_recoveries()
 #            #TODO should be added 'stop replication' when API to stop will be implemented
 #        for (rest_conn, cluster_ref, rep_database, rep_id) in self._cluster_state_arr:
 #            rest_conn.stop_replication(rep_database, rep_id)

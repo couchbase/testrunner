@@ -95,9 +95,17 @@ class CBRbaseclass(XDCRReplicationBaseTest):
             self.sleep(self._timeout)
 
             _check = self.wait_for_catchup(_compromised_cluster, bucket.name)
+            max_attempts = 1
             while not _check:
+                max_attempts += 1
                 _ssh_client.exec_command(command)
                 _check = self.wait_for_catchup(_compromised_cluster, bucket.name)
+                if max_attempts > 4:
+                    self.log.error("Cbrecovery didn't complete in time, ending test ..")
+                    rest = RestConnection(_compromised_)
+                    rest.remove_all_recoveries()
+                    raise Exception("Unable to complete test, cbrecovery failed to complete in expected time")
+                    break
         shell.disconnect()
 
     def trigger_rebalance(self, rest):
@@ -223,7 +231,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
-        self.sleep(self._timeout)
+        self._wait_for_replication_to_catchup()
         """
         Tracking vbucket movement just on the default bucket for now
         """
@@ -319,7 +327,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
-        self.sleep(self._timeout)
+        self._wait_for_replication_to_catchup()
         """
         Tracking vbucket movement just on the default bucket for now
         """
@@ -424,7 +432,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
-        self.sleep(self._timeout)
+        self._wait_for_replication_to_catchup()
         """
         Tracking vbucket movement just on the default bucket for now
         """

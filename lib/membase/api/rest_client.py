@@ -800,6 +800,16 @@ class RestConnection(object):
         api = self.baseUrl + uri
         self._http_request(api, 'DELETE')
 
+    def remove_all_recoveries(self):
+        recoveries = []
+        content = self.ns_server_tasks()
+        for item in content:
+            if item["type"]=="recovery":
+                recoverys.append(item)
+        for recovery in recoveries:
+            api = self.baseUrl + recovery["stopURI"]
+            self._http_request(api, 'POST')
+
     #params serverIp : the server to add to this cluster
     #raises exceptions when
     #unauthorized user
