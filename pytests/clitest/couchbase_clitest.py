@@ -295,7 +295,8 @@ class CouchbaseCliTest(CliBaseTest):
         for num in xrange(nodes_rem):
             options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
+            self.assertTrue("INFO: rebalancing" in output[0])
+            self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
 
         if nodes_rem == 0 and nodes_add > 0:
             cli_command = "rebalance"
@@ -408,14 +409,11 @@ class CouchbaseCliTest(CliBaseTest):
         if bucket_port != bucket.nodes[0].moxi:
             self.log.error("Bucket port is not correct")
             result = False
-        if bucket_port != bucket.nodes[0].moxi:
-            self.log.error("Bucket port is not correct")
-            result = False
         if bucket_type == "couchbase" and "membase" != bucket.type or\
             (bucket_type == "memcached" and "memcached" != bucket.type):
             self.log.error("Bucket type is not correct")
             result = False
-        if bucket_replica != bucket.numReplicas:
+        if bucket_type == "couchbase" and bucket_replica != bucket.numReplicas:
             self.log.error("Bucket num replica is not correct")
             result = False
         if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
@@ -426,8 +424,7 @@ class CouchbaseCliTest(CliBaseTest):
             result = False
 
         if not result:
-            self.fail("Bcucket was created with incorrect properties")
-
+            self.fail("Bucket was created with incorrect properties")
 
         remote_client.disconnect()
 
