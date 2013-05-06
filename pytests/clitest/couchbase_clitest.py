@@ -504,7 +504,7 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue("{0} healthy active".format(str(cluster_init_port)[:-1] + "9") in output[0])
             server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
             result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
-            self.assertEqual(result, "ns_1@127.0.0.1 127.0.0.1:{0} healthy active".format(str(cluster_init_port)[:-1] + "9"))
+            self.assertTrue("{0} healthy active".format(str(cluster_init_port)[:-1] + "9") in result)
 
             cli_command = command_init
             options = "--cluster-init-username={0} --cluster-init-password={1} --cluster-init-port={2}".\
@@ -519,10 +519,10 @@ class CouchbaseCliTest(CliBaseTest):
             remote_client = RemoteMachineShellConnection(server)
             cli_command = "server-list"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
-            self.assertEqual(output[0], "ns_1@127.0.0.1 127.0.0.1:{0} healthy active".format(str(cluster_init_port)))
+            self.assertTrue("{0} healthy active".format(str(cluster_init_port)) in output[0])
             server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
             result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
-            self.assertEqual(result, "ns_1@127.0.0.1 127.0.0.1:{0} healthy active".format(str(cluster_init_port)))
+            self.assertTrue("{0} healthy active".format(str(cluster_init_port)) in result)
             remote_client.disconnect()
         finally:
             rest = RestConnection(server)
