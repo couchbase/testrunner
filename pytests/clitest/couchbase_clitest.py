@@ -467,6 +467,7 @@ class CouchbaseCliTest(CliBaseTest):
         finally:
             rest = RestConnection(server)
             rest.force_eject_node()
+            self.sleep(5)
             rest.init_cluster()
 
     def testClusterInit(self):
@@ -479,6 +480,7 @@ class CouchbaseCliTest(CliBaseTest):
         remote_client = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
         rest.force_eject_node()
+        self.sleep(5)
 
         try:
             cli_command = command_init
@@ -525,4 +527,5 @@ class CouchbaseCliTest(CliBaseTest):
         finally:
             rest = RestConnection(server)
             rest.force_eject_node()
+            self.sleep(5)
             rest.init_cluster()
