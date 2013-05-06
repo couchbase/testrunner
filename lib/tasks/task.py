@@ -2437,23 +2437,29 @@ class ViewQueryVerificationTask(Task):
         err_infos = []
         rc_status = {"passed" : False,
                      "errors" : err_infos}  # array of dicts with keys 'msg' and 'details'
+        try:
+            # create verification id lists
+            expected_ids = [row['id'] for row in self.expected_rows]
+            couch_ids = [str(row['id']) for row in self.results['rows']]
 
-        # create verification id lists
-        expected_ids = [row['id'] for row in self.expected_rows]
-        couch_ids = [str(row['id']) for row in self.results['rows']]
+            # check results
+            self.check_for_duplicate_ids(expected_ids, couch_ids, err_infos)
+            self.check_for_missing_ids(expected_ids, couch_ids, err_infos)
+            self.check_for_extra_ids(expected_ids, couch_ids, err_infos)
+            self.check_for_value_corruption(err_infos)
 
-        # check results
-        self.check_for_duplicate_ids(expected_ids, couch_ids, err_infos)
-        self.check_for_missing_ids(expected_ids, couch_ids, err_infos)
-        self.check_for_extra_ids(expected_ids, couch_ids, err_infos)
-        self.check_for_value_corruption(err_infos)
+            # check for errors
+            if len(rc_status["errors"]) == 0:
+               rc_status["passed"] = True
 
-        # check for errors
-        if len(rc_status["errors"]) == 0:
-           rc_status["passed"] = True
-
-        self.state = FINISHED
-        self.set_result(rc_status)
+            self.state = FINISHED
+            self.set_result(rc_status)
+        except Exception, ex:
+            self.state = FINISHED
+            self.log.info("FIRST 100 RESULTS for view %s : %s" % (self.view_name,
+                                                        self.expected_rows[100]))
+            self.set_result({"passed" : False,
+                             "errors" : "ERROR: %s" % ex})
 
     def check_for_duplicate_ids(self, expected_ids, couch_ids, err_infos):
 
