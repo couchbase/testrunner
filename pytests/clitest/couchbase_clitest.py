@@ -442,7 +442,6 @@ class CouchbaseCliTest(CliBaseTest):
         data_path = self.input.param("data_path", None)
         index_path = self.input.param("index_path", None)
 
-
         if data_path is not None:
             data_path = prefix + data_path.replace('|', "/")
         if index_path is not None:
@@ -453,21 +452,24 @@ class CouchbaseCliTest(CliBaseTest):
         index_path_before = server_info["storage"]["hdd"][0]["index_path"]
 
         try:
+            rest = RestConnection(server)
+            rest.force_eject_node()
             cli_command = "node-init"
             options = ""
             options += ("--node-init-data-path={0} ".format(data_path), "")[data_path is None]
             options += ("--node-init-index-path={0} ".format(index_path), "")[index_path is None]
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output[0], "SUCCESS: init localhost")
+            rest.init_cluster()
             server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
             data_path_after = server_info["storage"]["hdd"][0]["path"]
-            index_path_after = server_info["storage"]["hdd"][0]["path"]
+            index_path_after = server_info["storage"]["hdd"][0]["index_path"]
             self.assertEqual((data_path, data_path_before)[data_path is None], data_path_after)
-            self.assertEqual((index_path, index_path_before)[index_path is None], data_path_after)
-        except Exception, e:
+            self.assertEqual((index_path, index_path_before)[index_path is None], index_path_after)
+        finally:
             rest = RestConnection(server)
             rest.force_eject_node()
-            raise e
+            rest.init_cluster()
 
     def testClusterInit(self):
         cluster_init_username = self.input.param("cluster_init_username", "Administrator")
@@ -490,15 +492,12 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--cluster-init-username={0} --cluster-init-password={1} --cluster-init-port={2}".\
                 format(cluster_init_username + "1", cluster_init_password + "1", str(cluster_init_port)[:-1] + "9")
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
-            if command_init == "cluster-init":
-                if output != []:
-                    self.fail("cluster-init in the second time doesn't make sence")
-                else:
-                    return
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            #MB-8202 cluster-init/edit doesn't provide status
+            self.assertTrue(output == [])
             server.rest_username = cluster_init_username + "1"
             server.rest_password = cluster_init_password + "1"
             server.port = str(cluster_init_port)[:-1] + "9"
+
 
             cli_command = "server-list"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
@@ -511,7 +510,8 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--cluster-init-username={0} --cluster-init-password={1} --cluster-init-port={2}".\
                 format(cluster_init_username, cluster_init_password, cluster_init_port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=(cluster_init_username + "1"), password=cluster_init_password + "1")
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            #MB-8202 cluster-init/edit doesn't provide status
+            self.assertTrue(output == [])
 
             server.rest_username = cluster_init_username
             server.rest_password = cluster_init_password
@@ -524,7 +524,7 @@ class CouchbaseCliTest(CliBaseTest):
             result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
             self.assertEqual(result, "ns_1@127.0.0.1 127.0.0.1:{0} healthy active".format(str(cluster_init_port)))
             remote_client.disconnect()
-        except Exception, e:
+        finally:
             rest = RestConnection(server)
             rest.force_eject_node()
-            raise e
+            rest.init_cluster()
