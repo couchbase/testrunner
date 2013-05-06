@@ -10,11 +10,13 @@ from remote.remote_util import RemoteMachineShellConnection
 from pprint import pprint
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
- 'COMMAND': {'bucket-create': 'add a new bucket to the cluster',
+ 'COMMAND': {'bucket-compact': 'compact database and index data',
+             'bucket-create': 'add a new bucket to the cluster',
              'bucket-delete': 'delete an existing bucket',
              'bucket-edit': 'modify an existing bucket',
-             'bucket-flush': 'flush a given bucket',
+             'bucket-flush': 'flush all data from disk for a given bucket',
              'bucket-list': 'list all buckets in a cluster',
+             'cluster-edit': 'modify cluster settings',
              'cluster-init': 'set the username,password and port of the cluster',
              'failover': '',
              'help': 'show longer usage/',
@@ -25,22 +27,32 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
              'server-add': 'add one or more servers to the cluster',
              'server-info': 'show details on one server',
              'server-list': 'list all servers in a cluster',
-             'server-readd': 'readd a server that was failed over'},
+             'server-readd': 'readd a server that was failed over',
+             'setting-alert': 'set email alert settings',
+             'setting-autofailover': 'set auto failover settings',
+             'setting-compaction': 'set auto compaction settings',
+             'setting-notification': 'set notification settings',
+             'setting-xdcr': 'set xdcr related settings',
+             'xdcr-replicate': 'xdcr operations',
+             'xdcr-setup': 'set up XDCR connection'},
  'EXAMPLES': {'Add a node to a cluster and rebalance': 'couchbase-cli rebalance -c 192.168.0.1:8091 --server-add=192.168.0.2:8091 --server-add-username=Administrator --server-add-password=password',
               'Add a node to a cluster, but do not rebalance': 'couchbase-cli server-add -c 192.168.0.1:8091 --server-add=192.168.0.2:8091 --server-add-username=Administrator --server-add-password=password',
               'Change the data path': 'couchbase-cli node-init -c 192.168.0.1:8091 --node-init-data-path=/tmp',
-              'Change the username, password, port and ram quota': 'couchbase-cli cluster-init -c 192.168.0.1:8091 --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port=8080 --cluster-init-ramsize=300',
               'Create a couchbase bucket and wait for bucket ready': 'couchbase-cli bucket-create -c 192.168.0.1:8091 --bucket=test_bucket --bucket-type=couchbase --bucket-port=11222 --bucket-ramsize=200 --bucket-replica=1 --wait',
               'Create a new dedicated port couchbase bucket': 'couchbase-cli bucket-create -c 192.168.0.1:8091 --bucket=test_bucket --bucket-type=couchbase --bucket-port=11222 --bucket-ramsize=200 --bucket-replica=1',
-              'Create a new sasl memcached bucket': 'couchbase-cli bucket-create -c 192.168.0.1:8091 --bucket=test_bucket --bucket-type=memcached --bucket-password=password --bucket-ramsize=200',
+              'Create a new sasl memcached bucket': 'couchbase-cli bucket-create -c 192.168.0.1:8091 --bucket=test_bucket --bucket-type=memcached --bucket-password=password --bucket-ramsize=200 --enable-flush=1 --enable-index-replica=1',
               'Delete a bucket': 'couchbase-cli bucket-delete -c 192.168.0.1:8091 --bucket=test_bucket',
+              'Flush a bucket': 'couchbase-cli xdcr-replicate -c 192.168.0.1:8091 --delete --xdcr-replicator=f4eb540d74c43fd3ac6d4b7910c8c92f/default/default',
               'List buckets in a cluster': 'couchbase-cli bucket-list -c 192.168.0.1:8091',
               'List servers in a cluster': 'couchbase-cli server-list -c 192.168.0.1:8091',
-              'Modify a dedicated port bucket': 'couchbase-cli bucket-edit -c 192.168.0.1:8091 --bucket=test_bucket --bucket-port=11222 --bucket-ramsize=400',
+              'Modify a dedicated port bucket': 'couchbase-cli bucket-edit -c 192.168.0.1:8091 --bucket=test_bucket --bucket-port=11222 --bucket-ramsize=400 --enable-flush=1 --enable-index-replica=1',
               'Remove a node from a cluster and rebalance': 'couchbase-cli rebalance -c 192.168.0.1:8091 --server-remove=192.168.0.2:8091',
               'Remove and add nodes from/to a cluster and rebalance': 'couchbase-cli rebalance -c 192.168.0.1:8091 --server-remove=192.168.0.2 --server-add=192.168.0.4 --server-add-username=Administrator --server-add-password=password',
               'Server information': 'couchbase-cli server-info -c 192.168.0.1:8091',
-              'Stop the current rebalancing': 'couchbase-cli rebalance-stop -c 192.168.0.1:8091'},
+              'Set data path for an unprovisioned cluster': 'couchbse-cli node-init -c 192.168.0.1:8091 --node-init-data-path=/tmp/data --node-init-index-path=/tmp/index',
+              'Set the username, password, port and ram quota': 'couchbase-cli cluster-init -c 192.168.0.1:8091 --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port=8080 --cluster-init-ramsize=300',
+              'Stop the current rebalancing': 'couchbase-cli rebalance-stop -c 192.168.0.1:8091',
+              'change the cluster username, password, port and ram quota': 'couchbase-cli cluster-edit -c 192.168.0.1:8091 --cluster-username=Administrator --cluster-password=password --cluster-port=8080 --cluster-ramsize=300'},
  'OPTIONS': {'-o KIND, --output=KIND': 'KIND is json or standard\n-d, --debug',
              '-p PASSWORD, --password=PASSWORD': 'admin password of the cluster',
              '-u USERNAME, --user=USERNAME': 'admin username of the cluster'},
@@ -50,14 +62,20 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
                       '--bucket-replica=COUNT': 'replication count',
                       '--bucket-type=TYPE': 'memcached or couchbase',
                       '--bucket=BUCKETNAME': ' bucket to act on',
+                      '--data-only': ' compact datbase data only',
+                      '--enable-flush=[0|1]': 'enable/disable flush',
+                      '--enable-index-replica=[0|1]': 'enable/disable index replicas',
+                      '--force': ' force to execute command without asking for confirmation',
+                      '--view-only': ' compact view data only',
                       '--wait': 'wait for bucket create to be complete before returning'},
- 'cluster-init OPTIONS': {'--cluster-init-password=PASSWORD': 'new admin password',
-                          '--cluster-init-port=PORT': 'new cluster REST/http port',
-                          '--cluster-init-ramsize=RAMSIZEMB': 'per node ram quota in MB',
-                          '--cluster-init-username=USER': 'new admin username'},
+ 'cluster-* OPTIONS': {'--cluster-password=PASSWORD': ' new admin password',
+                       '--cluster-port=PORT': ' new cluster REST/http port',
+                       '--cluster-ramsize=RAMSIZEMB': ' per node ram quota in MB',
+                       '--cluster-username=USER': ' new admin username'},
  'description': 'couchbase-cli - command-line cluster administration tool',
  'failover OPTIONS': {'--server-failover=HOST[:PORT]': ' server to failover'},
- 'node-init OPTIONS': {'--node-init-data-path=PATH': 'per node path to store data'},
+ 'node-init OPTIONS': {'--node-init-data-path=PATH': 'per node path to store data',
+                       '--node-init-index-path=PATH': ' per node path to store index'},
  'rebalance OPTIONS': {'--server-add*': ' see server-add OPTIONS',
                        '--server-remove=HOST[:PORT]': ' the server to be removed'},
  'server-add OPTIONS': {'--server-add-password=PASSWORD': 'admin password for the\nserver to be added',
@@ -66,7 +84,52 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'server-readd OPTIONS': {'--server-add-password=PASSWORD': 'admin password for the\nserver to be added',
                           '--server-add-username=USERNAME': 'admin username for the\nserver to be added',
                           '--server-add=HOST[:PORT]': 'server to be added'},
- 'usage': ' couchbase-cli COMMAND CLUSTER [OPTIONS]'}
+ 'setting-alert OPTIONS': {'--alert-auto-failover-cluster-small': " node wasn't auto fail over as cluster was too small",
+                           '--alert-auto-failover-max-reached': ' maximum number of auto failover nodes was reached',
+                           '--alert-auto-failover-node': 'node was auto failover',
+                           '--alert-auto-failover-node-down': " node wasn't auto failover as other nodes are down at the same time",
+                           '--alert-disk-space': 'disk space used for persistent storgage has reached at least 90% capacity',
+                           '--alert-ip-changed': 'node ip address has changed unexpectedly',
+                           '--alert-meta-oom': 'bucket memory on a node is entirely used for metadata',
+                           '--alert-meta-overhead': ' metadata overhead is more than 50%',
+                           '--alert-write-failed': 'writing data to disk for a specific bucket has failed',
+                           '--email-host=HOST': ' email server host',
+                           '--email-password=PWD': 'email server password',
+                           '--email-port=PORT': ' email server port',
+                           '--email-recipients=RECIPIENT': 'email recipents, separate addresses with , or ;',
+                           '--email-sender=SENDER': ' sender email address',
+                           '--email-user=USER': ' email server username',
+                           '--enable-email-alert=[0|1]': 'allow email alert',
+                           '--enable-email-encrypt=[0|1]': 'email encrypt'},
+ 'setting-autofailover OPTIONS': {'--auto-failover-timeout=TIMEOUT (>=30)': 'specify timeout that expires to trigger auto failover',
+                                  '--enable-auto-failover=[0|1]': 'allow auto failover'},
+ 'setting-compacttion OPTIONS': {'--compaction-db-percentage=PERCENTAGE': ' at which point database compaction is triggered',
+                                 '--compaction-db-size=SIZE[MB]': ' at which point database compaction is triggered',
+                                 '--compaction-period-from=HH:MM': 'allow compaction time period from',
+                                 '--compaction-period-to=HH:MM': 'allow compaction time period to',
+                                 '--compaction-view-percentage=PERCENTAGE': ' at which point view compaction is triggered',
+                                 '--compaction-view-size=SIZE[MB]': ' at which point view compaction is triggered',
+                                 '--enable-compaction-abort=[0|1]': ' allow compaction abort when time expires',
+                                 '--enable-compaction-parallel=[0|1]': 'allow parallel compaction for database and view'},
+ 'setting-notification OPTIONS': {'--enable-notification=[0|1]': ' allow notification'},
+ 'setting-xdcr OPTIONS': {'--checkpoint-interval=[1800]': ' intervals between checkpoints, 60 to 14400 seconds.',
+                          '--doc-batch-size=[2048]KB': 'document batching size, 10 to 100000 KB',
+                          '--failure-restart-interval=[30]': 'interval for restarting failed xdcr, 1 to 300 seconds\n--optimistic-replication-threshold=[256] document body size threshold (bytes) to trigger optimistic replication',
+                          '--max-concurrent-reps=[32]': ' maximum concurrent replications per bucket, 8 to 256.',
+                          '--worker-batch-size=[500]': 'doc batch size, 500 to 10000.'},
+ 'usage': ' couchbase-cli COMMAND CLUSTER [OPTIONS]',
+ 'xdcr-replicate OPTIONS': {'--create': ' create and start a new replication',
+                            '--delete': ' stop and cancel a replication',
+                            '--xdcr-clucter-name=CLUSTERNAME': 'remote cluster to replicate to',
+                            '--xdcr-from-bucket=BUCKET': 'local bucket name to replicate from',
+                            '--xdcr-to-bucket=BUCKETNAME': 'remote bucket to replicate to'},
+ 'xdcr-setup OPTIONS': {'--create': ' create a new xdcr configuration',
+                        '--delete': ' delete existed xdcr configuration',
+                        '--edit': ' modify existed xdcr configuration',
+                        '--xdcr-cluster-name=CLUSTERNAME': 'cluster name',
+                        '--xdcr-hostname=HOSTNAME': ' remote host name to connect to',
+                        '--xdcr-password=PASSWORD': ' remtoe cluster admin password',
+                        '--xdcr-username=USERNAME': ' remote cluster admin username'}}
 
 
 help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index data',
@@ -148,7 +211,7 @@ class CouchbaseCliTest(CliBaseTest):
             elif upper_key in ["EXAMPLES"] :
                 if line.endswith(":"):
                     previous_key = line[:-1]
-                    #result[upper_key][previous_key] = ""
+                    result[upper_key][previous_key] = ""
                 else:
                     line = line.strip()
                     if line.startswith("couchbase-cli"):
@@ -180,11 +243,11 @@ class CouchbaseCliTest(CliBaseTest):
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica), "")[enable_index_replica is None]
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
-        options += (" --wait", "")[bucket_wait]
+        options += (" --wait", "")[wait]
         cli_command = "bucket-create"
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output[0], "SUCCESS: bucket-create")
+        self.assertTrue("SUCCESS: bucket-create" in output[0])
 
 
     def testHelp(self):
@@ -194,7 +257,7 @@ class CouchbaseCliTest(CliBaseTest):
         result = self._get_dict_from_output(output)
         expected_result = help_short
         if "-h" in options:
-            expected_result = help_short
+            expected_result = help
         pprint(result)
         if result == expected_result:
             self.log.info("Correct help info was found")
@@ -209,7 +272,7 @@ class CouchbaseCliTest(CliBaseTest):
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
         server_info = self._get_cluster_info(remote_client)
         result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
-        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active".format(self.master.ip))
+        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active".format("127.0.0.1"))
 
         cli_command = "bucket-list"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
@@ -319,9 +382,10 @@ class CouchbaseCliTest(CliBaseTest):
 
 
     def testBucketCreation(self):
-        bucket = self.input.param("bucket", "default")
-        bucket_type = self.input.param("bucket", "couchbase")
+        bucket_name = self.input.param("bucket", "default")
+        bucket_type = self.input.param("bucket_type", "couchbase")
         bucket_port = self.input.param("bucket_port", 11211)
+        bucket_replica = self.input.param("bucket_replica", 1)
         bucket_password = self.input.param("bucket_password", None)
         bucket_ramsize = self.input.param("bucket_ramsize", 200)
         wait = self.input.param("wait", False)
@@ -329,9 +393,42 @@ class CouchbaseCliTest(CliBaseTest):
         enable_index_replica = self.input.param("enable_index_replica", None)
 
         remote_client = RemoteMachineShellConnection(self.master)
-        rest = RestConnection(server)
-        self._create_bucket(remote_client)
+        rest = RestConnection(self.master)
+        self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
+                        bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
         buckets = rest.get_buckets()
+        result = True
+        if len(buckets) != 1:
+            self.log.error("Expected to ge only 1 bucket")
+            result = False
+        bucket = buckets[0]
+        if bucket_name != bucket.name:
+            self.log.error("Bucket name is not correct")
+            result = False
+        if bucket_port != bucket.nodes[0].moxi:
+            self.log.error("Bucket port is not correct")
+            result = False
+        if bucket_port != bucket.nodes[0].moxi:
+            self.log.error("Bucket port is not correct")
+            result = False
+        if bucket_type == "couchbase" and "membase" != bucket.type or\
+            (bucket_type == "memcached" and "memcached" != bucket.type):
+            self.log.error("Bucket type is not correct")
+            result = False
+        if bucket_replica != bucket.numReplicas:
+            self.log.error("Bucket num replica is not correct")
+            result = False
+        if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
+            self.log.error("Bucket password is not correct")
+            result = False
+        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), int(int(buckets[0].stats.ram) * 1.05)):
+            self.log.error("Bucket RAM size is not correct")
+            result = False
+
+        if not result:
+            self.fail("Bcucket was created with incorrect properties")
+
+
         remote_client.disconnect()
 
     def testNodeInit(self):
@@ -393,6 +490,11 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--cluster-init-username={0} --cluster-init-password={1} --cluster-init-port={2}".\
                 format(cluster_init_username + "1", cluster_init_password + "1", str(cluster_init_port)[:-1] + "9")
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
+            if command_init == "cluster-init":
+                if output != []:
+                    self.fail("cluster-init in the second time doesn't make sence")
+                else:
+                    return
             self.assertEqual(output[0], "SUCCESS: init localhost")
             server.rest_username = cluster_init_username + "1"
             server.rest_password = cluster_init_password + "1"
