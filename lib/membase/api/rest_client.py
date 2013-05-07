@@ -805,7 +805,7 @@ class RestConnection(object):
         content = self.ns_server_tasks()
         for item in content:
             if item["type"]=="recovery":
-                recoverys.append(item)
+                recoveries.append(item)
         for recovery in recoveries:
             api = self.baseUrl + recovery["stopURI"]
             self._http_request(api, 'POST')
