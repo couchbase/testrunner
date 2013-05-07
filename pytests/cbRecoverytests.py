@@ -256,7 +256,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     return
                 self.log.info("Failing over {0} nodes on source ..".format(self._failover_count))
                 self.failed_nodes = self.src_nodes[(len(self.src_nodes)-self._failover_count):len(self.src_nodes)]
-                self._cluster_helper.failover(self.src_nodes, self.failed_nodes)
+                self.cluster.failover(self.src_nodes, self.failed_nodes)
                 for node in self.failed_nodes:
                     self.src_nodes.remove(node)
                 add_nodes = self._floating_servers_set[0:self._add_count]
@@ -287,7 +287,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     return
                 self.log.info("Failing over {0} nodes on destination ..".format(self._failover_count))
                 self.failed_nodes = self.dest_nodes[(len(self.dest_nodes)-self._failover_count):len(self.dest_nodes)]
-                self._cluster_helper.failover(self.dest_nodes, self.failed_nodes)
+                self.cluster.failover(self.dest_nodes, self.failed_nodes)
                 for node in self.failed_nodes:
                     self.dest_nodes.remove(node)
                 add_nodes = self._floating_servers_set[0:self._add_count]
@@ -457,7 +457,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     return
                 self.log.info("Failing over {0} nodes on source ..".format(self._failover_count))
                 self.failed_nodes = self.src_nodes[(len(self.src_nodes)-self._failover_count):len(self.src_nodes)]
-                self._cluster_helper.failover(self.src_nodes, self.failed_nodes)
+                self.cluster.failover(self.src_nodes, self.failed_nodes)
                 self.sleep(self._timeout / 4)
                 self.log.info("Adding back the {0} nodes that were failed over ..".format(self._failover_count))
                 for node in self.failed_nodes:
@@ -490,7 +490,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     return
                 self.log.info("Failing over {0} nodes on destination ..".format(self._failover_count))
                 self.failed_nodes = self.dest_nodes[(len(self.dest_nodes)-self._failover_count):len(self.dest_nodes)]
-                self._cluster_helper.failover(self.dest_nodes, self.failed_nodes)
+                self.cluster.failover(self.dest_nodes, self.failed_nodes)
                 self.sleep(self._timeout / 4)
                 self.log.info("Adding back the {0} nodes that were failed over ..".format(self._failover_count))
                 for node in self.failed_nodes:

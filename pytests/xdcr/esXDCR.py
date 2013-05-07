@@ -167,7 +167,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
         nodes_out = available_nodes[:1]
         if do_failover:
-            self._cluster_helper.failover(param_nodes, nodes_out)
+            self.cluster.failover(param_nodes, nodes_out)
 
         tasks = self._async_rebalance(param_nodes, [], nodes_out)
         if monitor:

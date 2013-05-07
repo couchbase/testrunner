@@ -54,7 +54,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         standard_buckets = len([bucket for bucket in buckets if bucket.startswith("standard_bucket")])
         self._create_standard_buckets(master_node, standard_buckets, master_id, bucket_size)
         if "default" in buckets:
-            self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
+            self.cluster.create_default_bucket(master_node, bucket_size, self._num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                 num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
 

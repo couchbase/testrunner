@@ -73,7 +73,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.log = logger.Logger.get_logger()
             self._input = TestInputSingleton.input
             self._init_parameters()
-            self._cluster_helper = Cluster()
+            self.cluster = Cluster()
             #REPLICATION RATE STATS
             self._local_replication_rate = {}
             self._xdc_replication_ops = {}
@@ -151,7 +151,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
         finally:
-            self._cluster_helper.shutdown()
+            self.cluster.shutdown()
             self._log_finish(self)
 
     def _print_stats(self, node):
@@ -294,7 +294,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.disable_dest_comp = self._input.param("disable_dest_comp", True)
 
         self._optimistic_xdcr_threshold = self._input.param("optimistic_xdcr_threshold", 256)
-        if self.src_master.ip != self.dest_master.ip:       #Only if it's not a cluster_run
+        if self.src_master.ip != self.dest_master.ip:  #Only if it's not a cluster_run
             if self._optimistic_xdcr_threshold != 256:
                 self.set_environ_param('XDCR_OPTIMISTIC_REPLICATION_THRESHOLD', self._optimistic_xdcr_threshold)
 
@@ -433,13 +433,13 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _setup_cluster(self, nodes, disabled_consistent_view=None):
         self._init_nodes(nodes, disabled_consistent_view)
-        self._cluster_helper.async_rebalance(nodes, nodes[1:], []).result()
+        self.cluster.async_rebalance(nodes, nodes[1:], []).result()
         self._create_buckets(nodes)
 
     def _init_nodes(self, nodes, disabled_consistent_view=None):
         _tasks = []
         for node in nodes:
-            _tasks.append(self._cluster_helper.async_init_node(node, disabled_consistent_view))
+            _tasks.append(self.cluster.async_init_node(node, disabled_consistent_view))
         for task in _tasks:
             mem_quota_node = task.result()
             if mem_quota_node < self._mem_quota_int or self._mem_quota_int == 0:
@@ -455,7 +455,7 @@ class XDCRBaseTest(unittest.TestCase):
         bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
-            bucket_tasks.append(self._cluster_helper.async_create_sasl_bucket(server, name, 'password',
+            bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name, 'password',
                                                                               bucket_size, self._num_replicas))
             if name not in self._existing_bucket_list(self.buckets):
                 self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
@@ -469,7 +469,7 @@ class XDCRBaseTest(unittest.TestCase):
         bucket_tasks = []
         for i in range(num_buckets):
             name = "standard_bucket_" + str(i + 1)
-            bucket_tasks.append(self._cluster_helper.async_create_standard_bucket(server, name,
+            bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
                                                                                   11214 + i,
                                                                                   bucket_size,
                                                                                   self._num_replicas))
@@ -495,7 +495,7 @@ class XDCRBaseTest(unittest.TestCase):
         if self._standard_buckets > 0:
             self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
-            self._cluster_helper.create_default_bucket(master_node, bucket_size, self._num_replicas)
+            self.cluster.create_default_bucket(master_node, bucket_size, self._num_replicas)
             if "default" not in self._existing_bucket_list(self.buckets):
                 self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                     num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
@@ -784,7 +784,7 @@ class XDCRBaseTest(unittest.TestCase):
                       "dbFragmentThresholdPercentage" :  None,
                       "dbFragmentThreshold" : None,
                       "viewFragmntThreshold" : None}
-        self._cluster_helper.modify_fragmentation_config(server, new_config, bucket)
+        self.cluster.modify_fragmentation_config(server, new_config, bucket)
 
     def make_default_views(self, prefix, count, is_dev_ddoc=False,):
         ref_view = self._default_view
@@ -796,10 +796,10 @@ class XDCRBaseTest(unittest.TestCase):
         tasks = []
         if len(views):
             for view in views:
-                t_ = self._cluster_helper.async_create_view(server, design_doc_name, view, bucket)
+                t_ = self.cluster.async_create_view(server, design_doc_name, view, bucket)
                 tasks.append(t_)
         else:
-            t_ = self._cluster_helper.async_create_view(server, design_doc_name, None, bucket)
+            t_ = self.cluster.async_create_view(server, design_doc_name, None, bucket)
             tasks.append(t_)
         return tasks
 
@@ -964,7 +964,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
         gen = copy.deepcopy(kv_gen)
-        task = self._cluster_helper.async_load_gen_docs(server, bucket.name, gen,
+        task = self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                           bucket.kvs[kv_store],
                                                           op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         return task
@@ -974,7 +974,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         buckets = self._get_cluster_buckets(server)
         for bucket in buckets:
             gen = copy.deepcopy(kv_gen)
-            tasks.append(self._cluster_helper.async_load_gen_docs(server, bucket.name, gen,
+            tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                           bucket.kvs[kv_store],
                                                           op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs))
         return tasks
@@ -1029,7 +1029,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         rest = RestConnection(src_server)
         buckets = rest.get_buckets()
         for bucket in buckets:
-            task_info = self._cluster_helper.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store],
+            task_info = self.cluster.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store],
                 ops_perf)
             error_count += task_info.err_count
             tasks.append(task_info)
@@ -1052,7 +1052,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 buckets = self._get_cluster_buckets(servers[0])
                 for server in servers:
                     for bucket in buckets:
-                        tasks.append(self._cluster_helper.async_wait_for_stats([server], bucket, '',
+                        tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                             'ep_queue_size', '==', 0))
                 for task in tasks:
                     task.result(timeout)
@@ -1073,7 +1073,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 tasks = []
                 buckets = self._get_cluster_buckets(server)
                 for bucket in buckets:
-                    tasks.append(self._cluster_helper.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
+                    tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
                 for task in tasks:
                     task.result(timeout)
                 return True
@@ -1096,9 +1096,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 buckets = self._get_cluster_buckets(servers[0])
                 for bucket in buckets:
                     items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
-                    stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
+                    stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                         'curr_items', '==', items))
-                    stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
+                    stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                         'vb_active_curr_items', '==', items))
 
 #                    available_replicas = self._num_replicas
@@ -1107,9 +1107,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 #                    elif len(servers) <= self._num_replicas:
 #                        available_replicas = len(servers) - 1
 #
-#                    stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
+#                    stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
 #                        'vb_replica_curr_items', '==', items * available_replicas))
-#                    stats_tasks.append(self._cluster_helper.async_wait_for_stats(servers, bucket, '',
+#                    stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
 #                        'curr_items_tot', '==', items * (available_replicas + 1)))
 
                 for task in stats_tasks:
@@ -1127,12 +1127,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _async_failover(self, src_nodes, failover_node):
         tasks = []
-        tasks.append(self._cluster_helper.async_failover(src_nodes, failover_node))
+        tasks.append(self.cluster.async_failover(src_nodes, failover_node))
         return tasks
 
     def _async_rebalance(self, src_nodes, to_add_node, to_remove_node):
         tasks = []
-        tasks.append(self._cluster_helper.async_rebalance(src_nodes, to_add_node, to_remove_node))
+        tasks.append(self.cluster.async_rebalance(src_nodes, to_add_node, to_remove_node))
         return tasks
     def _find_cluster_nodes_by_name(self, cluster_name):
         return self._clusters_dic[[k for k, v in self._cluster_names_dic.iteritems() if v == cluster_name][0]]

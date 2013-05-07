@@ -49,7 +49,7 @@ class Rebalance(XDCRReplicationBaseTest):
             self.log.info("==============  rebalanceXDCR cleanup was finished for test #{0} {1} =============="\
                     .format(self._case_number, self._testMethodName))
         finally:
-            self._cluster_helper.shutdown()
+            self.cluster.shutdown()
             self._log_finish(self)
 
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
@@ -374,7 +374,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 for task in tasks:
                     task.result(self._poll_timeout)
                 self.disable_compaction()
-                fragmentation_monitor = self._cluster_helper.async_monitor_view_fragmentation(self.src_master,
+                fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.src_master,
                     prefix + ddoc_name, self.fragmentation_value)
                 # generate load until fragmentation reached
                 while fragmentation_monitor.state != "FINISHED":
@@ -382,11 +382,11 @@ class Rebalance(XDCRReplicationBaseTest):
                     self._load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
                     for view in views:
                         # run queries to create indexes
-                        self._cluster_helper.query_view(self.src_master, prefix + ddoc_name, view.name, query)
-                        self._cluster_helper.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+                        self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
+                        self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
                 fragmentation_monitor.result()
 
-                compaction_task = self._cluster_helper.async_compact_view(self.src_master, prefix + ddoc_name, 'default')
+                compaction_task = self.cluster.async_compact_view(self.src_master, prefix + ddoc_name, 'default')
 
                 result = compaction_task.result()
                 self.assertTrue(result)
@@ -470,8 +470,8 @@ class Rebalance(XDCRReplicationBaseTest):
 
                 while True:
                     for view in views:
-                        self._cluster_helper.query_view(self.src_master, prefix + ddoc_name, view.name, query)
-                        self._cluster_helper.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+                        self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
+                        self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
                     for task in tasks:
                         if task.state != "FINISHED":
                             continue;
@@ -485,10 +485,10 @@ class Rebalance(XDCRReplicationBaseTest):
                 tasks = []
                 for view in views:
                     tasks.append(
-                        self._cluster_helper.async_query_view(self.src_master, prefix + ddoc_name, view.name, query,
+                        self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query,
                             src_buckets[0].kvs[1].__len__()))
                     tasks.append(
-                        self._cluster_helper.async_query_view(self.dest_master, prefix + ddoc_name, view.name, query,
+                        self.cluster.async_query_view(self.dest_master, prefix + ddoc_name, view.name, query,
                             dest_buckets[0].kvs[1].__len__()))
 
                 for task in tasks:
