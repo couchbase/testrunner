@@ -11,7 +11,7 @@ from rabbit_helper import PersistedMQ, RabbitHelper, rawTaskPublisher
 from app.workload_manager import Workload, sysTestRunner, getClusterStat, replace_magic_vars
 
 from app.query import QueryWorkload
-from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance, perform_bucket_create_tasks, perform_view_tasks, perform_xdcr_tasks
+from app.rest_client_tasks import perform_admin_tasks, perform_xdcr_tasks, create_ssh_conn, monitorRebalance, perform_bucket_create_tasks, perform_view_tasks, perform_xdcr_tasks, perform_teardown_tasks
 from celery.utils.log import get_task_logger
 from cbsystest import getResponseQueue
 
@@ -267,7 +267,8 @@ def runPhase(phase, rcq = None):
     if rcq is not None:
         runPhase.rabbitHelper.putMsg(rcq, runPhase.request.id)
 
-    ddocs = workload = workloadIds = cluster = query = queryIds = buckets = xdcr = None
+    ddocs = workload = workloadIds = cluster = query = queryIds =\
+        buckets = xdcr = teardown = None
     docTemplate = "default"
     rebalance_required = False
 
@@ -295,6 +296,8 @@ def runPhase(phase, rcq = None):
         ddocs = phase['ddocs']
     if 'xdcr' in phase:
         xdcr = phase['xdcr']
+    if 'teardown' in phase:
+        teardown = phase['teardown']
 
     logger.error('\n')
     logger.error("Running Phase: %s (%s)" % (name, desc))
@@ -319,6 +322,9 @@ def runPhase(phase, rcq = None):
 
     if query is not None:
         queryIds = activateQueries(query)
+
+    if teardown is not None:
+        perform_teardown_tasks(teardown)
 
     # monitor phase
     phase_status = monitorPhase(runTime, workloadIds, rebalance_required, queryIds)

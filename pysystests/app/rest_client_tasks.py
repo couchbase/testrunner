@@ -119,6 +119,7 @@ def _send_msg(message):
     sdk_client = eventlet.connect((SDK_IP, SDK_PORT))
     sdk_client.sendall(json.dumps(message))
 
+
 @celery.task
 def perform_bucket_create_tasks(bucketMsg):
     rest = create_rest()
@@ -564,3 +565,52 @@ def create_ssh_conn(server_ip = '', port=22, username = cfg.SSH_USER,
     node = _dict_to_obj(serverInfo)
     shell = RemoteMachineShellConnection(node)
     return shell, node
+
+
+def perform_teardown_tasks(teardownMsg, rest = None):
+
+    rest  = rest or create_rest()
+    if "ddocs" in teardownMsg:
+        teardown_ddocs(teardownMsg["ddocs"], rest)
+
+    if "buckets" in teardownMsg:
+        teardown_buckets(teardownMsg["buckets"], rest)
+
+    if "xdcr_dest_clusters" in teardownMsg:
+        teardown_xdcr(teardownMsg["xdcr_dest_clusters"])
+
+
+def teardown_ddocs(ddocList, rest = None):
+
+    rest = rest or create_rest()
+    for ddoc in ddocList:
+        try:
+            bucket_name, ddoc = filter(None, ddoc.split('/'))
+            bucket = rest.get_bucket(bucket_name)
+            rest._delete_design_doc(bucket, ddoc)
+        except ValueError:
+            logger.error("Invalid syntax: %s " % (args))
+        except Exception:
+            pass # ddoc already deleted
+
+
+def teardown_buckets(bucketList, rest = None):
+
+    rest = rest or create_rest()
+    for bucket in bucketList:
+        rest.delete_bucket(bucket)
+
+
+def teardown_xdcr(xdcrClusters, rest = None):
+    rest = rest or create_rest()
+
+    try:
+        # stop all replications
+        rest.remove_all_replications()
+
+        # unpair select sites
+        for cluster in xdcrClusters:
+            rest.remove_remote_cluster(cluster)
+
+    except Exception:
+        pass # xdcr done
