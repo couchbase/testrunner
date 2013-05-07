@@ -681,6 +681,7 @@ def replace_magic_vars(str_):
     str_  = str_.replace("$"+ref, str(value))
     return str_
 
+    logger.error(clusterStatus.get_all_hosts())
 """
 " object used to keep track of active nodes in a cluster
 """
@@ -703,9 +704,9 @@ class ClusterStatus(object):
         return ["%s:%s" % (node.ip, node.port) for node in self.nodes]
 
     def get_available_hosts(self):
-        if 'ips' in cfg.CLUSTER:
-            return ["%s:%s" % (ip.split(':')[0], ip.split(';')[1] if len(ip.split(':'))>1
-                               else cfg.COUCHBASE_PORT) for ip in cfg.CLUSTER['ips'].split()]
+        if len(cfg.CLUSTER_IPS) > 0:
+            return ["%s:%s" % (ip.split(':')[0], ip.split(':')[1] if len(ip.split(':'))>1
+                               else cfg.COUCHBASE_PORT) for ip in cfg.CLUSTER_IPS]
         return []
 
     def get_random_host(self):

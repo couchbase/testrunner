@@ -14,18 +14,27 @@ WORKERS = ['127.0.0.1']
 # valid configs ["kv","query","admin"] or ["all"]
 WORKER_CONFIGS = ["kv"]
 CB_CLUSTER_TAG = "default"
-#tags used for workers controlling remote clusters (xdcr use case)
-#For example, 2 dest clusters for xdcr then TAG = ["remote1", "remote2"]
-CB_REMOTE_CLUSTER_TAG = []
-ATOP_LOG_FILE = "/tmp/atop-node.log"
+
+# CHANGE THIS! to match all clusters will be managed by this worker
+CLUSTER_IPS = ["127.0.0.1:9000","127.0.0.1:9001","127.0.0.1:9002","127.0.0.1:9003"]
+
+# xdcr config
+"""
+" pointer information to remote sites
+" remote1 = name for remote site
+" RABBITMQ_IP = broker managing remote site (can be same as local broker if using different vhosts)
+"               this should equal RABBITMQ_IP of remote site
+" CB_CLUSTER_TAG = represents vhost watched by workers remote site.
+"                  this should equal CB_CLUSTER_TAG of remote site
+" COUCHBASE_IP/PORT = IP/PORT of a couchbase node in remote site
+"""
+REMOTE_SITES = {"remote1" : {"RABBITMQ_IP" : "10.0.0.5",
+                             "CB_CLUSTER_TAG" : "default",
+                             "COUCHBASE_IP" : "10.0.0.10",
+                             "COUCHBASE_PORT" : "9000"}}
+
 LOGDIR="logs"  # relative to current dir
 
-#Cluster Config
-#If you have multiple cluster to setup (xdcr use case), 'initial_nodes' should be a multiple value
-#string seperated by ','. For example, 2 clusters to setup, 1 src, 1 dest, 'initial_nodes': '2,3'
-CLUSTER = {'ini':'pysystests/cluster.ini', 'sasl_buckets':0, 'standard_buckets':0, 'default_bucket':False,
-           'default_mem_quota':12000, 'sasl_mem_quota':7000, 'xdcr':False, 'initial_nodes': "1",
-           'ips': '127.0.0.1'}
 
 #Backup Config
 ENABLE_BACKUPS = False

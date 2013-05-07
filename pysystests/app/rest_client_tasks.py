@@ -333,25 +333,32 @@ def monitorRebalance():
 def perform_xdcr_tasks(xdcrMsg):
     logger.error(xdcrMsg)
     src_master = create_server_obj()
-    remote_id = ''
-    if len(cfg.CB_REMOTE_CLUSTER_TAG) > 0:
-        remote_id = cfg.CB_REMOTE_CLUSTER_TAG[0]+"_status"
-    else:
-        logger.error("No remote cluster tag. Can not create xdcr")
-        return
-    clusterStatus = CacheHelper.clusterstatus(remote_id) or ClusterStatus(remote_id)
-    remote_ip = clusterStatus.get_random_host().split(":")[0]
+    remoteHost = None
+    remotePort = 8091
 
-    dest_master = create_server_obj(server_ip=remote_ip, username=xdcrMsg['dest_cluster_rest_username'],
+    # dest_cluster_name is used as remoteRef
+    dest_cluster_name = remoteRef = str(xdcrMsg['dest_cluster_name'])
+
+    if "COUCHBASE_IP" in cfg.REMOTE_SITES[remoteRef]:
+        remote_ip = cfg.REMOTE_SITES[remoteRef]["COUCHBASE_IP"]
+        if "COUCHBASE_PORT" in cfg.REMOTE_SITES[remoteRef]:
+            remote_port = cfg.REMOTE_SITES[remoteRef]["COUCHBASE_PORT"]
+    else:
+        logger.error("Cannot find remote site %s in testcfg.REMOTE_SITES: " % (remoteRef))
+        return
+
+    dest_master = create_server_obj(server_ip=remote_ip, port=remote_port,
+                                    username=xdcrMsg['dest_cluster_rest_username'],
                                     password=xdcrMsg['dest_cluster_rest_pwd'])
-    dest_cluster_name = xdcrMsg['dest_cluster_name']
     xdcr_link_cluster(src_master, dest_master, dest_cluster_name)
-    xdcr_start_replication(src_master, dest_cluster_name)
+
+    buckets = xdcrMsg.get("buckets")
+    xdcr_start_replication(src_master, dest_cluster_name, buckets)
 
     if xdcrMsg['replication_type'] == "bidirection":
         src_cluster_name = dest_cluster_name + "_temp"
         xdcr_link_cluster(dest_master, src_master, src_cluster_name)
-        xdcr_start_replication(dest_master, src_cluster_name)
+        xdcr_start_replication(dest_master, src_cluster_name, buckets)
 
 def xdcr_link_cluster(src_master, dest_master, dest_cluster_name):
     rest_conn_src = RestConnection(src_master)
@@ -359,12 +366,13 @@ def xdcr_link_cluster(src_master, dest_master, dest_cluster_name):
                                  dest_master.rest_username,
                                  dest_master.rest_password, dest_cluster_name)
 
-def xdcr_start_replication(src_master, dest_cluster_name):
+def xdcr_start_replication(src_master, dest_cluster_name, bucketFilter = None):
         rest_conn_src = RestConnection(src_master)
         for bucket in rest_conn_src.get_buckets():
-            (rep_database, rep_id) = rest_conn_src.start_replication("continuous",
-                                                                     bucket.name, dest_cluster_name)
-            logger.error("rep_database: %s rep_id: %s" % (rep_database, rep_id))
+            if bucketFilter is None or bucket.name in bucketFilter:
+                (rep_database, rep_id) = rest_conn_src.start_replication("continuous",
+                                                                         bucket.name, dest_cluster_name)
+                logger.error("rep_database: %s rep_id: %s" % (rep_database, rep_id))
 
 def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     if servers.find('.') != -1 or servers == '':

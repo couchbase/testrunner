@@ -148,7 +148,8 @@ def parseRemotePhases(phase):
     for task in phase:
 
         if isinstance(phase[task], dict) and 'remote' in phase[task]:
-            remoteIP = phase[task]['remote']
+            remoteRef = str(phase[task]['remote'])
+            remoteIP = cfg.REMOTE_SITES[remoteRef]["RABBITMQ_IP"]
 
             # create remote if remote phase spec if necessary
             if  remoteIP not in remotePhaseMap:
@@ -177,7 +178,9 @@ def parseRemotePhases(phase):
             for phase_task_spec in phase[task]:
 
                 if 'remote' in phase_task_spec:
-                    remoteIP = phase_task_spec['remote']
+                    remoteRef = str(phase_task_spec['remote'])
+                    remoteIP = cfg.REMOTE_SITES[remoteRef]["RABBITMQ_IP"]
+
                     if  remoteIP not in remotePhaseMap:
                         remotePhase = { 'name' : 'remote_' + phase.get('name') or\
                                                  'remote_phase',
