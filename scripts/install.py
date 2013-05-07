@@ -305,11 +305,12 @@ class CouchbaseServerInstaller(Installer):
         remote_client = RemoteMachineShellConnection(params["server"])
         while time.time() < start_time + 5 * 60:
             try:
+                rest = RestConnection(server)
+
                 # Optionally change node name and restart server
                 if params.get('use_domain_names', 0):
                     remote_client.set_node_name(server.ip)
-
-                rest = RestConnection(server)
+                    rest.rename_node(server.ip)
 
                 # Make sure that data_path and index_path are writable by couchbase user
                 for path in set(filter(None, [server.data_path, server.index_path])):

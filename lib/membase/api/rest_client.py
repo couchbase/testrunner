@@ -325,6 +325,22 @@ class RestConnection(object):
             print("{0}: {1}".format(api, content))
             return content, False
 
+    def rename_node(self, hostname, username='Administrator', password='password', port='8091'):
+        if not hostname:
+            return ""
+
+        params = urllib.urlencode({'username': username,
+                                   'password': password,
+                                   'hostname': hostname})
+
+        api = "%s%s" % (self.baseUrl, 'node/controller/rename')
+
+        try:
+            status, content, header = self._http_request(api, 'POST', params)
+            return json.loads(content)
+        except ValueError:
+            return ""
+
     def active_tasks(self):
         api = self.capiBaseUrl + "_active_tasks"
         try:
