@@ -463,7 +463,7 @@ class XDCRBaseTest(unittest.TestCase):
                                         master_id=server_id))
 
         for task in bucket_tasks:
-            task.result()
+            task.result(self._timeout * 10)
 
     def _create_standard_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
@@ -479,7 +479,7 @@ class XDCRBaseTest(unittest.TestCase):
                                         port=11214 + i, master_id=server_id))
 
         for task in bucket_tasks:
-            task.result()
+            task.result(self._timeout * 10)
 
     def _create_buckets(self, nodes):
         if self._dgm_run_bool:

@@ -187,7 +187,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def create_default_bucket(self, server, size, replicas=1, timeout=None):
+    def create_default_bucket(self, server, size, replicas=1, timeout=600):
         """Synchronously creates the default bucket
 
         Parameters:
@@ -446,7 +446,7 @@ class Cluster(object):
             list of MonitorActiveTask - A task future that is a handle to the scheduled task."""
         _tasks = []
         if type(servers) != types.ListType:
-            servers = [servers,]
+            servers = [servers, ]
         for server in servers:
             _task = MonitorActiveTask(server, type_task, target_value, wait_progress, num_iteration, wait_task)
             self.task_manager.schedule(_task)

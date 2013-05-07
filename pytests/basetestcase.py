@@ -217,7 +217,7 @@ class BaseTestCase(unittest.TestCase):
                                        num_replicas=self.num_replicas, bucket_size=bucket_size,
                                        master_id=server_id));
         for task in bucket_tasks:
-            task.result()
+            task.result(self.wait_timeout * 10)
 
     def _create_standard_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
@@ -237,7 +237,7 @@ class BaseTestCase(unittest.TestCase):
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size, port=11214 + i, master_id=server_id));
         for task in bucket_tasks:
-            task.result()
+            task.result(self.wait_timeout * 10)
 
     def _create_memcached_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
