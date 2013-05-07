@@ -43,20 +43,17 @@ def systestManager(testQueue = "systest_manager_default"):
                     # read test from local worker filesystem
                     testMsg = loadTestFromFile(testMsg["localtestname"], suffix)
 
-                    if "runlist" in testMsg:
+                if "runlist" in testMsg:
 
-                        # handle runlist
-                        for test in testMsg['runlist']:
-                            testMsg = loadTestFromFile(test, suffix)
-                            testMsg['loop'] = False
-                            launchSystest(testMsg)
-
-                    elif testMsg is not None:
-
-                        # run local standalone
+                    # handle runlist
+                    for test in testMsg['runlist']:
+                        testMsg = loadTestFromFile(test, suffix)
+                        testMsg['loop'] = False
                         launchSystest(testMsg)
-                else:
-                    # run remote standalone
+
+                elif testMsg is not None:
+
+                    # run local standalone
                     launchSystest(testMsg)
 
             except KeyError:
