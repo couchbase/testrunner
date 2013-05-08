@@ -475,9 +475,9 @@ class BaseTestCase(unittest.TestCase):
             self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)] = {}
             self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["uptime"] = mc_conn.stats("")["uptime"]
             self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"] = mc_conn.stats("")["curr_items_tot"]
+            self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["curr_items"] = mc_conn.stats("")["curr_items"]
             for stat_to_monitor in self.stats_monitor:
                 self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)][stat_to_monitor] = mc_conn.stats(self.stat_str)[stat_to_monitor]
-                self.log.info("memcached %s:%s has %s value %s for bucket %s" % (server.ip, server.port, stat_to_monitor , mc_conn.stats(self.stat_str)[stat_to_monitor], bucket_name))
             mc_conn.close()
 
     def _kill_nodes(self, nodes, bucket_name):

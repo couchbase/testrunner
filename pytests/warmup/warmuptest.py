@@ -47,44 +47,39 @@ class WarmUpTests(BaseTestCase):
         for bucket in self.buckets:
             for server in self.servers:
                 start = time.time()
-                # Try to get the stats for 5 minutes, else hit out.
-                if server == self.servers[0]:
-                    wait_time = 300
-                else:
-                    wait_time = 60
+                warmup_complete = False
 
-                while time.time() - start < wait_time:
-                # Get the wamrup time for each server
+                while not warmup_complete:
                     try:
+                        if stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_thread')[server] == "complete":
+                            self.log.info("warmup completed for %s in bucket %s" % (server.ip, bucket.name))
+                            warmup_complete = True
+                        elif stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_thread')[server] == "running":
+                            self.log.info("warming up is still running for %s in bucket %s....curr_items_tot : %s" %
+                                          (server.ip, bucket.name, stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server]))
+
                         warmup_time = int(stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_time')[server])
                         if warmup_time is not None:
                             self.log.info("ep_warmup_time is %s for %s in bucket %s" % (warmup_time, server.ip, bucket.name))
-                            break
-                        else:
-                            self.log.info(" Did not get the stats from the server yet, trying again.....")
-                            time.sleep(2)
                     except Exception as e:
                         self.log.error("Could not get warmup_time stats from server %s:%s, exception %s" % (server.ip, server.port, e))
 
-                # Waiting for warm-up
                 start = time.time()
                 while time.time() - start < self.timeout and not warmed_up[bucket.name][server]:
-                    if stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_thread')[server] == "complete":
-                        self.log.info("warmup completed for %s in bucket %s" % (server.ip, bucket.name))
-                        time.sleep(5)
-                        if stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server] == \
-                           self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]:
-                            self._stats_report(server, bucket.name, stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup')[server])
+                    if stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server] == \
+                        self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]:
+                        if stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items')[server] == \
+                           self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items"]:
+                            self._stats_report(server, bucket, stats_all_buckets[bucket.name])
                             warmed_up[bucket.name][server] = True
                         else:
-                            self.log.info("curr_items_tot is %s not equal to %s" % (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server],
-                                                                                   self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]))
+                            self.log.info("curr_items is %s not equal to %s" % (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items')[server],
+                                                                                    self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items"]))
+                    else:
+                        self.log.info("curr_items_tot is %s not equal to %s" % (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server],
+                                                                            self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]))
 
-                    elif stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_thread')[server] == "running":
-                        self.log.info("warming up is still running for %s in bucket %s....curr_items_tot : %s" %
-                                      (server.ip, bucket.name, stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server]))
-
-                    time.sleep(5)
+                    time.sleep(10)
 
         for bucket in self.buckets:
             for server in self.servers:
@@ -94,23 +89,26 @@ class WarmUpTests(BaseTestCase):
                     return False
         return True
 
-    def _stats_report(self, server, bucket_name, after_warmup_stat):
+    def _stats_report(self, server, bucket, after_warmup_stats):
         self.log.info("******** Stats before Warmup **********")
-        for key, value in self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)].iteritems():
-            self.log.info("%s on, %s:%s is %s for bucket %s" % (key, server.ip, server.port, value, bucket_name))
+        for key, value in self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)].iteritems():
+            self.log.info("%s on %s:%s is %s for bucket %s" % (key, server.ip, server.port, value, bucket.name))
 
         self.log.info("******** Stats after Warmup **********")
-        for key, value in after_warmup_stat.iteritems():
-                self.log.info("%s on, %s:%s is %s" % (key, server.ip, server.port, value))
+        self.log.info("uptime on, %s:%s is %s for bucket %s" % (server.ip, server.port, after_warmup_stats.get_stats([server], bucket, '', 'uptime')[server], bucket.name))
+        self.log.info("curr_items on, %s:%s is %s for bucket %s" % (server.ip, server.port, after_warmup_stats.get_stats([server], bucket, '', 'curr_items')[server], bucket.name))
+        self.log.info("curr_items_tot, %s:%s is %s for bucket %s" % (server.ip, server.port, after_warmup_stats.get_stats([server], bucket, '', 'curr_items_tot')[server], bucket.name))
+        for key in self.stats_monitor:
+                self.log.info("%s on, %s:%s is %s for bucket %s" % (key, server.ip, server.port, after_warmup_stats.get_stats([server], bucket, self.stat_str, key)[server], bucket.name))
 
     def _wait_for_access_run(self, access_log_time, access_scanner_runs, server, bucket, bucket_stats):
         access_log_created = False
-        new_scanner_run = int(bucket_stats.get_stats([server], bucket, '', 'ep_num_access_scanner_runs')[server])
         time.sleep(access_log_time * 60)
-        self.log.info("new access scanner run is %s for %s in bucket %s" % (new_scanner_run, server.ip, bucket.name))
+        new_scanner_run = int(bucket_stats.get_stats([server], bucket, '', 'ep_num_access_scanner_runs')[server])
         count = 0
         while not access_log_created and count < 5:
-            if new_scanner_run <= int(access_scanner_runs):
+            self.log.info("new access scanner run is %s times for %s in bucket %s" % (new_scanner_run, server.ip, bucket.name))
+            if int(new_scanner_run) <= int(access_scanner_runs):
                 count += 1
                 time.sleep(5)
                 new_scanner_run = int(bucket_stats.get_stats([server], bucket, '', 'ep_num_access_scanner_runs')[server])
@@ -172,12 +170,12 @@ class WarmUpTests(BaseTestCase):
             stats_all_buckets[bucket.name] = StatsCommon()
 
         for bucket in self.buckets:
-            scanner_runs_all_servers = stats_all_buckets[bucket.name].get_stats(self.servers, bucket, '', 'ep_num_access_scanner_runs')
             for server in self.servers:
-                self.log.info("current access scanner run for %s in bucket %s is %s times" % (server.ip, bucket.name, scanner_runs_all_servers[server]))
+                scanner_runs = stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'ep_num_access_scanner_runs')[server]
+                self.log.info("current access scanner run for %s in bucket %s is %s times" % (server.ip, bucket.name, scanner_runs))
                 self.log.info("setting access scanner time %s minutes for %s in bucket %s" % (self.access_log_time, server.ip, bucket.name))
                 ClusterOperationHelper.flushctl_set(server, "alog_sleep_time", self.access_log_time , bucket.name)
-                if not self._wait_for_access_run(self.access_log_time, scanner_runs_all_servers[server], server, bucket, stats_all_buckets[bucket.name]):
+                if not self._wait_for_access_run(self.access_log_time, scanner_runs, server, bucket, stats_all_buckets[bucket.name]):
                     self.fail("Not able to create access log within %s minutes" % self.access_log_time)
 
     def warmup_with_access_log(self):
@@ -185,6 +183,8 @@ class WarmUpTests(BaseTestCase):
 
         # wait for draining of data before restart and warmup
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        self._verify_stats_all_buckets(self.servers[:self.num_servers])
+
         for bucket in self.buckets:
             self._stats_befor_warmup(bucket.name)
 
@@ -195,8 +195,11 @@ class WarmUpTests(BaseTestCase):
 
         if self._warmup_check():
             generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-            if("delete" in self.doc_ops) or ("expire" in self.doc_ops):
-                self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if self.doc_ops is not None:
+                if "delete" in self.doc_ops or "expire" in self.doc_ops:
+                    self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                else:
+                    self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             else:
                 self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
         else:
@@ -204,13 +207,7 @@ class WarmUpTests(BaseTestCase):
 
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
-        rest = RestConnection(self.servers[0])
-        self.nodes_server = rest.get_nodes()
-        self._wait_for_stats_all_buckets(self.nodes_server)
-        self._stats_befor_warmup()
-        time.sleep(120)
-        self._restart_memcache()
-        self._warmup()
+
 
     def test_restart_node_with_full_disk(self):
         def _get_disk_usage_percentage(remote_client):
