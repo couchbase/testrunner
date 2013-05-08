@@ -681,7 +681,6 @@ def replace_magic_vars(str_):
     str_  = str_.replace("$"+ref, str(value))
     return str_
 
-    logger.error(clusterStatus.get_all_hosts())
 """
 " object used to keep track of active nodes in a cluster
 """
@@ -756,7 +755,7 @@ class ClusterStatus(object):
                time.sleep(5)
 
                # select random node and retry
-               ref_node = self.nodes[random.randint(0, len(self.nodes))]
+               ref_node = self.nodes[random.randint(0, len(self.nodes) - 1)]
                retry = retry - 1
                return self.update_orchestrator(ref_node, retry)
 

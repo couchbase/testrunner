@@ -315,6 +315,8 @@ def runPhase(phase, rcq = None):
         perform_xdcr_tasks(xdcr)
 
     if cluster is not None:
+        if isinstance(cluster, list):
+            cluster = cluster[0] # there can only be one cluster task-per-site
 
         clusterMsg = parseClusterReq(cluster)
         perform_admin_tasks(clusterMsg)
