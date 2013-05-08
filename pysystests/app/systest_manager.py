@@ -106,6 +106,7 @@ def launchSystest(testMsg):
 
         # parse remote phases from local phase
         remote_phases, new_local_phase = parseRemotePhases(phase)
+
         remotePhaseIds = []
         if len(remote_phases) > 0:
 
@@ -385,9 +386,16 @@ def activateQueries(query):
 
     queryIds = []
 
+    if isinstance(query, dict):
+        query = query['spec']
+
     if isinstance(query, list):
         # multi-query support
         for paramStr in query:
+
+            if isinstance(paramStr, dict):
+                paramStr = paramStr['spec']
+
             params = parseQueryStr(paramStr)
             qid =_activateQueries(params)
             queryIds.append(qid)
