@@ -107,6 +107,37 @@ class RebalanceProgressTests(RebalanceBaseTest):
             time.sleep(1)
         rebalance.result()
 
+    def test_progress_add_back_after_failover(self):
+        servers_init = self.servers[:self.nodes_init]
+        servers_failover = self.servers[(self.nodes_init - self.nodes_out) : self.nodes_init]
+        servers_unchanged = self.servers[:(self.nodes_init - self.nodes_out)]
+        nodes_all = self.rest.node_statuses()
+
+        failover_nodes = []
+        for failover_server in servers_failover:
+            failover_nodes.extend(filter(lambda node: node.ip == failover_server.ip and \
+                                         str(node.port) == failover_server.port, nodes_all))
+        self.cluster.failover(servers_init, servers_failover)
+        for node in failover_nodes:
+            self.rest.add_back_node(node.id)
+
+        rebalance = self.cluster.async_rebalance(servers_init, [], [])
+        self.sleep(5, "wait for rebalance start")
+        previous_stats = self._get_detailed_progress()
+        while rebalance.state != "FINISHED":
+            new_stats = self._get_detailed_progress()
+            if new_stats == {}:
+                self.log.info("Got empty progress")
+                break
+            #vbuckets left should go decreasing
+            #docsTotal should not change
+            #docsTransferred should go increasing
+            self._check_stats(servers_unchanged, previous_stats, new_stats, "outgoing")
+            self._check_stats(servers_failover, previous_stats, new_stats, "ingoing")
+            previous_stats = copy.deepcopy(new_stats)
+            time.sleep(1)
+        rebalance.result()
+
     def _check_vb_sums(self, servers_ingoing, servers_outgoing, new_stats):
         active_vb_sum_1 = sum([new_stats[server.ip]["ingoing"]['activeVBucketsLeft'] for server in servers_ingoing])
         active_vb_sum_2 = sum([new_stats[server.ip]["outgoing"]['activeVBucketsLeft'] for server in servers_outgoing])
