@@ -15,8 +15,11 @@ class BucketFlushTests(BaseTestCase):
         self.data_op = self.input.param("data_op", "create")
         self.use_ascii = self.input.param("use_ascii", "False")
         self.gen_create = BlobGenerator('bucketflush', 'bucketflush-', self.value_size, end=self.num_items)
-
-        self.default_test_setup()
+        try:
+            self.default_test_setup()
+        except Exception, e:
+            self.cluster.shutdown()
+            self.fail(e)
 
     def tearDown(self):
         super(BucketFlushTests, self).tearDown()
