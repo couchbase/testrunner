@@ -294,6 +294,9 @@ class RebalanceTask(Task):
         progress = -100
         try:
             progress = self.rest._rebalance_progress()
+            # if ServerUnavailableException
+            if progress == -100:
+                self.retry_get_progress += 1
         except RebalanceFailedException as ex:
             self.state = FINISHED
             self.set_exception(ex)
