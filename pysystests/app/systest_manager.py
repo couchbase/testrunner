@@ -147,6 +147,7 @@ def parseRemotePhases(phase):
 
     for task in phase:
 
+
         if isinstance(phase[task], dict) and 'remote' in phase[task]:
             remoteRef = str(phase[task]['remote'])
             remoteIP = cfg.REMOTE_SITES[remoteRef]["RABBITMQ_IP"]
@@ -156,7 +157,10 @@ def parseRemotePhases(phase):
                 remotePhase = { 'name' : 'remote_' + phase.get('name') or 'remote_phase',
                                 'desc' : 'remote_' + phase.get('desc') or 'remote_phase_description',
                                 'runtime' : phase.get('runtime') or 10}
-                remotePhaseMap[remoteIP] = remotePhase
+            else:
+                remotePhase = remotePhaseMap[remoteIP]
+
+            remotePhaseMap[remoteIP] = remotePhase
 
             # delete the 'remote' tag from this task
             del phase[task]['remote']
@@ -188,8 +192,12 @@ def parseRemotePhases(phase):
                                                  'remote_phase_description',
                                         'runtime' : phase.get('runtime') or 10,
                                         task : []}
+                    else:
+                        remotePhase = remotePhaseMap[remoteIP]
+                        if task not in remotePhase:
+                            remotePhase[task] = []
 
-                        remotePhaseMap[remoteIP] = remotePhase
+                    remotePhaseMap[remoteIP] = remotePhase
 
                     # delete the 'remote' tag from this task spec
                     del phase_task_spec['remote']
