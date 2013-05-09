@@ -56,22 +56,23 @@ class CBRbaseclass(XDCRReplicationBaseTest):
 
         return failover_count
 
-    def wait_for_catchup(self, servers, bucket):
+    def wait_for_catchup(self, _healthy_, _compromised_, bucket):
         start = time.time()
         _flag = False
-        while time.time() - start < 300:
-            _items = 0
-            for server in servers:
-                mc = MemcachedClientHelper.direct_client(server, bucket)
-                _items += int(mc.stats()["curr_items"])
-                mc.close()
-            if _items == int(self._num_items):
+        rest1 = RestConnection(_healthy_)
+        rest2 = RestConnection(_compromised_)
+        while time.time() - start < 180:
+            _count1 = rest1.fetch_bucket_stats(bucket=bucket)["op"]["samples"]["curr_items"][-1]
+            _count2 = rest2.fetch_bucket_stats(bucket=bucket)["op"]["samples"]["curr_items"][-1]
+            if _count1 == _count2:
+                self.log.info("Cbrecovery caught up .. {0} == {1}".format(_count1, _count2))
                 _flag = True
                 break
+            self.log.info("Waiting for cbrecovery to catch up .. {0} != {1}".format(_count1, _count2))
             self.sleep(self._timeout)
         return _flag
 
-    def cbr_routine(self, _healthy_, _compromised_, _compromised_cluster):
+    def cbr_routine(self, _healthy_, _compromised_):
         shell = RemoteMachineShellConnection(_healthy_)
         info = shell.extract_remote_info()
         _ssh_client = paramiko.SSHClient()
@@ -94,13 +95,13 @@ class CBRbaseclass(XDCRReplicationBaseTest):
             _ssh_client.exec_command(command)
             self.sleep(self._timeout)
 
-            _check = self.wait_for_catchup(_compromised_cluster, bucket.name)
-            max_attempts = 1
+            _check = self.wait_for_catchup(_healthy_, _compromised_, bucket.name)
+            _attempts = 1
             while not _check:
-                max_attempts += 1
+                _attempts += 1
                 _ssh_client.exec_command(command)
-                _check = self.wait_for_catchup(_compromised_cluster, bucket.name)
-                if max_attempts > 4:
+                _check = self.wait_for_catchup(_healthy_, _compromised_, bucket.name)
+                if _attempts > 4:
                     self.log.error("Cbrecovery didn't complete in time, ending test ..")
                     rest = RestConnection(_compromised_)
                     rest.remove_all_recoveries()
@@ -265,7 +266,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.src_nodes.extend(add_nodes)
                 self.sleep(self._timeout / 4)
                 # CALL THE CBRECOVERY ROUTINE
-                self.cbr_routine(self.dest_master, self.src_master, self.src_nodes)
+                self.cbr_routine(self.dest_master, self.src_master)
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
@@ -296,7 +297,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.dest_nodes.extend(add_nodes)
                 self.sleep(self._timeout / 4)
                 # CALL THE CBRECOVERY ROUTINE
-                self.cbr_routine(self.src_master, self.dest_master, self.dest_nodes)
+                self.cbr_routine(self.src_master, self.dest_master)
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
@@ -364,7 +365,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.src_nodes.extend(add_nodes)
                 self.sleep(self._timeout / 4)
                 # CALL THE CBRECOVERY ROUTINE
-                self.cbr_routine(self.dest_master, self.src_master, self.src_nodes)
+                self.cbr_routine(self.dest_master, self.src_master)
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
@@ -399,7 +400,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.dest_nodes.extend(add_nodes)
                 self.sleep(self._timeout / 4)
                 # CALL THE CBRECOVERY ROUTINE
-                self.cbr_routine(self.src_master, self.dest_master, self.dest_nodes)
+                self.cbr_routine(self.src_master, self.dest_master)
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
@@ -468,7 +469,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.src_nodes.extend(add_nodes)
                 # CALL THE CBRECOVERY ROUTINE
-                self.cbr_routine(self.dest_master, self.src_master, self.src_nodes)
+                self.cbr_routine(self.dest_master, self.src_master)
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
@@ -501,7 +502,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.dest_nodes.extend(add_nodes)
                 # CALL THE CBRECOVERY ROUTINE
-                self.cbr_routine(self.src_master, self.dest_master, self.dest_nodes)
+                self.cbr_routine(self.src_master, self.dest_master)
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
