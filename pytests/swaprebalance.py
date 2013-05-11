@@ -150,7 +150,7 @@ class SwapRebalanceBase(unittest.TestCase):
     @staticmethod
     def items_verification(test, master):
         rest = RestConnection(master)
-        #Verify items count across all node
+        # Verify items count across all node
         timeout = 600
         for bucket in rest.get_buckets():
             verified = RebalanceHelper.wait_till_total_numbers_match(master, bucket.name, timeout_in_seconds=timeout)
@@ -242,7 +242,8 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
-        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
+        status, servers_rebalanced = RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
+        self.assertTrue(status, msg="Rebalance was failed")
 
         self.log.info("DATA LOAD PHASE")
         self.loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -331,7 +332,8 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
-        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
+        status, servers_rebalanced = RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
+        self.assertTrue(status, msg="Rebalance was failed")
 
         self.log.info("DATA LOAD PHASE")
         self.loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -378,7 +380,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(self.percentage_progress))
         reached = RestHelper(rest).rebalance_reached(self.percentage_progress)
         if reached == 100 and not RestHelper(rest).is_cluster_rebalanced():
-            #handle situation when rebalance failed at the beginning
+            # handle situation when rebalance failed at the beginning
             self.log.error('seems rebalance failed!')
             self.log.info("Latest logs from UI:")
             for i in rest.get_logs(): self.log.error(i)
@@ -412,11 +414,11 @@ class SwapRebalanceBase(unittest.TestCase):
         if not self.swap_orchestrator:
             ClusterOperationHelper._wait_warmup_completed(self, [master], bucket, wait_time=600)
         i = 0
-        #we expect that rebalance will be failed
+        # we expect that rebalance will be failed
         try:
             rest.monitorRebalance()
         except RebalanceFailedException:
-            #retry rebalance if it failed
+            # retry rebalance if it failed
             self.log.warn("Rebalance failed but it's expected")
             SwapRebalanceBase.sleep(self, 30)
             self.assertFalse(RestHelper(rest).is_cluster_rebalanced(), msg="cluster need rebalance")
@@ -441,7 +443,8 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all servers
         self.log.info("INITIAL REBALANCE PHASE")
-        RebalanceHelper.rebalance_in(self.servers, len(self.servers) - 1)
+        status, servers_rebalanced = RebalanceHelper.rebalance_in(self.servers, len(self.servers) - 1)
+        self.assertTrue(status, msg="Rebalance was failed")
 
         self.log.info("DATA LOAD PHASE")
         self.loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -477,7 +480,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.log.info("DATA ACCESS PHASE")
         self.loaders = SwapRebalanceBase.start_access_phase(self, master)
 
-        #Failover selected nodes
+        # Failover selected nodes
         for node in optNodesIds:
             self.log.info("failover node {0} and rebalance afterwards".format(node))
             rest.fail_over(node)
@@ -490,8 +493,8 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Add back the same failed over nodes
 
-        #Cleanup the node, somehow
-        #TODO: cluster_run?
+        # Cleanup the node, somehow
+        # TODO: cluster_run?
         if do_node_cleanup:
             pass
 
@@ -534,7 +537,8 @@ class SwapRebalanceBase(unittest.TestCase):
 
         # Cluster all starting set of servers
         self.log.info("INITIAL REBALANCE PHASE")
-        RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
+        status, servers_rebalanced = RebalanceHelper.rebalance_in(intial_severs, len(intial_severs) - 1)
+        self.assertTrue(status, msg="Rebalance was failed")
 
         self.log.info("DATA LOAD PHASE")
         self.loaders = SwapRebalanceBase.start_load_phase(self, master)
@@ -554,7 +558,7 @@ class SwapRebalanceBase(unittest.TestCase):
             optNodesIds[0] = content
 
         self.log.info("FAILOVER PHASE")
-        #Failover selected nodes
+        # Failover selected nodes
         for node in optNodesIds:
             self.log.info("failover node {0} and rebalance afterwards".format(node))
             rest.fail_over(node)
