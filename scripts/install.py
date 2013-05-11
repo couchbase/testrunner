@@ -103,8 +103,8 @@ class Installer(object):
         server = ''
         names = []
 
-        #replace "v" with version
-        #replace p with product
+        # replace "v" with version
+        # replace p with product
         tmp = {}
         for k in params:
             value = params[k]
@@ -160,9 +160,10 @@ class Installer(object):
             else:
                 ok = False
                 _errors.append(errors["INVALID-PARAMS"])
-
+        remote_client = RemoteMachineShellConnection(server)
+        info = remote_client.extract_remote_info()
+        remote_client.disconnect()
         if ok:
-            info = RemoteMachineShellConnection(server).extract_remote_info()
             builds, changes = BuildQuery().get_all_builds()
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1"]
             for name in names:
@@ -192,7 +193,6 @@ class Installer(object):
 
             _errors.append(errors["BUILD-NOT-FOUND"])
         msg = "unable to find a build for product {0} version {1} for package_type {2}"
-        info = RemoteMachineShellConnection(server).extract_remote_info()
         raise Exception(msg.format(names, version, info.deliverable_type))
 
     def is_socket_active(self, host, port, timeout=300):
@@ -330,11 +330,11 @@ class CouchbaseServerInstaller(Installer):
                 rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
 
                 # TODO: Symlink data-dir to custom path
-                #remote_client.stop_couchbase()
-                #remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
-                #remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
-                #remote_client.execute_command("chown -h couchbase:couchbase /opt/couchbase/var")
-                #remote_client.start_couchbase()
+                # remote_client.stop_couchbase()
+                # remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
+                # remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
+                # remote_client.execute_command("chown -h couchbase:couchbase /opt/couchbase/var")
+                # remote_client.start_couchbase()
 
                 # Optionally disable consistency check
                 if params.get('disable_consistency', 0):
@@ -348,7 +348,7 @@ class CouchbaseServerInstaller(Installer):
                     remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
                                                            mem_req_tap_env)
                 remote_client.disconnect()
-                #TODO: Make it work with windows
+                # TODO: Make it work with windows
                 if "erlang_threads" in params:
                     num_threads = params.get('erlang_threads', testconstants.NUM_ERLANG_THREADS)
                     # Stop couchbase-server
@@ -409,7 +409,7 @@ class CouchbaseServerInstaller(Installer):
             if not downloaded:
                 log.error('unable to download binaries : {0}'.format(build.url))
                 return False
-            #TODO: need separate methods in remote_util for couchbase and membase install
+            # TODO: need separate methods in remote_util for couchbase and membase install
             path = server.data_path or '/tmp'
             try:
                 success = remote_client.install_server(build, path=path, vbuckets=vbuckets, swappiness=swappiness)
@@ -470,7 +470,7 @@ class CouchbaseSingleServerInstaller(Installer):
                 log.info("connecting to couch @ {0}".format(couch_ip))
                 couch = couchdb.Server(couch_ip)
                 couch.config()
-                #TODO: verify version number and other properties
+                # TODO: verify version number and other properties
                 couchdb_ok = True
                 break
             except Exception as ex:
@@ -644,9 +644,9 @@ def main():
         usage()
     except getopt.GetoptError, err:
         usage("ERROR: " + str(err))
-    #TODO: This is not broken, but could be something better
+    # TODO: This is not broken, but could be something better
     #      like a validator, to check SSH, input params etc
-    #check_build(input)
+    # check_build(input)
 
     if "parallel" in input.test_params:
         # workaround for a python2.6 bug of using strptime with threads
