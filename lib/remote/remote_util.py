@@ -1669,7 +1669,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         type = info.type.lower()
         if type == 'windows':
             transfer_command = "%scbtransfer.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
-        if type.distribution_type.lower() == 'mac':
+        if info.distribution_type.lower() == 'mac':
             transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
         command = "%s %s %s" % (transfer_command, source, destination)
