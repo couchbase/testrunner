@@ -186,7 +186,7 @@ class CouchbaseCliTest(CliBaseTest):
                 if not upper_key == "EXAMPLES":
                     upper_key = ""
                 continue
-            #line = ""
+            # line = ""
             if line.endswith(":") and upper_key != "EXAMPLES":
                 upper_key = line[:-1]
                 result[upper_key] = {}
@@ -406,7 +406,7 @@ class CouchbaseCliTest(CliBaseTest):
         if bucket_name != bucket.name:
             self.log.error("Bucket name is not correct")
             result = False
-        if bucket_port != bucket.nodes[0].moxi:
+        if not (bucket_port == bucket.nodes[0].moxi or bucket_port == bucket.port):
             self.log.error("Bucket port is not correct")
             result = False
         if bucket_type == "couchbase" and "membase" != bucket.type or\
@@ -492,7 +492,7 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--cluster-init-username={0} --cluster-init-password={1} --cluster-init-port={2}".\
                 format(cluster_init_username + "1", cluster_init_password + "1", str(cluster_init_port)[:-1] + "9")
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
-            #MB-8202 cluster-init/edit doesn't provide status
+            # MB-8202 cluster-init/edit doesn't provide status
             self.assertTrue(output == [])
             server.rest_username = cluster_init_username + "1"
             server.rest_password = cluster_init_password + "1"
@@ -510,7 +510,7 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--cluster-init-username={0} --cluster-init-password={1} --cluster-init-port={2}".\
                 format(cluster_init_username, cluster_init_password, cluster_init_port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=(cluster_init_username + "1"), password=cluster_init_password + "1")
-            #MB-8202 cluster-init/edit doesn't provide status
+            # MB-8202 cluster-init/edit doesn't provide status
             self.assertTrue(output == [])
 
             server.rest_username = cluster_init_username
