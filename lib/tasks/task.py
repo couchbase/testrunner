@@ -187,7 +187,7 @@ class BucketCreateTask(Task):
                 self.log.info("vbucket map not ready after try {0}".format(self.retries))
         except Exception:
             self.log.info("vbucket map not ready after try {0}".format(self.retries))
-            if self.retries>=5:
+            if self.retries >= 5:
                 self.state = FINISHED
                 self.set_exception(e)
         self.retries = self.retries + 1
@@ -1143,7 +1143,6 @@ class ViewCreateTask(Task):
                 else:
                     ddoc.add_view(self.view)
             self.ddoc_rev_no = self._parse_revision(meta['rev'])
-
         except ReadDocumentException:
             # creating first view in design doc
             if self.view:
@@ -1156,6 +1155,11 @@ class ViewCreateTask(Task):
                 ddoc = DesignDocument(self.design_doc_name, [])
             if self.ddoc_options:
                 ddoc.options = self.ddoc_options
+        #catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
 
         try:
             self.rest.create_design_document(self.bucket, ddoc)
