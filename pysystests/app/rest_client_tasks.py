@@ -12,6 +12,7 @@ from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.document import View
 from app.celery import celery
+from app.workload_manager import ClusterStatus
 import app
 import testcfg as cfg
 import json
