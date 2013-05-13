@@ -16,7 +16,8 @@ WORKER_CONFIGS = ["kv"]
 CB_CLUSTER_TAG = "default"
 
 # CHANGE THIS! to match all clusters will be managed by this worker
-CLUSTER_IPS = ["127.0.0.1:9000","127.0.0.1:9001","127.0.0.1:9002","127.0.0.1:9003"]
+# ex. CLUSTER_IPS = ["127.0.0.1:9000","127.0.0.1:9001","127.0.0.1:9002","127.0.0.1:9003"]
+CLUSTER_IPS = []
 
 # xdcr config
 """
@@ -27,11 +28,14 @@ CLUSTER_IPS = ["127.0.0.1:9000","127.0.0.1:9001","127.0.0.1:9002","127.0.0.1:900
 " CB_CLUSTER_TAG = represents vhost watched by workers remote site.
 "                  this should equal CB_CLUSTER_TAG of remote site
 " COUCHBASE_IP/PORT = IP/PORT of a couchbase node in remote site
+"
+" ex.
+" REMOTE_SITES = {"remote1" : {"RABBITMQ_IP" : "10.0.0.5",
+"                             "CB_CLUSTER_TAG" : "default",
+"                             "COUCHBASE_IP" : "10.0.0.10",
+"                             "COUCHBASE_PORT" : "9000"}}
 """
-REMOTE_SITES = {"remote1" : {"RABBITMQ_IP" : "10.0.0.5",
-                             "CB_CLUSTER_TAG" : "default",
-                             "COUCHBASE_IP" : "10.0.0.10",
-                             "COUCHBASE_PORT" : "9000"}}
+REMOTE_SITES = {}
 
 LOGDIR="logs"  # relative to current dir
 
