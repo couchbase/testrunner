@@ -478,7 +478,7 @@ class ViewQueryTests(BaseTestCase):
             4. Start rebalance in
             5. Start querying
         '''
-        num_nodes_to_add = self.input.param('num_nodes_to_add',0)
+        num_nodes_to_add = self.input.param('num_nodes_to_add', 0)
         data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
 
         data_set.add_all_docs_queries(limit=self.limit)
@@ -512,7 +512,7 @@ class ViewQueryTests(BaseTestCase):
             3. failover some nodes and start rebalance
             4. Start querying
         '''
-        self.retries +=50
+        self.retries += 50
         failover_factor = self.input.param("failover-factor", 1)
         failover_nodes = self.servers[1 : failover_factor + 1]
         try:
@@ -646,7 +646,7 @@ class ViewQueryTests(BaseTestCase):
             self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
             self._query_all_views(data_set.views, gen_load)
 
-            self.assertTrue(len(rest.node_statuses()) -len(nodes)==1, msg="number of cluster's nodes is not correct")
+            self.assertTrue(len(rest.node_statuses()) - len(nodes) == 1, msg="number of cluster's nodes is not correct")
             nodes = rest.node_statuses()
 
     def test_employee_dataset_alldocs_queries_start_stop_rebalance_out_incremental(self):
@@ -678,7 +678,7 @@ class ViewQueryTests(BaseTestCase):
         nodes = rest.node_statuses()
 
         for server in self.servers[1:]:
-            ejectedNodes=[]
+            ejectedNodes = []
             self.log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
             for node in nodes:
                 if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
@@ -915,7 +915,7 @@ class ViewQueryTests(BaseTestCase):
             for view in data_set.views:
                 data_set.add_skip_queries(skip, limit=self.limit)
             self._query_all_views(data_set.views, gen_load)
-            skip +=self.limit
+            skip += self.limit
 
     def test_all_datasets_all_queries(self):
         '''
@@ -1315,9 +1315,9 @@ class ViewQueryTests(BaseTestCase):
 
         data_set.add_skip_queries(skip, limit=self.limit)
         generator_load = data_set.generate_docs(data_set.views[0], start=0,
-                                                  end=self.num_docs/2)
+                                                  end=self.num_docs / 2)
         generator_update_delete = data_set.generate_docs(data_set.views[0],
-                                                  start=self.num_docs/2,
+                                                  start=self.num_docs / 2,
                                                   end=self.num_docs)
         self.load(data_set, generator_load)
         self.load(data_set, generator_update_delete)
@@ -1452,7 +1452,7 @@ class ViewQueryTests(BaseTestCase):
                                 args=(data_set.views, generators[iterator]))
             query_bucket_threads.append(t)
             t.start()
-            iterator +=1
+            iterator += 1
 
         while True:
             if not query_bucket_threads:
@@ -1503,7 +1503,7 @@ class ViewQueryTests(BaseTestCase):
                     tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name + str(i), view))
             if action == 'delete':
                 for i in xrange(ddoc_num):
-                    prefix = ("","dev_")[view.dev_view]
+                    prefix = ("", "dev_")[view.dev_view]
                     tasks.append(self.cluster.async_delete_view(self.servers[0], prefix + ddoc_name + str(i), None))
 
         self._query_all_views(data_set.views, generator_load)
@@ -1564,7 +1564,7 @@ class ViewQueryTests(BaseTestCase):
 
     def test_sales_dataset_skip_query_datatypes(self):
         '''
-        Test uses sales data set: 
+        Test uses sales data set:
             -documents are structured as {
                                        "join_yr" : year<int>,
                                        "join_mo" : month<int>,
@@ -1590,7 +1590,7 @@ class ViewQueryTests(BaseTestCase):
 
     def test_sales_dataset_multiply_items(self):
         '''
-        Test uses sales data set: 
+        Test uses sales data set:
             -documents are structured as {
                                        "join_yr" : year<int>,
                                        "join_mo" : month<int>,
@@ -1936,7 +1936,7 @@ class ViewQueryTests(BaseTestCase):
                          (view.name, view.fn_str, view.reduce_fn) for view in views]
             view_struct = 'Views : %s' % views_str
             msg = "\n****************** Error report *********************\n"
-            msg += "Failure message is: %s\nTest case info:\n%s\nViews structure are:\n%s\n\n" %(
+            msg += "Failure message is: %s\nTest case info:\n%s\nViews structure are:\n%s\n\n" % (
                                 ex[1], getattr(self, self._testMethodName).func_doc, view_struct)
             report += msg
         return report
@@ -1950,7 +1950,7 @@ class ViewQueryTests(BaseTestCase):
     @staticmethod
     def parse_string_to_dict(string_to_parse, separator_items=';', seprator_value='-'):
         if string_to_parse.find(separator_items) < 0:
-            return dict([string_to_parse.split(seprator_value)] )
+            return dict([string_to_parse.split(seprator_value)])
         else:
             return dict(item.split(seprator_value) for item in string_to_parse.split(separator_items))
 
@@ -2066,7 +2066,7 @@ class QueryView:
                 tc.thread_stopped.set()
 
 class EmployeeDataSet:
-    def __init__(self, server, cluster, docs_per_day = 200, bucket = "default", ddoc_options=None):
+    def __init__(self, server, cluster, docs_per_day=200, bucket="default", ddoc_options=None):
         self.docs_per_day = docs_per_day
         self.years = 1
         self.months = 12
@@ -2105,7 +2105,7 @@ class EmployeeDataSet:
             else:
                 query_params_dict = dict(item.split("-") for item in valid_query_params.split(";"))
         if invalid_query_params.find(';') < 0:
-            invalid_query_params_dict = dict([invalid_query_params.split("-")] )
+            invalid_query_params_dict = dict([invalid_query_params.split("-")])
         else:
             invalid_query_params_dict = dict(item.split("-") for item in invalid_query_params.split(";"))
 
@@ -2259,7 +2259,7 @@ class EmployeeDataSet:
                                              "startkey_docid" : '"%s%s"' % (
                                                                   self.views[0].prefix,
                                                                   str(uuid.uuid4())[:1]),
-                                             "descending" : "false"}, ),
+                                             "descending" : "false"},),
                                  QueryHelper({"startkey" : "[2008,7,1]",
                                               "startkey_docid" : '"%s%s"' % (
                                                                   self.views[0].prefix,
@@ -2376,17 +2376,17 @@ class EmployeeDataSet:
         vfn4 = 'function (doc) { if(doc.job_title !== undefined) emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] ); }'
         vfn5 = 'function (doc, meta) { if(doc.job_title !== undefined) { var myregexp = new RegExp("^System "); if(doc.job_title.match(myregexp)) { emit([doc.join_yr, doc.join_mo, doc.join_day], [doc.name, doc.email] );}}}'
 
-        return [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn4,
+        return [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn4,
                           ddoc_options=self.ddoc_options),
-                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn1,
+                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn1,
                           ddoc_options=self.ddoc_options),
-                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn2,
+                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn2,
                           ddoc_options=self.ddoc_options),
-                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn3,
+                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn3,
                           ddoc_options=self.ddoc_options),
-                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn4, reduce_fn="_count",
+                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn4, reduce_fn="_count",
                           ddoc_options=self.ddoc_options),
-                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn5,
+                QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn5,
                           ddoc_options=self.ddoc_options)]
 
     def get_data_sets(self):
@@ -2424,15 +2424,15 @@ class EmployeeDataSet:
             while (time.time() - st) < timeout:
                 try:
                     update_num = ViewBaseTests.get_update_seq(self, rest, view)
-                    tc.log.info("Update seq for %s:%s - %s is %s" %(
+                    tc.log.info("Update seq for %s:%s - %s is %s" % (
                                     server.ip, server.port,
                                     view.name, update_num))
                     if update_num >= min_change:
                         tc.assertTrue(ViewBaseTests.is_index_triggered(self, rest, view.name) or\
                                       ViewBaseTests.get_updates_num(self, rest, view) > 0,
-                                  "Index for %s in %s:%s is not triggered!" %(
+                                  "Index for %s in %s:%s is not triggered!" % (
                                                 view.name, server.ip, server.port))
-                        tc.log.info("Index for %s in %s:%s is triggered successfully" %(
+                        tc.log.info("Index for %s in %s:%s is triggered successfully" % (
                                                 view.name, server.ip, server.port))
                         return
                 except Exception as ex:
@@ -2505,7 +2505,7 @@ class SimpleDataSet:
         for view in views:
             if view.reduce_fn:
                 continue
-            start_key = self.num_docs/2
+            start_key = self.num_docs / 2
             end_key = self.num_docs - 2
 
             view.queries += [QueryHelper({"startkey" : end_key,
@@ -2529,7 +2529,7 @@ class SimpleDataSet:
 
         for view in views:
             view.queries = list()
-            start_key = '"%s-%s"' % (views[0].prefix, str(self.num_docs/2))
+            start_key = '"%s-%s"' % (views[0].prefix, str(self.num_docs / 2))
             end_key = '"%s-%s%s"' % (views[0].prefix, str(self.num_docs - 1000), symbol)
 
             view.queries += [QueryHelper({"startkey" : end_key,
@@ -2550,7 +2550,7 @@ class SimpleDataSet:
         for view in views:
 
             if stale_param:
-                view.queries += [QueryHelper({"stale" :  stale_param}),]
+                view.queries += [QueryHelper({"stale" :  stale_param}), ]
             else:
                 view.queries += [QueryHelper({"stale" : "false"}),
                                  QueryHelper({"stale" : "ok"}),
@@ -2598,12 +2598,12 @@ class SalesDataSet:
         self.views = self.create_views()
         self.name = "sales_dataset"
         self.kv_store = None
-        self.docs_set = []
+#        self.docs_set = []
 
 
     # views for this dataset
     def create_views(self):
-        vfn = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc['sales']);}"
+        vfn = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc.sales);}"
 
         if self.test_datatype:
             vfn1 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc['is_support_included']);}"
@@ -2611,20 +2611,20 @@ class SalesDataSet:
             vfn3 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], Date.parse(doc['delivery_date']));}"
             vfn4 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], {client : {name : doc['client_name'], contact : doc['client_contact']}});}"
             vfn5 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc['client_reclaims_rate']);}"
-            views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn1),
-                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn2),
-                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn3),
-                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn4),
-                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn5),
-                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn5, reduce_fn = "_count")]
+            views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn1),
+                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn2),
+                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn3),
+                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn4),
+                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn5),
+                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn5, reduce_fn="_count")]
         elif self.template_items_num:
             vfn1 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc.sales);}"
-            views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str= vfn1),
-                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = vfn1, reduce_fn = "_count")]
+            views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn1),
+                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn1, reduce_fn="_count")]
         else:
             views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn, reduce_fn="_count"),
                      QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn, reduce_fn="_sum"),
-                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn, reduce_fn = "_stats")]
+                     QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn, reduce_fn="_stats")]
 
         return views
 
@@ -2635,12 +2635,13 @@ class SalesDataSet:
         join_yr = range(2008, 2008 + self.years)
         join_mo = range(1, self.months + 1)
         join_day = range(1, self.days + 1)
+
         if self.test_datatype:
             template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
-            template += '"sales" : {3}, "delivery_date" : "{4}", "is_support_included" : {5},'
-            template += '"is_high_priority_client" : {6}, "client_contact" :  "{7}",'
-            template += '"client_name" : "{8}", "client_reclaims_rate" : {9}}}'
-            sales = range(20000,4000000)
+            template += ' "sales" : {3}, "delivery_date" : "{4}", "is_support_included" : {5},'
+            template += ' "is_high_priority_client" : {6}, "client_contact" :  "{7}",'
+            template += ' "client_name" : "{8}", "client_reclaims_rate" : {9}}}'
+            sales = [200000, 400000, 600000, 800000]
             delivery = str(datetime.date(2007 + i, j, k))
             is_support = [True, False]
             is_priority = [True, False]
@@ -2654,17 +2655,18 @@ class SalesDataSet:
                         generators.append(DocumentGenerator(view.prefix + prefix,
                                                   template,
                                                   name, [year], [month], [day],
-                                                  sales, [delivery],is_support,
+                                                  sales, [delivery], is_support,
                                                   is_priority, [contact],
                                                   [name], rate,
                                                   start=start, end=end))
         else:
-            template = '{{"join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
+            template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
             if self.template_items_num:
                 for num in xrange(self.template_items_num - 2):
-                    template += '"item_%s" : "value_%s",' % (num,num)
-            template += '"sales" : {3}}}'
-            sales = range(20000,4000000)
+                    template += '"item_%s" : "value_%s",' % (num, num)
+            template += ' "sales" : {3} }}'
+            sales = [200000, 400000, 600000, 800000]
+            name = str(uuid.uuid4())[:10]
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
@@ -2683,7 +2685,7 @@ class SalesDataSet:
                 params_dict = params
             else:
                 params_dict = ViewQueryTests.parse_string_to_dict(params)
-            if self.limit:
+            if limit:
                 params_dict['limit'] = limit
             view.queries += [QueryHelper(params_dict)]
 
@@ -2701,7 +2703,7 @@ class SalesDataSet:
                 view.queries += [QueryHelper({"skip" : skip})]
 
 class ExpirationDataSet:
-    def __init__(self, server, cluster, num_docs=10000, bucket = "default", expire=60):
+    def __init__(self, server, cluster, num_docs=10000, bucket="default", expire=60):
         self.num_docs = num_docs
         self.bucket = bucket
         self.server = server
@@ -2715,7 +2717,7 @@ class ExpirationDataSet:
 
     def create_views(self, rest):
         view_fn = 'function (doc, meta) {if(doc.age !== undefined) { emit(doc.age, meta.expiration);}}'
-        return [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = view_fn)]
+        return [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=view_fn)]
 
     def generate_docs(self, view, start=0, end=None):
         if end is None:
@@ -2739,17 +2741,17 @@ class ExpirationDataSet:
                 self.query["full_set"] = "true"
             results = tc._rconn().query_view(view.name, view.name,
                                              self.bucket, query, timeout=600)
-            tc.assertTrue(len(results.get(u'rows',0)) == self.num_docs,
+            tc.assertTrue(len(results.get(u'rows', 0)) == self.num_docs,
                           "Actual results %s, expected %s" % (
-                                    len(results.get(u'rows',0)),self.num_docs))
-            for row in results.get(u'rows',0):
-                tc.assertTrue(row['value'] in xrange(self.expire_millis -200, self.expire_millis + 200),
-                                  "Expiration should be %s, but actual is %s" %\
+                                    len(results.get(u'rows', 0)), self.num_docs))
+            for row in results.get(u'rows', 0):
+                tc.assertTrue(row['value'] in xrange(self.expire_millis - 200, self.expire_millis + 200),
+                                  "Expiration should be %s, but actual is %s" % \
                                    (self.expire_millis, row['value']))
             tc.log.info("Expiration emmited correctly")
 
 class FlagsDataSet:
-    def __init__(self, server, cluster, num_docs = 10000, bucket = "default", item_flag=4042322160):
+    def __init__(self, server, cluster, num_docs=10000, bucket="default", item_flag=4042322160):
         self.num_docs = num_docs
         self.bucket = bucket
         self.server = server
@@ -2762,7 +2764,7 @@ class FlagsDataSet:
 
     def create_views(self):
         view_fn = 'function (doc, meta) {if(doc.age !== undefined) { emit(doc.age, meta.flags);}}'
-        return [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str = view_fn)]
+        return [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=view_fn)]
 
     def generate_docs(self, view, start=0, end=None):
         if end is None:
@@ -2775,7 +2777,7 @@ class FlagsDataSet:
                                      end=end)
         return [gen_load]
 
-    def query_verify_value(self,tc):
+    def query_verify_value(self, tc):
         for view in self.views:
             #query view
             results = query = {"stale" : "false"}
@@ -2786,15 +2788,15 @@ class FlagsDataSet:
             tc.assertEquals(len(results.get(u'rows', 0)), self.num_docs,
                               "Returned number of items is incorrect"\
                               "Actual:%s, expected:%s" % (
-                                            len(results.get(u'rows', 0)),self.num_docs))
-            for row in results.get(u'rows',0):
+                                            len(results.get(u'rows', 0)), self.num_docs))
+            for row in results.get(u'rows', 0):
                 tc.assertTrue(row['value'] == self.item_flag,
-                                  "Flag should be %s, but actual is %s" %\
+                                  "Flag should be %s, but actual is %s" % \
                                    (self.item_flag, row['value']))
 
 class QueryHelper:
     def __init__(self, params,
-                 type_ = "view",
+                 type_="view",
                  error=None):
 
         self.params = params
