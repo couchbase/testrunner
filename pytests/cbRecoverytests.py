@@ -200,6 +200,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         self._failover_count = self._input.param("fail_count", 0)
         self._add_count = self._input.param("add_count", 0)
         self.failover_reason = self._input.param("failover_reason", "stop_server")     # or firewall_block
+        self.flag_val = self._input.param("setflag", 0)
         self.failed_nodes = []
         self._ifautofail = 0
 
@@ -222,7 +223,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         super(cbrecovery, self).tearDown()
 
     def cbrecover_multiple_failover_swapout_reb_routine(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0, flag=self.flag_val)
         tasks = []
         if self._doc_ops is not None:
             if "update" in self._doc_ops:
@@ -318,7 +319,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         self.verify_results(verify_src=True)
 
     def cbrecover_multiple_autofailover_swapout_reb_routine(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0, flag=self.flag_val)
         tasks = []
         if self._doc_ops is not None:
             if "update" in self._doc_ops:
@@ -423,7 +424,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         self.verify_results(verify_src=True)
 
     def cbrecover_multiple_failover_addback_routine(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0, flag=self.flag_val)
         tasks = []
         if self._doc_ops is not None:
             if "update" in self._doc_ops:
