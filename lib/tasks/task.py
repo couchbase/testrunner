@@ -185,7 +185,7 @@ class BucketCreateTask(Task):
                 return
             else:
                 self.log.info("vbucket map not ready after try {0}".format(self.retries))
-        except Exception:
+        except Exception as e:
             self.log.info("vbucket map not ready after try {0}".format(self.retries))
             if self.retries >= 5:
                 self.state = FINISHED
