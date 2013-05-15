@@ -1261,7 +1261,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
 
     def execute_command_raw(self, command, debug=True, use_channel=False):
         if debug:
-            log.info("running command.raw  {0}".format(command))
+            log.info("running command.raw on {0}: {1}".format(self.ip, command))
         output = []
         error = []
         temp = ''
