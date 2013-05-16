@@ -10,7 +10,7 @@ from couchbase.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection
 import string
 import random
-
+import testconstants
 
 def key_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for x in range(size))
@@ -21,7 +21,7 @@ class WarmUpTests(BaseTestCase):
         super(WarmUpTests, self).setUp()
         self.pre_warmup_stats = {}
         self.timeout = 120
-        self.access_log = self.input.param("access_log", False)
+        self.without_access_log = self.input.param("without_access_log", False)
         self.servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
         self.cluster.rebalance(self.servers[:1], self.servers_in, [])
         self.active_resident_threshold = int(self.input.param("active_resident_threshold", 90))
@@ -70,8 +70,9 @@ class WarmUpTests(BaseTestCase):
                         self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]:
                         if stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items')[server] == \
                            self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items"]:
-                            self._stats_report(server, bucket, stats_all_buckets[bucket.name])
-                            warmed_up[bucket.name][server] = True
+                            if self._warmup_check_without_access_log():
+                                warmed_up[bucket.name][server] = True
+                                self._stats_report(server, bucket, stats_all_buckets[bucket.name])
                         else:
                             self.log.info("curr_items is %s not equal to %s" % (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items')[server],
                                                                                     self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items"]))
@@ -89,6 +90,52 @@ class WarmUpTests(BaseTestCase):
                     return False
         return True
 
+
+    def _warmup_check_without_access_log(self):
+        if not self.without_access_log:
+            return True
+
+        warmed_up = {}
+        stats_all_buckets = {}
+        for bucket in self.buckets:
+            stats_all_buckets[bucket.name] = StatsCommon()
+            warmed_up[bucket.name] = {}
+            for server in self.servers:
+                warmed_up[bucket.name][server] = False
+
+        for bucket in self.buckets:
+            for server in self.servers:
+                start = time.time()
+                while time.time() - start < self.timeout and not warmed_up[bucket.name][server]:
+                    if stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_key_count')[server] >= \
+                       stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_min_item_threshold')[server] or \
+                       stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'mem_used')[server] >= \
+                       stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_min_memory_threshold')[server] or \
+                       stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'mem_used')[server] >= \
+                       stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'ep_mem_low_wat')[server]:
+                        warmed_up[bucket.name][server] = True
+                    else:
+                        self.log.info("curr_items is %s and ep_warmup_min_item_threshold is %s" %
+                                      (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items')[server],
+                                       stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_min_item_threshold')[server]))
+                        self.log.info("vb_active_perc_mem_resident is %s and ep_warmup_min_memory_threshold is %s" %
+                                      (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'vb_active_perc_mem_resident')[server],
+                                       stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_min_memory_threshold')[server]))
+                        self.log.info("mem_used is %s and ep_mem_low_wat is %s" %
+                                      (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'mem_used')[server],
+                                       stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'ep_mem_low_wat')[server]))
+
+                    time.sleep(10)
+
+        for bucket in self.buckets:
+            for server in self.servers:
+                if warmed_up[bucket.name][server] == True:
+                    continue
+                elif warmed_up[bucket.name][server] == False:
+                    return False
+        return True
+
+
     def _stats_report(self, server, bucket, after_warmup_stats):
         self.log.info("******** Stats before Warmup **********")
         for key, value in self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)].iteritems():
@@ -99,7 +146,10 @@ class WarmUpTests(BaseTestCase):
         self.log.info("curr_items on, %s:%s is %s for bucket %s" % (server.ip, server.port, after_warmup_stats.get_stats([server], bucket, '', 'curr_items')[server], bucket.name))
         self.log.info("curr_items_tot, %s:%s is %s for bucket %s" % (server.ip, server.port, after_warmup_stats.get_stats([server], bucket, '', 'curr_items_tot')[server], bucket.name))
         for key in self.stats_monitor:
-                self.log.info("%s on, %s:%s is %s for bucket %s" % (key, server.ip, server.port, after_warmup_stats.get_stats([server], bucket, self.stat_str, key)[server], bucket.name))
+            self.log.info("%s on, %s:%s is %s for bucket %s" % (key, server.ip, server.port, after_warmup_stats.get_stats([server], bucket, '', key)[server], bucket.name))
+        if self.without_access_log:
+            for key in self.warmup_stats_monitor:
+                self.log.info("%s on, %s:%s is %s for bucket %s" % (key, server.ip, server.port, after_warmup_stats.get_stats([server], bucket, 'warmup', key)[server], bucket.name))
 
     def _wait_for_access_run(self, access_log_time, access_scanner_runs, server, bucket, bucket_stats):
         access_log_created = False
@@ -164,7 +214,7 @@ class WarmUpTests(BaseTestCase):
                 time.sleep(30)
 
 
-    def _update_access_log(self):
+    def _create_access_log(self):
         stats_all_buckets = {}
         for bucket in self.buckets:
             stats_all_buckets[bucket.name] = StatsCommon()
@@ -178,7 +228,24 @@ class WarmUpTests(BaseTestCase):
                 if not self._wait_for_access_run(self.access_log_time, scanner_runs, server, bucket, stats_all_buckets[bucket.name]):
                     self.fail("Not able to create access log within %s minutes" % self.access_log_time)
 
-    def warmup_with_access_log(self):
+    def _delete_access_log(self):
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            info = shell.extract_remote_info()
+            type = info.type.lower()
+            path = testconstants.COUCHBASE_DATA_PATH
+            if type == 'windows':
+                path = testconstants.WIN_COUCHBASE_DATA_PATH
+
+            for bucket in self.buckets:
+                command = "cd %s%s & remove *access*" % (path, bucket.name)
+                output, error = shell.execute_command(command.format(command))
+                shell.log_command_output(output, error)
+
+            shell.disconnect()
+
+
+    def warmup_test(self):
         self._load_dgm()
 
         # wait for draining of data before restart and warmup
@@ -188,7 +255,10 @@ class WarmUpTests(BaseTestCase):
         for bucket in self.buckets:
             self._stats_befor_warmup(bucket.name)
 
-        self._update_access_log()
+        if self.without_access_log:
+            self._delete_access_log()
+        else:
+            self._create_access_log()
 
         for bucket in self.buckets:
             self._restart_memcache(bucket.name)

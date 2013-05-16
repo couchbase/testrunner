@@ -464,12 +464,12 @@ class BaseTestCase(unittest.TestCase):
 
     def _stats_befor_warmup(self, bucket_name):
         self.pre_warmup_stats[bucket_name] = {}
-        if not self.access_log:
-            self.stat_str = ""
-        else:
-            self.stat_str = "warmup"
-        self.stats_monitor = self.input.param("stats_monitor", "curr_items_tot")
-        self.stats_monitor = self.stats_monitor.split(";")
+        self.stats_monitor = self.input.param("stats_monitor", "")
+        self.warmup_stats_monitor = self.input.param("warmup_stats_monitor", "")
+        if self.stats_monitor is not '':
+            self.stats_monitor = self.stats_monitor.split(";")
+        if self.warmup_stats_monitor is not '':
+            self.warmup_stats_monitor = self.warmup_stats_monitor.split(";")
         for server in self.servers:
             mc_conn = MemcachedClientHelper.direct_client(server, bucket_name, self.timeout)
             self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)] = {}
@@ -477,7 +477,10 @@ class BaseTestCase(unittest.TestCase):
             self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"] = mc_conn.stats("")["curr_items_tot"]
             self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["curr_items"] = mc_conn.stats("")["curr_items"]
             for stat_to_monitor in self.stats_monitor:
-                self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)][stat_to_monitor] = mc_conn.stats(self.stat_str)[stat_to_monitor]
+                self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)][stat_to_monitor] = mc_conn.stats('')[stat_to_monitor]
+            if self.without_access_log:
+                for stat_to_monitor in self.warmup_stats_monitor:
+                    self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)][stat_to_monitor] = mc_conn.stats('warmup')[stat_to_monitor]
             mc_conn.close()
 
     def _kill_nodes(self, nodes, bucket_name):
