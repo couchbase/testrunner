@@ -27,6 +27,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         self.assertEquals(settings.enabled, False)
 
     def wait_for_failover_or_assert(self, master, autofailover_count, timeout):
+        rest = RestConnection(master)
         time_start = time.time()
         time_max_end = time_start + timeout + 60
         failover_count = 0
