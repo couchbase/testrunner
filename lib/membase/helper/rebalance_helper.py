@@ -608,7 +608,12 @@ class RebalanceHelper():
     def end_rebalance(master):
         log = logger.Logger.get_logger()
         rest = RestConnection(master)
-        assert rest.monitorRebalance(), "rebalance operation failed after adding nodes"
+        result = False
+        try:
+            result = rest.monitorRebalance()
+        except RebalanceFailedException as e:
+            log.error("rebalance failed: {0}".format(e))
+        assert result, "rebalance operation failed after adding nodes"
         log.info("rebalance finished")
 
     @staticmethod
