@@ -483,19 +483,32 @@ class BaseTestCase(unittest.TestCase):
                     self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)][stat_to_monitor] = mc_conn.stats('warmup')[stat_to_monitor]
             mc_conn.close()
 
-    def _kill_nodes(self, nodes, bucket_name):
-        for node in nodes:
-            _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
+    def _kill_nodes(self, nodes, servers, bucket_name):
+        self.reboot = self.input.param("reboot", True)
+        if not self.reboot:
+            for node in nodes:
+                _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
                   "password": self.servers[0].rest_password}
-            _mc = MemcachedClientHelper.direct_client(_node, bucket_name)
-            self.log.info("restarted the node %s:%s" % (node.ip, node.port))
-            pid = _mc.stats()["pid"]
-            node_rest = RestConnection(_node)
-            command = "os:cmd(\"kill -9 {0} \")".format(pid)
-            self.log.info(command)
-            killed = node_rest.diag_eval(command)
-            self.log.info("killed ??  {0} ".format(killed))
-            _mc.close()
+                node_rest = RestConnection(_node)
+                _mc = MemcachedClientHelper.direct_client(_node, bucket_name)
+                self.log.info("restarted the node %s:%s" % (node.ip, node.port))
+                pid = _mc.stats()["pid"]
+                command = "os:cmd(\"kill -9 {0} \")".format(pid)
+                self.log.info(command)
+                killed = node_rest.diag_eval(command)
+                self.log.info("killed ??  {0} ".format(killed))
+                _mc.close()
+        else:
+            for server in servers:
+                shell = RemoteMachineShellConnection(server)
+                command = "reboot"
+                output, error = shell.execute_command(command)
+                shell.log_command_output(output, error)
+                time.sleep(self.wait_timeout*8)
+                command = "/sbin/iptables -F"
+                output, error = shell.execute_command(command)
+                shell.log_command_output(output, error)
+                shell.disconnect()
 
     def _restart_memcache(self, bucket_name):
         rest = RestConnection(self.master)
@@ -510,19 +523,20 @@ class BaseTestCase(unittest.TestCase):
             _nodes = nodes[:len(nodes):skip]
         else:
             _nodes = nodes
-        self._kill_nodes(_nodes, bucket_name)
 
-        start = time.time()
-        memcached_restarted = False
         _servers = []
         for server in self.servers:
             for _node in _nodes:
                 if server.ip == _node.ip:
                     _servers.append(server)
 
+        self._kill_nodes(_nodes, _servers, bucket_name)
+
+        start = time.time()
+        memcached_restarted = False
+
         for server in _servers:
-            mc = None
-            while time.time() - start < 60:
+            while time.time() - start < (self.wait_timeout*2):
                 try:
                     mc = MemcachedClientHelper.direct_client(server, bucket_name)
                     stats = mc.stats()
@@ -536,7 +550,7 @@ class BaseTestCase(unittest.TestCase):
                     self.log.error("unable to connect to %s:%s for bucket %s" % (server.ip, server.port, bucket_name))
                     if mc:
                         mc.close()
-                    time.sleep(1)
+                    time.sleep(5)
             if not memcached_restarted:
                 self.fail("memcached did not start %s:%s for bucket %s" % (server.ip, server.port, bucket_name))
 
