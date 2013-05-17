@@ -756,7 +756,7 @@ class PerfBase(unittest.TestCase):
 
         cur, start_time, end_time = \
             self.mcsoda_run(cfg, cur, protocol, host_port, user, pswd,
-                            heartbeat=self.parami("mcsoda_heartbeat", 0),
+                            stats_collector=sc, heartbeat=self.parami("mcsoda_heartbeat", 0),
                             why="load", bucket=self.param("bucket", "default"))
         self.num_items_loaded = num_items
         ops = {'tot-sets': cur.get('cur-sets', 0),
