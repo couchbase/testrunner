@@ -818,6 +818,7 @@ class VBucketAwareMemcached(object):
         if vBucketId not in self.vBucketMapReplica:
             msg = "replica vbucket map does not have an entry for vb : {0}"
             raise Exception(msg.format(vBucketId))
+        self.log.info("replica vbucket: vBucketId {0}, server{1}".format(vBucketId, self.vBucketMapReplica[vBucketId][replica_index]))
         if self.vBucketMapReplica[vBucketId][replica_index] not in self.memcacheds:
             msg = "moxi does not have a mc connection for server : {0}"
             raise Exception(msg.format(self.vBucketMapReplica[vBucketId][replica_index]))
