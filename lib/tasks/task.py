@@ -638,7 +638,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
             self._process_values_for_create(key_val)
             self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
             self._populate_kvstore(partition_keys_dic, key_val)
-        except (MemcachedError, ServerUnavailableException, socket.error, EOFError) as error:
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError) as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -648,7 +648,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
             self._process_values_for_update(partition_keys_dic, key_val)
             self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
             self._populate_kvstore(partition_keys_dic, key_val)
-        except (MemcachedError, ServerUnavailableException, socket.error, EOFError) as error:
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError) as error:
             self.state = FINISHED
             self.set_exception(error)
 
@@ -666,7 +666,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
                         self.state = FINISHED
                         self.set_exception(error)
                         return
-                except (ServerUnavailableException, socket.error, EOFError) as error:
+                except (ServerUnavailableException, socket.error, EOFError, AttributeError) as error:
                     self.state = FINISHED
                     self.set_exception(error)
 
