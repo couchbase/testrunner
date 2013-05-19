@@ -2654,7 +2654,7 @@ class SalesDataSet:
                         prefix = str(uuid.uuid4())[:7]
                         generators.append(DocumentGenerator(view.prefix + prefix,
                                                   template,
-                                                  name, [year], [month], [day],
+                                                  [year], [month], [day],
                                                   sales, [delivery], is_support,
                                                   is_priority, [contact],
                                                   [name], rate,
@@ -2666,14 +2666,13 @@ class SalesDataSet:
                     template += '"item_%s" : "value_%s",' % (num, num)
             template += ' "sales" : {3} }}'
             sales = [200000, 400000, 600000, 800000]
-            name = str(uuid.uuid4())[:10]
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
                         prefix = str(uuid.uuid4())[:7]
                         generators.append(DocumentGenerator(view.prefix + prefix,
                                                   template,
-                                                  name, [year], [month], [day],
+                                                  [year], [month], [day],
                                                   sales,
                                                   start=start, end=end))
         return generators
