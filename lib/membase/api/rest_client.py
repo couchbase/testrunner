@@ -1451,6 +1451,8 @@ class RestConnection(object):
 
     def check_compaction_status(self, bucket_name):
         tasks = self.active_tasks()
+        if "error" in tasks:
+            raise Exception(tasks)
         for task in tasks:
             print task
             if task["type"] == "bucket_compaction":

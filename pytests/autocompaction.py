@@ -107,7 +107,13 @@ class AutoCompactionTests(BaseTestCase):
                     self.fail("auto compaction does not run")
                 elif compact_run:
                     self.log.info("auto compaction run successfully")
-            finally:
+            except Exception, ex:
+                insert_thread._Thread__stop()
+                if str(ex).find("enospc") != -1:
+                    self.log.error("Disk is out of space, unable to load more data")
+                else:
+                    raise ex
+            else:
                 insert_thread.join()
         else:
             self.log.error("Unknown error")
