@@ -128,7 +128,11 @@ class FailoverTests(FailoverBaseTest):
                     for server in self.servers:
                         if server.ip == node.ip:
                             shell = RemoteMachineShellConnection(server)
-                            o, r = shell.execute_command("/sbin/iptables --list")
+                            info = shell.extract_remote_info()
+                            if info.type.lower() == "windows":
+                                o, r = shell.execute_command("netsh advfirewall show allprofiles")
+                            else:
+                                o, r = shell.execute_command("/sbin/iptables --list")
                             shell.log_command_output(o, r)
                             shell.disconnect()
                     for i in rest.get_logs(): self.log.error(i)
