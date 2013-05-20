@@ -75,8 +75,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
         else:
             try:
-                #cleanup only nodes that are in cluster
-                #not all servers have been installed
+                # cleanup only nodes that are in cluster
+                # not all servers have been installed
                 if self.rest is None:
                     self._new_master(self.master)
                 nodes = self.rest.get_nodes()
@@ -262,8 +262,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if "autofailover_timeout" in self.input.test_params:
             status &= self.rest.update_autofailover_settings(True, self.input.param("autofailover_timeout", None))
         if "autofailover_alerts" in self.input.test_params:
-            tmp, _, _ = self.rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd')
-            status &= tmp
+            status &= self.rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd')
         if "autocompaction" in self.input.test_params:
             tmp, _, _ = self.rest.set_auto_compaction(viewFragmntThresholdPercentage=
                                      self.input.param("autocompaction", 50))
@@ -322,7 +321,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             for path in paths_to_delete:
                 output, error = shell.execute_command("rm -rf {0}".format(path))
                 shell.log_command_output(output, error)
-                #shell._ssh_client.open_sftp().rmdir(path)
+                # shell._ssh_client.open_sftp().rmdir(path)
             shell.disconnect()
 
     def check_seqno(self, seqno_expected, comparator='=='):
