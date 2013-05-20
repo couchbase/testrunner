@@ -504,7 +504,9 @@ class BaseTestCase(unittest.TestCase):
                 command = "reboot"
                 output, error = shell.execute_command(command)
                 shell.log_command_output(output, error)
+                shell.disconnect()
                 time.sleep(self.wait_timeout*8)
+                shell = RemoteMachineShellConnection(server)
                 command = "/sbin/iptables -F"
                 output, error = shell.execute_command(command)
                 shell.log_command_output(output, error)
