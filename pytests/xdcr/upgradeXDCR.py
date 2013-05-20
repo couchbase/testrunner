@@ -112,7 +112,6 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                     return bucket
             return None
 
-
     def _online_upgrade(self, update_servers, extra_servers, check_newmaster=True):
         self.cluster.rebalance(update_servers + extra_servers, extra_servers, [])
         self.log.info("Rebalance in all 2.0 Nodes")
@@ -135,6 +134,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
+        self.cluster.shutdown()
         XDCRReplicationBaseTest.setUp(self)
         bucket = self._get_bucket('default', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
@@ -174,11 +174,11 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
 
-
     def online_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
+        self.cluster.shutdown()
         XDCRReplicationBaseTest.setUp(self)
         bucket_default = self._get_bucket('default', self.src_master)
         bucket_sasl = self._get_bucket('bucket0', self.src_master)
