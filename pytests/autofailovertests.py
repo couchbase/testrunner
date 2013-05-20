@@ -58,7 +58,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
     @staticmethod
     def wait_for_failover_or_assert(master, autofailover_count, timeout, testcase):
         time_start = time.time()
-        time_max_end = time_start + timeout + 120
+        time_max_end = time_start + timeout
         failover_count = 0
         while time.time() < time_max_end:
             failover_count = AutoFailoverBaseTest.get_failover_count(master)
@@ -120,13 +120,14 @@ class AutoFailoverTests(unittest.TestCase):
         self.master = self._servers[0]
         self.rest = RestConnection(self.master)
         self.timeout = 60
+        #timeout as workaround for MB-7863
+        self.extra_timeout = 120
 
         AutoFailoverBaseTest.common_setup(self._input, self)
         self._cluster_setup()
 
     def tearDown(self):
         AutoFailoverBaseTest.common_tearDown(self._servers, self)
-
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
@@ -171,9 +172,9 @@ class AutoFailoverTests(unittest.TestCase):
         self.sleep(5)
         time_start = time.time()
         RemoteUtilHelper.enable_firewall(server_fail)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + self.extra_timeout, self)
         time_end = time.time()
-        msg = "{0} != {1}".format(time_end - time_start, timeout)
+        msg = "{0} != {1}".format(time_end - time_start, timeout + self.extra_timeout)
         self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
@@ -187,10 +188,10 @@ class AutoFailoverTests(unittest.TestCase):
         self.sleep(5)
         time_start = time.time()
         RemoteUtilHelper.enable_firewall(server_fail)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + self.extra_timeout, self)
         time_end = time.time()
-        msg = "{0} != {1}".format(time_end - time_start, timeout)
-        self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
+        msg = "{0} != {1}".format(time_end - time_start, timeout + self.extra_timeout)
+        self.assertTrue(abs((time_end - time_start) - timeout - self.extra_timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
     def test_30s_timeout_stop(self):
@@ -203,10 +204,10 @@ class AutoFailoverTests(unittest.TestCase):
         self.sleep(5)
         time_start = time.time()
         self._stop_couchbase(server_fail)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + self.extra_timeout, self)
         time_end = time.time()
-        msg = "{0} != {1}".format(time_end - time_start, timeout)
-        self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
+        msg = "{0} != {1}".format(time_end - time_start, timeout + self.extra_timeout)
+        self.assertTrue(abs((time_end - time_start) - timeout - self.extra_timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
     def test_60s_timeout_stop(self):
@@ -219,10 +220,10 @@ class AutoFailoverTests(unittest.TestCase):
         self.sleep(5)
         time_start = time.time()
         self._stop_couchbase(server_fail)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + self.extra_timeout, self)
         time_end = time.time()
-        msg = "{0} != {1}".format(time_end - time_start, timeout)
-        self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
+        msg = "{0} != {1}".format(time_end - time_start, timeout + self.extra_timeout)
+        self.assertTrue(abs((time_end - time_start) - timeout - self.extra_timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
     def test_reset_count(self):
@@ -251,10 +252,10 @@ class AutoFailoverTests(unittest.TestCase):
         self.log.info("stopping the second server")
         time_start = time.time()
         self._stop_couchbase(server_fail2)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + self.extra_timeout, self)
         time_end = time.time()
-        msg = "{0} != {1}".format(time_end - time_start, timeout)
-        self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
+        msg = "{0} != {1}".format(time_end - time_start, timeout + self.extra_timeout)
+        self.assertTrue(abs((time_end - time_start) - timeout - self.extra_timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
         self.log.info("resetting the autofailover count")
@@ -272,10 +273,10 @@ class AutoFailoverTests(unittest.TestCase):
         self.sleep(5)
         time_start = time.time()
         self._pause_couchbase(server_fail)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + self.extra_timeout, self)
         time_end = time.time()
-        msg = "{0} != {1}".format(time_end - time_start, timeout)
-        self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
+        msg = "{0} != {1}".format(time_end - time_start, timeout + self.extra_timeout)
+        self.assertTrue(abs((time_end - time_start) - timeout - self.extra_timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
     def test_60s_timeout_pause(self):
@@ -288,10 +289,10 @@ class AutoFailoverTests(unittest.TestCase):
         self.sleep(5)
         time_start = time.time()
         self._pause_couchbase(server_fail)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + self.extra_timeout, self)
         time_end = time.time()
-        msg = "{0} != {1}".format(time_end - time_start, timeout)
-        self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
+        msg = "{0} != {1}".format(time_end - time_start, timeout + self.extra_timeout)
+        self.assertTrue(abs((time_end - time_start) - timeout - self.extra_timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
 
@@ -318,10 +319,10 @@ class AutoFailoverTests(unittest.TestCase):
         self.log.info("stopping the first server")
         time_start = time.time()
         self._stop_couchbase(server_fail1)
-        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout, self)
+        AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + self.extra_timeout, self)
         time_end = time.time()
-        msg = "{0} != {1}".format(time_end - time_start, timeout)
-        self.assertTrue(abs((time_end - time_start) - timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
+        msg = "{0} != {1}".format(time_end - time_start, timeout + self.extra_timeout)
+        self.assertTrue(abs((time_end - time_start) - timeout - self.extra_timeout) <= AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, msg)
         self.log.info("expected failover in {0} seconds, actual time {1} seconds".format(timeout, time_end - time_start))
 
         self.log.info("stopping the second server")
