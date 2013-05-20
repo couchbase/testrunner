@@ -803,7 +803,7 @@ class RestConnection(object):
         replications = []
         content = self.ns_server_tasks()
         for item in content:
-            if item["type"]=="xdcr":
+            if item["type"] == "xdcr":
                 replications.append(item)
         return replications
 
@@ -820,7 +820,7 @@ class RestConnection(object):
         recoveries = []
         content = self.ns_server_tasks()
         for item in content:
-            if item["type"]=="recovery":
+            if item["type"] == "recovery":
                 recoveries.append(item)
         for recovery in recoveries:
             api = self.baseUrl + recovery["stopURI"]
@@ -1589,7 +1589,7 @@ class RestConnection(object):
             params["allowedTimePeriod[abortOutside]"] = allowedTimePeriodAbort
 
         params = urllib.urlencode(params)
-        log.info("'%s' bucket's settings were changed with parameters: %s" % (bucket, params))
+        log.info("'%s' bucket's settings will be changed with parameters: %s" % (bucket, params))
         return self._http_request(api, "POST", params)
 
     def set_global_loglevel(self, loglevel='error'):

@@ -237,6 +237,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             cluster_status = self.rest.cluster_status()
             if cluster_status["autoCompactionSettings"]["viewFragmentationThreshold"]\
                              ["percentage"] != self.input.param("autocompaction", 50):
+                    self.log.info("Cluster status: {0}".format(cluster_status))
                     self.fail("autocompaction settings weren't saved")
 
     def verify_all_queries(self):
@@ -255,15 +256,20 @@ class NewUpgradeBaseTest(BaseTestCase):
                                            retry_time=10)
 
     def change_settings(self):
+        status = True
         if "update_notifications" in self.input.test_params:
-            self.rest.update_notifications(str(self.input.param("update_notifications", 'true')).lower())
+            status &= self.rest.update_notifications(str(self.input.param("update_notifications", 'true')).lower())
         if "autofailover_timeout" in self.input.test_params:
-            self.rest.update_autofailover_settings(True, self.input.param("autofailover_timeout", None))
+            status &= self.rest.update_autofailover_settings(True, self.input.param("autofailover_timeout", None))
         if "autofailover_alerts" in self.input.test_params:
-            self.rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd')
+            tmp, _, _ = self.rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd')
+            status &= tmp
         if "autocompaction" in self.input.test_params:
-            self.rest.set_auto_compaction(viewFragmntThresholdPercentage=
+            tmp, _, _ = self.rest.set_auto_compaction(viewFragmntThresholdPercentage=
                                      self.input.param("autocompaction", 50))
+            status &= tmp
+            if not status:
+                self.fail("some settings were not set correctly!")
 
     def warm_up_node(self, warmup_nodes=None):
         if not warmup_nodes:
