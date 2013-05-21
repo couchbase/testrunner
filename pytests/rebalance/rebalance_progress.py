@@ -32,10 +32,12 @@ class RebalanceProgressTests(RebalanceBaseTest):
             #docsTotal and docsTransferred should be 0 in added nodes
             #docsTotal should not change
             #docsTransferred should go increasing
-            self._check_stats(servers_in, previous_stats, new_stats,
+            self._check_stats(servers_in, previous_stats, new_stats, "outgoing",
                               docs_total=0, docs_transf=0)
-            self._check_stats(servers_init, previous_stats, new_stats)
-
+            self._check_stats(servers_in, previous_stats, new_stats, "ingoing")
+            self._check_stats(servers_init, previous_stats, new_stats, "ingoing",
+                              docs_total=0, docs_transf=0)
+            self._check_stats(servers_init, previous_stats, new_stats, "outgoing")
             #sum of sending and receiving vbuckets should coincide
             self._check_vb_sums(servers_init, servers_in, new_stats)
             previous_stats = copy.deepcopy(new_stats)
@@ -60,8 +62,8 @@ class RebalanceProgressTests(RebalanceBaseTest):
             #vbuckets left should go decreasing
             #docsTotal should not change
             #docsTransferred should go increasing
-            self._check_stats(servers_init, previous_stats, new_stats)
-
+            self._check_stats(servers_init, previous_stats, new_stats, "ingoing")
+            self._check_stats(servers_init, previous_stats, new_stats, "outgoing")
             previous_stats = copy.deepcopy(new_stats)
             time.sleep(1)
         rebalance.result()
@@ -87,11 +89,13 @@ class RebalanceProgressTests(RebalanceBaseTest):
             #no vbuckets moving for unchanged nodes
             #docsTotal should not change
             #docsTransferred should go increasing
-            self._check_stats(servers_in, previous_stats, new_stats,
+            self._check_stats(servers_in, previous_stats, new_stats, "ingoing",
                               docs_total=0, docs_transf=0)
-            self._check_stats(servers_unchanged, previous_stats, new_stats,
+            self._check_stats(servers_unchanged, previous_stats, new_stats, "ingoing",
                               active_vb=0, replica_vb=0)
-            self._check_stats(servers_out, previous_stats, new_stats)
+            self._check_stats(servers_unchanged, previous_stats, new_stats, "outgoing",
+                              active_vb=0, replica_vb=0)
+            self._check_stats(servers_out, previous_stats, new_stats, "outgoing")
 
             #sum of sending and receiving vbuckets should coincide
             self._check_vb_sums(servers_in, servers_out, new_stats)
@@ -99,21 +103,21 @@ class RebalanceProgressTests(RebalanceBaseTest):
             time.sleep(1)
         rebalance.result()
 
-    def _check_vb_sums(self, servers1, servers2, new_stats):
-        active_vb_sum_1 = sum([new_stats[server.ip]['activeVBucketsLeft'] for server in servers1])
-        active_vb_sum_2 = sum([new_stats[server.ip]['activeVBucketsLeft'] for server in servers2])
+    def _check_vb_sums(self, servers_ingoing, servers_outgoing, new_stats):
+        active_vb_sum_1 = sum([new_stats[server.ip]["ingoing"]['activeVBucketsLeft'] for server in servers1])
+        active_vb_sum_2 = sum([new_stats[server.ip]["outgoing"]['activeVBucketsLeft'] for server in servers2])
         self.assertTrue(active_vb_sum_1 == active_vb_sum_2,
                         "Active vbuckets left should be equal in servers_in and init. %s" % new_stats)
 
-    def _check_stats(self, servers, previous_stats, new_stats,
+    def _check_stats(self, servers, previous_stats, new_stats, type,
                      docs_total=None, docs_transf=None,
                      active_vb=None, replica_vb=None):
         self.assertTrue(new_stats["buckets_count"] == len(self.buckets),
                         "Expected buckets %s. Actual stat %s" %(
                                 len(self.buckets), new_stats))
         for server in servers:
-            current_stat = new_stats[server.ip]
-            previous_stat =  previous_stats[server.ip]
+            current_stat = new_stats[server.ip][type]
+            previous_stat =  previous_stats[server.ip][type]
             if new_stats["bucket"] != previous_stats["bucket"]:
                 self.assertTrue(current_stat['activeVBucketsLeft'] >= previous_stat['activeVBucketsLeft'],
                             "activeVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" %(
