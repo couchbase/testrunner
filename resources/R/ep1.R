@@ -2122,149 +2122,195 @@ if (nrow(ns_server_data) > 0) {
 
     ################################################################################################################
     if(!is.null(ns_server_data$replication_rate_replication)) {
-        p <- ggplot(ns_server_data, aes(row, replication_rate_replication, color=buildinfo.version, label=replication_rate_replication))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_rate_replication, color=buildinfo.version, label=replication_rate_replication))
         p <- p + labs(x="----time (sec)--->", y="ops/sec") + geom_point()
         p <- addopts(p, "Mutation replication rate")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Rate of replication in terms of number of replicated mutations per second")
+        makeMetricDef(paste("Rate of replication in terms of number",
+                            "of replicated mutations per second", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, replication_bandwidth_usage, color=buildinfo.version, label=replication_bandwidth_usage))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_bandwidth_usage, color=buildinfo.version, label=replication_bandwidth_usage))
         p <- p + labs(x="----time (sec)--->", y="Bytes/sec") + geom_point()
         p <- addopts(p, "Data replication rate")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Rate of replication in terms of bytes replicated per second")
+        makeMetricDef(paste("Rate of replication in terms",
+                            "of bytes replicated per second", sep="\n"))
         ################################################################################################################
-        p <- ggplot(ns_server_data, aes(row, replication_docs_latency_wt, color=buildinfo.version, label=replication_docs_latency_wt))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_docs_latency_wt, color=buildinfo.version, label=replication_docs_latency_wt))
         p <- p + labs(x="----time (sec)--->", y="ms") + geom_point()
         p <- addopts(p, "ms doc ops latency")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Weighted average latency in ms of sending replicated mutations to remote cluster")
+        makeMetricDef(paste("Weighted average latency in ms of",
+                            "sending replicated mutations to remote cluster", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, replication_meta_latency_wt, color=buildinfo.version, label=replication_meta_latency_wt))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_meta_latency_wt, color=buildinfo.version, label=replication_meta_latency_wt))
         p <- p + labs(x="----time (sec)--->", y="ms") + geom_point()
         p <- addopts(p, "ms meta ops latency")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Weighted average latency in ms of sending getMeta and waiting for conflict solution result from remote cluster")
+        makeMetricDef(paste("Weighted average latency in ms of",
+                            "sending getMeta and waiting for conflict solution",
+                            "result from remote cluster", sep="\n"))
     }
     ################################################################################################################
     if(!is.null(ns_server_data$replication_num_failedckpts)) {
-        p <- ggplot(ns_server_data, aes(row, replication_changes_left, color=buildinfo.version, label=replication_changes_left))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_changes_left, color=buildinfo.version, label=replication_changes_left))
         p <- p + labs(x="----time (sec)--->", y="items") + geom_point()
         p <- addopts(p, "Outbound XDCR mutations")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of mutations to be replicated to other clusters")
+        makeMetricDef(paste("Number of mutations to be",
+                            "replicated to other clusters", sep="\n"))
 
-        p <- ggplot(ns_server_data,aes(row, replication_docs_rep_queue, color=buildinfo.version, label=replication_docs_rep_queue))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_docs_rep_queue, color=buildinfo.version, label=replication_docs_rep_queue))
         p <- p + labs(x="----time (sec)--->", y="items") + geom_point()
         p <- addopts(p, "Mutations in queue")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of document mutations in XDC replication queue")
+        makeMetricDef(paste("Number of document mutations",
+                            "in XDC replication queue", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, replication_size_rep_queue, color=buildinfo.version, label=replication_size_rep_queue))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_size_rep_queue, color=buildinfo.version, label=replication_size_rep_queue))
         p <- p + labs(x="----time (sec)--->", y="Bytes") + geom_point()
         p <- addopts(p, "XDCR queue size")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Size in bytes of XDC replication queue")
+        makeMetricDef(paste("Size in bytes of",
+                            "XDC replication queue", sep="\n"))
         ################################################################################################################
-        p <- ggplot(ns_server_data, aes(row, replication_docs_checked, color=buildinfo.version, label=replication_docs_checked))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_docs_checked, color=buildinfo.version, label=replication_docs_checked))
         p <- p + labs(x="----time (sec)--->", y="") + geom_point()
         p <- addopts(p, "Mutations checked")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Document mutations checked for XDC replication")
+        makeMetricDef(paste("Document mutations checked",
+                            "for XDC replication", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, replication_docs_written, color=buildinfo.version, label=replication_docs_written))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_docs_written, color=buildinfo.version, label=replication_docs_written))
         p <- p + labs(x="----time (sec)--->", y="") + geom_point()
         p <- addopts(p, "Mutations replicated")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Document mutations replicated to remote cluster")
+        makeMetricDef(paste("Document mutations replicated",
+                            "to remote cluster", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, replication_data_replicated, color=buildinfo.version, label=replication_data_replicated))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_data_replicated, color=buildinfo.version, label=replication_data_replicated))
         p <- p + labs(x="----time (sec)--->", y="Bytes") + geom_point()
         p <- addopts(p, "XDCR data replicated")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Data in bytes replicated to remote cluster")
+        makeMetricDef(paste("Data in bytes replicated",
+                            "to remote cluster", sep="\n"))
         ################################################################################################################
-        p <- ggplot(ns_server_data, aes(row, replication_work_time, color=buildinfo.version, label=replication_work_time))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_work_time, color=buildinfo.version, label=replication_work_time))
         p <- p + labs(x="----time (sec)--->", y="secs") + geom_point()
         p <- addopts(p, "XDCR secs in replicating")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Total time in secs all vb replicators spent checking and writing")
+        makeMetricDef("Total time in secs all vb replicators",
+                            "spent checking and writing", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, replication_commit_time, color=buildinfo.version, label=replication_commit_time))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_commit_time, color=buildinfo.version, label=replication_commit_time))
         p <- p + labs(x="----time (sec)--->", y="secs") + geom_point()
         p <- addopts(p,"XDCR secs in checkpointing")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Total time all vb replicators spent waiting for commit and checkpoint")
+        makeMetricDef(paste("Total time all vb replicators",
+                            "spent waiting for commit and checkpoint", sep="\n"))
         ################################################################################################################
-        p <- ggplot(ns_server_data, aes(row, replication_active_vbreps, color=buildinfo.version, label=replication_active_vbreps))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_active_vbreps, color=buildinfo.version, label=replication_active_vbreps))
         p <- p + labs(x="----time (sec)--->", y="") + geom_point()
         p <- addopts(p, "XDCR active vb reps")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of active vbucket replications")
+        makeMetricDef(paste("Number of active vbucket",
+                            "replications", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, replication_waiting_vbreps, color=buildinfo.version, label=replication_waiting_vbreps))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_waiting_vbreps, color=buildinfo.version, label=replication_waiting_vbreps))
         p <- p + labs(x="----time (sec)--->", y="") + geom_point()
         p <- addopts(p, "XDCR waiting vb reps")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of waiting vbucket replications")
+        makeMetricDef(paste("Number of waiting vbucket",
+                            "replications", sep="\n"))
         ################################################################################################################
-        p <- ggplot(ns_server_data, aes(row, replication_num_checkpoints, color=buildinfo.version, label=replication_num_checkpoints))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_num_checkpoints, color=buildinfo.version, label=replication_num_checkpoints))
         p <- p + labs(x="----time (sec)--->", y="") + geom_point()
         p <- addopts(p, "XDCR checkpoints issued")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of successful checkpoints out of the last 10 issued on each node in current replication")
+        makeMetricDef(paste("Number of successful checkpoints",
+                            "out of the last 10 issued on each node",
+                            "in current replication", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, replication_num_failedckpts, color=buildinfo.version, label=replication_num_failedckpts))
+        p <- ggplot(ns_server_data,
+                    aes(row, replication_num_failedckpts, color=buildinfo.version, label=replication_num_failedckpts))
         p <- p + labs(x="----time (sec)--->", y="") + geom_point()
         p <- addopts(p, "XDCR checkpoints failed")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of failed checkpoints out of the last 10 issued on each node in current replication")
+        makeMetricDef(paste("Number of failed checkpoints",
+                            "out of the last 10 issued on each node",
+                            "in current replication", sep="\n"))
     }
     ################################################################################################################
     if(!is.null(ns_server_data$xdc_ops)) {
-        p <- ggplot(ns_server_data, aes(row, xdc_ops, color=buildinfo.version, label=xdc_ops))
+        p <- ggplot(ns_server_data,
+                    aes(row, xdc_ops, color=buildinfo.version, label=xdc_ops))
         p <- p + labs(x="----time (sec)--->", y="ops/sec") + geom_point()
         p <- addopts(p, "XDC ops per sec")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Incoming XDCR operations per second for this bucket")
+        makeMetricDef(paste("Incoming XDCR operations",
+                            "per second for this bucket", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, ep_num_ops_get_meta, color=buildinfo.version, label=ep_num_ops_get_meta))
+        p <- ggplot(ns_server_data,
+                    aes(row, ep_num_ops_get_meta, color=buildinfo.version, label=ep_num_ops_get_meta))
         p <- p + labs(x="----time (sec)--->", y="ops/sec") + geom_point()
         p <- addopts(p, "Metadata gets per sec")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of metadata read operations per second for this bucket as the target for XDCR")
+        makeMetricDef(paste("Number of metadata read operations",
+                            "per second for this bucket",
+                            "as the target for XDCR", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, ep_num_ops_set_meta, color=buildinfo.version, label=ep_num_ops_set_meta))
+        p <- ggplot(ns_server_data,
+                    aes(row, ep_num_ops_set_meta, color=buildinfo.version, label=ep_num_ops_set_meta))
         p <- p + labs(x="----time (sec)--->", y="ops/sec") + geom_point()
         p <- addopts(p, "Metadata sets per sec")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of set operations per second for this bucket as the target for XDCR")
+        makeMetricDef(paste("Number of set operations",
+                            "per second for this bucket",
+                            "as the target for XDCR", sep="\n"))
 
-        p <- ggplot(ns_server_data, aes(row, ep_num_ops_del_meta, color=buildinfo.version, label=ep_num_ops_del_meta))
+        p <- ggplot(ns_server_data,
+                    aes(row, ep_num_ops_del_meta, color=buildinfo.version, label=ep_num_ops_del_meta))
         p <- p + labs(x="----time (sec)--->", y="ops/sec") + geom_point()
         p <- addopts(p, "Metadata dels per sec")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Number of delete operations per second for this bucket as the target for XDCR")
+        makeMetricDef(paste("Number of delete operations",
+                            "per second for this bucket",
+                            "as the target for XDCR", sep="\n"))
     }
     ################################################################################################################
 }
