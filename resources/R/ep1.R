@@ -2221,7 +2221,7 @@ if (nrow(ns_server_data) > 0) {
         p <- addopts(p, "XDCR secs in replicating")
         print(p)
         makeFootnote(footnote)
-        makeMetricDef("Total time in secs all vb replicators",
+        makeMetricDef(paste("Total time in secs all vb replicators",
                             "spent checking and writing", sep="\n"))
 
         p <- ggplot(ns_server_data,
