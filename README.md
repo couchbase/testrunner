@@ -13,11 +13,11 @@ General:
 
     pip install boto
 
-Buildout:
-
-    pip install zc.buildout
-
 Performance tests:
+
+    pip install btrc
+
+PDF reports:
 
     pip install couchdbkit
 
@@ -26,6 +26,10 @@ Documentation:
     pip install sphinx
 
     pip install sphinx-pypi-upload
+
+Buildout:
+
+    pip install zc.buildout
 
 Usage
 -----
