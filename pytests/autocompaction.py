@@ -4,7 +4,7 @@ import random
 import time
 import json
 
-from threading import Thread
+from threading import Thread, Event
 
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
@@ -28,6 +28,7 @@ class AutoCompactionTests(BaseTestCase):
         super(AutoCompactionTests, self).setUp()
         self.autocompaction_value = self.input.param("autocompaction_value", 0)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        self.is_crashed = Event()
 
     @staticmethod
     def insert_key(serverInfo, bucket_name, count, size):
@@ -44,10 +45,17 @@ class AutoCompactionTests(BaseTestCase):
         end_time = time.time() + self.wait_timeout * 50
         # generate load until fragmentation reached
         while monitor_fragm.state != "FINISHED":
+            if self.is_crashed.is_set():
+                self.cluster.shutdown()
+                return
             if end_time < time.time():
                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 50)
             # update docs to create fragmentation
-            self._load_all_buckets(server, gen, "update", 0)
+            try:
+                self._load_all_buckets(server, gen, "update", 0)
+            except Exception, ex:
+               self.is_crashed.set()
+               self.log.error("Load cannot be performed: %s" % str(ex))
         monitor_fragm.result()
 
     def test_database_fragmentation(self):
@@ -108,10 +116,12 @@ class AutoCompactionTests(BaseTestCase):
                 elif compact_run:
                     self.log.info("auto compaction run successfully")
             except Exception, ex:
-                insert_thread._Thread__stop()
                 if str(ex).find("enospc") != -1:
+                    self.is_crashed.set()
                     self.log.error("Disk is out of space, unable to load more data")
+                    insert_thread._Thread__stop()
                 else:
+                    insert_thread._Thread__stop()
                     raise ex
             else:
                 insert_thread.join()
