@@ -104,8 +104,8 @@ class RebalanceProgressTests(RebalanceBaseTest):
         rebalance.result()
 
     def _check_vb_sums(self, servers_ingoing, servers_outgoing, new_stats):
-        active_vb_sum_1 = sum([new_stats[server.ip]["ingoing"]['activeVBucketsLeft'] for server in servers1])
-        active_vb_sum_2 = sum([new_stats[server.ip]["outgoing"]['activeVBucketsLeft'] for server in servers2])
+        active_vb_sum_1 = sum([new_stats[server.ip]["ingoing"]['activeVBucketsLeft'] for server in servers_ingoing])
+        active_vb_sum_2 = sum([new_stats[server.ip]["outgoing"]['activeVBucketsLeft'] for server in servers_outgoing])
         self.assertTrue(active_vb_sum_1 == active_vb_sum_2,
                         "Active vbuckets left should be equal in servers_in and init. %s" % new_stats)
 
