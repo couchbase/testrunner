@@ -849,6 +849,7 @@ class CreateDeleteViewTests(ViewBaseTest):
 
         self.log.info("Inserting json data into bucket")
         self._load_all_buckets(self.master, gen_load, "create", 0)
+        self._wait_for_stats_all_buckets([self.master])
 
         map_fn = 'function (doc) {emit([doc.conversationId, doc.timestamp], doc);}'
         view = [View('view_big_int', map_fn, dev_view=False)]
