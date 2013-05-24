@@ -35,13 +35,14 @@ class ViewMergingTests(BaseTestCase):
             # num_docs must be a multiple of the number of vbuckets
             self.num_docs = self.input.param("num_docs_per_vbucket", 1) * \
                             len(self.bucket.vbuckets)
-            self.is_dev_view = self.input.param("is_dev_view", True)
+            self.is_dev_view = self.input.param("is_dev_view", False)
             self.map_view_name = 'mapview1'
             self.red_view_name = 'redview1'
             self.red_view_stats_name = 'redview_stats'
             self.clients = self.init_clients()
             if 'first_case' in TestInputSingleton.input.test_params:
-                 self.create_ddocs()
+                 self.create_ddocs(False)
+                 self.create_ddocs(True)
         except Exception as ex:
             self.input.test_params["stop-on-failure"] = True
             self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
@@ -150,6 +151,15 @@ class ViewMergingTests(BaseTestCase):
             self.assertEquals(len(results.get(u'rows', None)), 0)
             self.assertEquals(len(results.get(u'errors', None)), 1)
 
+    def test_dev_view(self):
+        # A lot of additional documents are needed in order to trigger the
+        # dev views. If the number is too low, production views will be used
+        docs = ViewMergingTests.make_docs(0, self.num_docs)
+        num_vbuckets = len(self.rest.get_vbuckets(self.bucket))
+        self.populate_alternated(num_vbuckets, docs)
+        results = self.merged_query(self.map_view_name, {})
+        self.verify_results_dev(results)
+
     def calculate_matching_keys(self, params):
         keys = range(1, self.num_docs + 1)
         if 'descending' in params:
@@ -219,6 +229,22 @@ class ViewMergingTests(BaseTestCase):
                                   "Results are wrong, expected %s, actual %s"
                                   % (expected, results.get(u'rows', [])))
 
+    def verify_results_dev(self, results):
+        # A development view is always a subset of the production view,
+        # hence only check for that (and not the exact items)
+        expected = self.calculate_matching_keys({})
+        self.assertTrue(len(results.get(u'rows', [])) < len(expected) and
+                        len(results.get(u'rows', [])) > 0,
+                          ("Rows number is wrong, expected to be lower than "
+                           "%d and >0, but it was %d"
+                          % (len(expected), len(results.get(u'rows', [])))))
+        self.assertTrue(
+            results.get(u'rows', [])[0]['key'] != expected[0] or
+            results.get(u'rows', [])[-1]['key'] != expected[-1],
+            "Dev view should be a subset, but returned the same as "
+            "the production view")
+        self.verify_keys_are_sorted(results)
+
     def verify_results_reduce(self, results, params):
         if 'reduce' in params and params['reduce'] == 'false' or \
           'group_level' in params or 'group' in params and params['group'] == 'true':
@@ -241,18 +267,18 @@ class ViewMergingTests(BaseTestCase):
                               "Value for reduce is incorrect. Expected %s, actual %s"
                               % (len(expected),results.get(u'rows', [])[0][u'value']))
 
-    def create_ddocs(self):
+    def create_ddocs(self, is_dev_view):
         mapview = View(self.map_view_name, '''function(doc) {
              emit(doc.integer, doc.string);
-          }''', dev_view=self.is_dev_view)
+          }''', dev_view=is_dev_view)
         self.cluster.create_view(self.master, 'test', mapview)
         redview = View(self.red_view_name, '''function(doc) {
              emit([doc.integer, doc.string], doc.integer);
-          }''', '''_count''', dev_view=self.is_dev_view)
+          }''', '''_count''', dev_view=is_dev_view)
         self.cluster.create_view(self.master, 'test', redview)
         redview_stats = View(self.red_view_stats_name, '''function(doc) {
              emit(doc.string, doc.string);
-          }''', '''_stats''', dev_view=self.is_dev_view)
+          }''', '''_stats''', dev_view=is_dev_view)
         self.cluster.create_view(self.master, 'test2', redview_stats)
         RebalanceHelper.wait_for_persistence(self.master, self.bucket, 0)
 
@@ -339,7 +365,6 @@ class ViewMergingTests(BaseTestCase):
         return docs
 
     def merged_query(self, view_name, params={}, ddoc='test'):
-       params['full_set'] = 'true'
        bucket = self.default_bucket_name
        if not 'stale' in params:
            params['stale'] = 'false'
