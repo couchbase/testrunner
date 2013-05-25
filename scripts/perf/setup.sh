@@ -1,17 +1,11 @@
 #!/bin/sh -ex
 
 #### INSTALL ####
-erlang_threads=`grep erlang_threads ${test_conf} | awk -F"=" '{print $2}'`
-if [ -n ${erlang_threads} ] ; then
-    erlang_threads=",erlang_threads=${erlang_threads}"
-fi
-
 if [ -n ${toy_build} ] ; then
    toy=",toy=${toy_build}"
 fi
 
-./bin/install -i ${ini_file} \
-    -p product=cb,version=${version_number},vbuckets=1024,parallel=True,use_domain_names=1${erlang_threads}${toy}
+./bin/install -i ${ini_file} -p product=cb,version=${version_number},vbuckets=1024,parallel=True${toy}
 
 #### CLUSTER SETUP ####
 index_replicas=`grep index_replicas ${test_conf} | awk -F"=" '{print $2}'`
