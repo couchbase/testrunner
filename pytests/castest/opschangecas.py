@@ -69,7 +69,7 @@ class OpsChangeCasTests(CasBaseTest):
                                           .format(cas_old, key, cas_new))
                 elif ops == "delete":
                     o, cas, d = self.clients[bucket.name].delete(key)
-                    time.sleep(1)
+                    time.sleep(5)
                     self.log.info("Delete operation set item cas with key {0} to {1}".format(key, cas))
                     try:
                         self.clients[bucket.name].cas(key, 0, self.item_flag, cas, value)
