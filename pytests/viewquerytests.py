@@ -629,7 +629,7 @@ class ViewQueryTests(BaseTestCase):
         for server in self.servers[1:]:
             self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
             self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
-            otpNode = rest.add_node(master.rest_username, master.rest_password, server.ip, server.port)
+            otpNode = rest.add_node(self.master.rest_username, self.master.rest_password, server.ip, server.port)
             msg = "unable to add node {0}:{1} to the cluster"
             self.assertTrue(otpNode, msg.format(server.ip, server.port))
 
