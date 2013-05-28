@@ -5,7 +5,7 @@ if [ -n ${toy_build} ] ; then
    toy=",toy=${toy_build}"
 fi
 
-./bin/install -i ${ini_file} -p product=cb,version=${version_number},vbuckets=1024,parallel=True${toy}
+./bin/install -i ${ini_file} -p product=cb,version=${version_number},vbuckets=1024,parallel=True,use_domain_names=1${toy}
 
 #### CLUSTER SETUP ####
 mem_quota=`grep mem_quota ${test_conf} | awk -F"=" '{print $2}'`
