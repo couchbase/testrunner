@@ -125,9 +125,6 @@ class RebalanceProgressTests(RebalanceBaseTest):
                 self.assertTrue(current_stat['replicaVBucketsLeft'] >= previous_stat['replicaVBucketsLeft'],
                                 "replicaVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" %(
                                       server.ip, current_stat, previous_stat))
-                self.assertTrue(current_stat['docsTotal'] != previous_stat['docsTotal'],
-                                "docsTotal for node %s changed! Previous stat %s. Actual: %s" %(
-                                      server.ip, current_stat, previous_stat))
             else:
                 self.assertTrue(current_stat['activeVBucketsLeft'] <= previous_stat['activeVBucketsLeft'],
                                 "activeVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" %(
@@ -164,13 +161,16 @@ class RebalanceProgressTests(RebalanceBaseTest):
         tasks = self.rest.ns_server_tasks()
         for task in tasks:
                 if "detailedProgress" in task:
-                    if u"perNode" in task["detailedProgress"]:
-                        nodes = task["detailedProgress"]["perNode"]
-                        for node in nodes:
-                            detailed_progress[node.split('@')[1]] = nodes[node]
-                    detailed_progress["bucket"] = task["detailedProgress"]["bucket"]
-                    detailed_progress["buckets_count"] = task["detailedProgress"]["bucketsCount"]
-                    break
+                    try:
+                        if u"perNode" in task["detailedProgress"]:
+                            nodes = task["detailedProgress"]["perNode"]
+                            for node in nodes:
+                                detailed_progress[node.split('@')[1]] = nodes[node]
+                        detailed_progress["bucket"] = task["detailedProgress"]["bucket"]
+                        detailed_progress["buckets_count"] = task["detailedProgress"]["bucketsCount"]
+                        break
+                    except Exception, ex:
+                        self.log.warn("Didn't get statistics %s" % str(ex))
         return detailed_progress
 
     def _create_indexes(self):
