@@ -27,7 +27,7 @@ class ObserveTests(BaseTestCase):
         self.log.info("Observe Rebalance Started")
         self.cluster.rebalance(self.servers[:1], self.servs_in, [])
         self.nodes_init = self.input.param("nodes_init", 2)
-
+        self.without_access_log = self.input.param("without_access_log", False)
 
     def tearDown(self):
         super(ObserveTests, self).tearDown()
