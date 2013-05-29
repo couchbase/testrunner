@@ -1196,7 +1196,7 @@ class ViewQueryTests(BaseTestCase):
             3. gor node into pending failover state
         '''
         failover_factor = self.input.param("failover-factor", 1)
-        failover_nodes = self.server[1 : failover_factor + 1]
+        failover_nodes = self.servers[1 : failover_factor + 1]
         try:
             data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
 
