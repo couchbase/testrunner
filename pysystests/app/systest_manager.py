@@ -492,6 +492,10 @@ def parseClusterReq(cluster):
         if cluster['orchestrator'] == "True":
             clusterMsg['involve_orchestrator'] = True
 
+    if clusterMsg['soft_restart'] != '' or clusterMsg['hard_restart'] != '' \
+        or clusterMsg['only_failover'] == True:
+        rebalance_required = False
+
     clusterMsg['rebalance_required'] = rebalance_required
     return clusterMsg
 

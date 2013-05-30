@@ -320,11 +320,12 @@ def perform_admin_tasks(adminMsg, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     servers = adminMsg["hard_restart"]
     restart(servers, type='hard', cluster_id=cluster_id)
 
-    if not only_failover and (len(allNodes) > 0 or len(toBeEjectedNodes) > 0):
-        logger.error("Rebalance")
-        logger.error(allNodes)
-        logger.error(toBeEjectedNodes)
-        rest.rebalance(otpNodes=allNodes, ejectedNodes=toBeEjectedNodes)
+    if adminMsg["soft_restart"] == '' and adminMsg["hard_restart"] == '':
+        if not only_failover and (len(allNodes) > 0 or len(toBeEjectedNodes) > 0):
+            logger.error("Rebalance")
+            logger.error(allNodes)
+            logger.error(toBeEjectedNodes)
+            rest.rebalance(otpNodes=allNodes, ejectedNodes=toBeEjectedNodes)
 
 
 def monitorRebalance():
@@ -463,6 +464,8 @@ def auto_failover_nodes(rest, servers='', only_failover=False, failover_orchestr
                 failover_by_killing_mc(node.ip)
                 if not only_failover:
                     toBeEjectedNodes.append(node.id)
+
+    rest.reset_autofailover()
     return toBeEjectedNodes
 
 def failover_by_killing_mc(ip):
