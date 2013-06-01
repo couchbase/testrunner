@@ -466,6 +466,7 @@ def auto_failover_nodes(rest, servers='', only_failover=False, failover_orchestr
                     toBeEjectedNodes.append(node.id)
 
     rest.reset_autofailover()
+    rest.update_autofailover_settings(False, 30)
     return toBeEjectedNodes
 
 def failover_by_killing_mc(ip):
