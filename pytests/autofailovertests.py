@@ -64,7 +64,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
             failover_count = AutoFailoverBaseTest.get_failover_count(master)
             if failover_count == autofailover_count:
                 testcase.log.info("{0} nodes failed over as expected".format(failover_count))
-                self.log.info("expected failover in {0} seconds, actual time {1} seconds".format\
+                testcase.log.info("expected failover in {0} seconds, actual time {1} seconds".format\
                               (timeout - AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME * 2, time.time() - time_start))
                 return
             time.sleep(2)
