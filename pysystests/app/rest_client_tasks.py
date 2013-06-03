@@ -634,3 +634,21 @@ def teardown_xdcr(xdcrClusters, rest = None):
 
     except Exception:
         pass # xdcr done
+
+def perform_cli_task(ssh_command, rest = None):
+
+    hosts = ssh_command.get('hosts') or ['127.0.0.1']
+    username = ssh_command.get('username') or testcfg.SSH_USER
+    password = ssh_command.get('password') or testcfg.SSH_PASSWORD
+    command = ssh_command.get('command')
+    if command is not None:
+        for host in hosts:
+            node_ssh, node = create_ssh_conn(host,
+                                             username = username,
+                                             password = password)
+            logger.error(command)
+            #TODO: cache result: CBQE-1329
+            result = node_ssh.execute_command(command, node)
+            logger.error(result)
+
+
