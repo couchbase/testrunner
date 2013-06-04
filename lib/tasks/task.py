@@ -328,7 +328,7 @@ class RebalanceTask(Task):
                             break
                         else:
                             time.sleep(0.1)
-                    except IncompleteRead as e:
+                    except (ServerUnavailableException, IncompleteRead), e:
                         self.log.error(e)
             result = True
             for node in set(self.to_remove) - set(success_cleaned):
