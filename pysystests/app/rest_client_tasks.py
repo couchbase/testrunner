@@ -484,6 +484,8 @@ def add_back_nodes(rest, servers='', nodes=[]):
         for server in servers:
             for node in rest.node_statuses():
                 if "%s" % node.ip == "%s" % server:
+                    restart(servers=server, type='soft')
+                    time.sleep(60)
                     logger.error("Add Back node %s" % node.id)
                     rest.add_back_node(node.id)
                     addBackNodes.append(node.id)
@@ -491,6 +493,8 @@ def add_back_nodes(rest, servers='', nodes=[]):
         count = int(servers)
         servers = nodes[:count]
         for server in servers:
+            restart(servers=server.split('@')[1], type='soft')
+            time.sleep(60)
             logger.error("Add Back node %s" % server)
             rest.add_back_node(server)
             addBackNodes.append(server)
