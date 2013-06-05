@@ -703,7 +703,10 @@ class NodeInitializeHelper():
         self.controls.step_4().last_name.type(input.param("last_name", None))
         self.controls.step_4().company.type(input.param("company", None))
         if input.param("agree_terms", None) is not None:
-            self.controls.step_4().agree_terms.check(setTrue=input.param("agree_terms", None))
+            if self.controls.step_4().agree_terms.is_displayed():
+                self.controls.step_4().agree_terms.check(setTrue=input.param("agree_terms", None))
+            else:
+                self.tc.log.info("This version of application doesn't contain agree checkbox(step 4)")
 
     def _fill_5_step(self, input):
         self.controls.step_5().password_confirm.type(input.membase_settings.rest_password)
