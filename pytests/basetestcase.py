@@ -484,7 +484,7 @@ class BaseTestCase(unittest.TestCase):
             mc_conn.close()
 
     def _kill_nodes(self, nodes, servers, bucket_name):
-        self.reboot = self.input.param("reboot", True)
+        self.reboot = self.input.param("reboot", False)
         if not self.reboot:
             for node in nodes:
                 _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
