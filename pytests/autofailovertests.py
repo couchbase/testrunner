@@ -295,7 +295,8 @@ class AutoFailoverTests(unittest.TestCase):
     def load_data(self, master, bucket, keys_count):
         log = logger.Logger.get_logger()
         inserted_keys_cnt = 0
-        while inserted_keys_cnt < keys_count:
+        repeat_count = 0
+        while inserted_keys_cnt < keys_count and repeat_count < 5:
             keys_cnt, rejected_keys_cnt = \
             MemcachedClientHelper.load_bucket(servers=[master],
                 name=bucket,
@@ -303,6 +304,12 @@ class AutoFailoverTests(unittest.TestCase):
                 number_of_threads=5,
                 write_only=True)
             inserted_keys_cnt += keys_cnt
+            if keys_cnt == 0:
+                repeat_count += 1
+            else:
+                repeat_count = 0
+        if repeat_count == 5:
+            log.fail("impossible to load data")
         log.info("wait until data is completely persisted on the disk")
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
