@@ -319,7 +319,11 @@ class RebalanceTask(Task):
         else:
             success_cleaned = []
             for removed in self.to_remove:
-                rest = RestConnection(removed)
+                try:
+                    rest = RestConnection(removed)
+                except ServerUnavailableException, e:
+                    self.log.error(e)
+                    continue
                 start = time.time()
                 while time.time() - start < 30:
                     try:
