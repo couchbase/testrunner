@@ -539,6 +539,7 @@ class BaseTestCase(unittest.TestCase):
 
         for server in _servers:
             while time.time() - start < (self.wait_timeout*2):
+                mc = None
                 try:
                     mc = MemcachedClientHelper.direct_client(server, bucket_name)
                     stats = mc.stats()
