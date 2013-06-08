@@ -121,7 +121,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                     self._load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=batch_size)
                 elif("create" in self.doc_ops):
                     # 1/2th of initial data will be added in each iteration
-                    gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (1 + i) / 2.0 , end=self.num_items * (1 + i / 2.0))
+                    gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (self.num_servers - i) / 2.0 , end=self.num_items * (self.num_servers - i + 1) / 2.0)
                     self._load_all_buckets(self.master, gen_create, "create", 0, batch_size=batch_size)
                 elif("delete" in self.doc_ops):
                     # 1/(num_servers) of initial data will be removed after each iteration
