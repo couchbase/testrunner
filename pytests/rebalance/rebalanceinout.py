@@ -113,7 +113,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            self.sleep(5)
+            self.sleep(10)
             for task in tasks:
                 task.result(self.wait_timeout * 20)
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
@@ -346,9 +346,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
     Once we got all data,cluster was rebalanced the test is finished.
     Available parameters by default are:
     nodes_init=1, nodes_in=1, nodes_out=1
-    num_ddocs=1,num_views=1,data_perc_add=10
-
-    """
+    num_ddocs=1,num_views=1,data_perc_add=10"""
     def measure_time_index_during_rebalance(self):
         num_ddocs = self.input.param("num_ddocs", 1)
         num_views = self.input.param("num_views", 1)
