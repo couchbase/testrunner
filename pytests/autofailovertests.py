@@ -134,7 +134,7 @@ class AutoFailoverTests(unittest.TestCase):
     def test_enable(self):
         status = self.rest.update_autofailover_settings(True, self.timeout / 2)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         #read settings and verify
         settings = self.rest.get_autofailover_settings()
         self.assertEquals(settings.enabled, True)
@@ -142,7 +142,7 @@ class AutoFailoverTests(unittest.TestCase):
     def test_disable(self):
         status = self.rest.update_autofailover_settings(False, self.timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         #read settings and verify
         settings = self.rest.get_autofailover_settings()
         self.assertEquals(settings.enabled, False)
@@ -152,7 +152,7 @@ class AutoFailoverTests(unittest.TestCase):
         for timeout in timeouts:
             status = self.rest.update_autofailover_settings(True, timeout)
             if not status:
-                self.fail('failed to change autofailover_settings!')
+                self.fail('failed to change autofailover_settings! See MB-7282')
             #read settings and verify
             settings = self.rest.get_autofailover_settings()
             self.assertTrue(settings.timeout == timeout)
@@ -162,7 +162,7 @@ class AutoFailoverTests(unittest.TestCase):
         server_fail = self._servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         self.sleep(5)
         RemoteUtilHelper.enable_firewall(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
@@ -172,7 +172,7 @@ class AutoFailoverTests(unittest.TestCase):
         server_fail = self._servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         self.sleep(5)
         RemoteUtilHelper.enable_firewall(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
@@ -182,7 +182,7 @@ class AutoFailoverTests(unittest.TestCase):
         server_fail = self._servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         self.sleep(5)
         self._stop_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
@@ -192,7 +192,7 @@ class AutoFailoverTests(unittest.TestCase):
         server_fail = self._servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         self.sleep(5)
         self._stop_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
@@ -203,7 +203,7 @@ class AutoFailoverTests(unittest.TestCase):
         server_fail2 = self._servers[2]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         self.sleep(5)
         self.log.info("stopping the first server")
         self._stop_couchbase(server_fail1)
@@ -226,7 +226,7 @@ class AutoFailoverTests(unittest.TestCase):
         server_fail = self._servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         self.sleep(5)
         self._pause_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
@@ -236,7 +236,7 @@ class AutoFailoverTests(unittest.TestCase):
         server_fail = self._servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         self.sleep(5)
         self._pause_couchbase(server_fail)
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
@@ -257,7 +257,7 @@ class AutoFailoverTests(unittest.TestCase):
         server_fail2 = self._servers[2]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
-            self.fail('failed to change autofailover_settings!')
+            self.fail('failed to change autofailover_settings! See MB-7282')
         self.sleep(5)
         self.log.info("stopping the first server")
         self._stop_couchbase(server_fail1)
