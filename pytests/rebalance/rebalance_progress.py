@@ -132,9 +132,16 @@ class RebalanceProgressTests(RebalanceBaseTest):
                 self.assertTrue(current_stat['replicaVBucketsLeft'] <= previous_stat['replicaVBucketsLeft'],
                                 "replicaVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" %(
                                       server.ip, current_stat, previous_stat))
-                self.assertTrue(current_stat['docsTotal'] == previous_stat['docsTotal'],
-                                "docsTotal for node %s changed! Previous stat %s. Actual: %s" %(
-                                      server.ip, current_stat, previous_stat))
+                try:
+                    self.assertTrue(current_stat['docsTotal'] == previous_stat['docsTotal'],
+                                    "docsTotal for node %s changed! Previous stat %s. Actual: %s" %(
+                                          server.ip, current_stat, previous_stat))
+                except Exception, ex:
+                    if previous_stat['docsTotal'] != 0 and current_stat['docsTotal'] == 0:
+                        command = "sys:get_status({global, ns_rebalance_observer})."
+                        self.log.info("posting: %s" % command)
+                        self.rest.diag_eval(command)
+                    raise ex
                 self.assertTrue(current_stat['docsTransferred'] >= previous_stat['docsTransferred'],
                                 "docsTransferred for node %s decreased! Previous stat %s. Actual: %s" %(
                                       server.ip, current_stat, previous_stat))
