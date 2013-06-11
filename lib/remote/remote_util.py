@@ -756,7 +756,7 @@ class RemoteMachineShellConnection:
                 log.info("upgrademe task complteted")
                 break
             elif "Could not start":
-                log.fail("Ugrade failed!!!")
+                log.exception("Ugrade failed!!!")
             else:
                 log.info("upgrademe task still running:{0}".format(output))
                 time.sleep(30)

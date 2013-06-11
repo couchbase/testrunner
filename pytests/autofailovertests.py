@@ -309,7 +309,7 @@ class AutoFailoverTests(unittest.TestCase):
             else:
                 repeat_count = 0
         if repeat_count == 5:
-            log.fail("impossible to load data")
+            log.exception("impossible to load data")
         log.info("wait until data is completely persisted on the disk")
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
         RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)

@@ -98,7 +98,7 @@ class RebalanceInTests(RebalanceBaseTest):
             [t.join() for t in list_threads]
 
             if tuple(temp_result) == tuple(result):
-                self.log.fail("random keys are not changed")
+                self.log.exception("random keys are not changed")
             else:
                 result = temp_result
             num_iter += 1
@@ -443,7 +443,7 @@ class RebalanceInTests(RebalanceBaseTest):
         rebalance.result()
         rest = RestConnection(self.master)
         bucket_to_change = [bucket for bucket in self.buckets
-                            if bucket.authType =='sasl' and bucket.name !='default'][0]
+                            if bucket.authType == 'sasl' and bucket.name != 'default'][0]
         rest.change_bucket_props(bucket_to_change, saslPassword=new_pass)
         rebalance = self.cluster.async_rebalance(servs_result, servs_in_second, [])
         rebalance.result()

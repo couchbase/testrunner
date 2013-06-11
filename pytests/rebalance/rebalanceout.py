@@ -89,7 +89,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             [t.join() for t in list_threads]
 
             if tuple(temp_result) == tuple(result):
-                self.log.fail("random keys are not changed")
+                self.log.exception("random keys are not changed")
             else:
                 result = temp_result
             num_iter += 1
