@@ -66,6 +66,9 @@ class ConnectionTests(BaseTestCase):
                 if t is None:
                     self.log.error("Can open only %s threads" % i)
                     break
+                if i % 50 == 0:
+                    rate = shell.get_mem_usage_by_process(process)
+                    self.log.info("Usage of memory after {0} created connections: {1}".format(i, rate))
 
             result_rate = shell.get_mem_usage_by_process(process)
 
