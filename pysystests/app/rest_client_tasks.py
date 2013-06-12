@@ -570,7 +570,7 @@ def create_rest(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
     return RestConnection(create_server_obj(server_ip, port, username, password))
 
 def create_ssh_conn(server_ip = '', port=22, username = cfg.SSH_USER,
-               password = cfg.SSH_PASSWORD, os='linux'):
+               password = cfg.SSH_PASSWORD, os=cfg.COUCHBASE_OS):
     if isinstance(server_ip, unicode):
         server_ip = str(server_ip)
 

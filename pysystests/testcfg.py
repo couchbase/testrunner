@@ -8,6 +8,7 @@ COUCHBASE_IP = '127.0.0.1'
 COUCHBASE_PORT = '9000'
 COUCHBASE_USER = "Administrator"
 COUCHBASE_PWD = "asdasd"
+COUCHBASE_OS = "linux" # linux|windows|unix
 SSH_USER = "root"
 SSH_PASSWORD = "password"
 WORKERS = ['127.0.0.1']
