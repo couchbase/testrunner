@@ -26,7 +26,7 @@ class docloaderTests(CliBaseTest):
                                                            bucket.name, self.memory_quota, self.load_filename)
             info = self.shell.extract_remote_info()
             type = info.type.lower()
-            if type != "windows":
+            if type != "windows" and info.distribution_type.lower() != 'mac':
                 if len(error) > 0:
                     raise Exception("Command throw out error message. Please check the output of remote_util")
                 for output_line in output:
@@ -67,9 +67,13 @@ class docloaderTests(CliBaseTest):
         type = info.type.lower()
         if type == 'windows':
             os = "windows"
+        if info.distribution_type.lower() == 'mac':
+            os = 'mac'
 
-        if os == "linux":
+        if os != "windows":
             command = "unzip %ssamples/%s.zip" % (testconstants.LINUX_CB_PATH, file)
+            if os == 'mac':
+                command = "unzip %ssamples/%s.zip" % (testconstants.MAC_CB_PATH, file)
             output, error = self.shell.execute_command(command.format(command))
             self.shell.log_command_output(output, error)
 
@@ -93,6 +97,7 @@ class docloaderTests(CliBaseTest):
             number_of_items = a - b  #design doc create views not items in cluster
             self.shell.delete_files(file)
             return number_of_items
+
         elif os == "windows":
             if file == "gamesim-sample":
                 return 586
