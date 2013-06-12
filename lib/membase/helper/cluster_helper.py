@@ -266,7 +266,13 @@ class ClusterOperationHelper(object):
             for removed in [node for node in nodes if (node.id != master_id)]:
                 removed.rest_password = servers[0].rest_password
                 removed.rest_username = servers[0].rest_username
-                rest = RestConnection(removed)
+                try:
+                    rest = RestConnection(removed)
+                except Exception as ex:
+                    log.error("can't create rest connection after rebalance out for ejected nodes,\
+                        will retry after 10 seconds according to MB-8430: {0} ".format(ex))
+                    time.sleep(10)
+                    rest = RestConnection(removed)
                 start = time.time()
                 while time.time() - start < 30:
                     if len(rest.get_pools_info()["pools"]) == 0:
