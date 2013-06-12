@@ -196,15 +196,15 @@ class WarmUpTests(BaseTestCase):
 
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
-                for gen in self.load_gen_list[:int(len(self.load_gen_list)*0.5)]:
+                for gen in self.load_gen_list[:int(len(self.load_gen_list) * 0.5)]:
                     self._load_all_buckets(self.master, gen, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("delete" in self.doc_ops):
-                for gen in self.load_gen_list[int(len(self.load_gen_list)*0.5):]:
+                for gen in self.load_gen_list[int(len(self.load_gen_list) * 0.5):]:
                     self._load_all_buckets(self.master, gen, "delete", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("expire" in self.doc_ops):
-                for gen in self.load_gen_list[:int(len(self.load_gen_list)*0.8)]:
+                for gen in self.load_gen_list[:int(len(self.load_gen_list) * 0.8)]:
                     self._load_all_buckets(self.master, gen, "update", self.expire_time, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-                time.sleep(self.expire_time*2)
+                time.sleep(self.expire_time * 2)
 
                 for server in self.servers:
                     shell = RemoteMachineShellConnection(server)
@@ -293,7 +293,7 @@ class WarmUpTests(BaseTestCase):
         remote_client.log_command_output(output, error)
         percentage = _get_disk_usage_percentage(remote_client)
         try:
-            while int(percentage) < 99:
+            while int(percentage) < 95:
                 output, error = remote_client.execute_command("dd if=/dev/zero of=full_disk{0} bs=3G count=1".format(percentage + str(time.time())), use_channel=True)
                 remote_client.log_command_output(output, error)
                 percentage = _get_disk_usage_percentage(remote_client)
