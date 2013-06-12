@@ -129,14 +129,21 @@ class BucketOperationHelper():
             buckets = []
             try:
                 buckets = rest.get_buckets()
-            except:
-                log.info('15 seconds sleep before calling get_buckets again...')
+            except Exception as e:
+                log.error(e)
+                log.error('15 seconds sleep before calling get_buckets again...')
                 time.sleep(15)
                 buckets = rest.get_buckets()
             log.info('deleting existing buckets {0} on {1}'.format([b.name for b in buckets], serverInfo.ip))
             for bucket in buckets:
                 log.info("remove bucket {0} ...".format(bucket.name))
-                status = rest.delete_bucket(bucket.name)
+                try:
+                    status = rest.delete_bucket(bucket.name)
+                except ServerUnavailableException as e:
+                    log.error(e)
+                    log.error('5 seconds sleep before calling delete_bucket again...')
+                    time.sleep(5)
+                    status = rest.delete_bucket(bucket.name)
                 if not status:
                     try:
                         BucketOperationHelper.print_dataStorage_content(servers)
