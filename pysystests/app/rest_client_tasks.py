@@ -638,8 +638,8 @@ def teardown_xdcr(xdcrClusters, rest = None):
 def perform_cli_task(ssh_command, rest = None):
 
     hosts = ssh_command.get('hosts') or ['127.0.0.1']
-    username = ssh_command.get('username') or testcfg.SSH_USER
-    password = ssh_command.get('password') or testcfg.SSH_PASSWORD
+    username = ssh_command.get('username') or cfg.SSH_USER
+    password = ssh_command.get('password') or cfg.SSH_PASSWORD
     command = ssh_command.get('command')
     if command is not None:
         for host in hosts:
