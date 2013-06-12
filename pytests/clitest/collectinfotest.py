@@ -130,4 +130,4 @@ class collectinfoTests(CliBaseTest):
             pass
 
         self.shell.delete_files(zip_file)
-        self.shell.delete_files("cbcbcollect_info*")
+        self.shell.delete_files("cbcollect_info*")
