@@ -450,9 +450,14 @@ class BaseTestCase(unittest.TestCase):
 
         self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120))
         if check_items:
-            self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify,
+            try:
+                self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify,
                                      only_store_hash=only_store_hash, replica_to_read=replica_to_read,
                                      batch_size=batch_size)
+            except ValueError, e:
+                # get/verify stats if 'ValueError: Not able to get values for following keys' was gotten
+                self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
+                raise e
             self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
             verified = True
@@ -505,7 +510,7 @@ class BaseTestCase(unittest.TestCase):
                 output, error = shell.execute_command(command)
                 shell.log_command_output(output, error)
                 shell.disconnect()
-                time.sleep(self.wait_timeout*8)
+                time.sleep(self.wait_timeout * 8)
                 shell = RemoteMachineShellConnection(server)
                 command = "/sbin/iptables -F"
                 output, error = shell.execute_command(command)
@@ -538,7 +543,7 @@ class BaseTestCase(unittest.TestCase):
         memcached_restarted = False
 
         for server in _servers:
-            while time.time() - start < (self.wait_timeout*2):
+            while time.time() - start < (self.wait_timeout * 2):
                 mc = None
                 try:
                     mc = MemcachedClientHelper.direct_client(server, bucket_name)
