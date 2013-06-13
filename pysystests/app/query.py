@@ -62,40 +62,52 @@ def queryConsumer(queryQueue = "query_default"):
 """
 Looks for active query workloads in the cache and runs them
 """
-@celery.task
-def queryRunner():
+@celery.task(base = PersistedMQ, ignore_result=True)
+def queryRunner(max_msgs = 10):
 
-    hosts = None
-    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
+    rabbitHelper = queryRunner.rabbitHelper
 
-    if clusterStatus:
-        hosts = clusterStatus.get_all_hosts()
+    # check queue with pending http requests
+    pending_http_requests = "query_multi_"+cfg.CB_CLUSTER_TAG
+    if rabbitHelper.qsize(pending_http_requests) > max_msgs:
 
-    # retreive all active query workloads
-    queries = CacheHelper.active_queries()
-    for query in queries:
+        # purge waiting tasks
+        rabbitHelper.purge(pending_http_requests)
+        query_ops_manager(max_msgs, True)
 
-        # async update query workload object
-        updateQueryWorkload.apply_async(args=[query])
+    else:
 
-        count = int(query.qps)
-        filters = list(set(query.include_filters) -\
-                       set(query.exclude_filters))
-        params = generateQueryParams(query.indexed_key,
-                                     query.bucket,
-                                     filters,
-                                     query.limit,
-                                     query.startkey,
-                                     query.endkey,
-                                     query.startkey_docid,
-                                     query.endkey_docid)
-        multi_query.delay(count,
-                          query.ddoc,
-                          query.view,
-                          params,
-                          query.bucket,
-                          query.password,
-                          hosts = hosts)
+        hosts = None
+        clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
+
+        if clusterStatus:
+            hosts = clusterStatus.get_all_hosts()
+
+        # retreive all active query workloads
+        queries = CacheHelper.active_queries()
+        for query in queries:
+
+            # async update query workload object
+            updateQueryWorkload.apply_async(args=[query])
+
+            count = int(query.qps)
+            filters = list(set(query.include_filters) -\
+                           set(query.exclude_filters))
+            params = generateQueryParams(query.indexed_key,
+                                         query.bucket,
+                                         filters,
+                                         query.limit,
+                                         query.startkey,
+                                         query.endkey,
+                                         query.startkey_docid,
+                                         query.endkey_docid)
+            multi_query.delay(count,
+                              query.ddoc,
+                              query.view,
+                              params,
+                              query.bucket,
+                              query.password,
+                              hosts = hosts)
 
 
 class QueryWorkload(object):
@@ -290,5 +302,32 @@ class QueryBuilder(object):
     @staticmethod
     def from_cache(id_):
         return ObjCacher().instance(CacheHelper.QBUILDCACHEKEY, id_)
+
+
+@celery.task(base = PersistedMQ, ignore_result=True)
+def query_ops_manager(max_msgs = 10, isovercommited = False):
+
+    rabbitHelper = query_ops_manager.rabbitHelper
+
+    # retreive all active query workloads
+    queries = CacheHelper.active_queries()
+    for query in queries:
+
+        # check if query tasks are overloaded
+        if rabbitHelper.qsize(query.task_queue) > max_msgs or isovercommited:
+
+            # purge waiting tasks
+            rabbitHelper.purge(query.task_queue)
+
+            # throttle down ops by 10%
+            new_queries_per_sec = query.qps*0.90
+
+            # cannot reduce below 10 qps
+            if new_queries_per_sec > 10:
+                query.qps = new_queries_per_sec
+                logger.error("Cluster Overcommited: reduced queries/sec to (%s)" %\
+                             query.qps)
+
+
 
 

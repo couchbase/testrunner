@@ -180,6 +180,12 @@ class BaseConfig(object):
             'query_runner': {
                 'task': 'app.query.queryRunner',
                 'schedule': timedelta(seconds=1),
+                'args' : (10,) # no. of msgs to trigger throttling
+            },
+            'query_ops_manager': {
+                'task': 'app.query.query_ops_manager',
+                'schedule': timedelta(seconds=10), # every 10s
+                'args' : (10,) # no. of msgs to trigger throttling
             },
         })
 
@@ -195,6 +201,7 @@ class BaseConfig(object):
                 self.make_queue('query_runner',  'query.runner', direct_ex),
                 self.make_queue('query_upt_builder',  'query.updateqb', direct_ex),
                 self.make_queue('query_upt_workload',  'query.updateqw', direct_ex),
+                self.make_queue('query_ops_manager',  'query.opmanager', direct_ex),
             )
 
         self.CELERY_ROUTES = self.CELERY_ROUTES +\
@@ -204,6 +211,7 @@ class BaseConfig(object):
             {'app.query.updateQueryBuilders': self.route_args('query_upt_builder','query.updateqb')},
             {'app.query.updateQueryWorkload': self.route_args('query_upt_workload','query.updateqw')},
             {'app.rest_client_tasks.multi_query': self.route_args('query_multi','query.multi')},
+            {'app.query.query_ops_manager': self.route_args('query_ops_manager','query.opmanager')},
         )
 
     def add_adminconfig(self):
