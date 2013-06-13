@@ -196,7 +196,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 server.data_path = data_path
                 server.index_path = index_path
                 shell = RemoteMachineShellConnection(server)
-                shell.remove_folders([data_path, index_path])
+                #shell.remove_folders([data_path, index_path])
                 for path in set([data_path, index_path]):
                     shell.create_directory(path)
                 shell.disconnect()
