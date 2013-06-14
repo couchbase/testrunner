@@ -53,9 +53,18 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
     if cfg.SERIESLY_IP != '' and qtime is not None:
         # store the most recent query response time 'qtime' into seriesly
         seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
-        #TODO: do not hardcode fast...we should have per/testdbs
-        db='fast'
-        seriesly[db].append({'query_latency' : qtime})
+
+        db = None
+        if 'fast' in seriesly.list_dbs():
+            db='fast'
+        else:
+            bucketStatus = app.workload_manager.BucketStatus.from_cache(bucket) or app.workload_manager.BucketStatus(bucket)
+            db = bucketStatus.latency_db
+            if db not in seriesly.list_dbs():
+                seriesly.create_db(db)
+
+        if db is not None:
+            seriesly[db].append({'query_latency' : qtime})
 
     # log to logs/celery-query.log
     try:

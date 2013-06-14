@@ -569,10 +569,19 @@ def report_kv_latency(bucket = "default"):
 
             # report to seriessly
             seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
-            db='fast'
-            seriesly[db].append({'set_latency' : set_latency,
-                                 'get_latency' : get_latency,
-                                 'delete_latency' : delete_latency})
+            db = None
+            if 'fast' in seriesly.list_dbs():
+                db='fast'
+            else:
+                bucketStatus = BucketStatus.from_cache(bucket) or BucketStatus(bucket)
+                db = bucketStatus.latency_db
+                if db not in seriesly.list_dbs():
+                    seriesly.create_db(db)
+
+            if db is not None:
+                seriesly[db].append({'set_latency' : set_latency,
+                                     'get_latency' : get_latency,
+                                     'delete_latency' : delete_latency})
 
 
 
@@ -956,6 +965,7 @@ class BucketStatus(object):
     def __init__(self, id_):
         self.id = id_
         self.history = {}
+        self.latency_db = id_ + "latency"
 
     def addTask(self, bucket, taskid, workload):
         newPair = (taskid, workload)
