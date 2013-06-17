@@ -1260,9 +1260,10 @@ class EVPerfClient(EPerfClient):
             if getattr(self, "active_fg_workers", None) is not None:
                 self.active_fg_workers.value += 1
                 cfg['active_fg_workers'] = self.active_fg_workers
-            if getattr(self, "shutdown_event", None) is not None:
-                ctl['shutdown_event'] = self.shutdown_event
             cfg['node_prefix'] = self.parami('prefix', 0)
+
+        if why == "loop" and getattr(self, "shutdown_event", None) is not None:
+            ctl["shutdown_event"] = getattr(self, "shutdown_event")
 
         cfg['stats_ops'] = self.parami("mcsoda_fg_stats_ops",
                                        PerfDefaults.mcsoda_fg_stats_ops)
