@@ -736,7 +736,7 @@ class RemoteMachineShellConnection:
             # Please run installer again to continue."""
             output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
             self.log_command_output(output, error)
-            time.sleep(100)
+            time.sleep(200)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
             self.log_command_output(output, error)
             self.stop_schedule_tasks()
