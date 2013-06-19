@@ -44,11 +44,11 @@ class RemoteMachineHelper(object):
 
     def monitor_process(self, process_name,
                         duration_in_seconds=120):
-        #monitor this process and return if it crashes
+        # monitor this process and return if it crashes
         end_time = time.time() + float(duration_in_seconds)
         last_reported_pid = None
         while time.time() < end_time:
-            #get the process list
+            # get the process list
             process = self.is_process_running(process_name)
             if process:
                 if not last_reported_pid:
@@ -57,11 +57,11 @@ class RemoteMachineHelper(object):
                     message = 'process {0} was restarted. old pid : {1} new pid : {2}'
                     log.info(message.format(process_name, last_reported_pid, process.pid))
                     return False
-                    #check if its equal
+                    # check if its equal
             else:
                 # we should have an option to wait for the process
                 # to start during the timeout
-                #process might have crashed
+                # process might have crashed
                 log.info("process {0} is not running or it might have crashed!".format(process_name))
                 return False
             time.sleep(1)
@@ -86,7 +86,7 @@ class RemoteMachineShellConnection:
         self.use_sudo = True
         if self.username == 'root':
            self.use_sudo = False
-        #let's create a connection
+        # let's create a connection
         self._ssh_client = paramiko.SSHClient()
         self.ip = ip
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -104,7 +104,7 @@ class RemoteMachineShellConnection:
             exit(1)
 
     def __init__(self, serverInfo):
-        #let's create a connection
+        # let's create a connection
         self.username = serverInfo.ssh_username
         self.use_sudo = True
         if self.username == 'root':
@@ -116,7 +116,7 @@ class RemoteMachineShellConnection:
         msg = 'connecting to {0} with username : {1} password : {2} ssh_key: {3}'
         log.info(msg.format(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password, serverInfo.ssh_key))
         # added attempts for connection because of PID check failed. RNG must be re-initialized after fork() error
-        #That's a paramiko bug
+        # That's a paramiko bug
         max_attempts_connect = 2
         attempt = 0
         while True:
@@ -149,14 +149,14 @@ class RemoteMachineShellConnection:
         log.info("Connected")
 
     def get_running_processes(self):
-        #if its linux ,then parse each line
-        #26989 ?        00:00:51 pdflush
-        #ps -Ao pid,comm
+        # if its linux ,then parse each line
+        # 26989 ?        00:00:51 pdflush
+        # ps -Ao pid,comm
         processes = []
         output, error = self.execute_command('ps -Ao pid,comm', debug=False)
         if output:
             for line in output:
-                #split to words
+                # split to words
                 words = line.strip().split(' ')
                 if len(words) >= 2:
                     process = RemoteMachineProcess()
@@ -185,7 +185,7 @@ class RemoteMachineShellConnection:
             log.info("Wait 10 seconds to stop service completely")
             time.sleep(10)
         if info.type.lower() == "linux":
-            #check if /opt/membase exists or /opt/couchbase or /opt/couchbase-single
+            # check if /opt/membase exists or /opt/couchbase or /opt/couchbase-single
             o, r = self.execute_command("/etc/init.d/membase-server stop", info)
             self.log_command_output(o, r)
 
@@ -313,11 +313,11 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             return self.file_exists('/cygdrive/c/tmp/', 'setup.exe')
         else:
-        #try to push this build into
-        #depending on the os
-        #build.product has the full name
-        #first remove the previous file if it exist ?
-        #fix this :
+        # try to push this build into
+        # depending on the os
+        # build.product has the full name
+        # first remove the previous file if it exist ?
+        # fix this :
             output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename), info)
             self.log_command_output(output, error)
             log.info('get md5 sum for local and remote')
@@ -326,11 +326,11 @@ class RemoteMachineShellConnection:
             log.info('comparing md5 sum and downloading if needed')
             output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
             self.log_command_output(output, error)
-            #check if the file exists there now ?
+            # check if the file exists there now ?
             return self.file_exists('/tmp', filename)
-            #for linux environment we can just
-            #figure out what version , check if /tmp/ has the
-            #binary and then return True if binary is installed
+            # for linux environment we can just
+            # figure out what version , check if /tmp/ has the
+            # binary and then return True if binary is installed
 
     def get_file(self, remotepath, filename, todir):
         if self.file_exists(remotepath, filename):
@@ -370,8 +370,8 @@ class RemoteMachineShellConnection:
             return []
         return files
 
-    #check if this file exists in the remote
-    #machine or not
+    # check if this file exists in the remote
+    # machine or not
     def file_starts_with(self, remotepath, pattern):
         sftp = self._ssh_client.open_sftp()
         files_matched = []
@@ -381,7 +381,7 @@ class RemoteMachineShellConnection:
                 if name.startswith(pattern):
                     files_matched.append("{0}/{1}".format(remotepath, name))
         except IOError:
-            #ignore this error
+            # ignore this error
             pass
         sftp.close()
         if len(files_matched) > 0:
@@ -447,7 +447,7 @@ class RemoteMachineShellConnection:
     def copy_files_local_to_remote(self, src_path, des_path):
         files = os.listdir(src_path)
         log.info("copy file from {0} to {1}".format(src_path, des_path))
-        #self.execute_batch_command("cp -r  {0}/* {1}".format(src_path, des_path))
+        # self.execute_batch_command("cp -r  {0}/* {1}".format(src_path, des_path))
         for file in files:
             if file.find("wget") != 1:
                 a = ""
@@ -583,7 +583,7 @@ class RemoteMachineShellConnection:
         f2.close()
         self.copy_file_local_to_remote(full_src_path, full_des_path)
         # remove capture file from source after copy to destination
-        #os.remove(full_src_path)
+        # os.remove(full_src_path)
 
     def get_windows_system_info(self):
         try:
@@ -617,7 +617,7 @@ class RemoteMachineShellConnection:
     def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
-        #releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1", "1.7.2"]
+        # releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1", "1.7.2"]
 
         product_version = ""
         if   "2.1.0" in version:
@@ -693,7 +693,7 @@ class RemoteMachineShellConnection:
             pass
 
     def membase_upgrade(self, build, save_upgrade_config=False):
-        #upgrade couchbase server
+        # upgrade couchbase server
         info = self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(info.deliverable_type))
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
@@ -703,7 +703,7 @@ class RemoteMachineShellConnection:
                 log.info('********* continue upgrade process **********')
 
         elif info.deliverable_type == 'rpm':
-            #run rpm -i to install
+            # run rpm -i to install
             if save_upgrade_config:
                 self.membase_uninstall(save_upgrade_config=save_upgrade_config)
                 install_command = 'rpm -i /tmp/{0}'.format(build.name)
@@ -731,9 +731,9 @@ class RemoteMachineShellConnection:
         log.info('sleep for 5 seconds before running task schedule upgrademe')
         time.sleep(5)
         if '1.8.0' in str(output):
-            #run installer in second time as workaround for upgrade 1.8.0 only:
-            #Installer needs to update registry value in order to upgrade from the previous version.
-            #Please run installer again to continue."""
+            # run installer in second time as workaround for upgrade 1.8.0 only:
+            # Installer needs to update registry value in order to upgrade from the previous version.
+            # Please run installer again to continue."""
             output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
             self.log_command_output(output, error)
             time.sleep(100)
@@ -757,6 +757,7 @@ class RemoteMachineShellConnection:
                 break
             elif "Could not start":
                 log.exception("Ugrade failed!!!")
+                break
             else:
                 log.info("upgrademe task still running:{0}".format(output))
                 time.sleep(30)
@@ -833,7 +834,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
                              "firefox.*", "WerFault.*", "iexplore.*"]
             self.terminate_processes(info, win_processes)
-            #to prevent getting full disk let's delete some large files
+            # to prevent getting full disk let's delete some large files
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
@@ -924,7 +925,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
         end_time = time.time() + float(timeout_in_seconds)
         deleted = False
         while time.time() < end_time and not deleted:
-            #get the process list
+            # get the process list
             exists = self.file_exists(remotepath, filename)
             if exists:
                 log.error('at {2} file still exists : {0}{1}'.format(remotepath, filename, self.ip))
@@ -938,7 +939,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
         end_time = time.time() + float(timeout_in_seconds)
         added = False
         while time.time() < end_time and not added:
-            #get the process list
+            # get the process list
             exists = self.file_exists(remotepath, filename)
             if not exists:
                 log.error('at {2} file does not exist : {0}{1}'.format(remotepath, filename, self.ip))
@@ -1023,7 +1024,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             else:
                 log.info("No couchbase single server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
-            #uninstallation command is different
+            # uninstallation command is different
             if type == "ubuntu":
                 uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
                 output, error = self.execute_command(uninstall_cmd)
@@ -1093,7 +1094,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             else:
                 log.info("No couchbase server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
-            #uninstallation command is different
+            # uninstallation command is different
             if type == "ubuntu":
                 uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
                 output, error = self.execute_command(uninstall_cmd)
@@ -1216,7 +1217,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             else:
                 log.info("No membase server on this server.  Free to install")
         elif type in ["ubuntu", "centos", "red hat"]:
-            #uninstallation command is different
+            # uninstallation command is different
             if type == "ubuntu":
                 uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};'.format('membase-server', 'membase-server')
                 output, error = self.execute_command(uninstall_cmd)
@@ -1231,9 +1232,9 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                 self.remove_folders(linux_folders)
 
     def log_command_output(self, output, error, track_words=()):
-        #success means that there are no track_words in the output
-        #and there are no errors at all, if track_words is not empty
-        #if track_words=(), the result is not important, and we return True
+        # success means that there are no track_words in the output
+        # and there are no errors at all, if track_words is not empty
+        # if track_words=(), the result is not important, and we return True
         success = True
         for line in error:
             log.error(line)
@@ -1311,8 +1312,8 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         self._ssh_client.close()
 
     def extract_remote_info(self):
-        #use ssh to extract remote machine info
-        #use sftp to if certain types exists or not
+        # use ssh to extract remote machine info
+        # use sftp to if certain types exists or not
         mac_check_cmd = "sw_vers | grep ProductVersion | awk '{ print $2 }'"
         stdin, stdout, stderro = self._ssh_client.exec_command(mac_check_cmd)
         stdin.close()
@@ -1332,17 +1333,17 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             is_linux_distro = False
             for name in filenames:
                 if name == 'issue':
-                    #it's a linux_distro . let's downlaod this file
-                    #format Ubuntu 10.04 LTS \n \l
+                    # it's a linux_distro . let's downlaod this file
+                    # format Ubuntu 10.04 LTS \n \l
                     filename = 'etc-issue-{0}'.format(uuid.uuid4())
                     sftp.get(localpath=filename, remotepath='/etc/issue')
                     file = open(filename)
                     etc_issue = ''
-                    #let's only read the first line
+                    # let's only read the first line
                     for line in file.xreadlines():
                         etc_issue = line
                         break
-                        #strip all extra characters
+                        # strip all extra characters
                     etc_issue = etc_issue.rstrip('\n').rstrip('\\l').rstrip('\\n')
                     if etc_issue.lower().find('ubuntu') != -1:
                         os_distro = 'Ubuntu'
@@ -1390,7 +1391,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
             info.hostname = self.get_hostname(win_info)
             return info
         else:
-            #now run uname -m to get the architechtre type
+            # now run uname -m to get the architechtre type
             stdin, stdout, stderro = self._ssh_client.exec_command('uname -m')
             stdin.close()
             os_arch = ''
@@ -1508,7 +1509,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         self.log_command_output(o, r)
 
 
-    #TODO: Windows
+    # TODO: Windows
     def flush_os_caches(self):
         info = self.extract_remote_info()
         if info.type.lower() == "linux":
@@ -1621,7 +1622,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
                                command_options='', cluster_ip="", cluster_port="8091"):
         backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
-        #TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
         info = self.extract_remote_info()
         type = info.type.lower()
         if type == 'windows':
@@ -1778,7 +1779,7 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
         user_param = (" -u {0}".format(user), "")[user is None]
         passwd_param = (" -p {0}".format(password), "")[password is None]
         # now we can run command in format where all parameters are optional
-        #{PATH}/couchbase-cli [COMMAND] [CLUSTER:[PORT]] [USER] [PASWORD] [OPTIONS]
+        # {PATH}/couchbase-cli [COMMAND] [CLUSTER:[PORT]] [USER] [PASWORD] [OPTIONS]
         command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
 
         output, error = self.execute_command(command, use_channel=True)
@@ -1822,11 +1823,11 @@ class RemoteUtilHelper(object):
             shell.execute_command('netsh advfirewall set privateprofile state on')
             log.info("enabled firewall on {0}".format(server))
         else:
-            #Reject incoming connections on port 1000->60000
+            # Reject incoming connections on port 1000->60000
             o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
             shell.log_command_output(o, r)
 
-            #Reject outgoing connections on port 1000->60000
+            # Reject outgoing connections on port 1000->60000
             if bidirectional:
                 o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:60000 -j REJECT")
                 shell.log_command_output(o, r)
