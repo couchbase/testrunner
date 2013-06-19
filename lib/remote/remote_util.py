@@ -185,7 +185,6 @@ class RemoteMachineShellConnection:
             log.info("Wait 10 seconds to stop service completely")
             time.sleep(10)
         if info.type.lower() == "linux":
-            # check if /opt/membase exists or /opt/couchbase or /opt/couchbase-single
             o, r = self.execute_command("/etc/init.d/membase-server stop", info)
             self.log_command_output(o, r)
 
@@ -764,58 +763,6 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
         self.log_command_output(output, error)
 
-    def couchbase_single_install(self, build):
-        is_couchbase_single = False
-        success = True
-        track_words = ("warning", "error", "fail")
-        if build.name.lower().find("couchbase-single") != -1:
-            is_couchbase_single = True
-        if not is_couchbase_single:
-            raise Exception("its not a couchbase-single?")
-        info = self.extract_remote_info()
-        log.info('deliverable_type : {0}'.format(info.deliverable_type))
-        type = info.type.lower()
-        if type == 'windows':
-            win_processes = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
-                             "WerFault.*"]
-            self.terminate_processes(info, win_processes)
-            install_init_command = "echo '[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-DlgOrder]\r\n\
-Dlg0={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdWelcome-0\r\n\
-Count=4\r\n\
-Dlg1={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdAskDestPath-0\r\n\
-Dlg2={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdStartCopy2-0\r\n\
-Dlg3={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0\r\n\
-[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdWelcome-0]\r\n\
-Result=1\r\n\
-[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdAskDestPath-0]\r\n\
-szDir=C:\\Program Files (x86)\\Couchbase\\Server\\\r\n\
-Result=1\r\n\
-[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdStartCopy2-0]\r\n\
-Result=1\r\n\
-[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0]\r\n\
-Result=1\r\n\
-bOpt1=0\r\n\
-bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
-            output, error = self.execute_command(install_init_command)
-            self.log_command_output(output, error)
-            install_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\css_win2k8_64_install.iss' > /cygdrive/c/automation/install.bat"
-            output, error = self.execute_command(install_command)
-            self.log_command_output(output, error)
-            output, error = self.execute_command("cmd /c schtasks /run /tn installme")
-            success &= self.log_command_output(output, error, track_words)
-            self.wait_till_file_added("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
-                                          timeout_in_seconds=600)
-            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
-            self.log_command_output(output, error)
-        elif info.deliverable_type in ["rpm", "deb"]:
-            log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
-            if info.deliverable_type == 'rpm':
-                output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
-            elif info.deliverable_type == 'deb':
-                output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
-            success &= self.log_command_output(output, error, track_words)
-        return success
-
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None, swappiness=10):
         server_type = None
         success = True
@@ -979,63 +926,6 @@ bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_install.iss"
             output, error = self.execute_command("rm -rf {0}".format(folder))
             self.log_command_output(output, error)
 
-    def couchbase_single_uninstall(self):
-        linux_folders = ["/opt/couchbase"]
-        terminate_process_list = ["beam", "couchdb"]
-
-        info = self.extract_remote_info()
-        log.info(info.distribution_type)
-        type = info.distribution_type.lower()
-        if type == 'windows':
-            if info.architecture_type == "x86_64":
-                exists = self.file_exists("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt')
-            elif info.architecture_type == "x86":
-                exists = self.file_exists("/cygdrive/c/Program Files/Couchbase/Server/", 'VERSION.txt')
-            log.info("exists ? {0}".format(exists))
-            if exists:
-                uninstall_init_command = "echo '[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-DlgOrder]\r\n\
-Dlg0={95137A8D-0896-4BB8-85B3-9D7723BA6811}-MessageBox-0\r\n\
-Count=2\r\n\
-Dlg1={95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0\r\n\
-[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-MessageBox-0]\r\n\
-Result=6\r\n\
-[{95137A8D-0896-4BB8-85B3-9D7723BA6811}-SdFinish-0]\r\n\
-Result=1\r\n\
-bOpt1=0\r\n\
-bOpt2=0' > /cygdrive/c/automation/css_win2k8_64_uninstall.iss"
-                output, error = self.execute_command(uninstall_init_command)
-                self.log_command_output(output, error)
-                uninstall_command = "echo 'c:\\automation\\setup.exe /s -f1c:\\automation\\css_win2k8_64_uninstall.iss' > /cygdrive/c/automation/uninstall.bat"
-                self.log_command_output(output, error)
-                output, error = self.execute_command(uninstall_command)
-                self.log_command_output(output, error)
-                win_processes = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
-                                 "WerFault.*"]
-                self.terminate_processes(info, win_processes)
-                self.remove_folders(["/cygdrive/c/Program Files (x86)/Couchbase/Server/"])
-                output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
-                self.log_command_output(output, error)
-                self.wait_till_file_deleted("/cygdrive/c/Program Files (x86)/Couchbase/Server/", 'VERSION.txt',
-                                            timeout_in_seconds=120)
-                log.info("Wait for 30 seconds before doing something else")
-                time.sleep(30)
-                output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
-                self.log_command_output(output, error)
-            else:
-                log.info("No couchbase single server on this server.  Free to install")
-        elif type in ["ubuntu", "centos", "red hat"]:
-            # uninstallation command is different
-            if type == "ubuntu":
-                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
-                output, error = self.execute_command(uninstall_cmd)
-                self.log_command_output(output, error)
-            elif type in ["centos", "red hat"]:
-                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
-                log.info('running rpm -e to remove couchbase-server')
-                output, error = self.execute_command(uninstall_cmd)
-                self.log_command_output(output, error)
-            self.terminate_processes(info, terminate_process_list)
-            self.remove_folders(linux_folders)
 
     def couchbase_uninstall(self):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
