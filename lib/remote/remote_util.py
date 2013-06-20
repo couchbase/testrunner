@@ -403,7 +403,7 @@ class RemoteMachineShellConnection:
         except IOError:
             return False
 
-    def download_binary_in_win(self, url, version.):
+    def download_binary_in_win(self, url, version):
         self.execute_command('taskkill /F /T /IM msiexec32.exe')
         self.execute_command('taskkill /F /T /IM msiexec.exe')
         self.execute_command('taskkill /F /T IM setup.exe')
