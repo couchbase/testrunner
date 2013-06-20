@@ -30,6 +30,8 @@ class RebalanceInTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        if self.output_time:
+            start_time = time.time()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
         if(self.doc_ops is not None):
             tasks = []
@@ -44,6 +46,9 @@ class RebalanceInTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
         rebalance.result()
+        if self.output_time:
+            delta_time = time.time() - start_time
+            self.log.info("TIME FOR REBALANCE IS %s SECS (%s MINS)" % (delta_time, delta_time / 60))
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
 
     def rebalance_in_with_ops_batch(self):
