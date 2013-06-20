@@ -274,8 +274,8 @@ class MembaseServerInstaller(Installer):
 
         if type == "windows":
             build = self.build_url(params)
-            remote_client.download_binary_in_win(build.url, params["product"], params["version"])
-            success &= remote_client.install_server_win(build, params["version"])
+            remote_client.download_binary_in_win(build.url, params["version"])
+            success = remote_client.install_server_win(build, params["version"])
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
@@ -402,8 +402,8 @@ class CouchbaseServerInstaller(Installer):
         else:
             vbuckets = None
         if type == "windows":
-            remote_client.download_binary_in_win(build.url, params["product"], params["version"])
-            success = remote_client.install_server_win(build, params["version"])
+            remote_client.download_binary_in_win(build.url, params["version"])
+            success = remote_client.install_server_win(build, params["version"].replace("-rel",""))
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:

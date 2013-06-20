@@ -9,6 +9,9 @@ import logger
 from builds.build_query import BuildQuery
 import testconstants
 from testconstants import WIN_REGISTER_ID
+from testconstants import MEMBASE_VERSIONS
+from testconstants import COUCHBASE_VERSIONS
+
 from membase.api.rest_client import RestConnection, RestHelper
 
 
@@ -400,7 +403,7 @@ class RemoteMachineShellConnection:
         except IOError:
             return False
 
-    def download_binary_in_win(self, url, name, version):
+    def download_binary_in_win(self, url, version.):
         self.execute_command('taskkill /F /T /IM msiexec32.exe')
         self.execute_command('taskkill /F /T /IM msiexec.exe')
         self.execute_command('taskkill /F /T IM setup.exe')
@@ -409,19 +412,16 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM WerFault.*')
         self.execute_command('taskkill /F /T /IM Firefox.*')
         self.disable_firewall()
-        if url.lower().find("membase") != -1:
-            name = "mb"
-        elif url.lower().find("couchbase") != -1:
-            name = "cb"
-        exist = self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name, version))
+        version = version.replace("-rel", "")
+        exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
         if not exist:
             output, error = self.execute_command(
-                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O {1}_{2}.exe';ls -l;".format(
-                    url, name, version))
+                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q \
+                                                     {0} -O {1}.exe';ls -l;".format(url, version))
             self.log_command_output(output, error)
         else:
-            log.info('File {0}_{1}.exe exist in tmp directory'.format(name, version))
-        return self.file_exists('/cygdrive/c/tmp/', '{0}_{1}.exe'.format(name, version))
+            log.info('File {0}.exe exist in tmp directory'.format(version))
+        return self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
 
     def copy_file_local_to_remote(self, src_path, des_path):
         sftp = self._ssh_client.open_sftp()
@@ -475,6 +475,7 @@ class RemoteMachineShellConnection:
                 log.error('Can not find {0}'.format(file))
         except IOError:
             pass
+        sftp.close()
 
     def find_build_version(self, path_to_version, version_file, product):
         sftp = self._ssh_client.open_sftp()
@@ -484,24 +485,14 @@ class RemoteMachineShellConnection:
             path_to_version = testconstants.WIN_CB_PATH
         else:
             path_to_version = testconstants.WIN_MB_PATH
-        releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1"]
         try:
             log.info(path_to_version)
             f = sftp.open(os.path.join(path_to_version, version_file), 'r+')
-            full_version = f.read().rstrip()
-            if full_version in releases_version:
-                if full_version == "1.6.5.4-win64":
-                    full_version = "1.6.5.4"
-                build_name = "mb_{0}".format(full_version)
-                short_version = full_version
-            else:
-                tmp = full_version.split("-")
-                if tmp[0].startswith("1.8") or tmp[0].startswith("2."):
-                    product = "cb"
-                else:
-                    product = "mb"
-                build_name = "{0}_{1}-{2}".format(product, tmp[0], tmp[1])
-                short_version = "{0}-{1}".format(tmp[0], tmp[1])
+            tmp_str = f.read().strip()
+            full_version = tmp_str.replace("-rel","")
+            if full_version == "1.6.5.4-win64":
+                full_version = "1.6.5.4"
+            build_name = short_version = full_version
             return build_name, short_version, full_version
         except IOError:
             log.error('Can not read version file')
@@ -523,6 +514,7 @@ class RemoteMachineShellConnection:
                 return info
             except IOError:
                 log.error("can not find windows info file")
+            sftp.close()
         else:
             return self.create_windows_info()
 
@@ -560,13 +552,12 @@ class RemoteMachineShellConnection:
         reg_version = version[0:5:2]
         reg_id = WIN_REGISTER_ID[reg_version]
 
-        if product == "cb":
-            if task == "install":
-                template_file = "cb-install.wct"
-                file = "cb-install.iss"
-            elif task == "uninstall":
-                template_file = "cb-uninstall.wct"
-                file = "cb-uninstall.iss"
+        if task == "install":
+            template_file = "cb-install.wct"
+            file = "install.iss"
+        elif task == "uninstall":
+            template_file = "cb-uninstall.wct"
+            file = "uninstall.iss"
 
         # create in/uninstall file from windows capture template (wct) file
         full_src_path_template = os.path.join(src_path, template_file)
@@ -577,9 +568,13 @@ class RemoteMachineShellConnection:
         f2 = open(full_src_path, 'w')
         # replace ####### with reg ID to install/uninstall
         for line in f1:
-            f2.write(line.replace("#######", reg_id))
+            line = line.replace("#######", reg_id)
+            if product == "mb" and task == "install":
+                line = line.replace("Couchbase", "Membase")
+            f2.write(line)
         f1.close()
         f2.close()
+
         self.copy_file_local_to_remote(full_src_path, full_des_path)
         # remove capture file from source after copy to destination
         # os.remove(full_src_path)
@@ -616,49 +611,33 @@ class RemoteMachineShellConnection:
     def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
-        # releases_version = ["1.6.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1", "1.7.2"]
 
         product_version = ""
-        if   "2.1.0" in version:
-            product_version = "2.1.0"
-        elif "2.0.1" in version:
-            product_version = "2.0.1"
-        elif "2.0.2" in version:
-            product_version = "2.0.2"
-        elif "2.0.0" in version:
-            product_version = "2.0.0"
-        elif "1.8.0" in version:
-            product_version = "1.8.0"
-            name = "cb"
-        elif "1.8.1" in version:
-            product_version = "1.8.1"
-            name = "cb"
-        elif "1.7.2" in version:
-            product_version = "1.7.2"
+        if version[:5] in MEMBASE_VERSIONS:
+            product_version = version[:5]
             name = "mb"
-#        elif version in releases_version:
-#            product_version = version
-#            name = "mb"
+        elif version[:5] in COUCHBASE_VERSIONS:
+            product_version = version[:5]
+            name = "cb"
         else:
             log.error('Windows automation does not support {0} version yet'.format(version))
             sys.exit()
 
         try:
             f = sftp.open(found, 'w')
-            name = name.rstrip()
-            version = version.rstrip()
+            name = name.strip()
+            version = version.strip()
             if task == "upgrade":
                 content = 'c:\\tmp\setup.exe /s -f1c:\\automation\{0}_{1}_{2}.iss'.format(name,
                                                                          product_version, task)
             else:
-                content = 'c:\\tmp\{0}_{1}.exe /s -f1c:\\automation\{2}_{3}_{4}.iss'.format(name,
-                                                            version, name, product_version, task)
+                content = 'c:\\tmp\{0}.exe /s -f1c:\\automation\{1}.iss'.format(version, task)
             log.info("create {0} task with content:{1}".format(task, content))
             f.write(content)
             log.info('Successful write to {0}'.format(found))
-            sftp.close()
         except IOError:
             log.error('Can not write build name file to bat file {0}'.format(found))
+        sftp.close()
 
     def create_directory(self, remote_path):
         sftp = self._ssh_client.open_sftp()
@@ -790,6 +769,8 @@ class RemoteMachineShellConnection:
                                           timeout_in_seconds=600)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
+            # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
+            # self.log_command_output(output, error)
         elif info.deliverable_type in ["rpm", "deb"]:
             if startserver and vbuckets == None:
                 environment = ""
@@ -958,11 +939,11 @@ class RemoteMachineShellConnection:
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:  # if not exist in tmp dir, start to download that version build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
-                    downloaded = self.download_binary_in_win(build.url, product, short_version)
+                    downloaded = self.download_binary_in_win(build.url, short_version)
                     if downloaded:
-                        log.info('Successful download {0}_{1}.exe'.format(product, short_version))
+                        log.info('Successful download {0}.exe'.format(short_version))
                     else:
-                        log.error('Download {0}_{1}.exe failed'.format(product, short_version))
+                        log.error('Download {0}.exe failed'.format(short_version))
                 dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
                 self.create_multiple_dir(dir_paths)
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
@@ -980,6 +961,9 @@ class RemoteMachineShellConnection:
                 log.info('sleep 30 seconds before running the next job ...')
                 time.sleep(30)
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+                self.log_command_output(output, error)
+                # delete binary after uninstall
+                output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
                 self.log_command_output(output, error)
             else:
                 log.info("No couchbase server on this server.  Free to install")
@@ -1026,11 +1010,11 @@ class RemoteMachineShellConnection:
             exist = self.file_exists("/cygdrive/c/tmp/", build_name)
             if not exist:  # if not exist in tmp dir, start to download that version build
                 build = query.find_build(builds, name, ex_type, info.architecture_type, rm_version)
-                downloaded = self.download_binary_in_win(build.url, product, rm_version)
+                downloaded = self.download_binary_in_win(build.url, rm_version)
                 if downloaded:
-                    log.info('Successful download {0}_{1}.exe'.format(product, rm_version))
+                    log.info('Successful download {0}.exe'.format(rm_version))
                 else:
-                    log.error('Download {0}_{1}.exe failed'.format(product, rm_version))
+                    log.error('Download {0}.exe failed'.format(rm_version))
             # copy required files to automation directory
             dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
             self.create_multiple_dir(dir_paths)
@@ -1046,6 +1030,8 @@ class RemoteMachineShellConnection:
             log.info('sleep 15 seconds before running the next job ...')
             time.sleep(15)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
+            self.log_command_output(output, error)
+            output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
             self.log_command_output(output, error)
         else:
             log.info('No couchbase server on this server')
@@ -1083,7 +1069,7 @@ class RemoteMachineShellConnection:
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:  # if not exist in tmp dir, start to download that version build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
-                    downloaded = self.download_binary_in_win(build.url, product, short_version)
+                    downloaded = self.download_binary_in_win(build.url, short_version)
                     if downloaded:
                         log.info('Successful download {0}_{1}.exe'.format(product, short_version))
                     else:
@@ -1092,6 +1078,7 @@ class RemoteMachineShellConnection:
                 self.create_multiple_dir(dir_paths)
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
                 # modify bat file to run uninstall schedule task
+                self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule uninstall')
