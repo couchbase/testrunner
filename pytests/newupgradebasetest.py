@@ -142,6 +142,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             appropriate_build = BuildQuery().\
                 find_membase_build(builds, '%s-enterprise' % (self.product), info.deliverable_type,
                                    info.architecture_type, version.strip(), is_amazon=is_amazon)
+        if appropriate_build is None:
+            self.log.info("builds are: %s \n. Remote is %s. Result is: %s" % (builds, remote, result))
+            raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 
     def _upgrade(self, upgrade_version, server, queue=None, skip_init=False):
