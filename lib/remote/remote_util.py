@@ -1518,41 +1518,48 @@ class RemoteMachineShellConnection:
         cluster_port = cluster_port or self.port
 
         command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
-                                           cluster_ip, cluster_port, backup_location, command_options_string)
+                                           cluster_ip, cluster_port, backup_file_location, command_options_string)
 
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
     def restore_backupFile(self, login_info, backup_location, buckets):
         restore_command = "%scbrestore" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        backup_file_location = backup_location
         info = self.extract_remote_info()
         type = info.type.lower()
         if type == 'windows':
-            restore_command = "%scbrestore.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            restore_command = "%scbrestore.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
+            backup_file_location = "C:%s" % (backup_location)
         if info.distribution_type.lower() == 'mac':
             restore_command = "%scbrestore" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
         for bucket in buckets:
-            command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_location, "http://",
+            command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_file_location, "http://",
                                                   login_info, self.ip, self.port, "-b", bucket)
+            if type == 'windows':
+                command = "cmd /c \"%s\" \"%s\" \"%s%s@%s:%s\" %s %s" % (restore_command, backup_file_location, "http://",
+                                                      login_info, self.ip, self.port, "-b", bucket)
             output, error = self.execute_command(command.format(command))
             self.log_command_output(output, error)
 
     def delete_files(self, file_location):
-        command = "%s%s" % ("rm -r ", file_location)
+        command = "%s%s" % ("rm -rf ", file_location)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
-    def execute_cbtransfer(self, source, destination):
+    def execute_cbtransfer(self, source, destination, bucket):
         transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         info = self.extract_remote_info()
         type = info.type.lower()
         if type == 'windows':
-            transfer_command = "%scbtransfer.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            transfer_command = "%scbtransfer.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
         if info.distribution_type.lower() == 'mac':
             transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        command = "%s %s %s" % (transfer_command, source, destination)
+        command = "%s %s %s -b %s -B %s -v -v -v" % (transfer_command, source, destination, bucket, bucket)
+        if type == 'windows':
+            command = "cmd /c \"%s\" \"%s\" \"%s\" -b %s -B %s" % (transfer_command, source, destination, bucket, bucket)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 

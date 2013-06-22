@@ -10,6 +10,7 @@ class TransferBaseTest(BaseTestCase):
         self.expire_time = self.input.param("expire_time", 60)
         self.item_flag = self.input.param("item_flag", 0)
         self.backup_location = self.input.param("backup_location", "/tmp/backup")
+        self.win_data_location = self.input.param("win_data_location", "/tmp/data")
         self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")

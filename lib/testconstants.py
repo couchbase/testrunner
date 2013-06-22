@@ -6,7 +6,7 @@ COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 # remember update WIN_REGISTER_ID also when update COUCHBASE_VERSION
 COUCHBASE_VERSIONS = ["1.8.0r","1.8.0","1.8.1","2.0.0","2.0.1","2.0.2","2.1.0","2.1.1"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
-WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/membase/data/'
+WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
 WIN_MB_PATH = "/cygdrive/c/Program Files/Membase/Server/"
 LINUX_CB_PATH = "/opt/couchbase/"
@@ -22,6 +22,7 @@ MAX_COMPACTION_THRESHOLD = 100
 NUM_ERLANG_THREADS = 16
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
 WIN_COUCHBASE_BIN_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/bin/'
+WIN_COUCHBASE_BIN_PATH_RAW = 'C:\Program Files\Couchbase\Server\\bin\\'
 WIN_TMP_PATH = '/cygdrive/c/tmp/'
 MAC_COUCHBASE_BIN_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/bin/"
 MAC_CB_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/"
