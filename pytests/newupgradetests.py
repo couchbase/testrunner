@@ -228,8 +228,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 for server in servers_with_not_default:
                     rest = RestConnection(server)
                     node = rest.get_nodes_self()
-                    self.assertTrue(node.storage[0].path, data_path)
-                    self.assertTrue(node.storage[0].index_path, index_path)
+                    self.assertEqual(node.storage[0].path.lower(), data_path.lower(),
+                                     "Server %s. Data path expected:%s, actual %s." % (
+                                                          server.ip, data_path, node.storage[0].path))
+                    self.assertEqual(node.storage[0].index_path.lower(), index_path.lower(),
+                                     "Server %s. Index path expected: %s, actual: %s." % (
+                                                                server.ip, index_path, node.storage[0].index_path))
             if num_nodes_remove_data:
                 for bucket in self.buckets:
                     if self.rest_helper.bucket_exists(bucket):
