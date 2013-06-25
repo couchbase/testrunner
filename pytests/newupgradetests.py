@@ -228,6 +228,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 for server in servers_with_not_default:
                     rest = RestConnection(server)
                     node = rest.get_nodes_self()
+                    print node
                     self.assertEqual(node.storage[0].path.lower(), data_path.lower(),
                                      "Server %s. Data path expected:%s, actual %s." % (
                                                           server.ip, data_path, node.storage[0].path))
