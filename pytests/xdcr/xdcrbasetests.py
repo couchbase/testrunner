@@ -43,6 +43,7 @@ class XDCRConstants:
     #CLUSTER_TOPOLOGY_TYPE_LINE = "line"
     CLUSTER_TOPOLOGY_TYPE_CHAIN = "chain"
     CLUSTER_TOPOLOGY_TYPE_STAR = "star"
+    CLUSTER_TOPOLOGY_TYPE_RING = "ring"
 
     REPLICATION_TYPE_CONTINUOUS = "continuous"
     REPLICATION_DIRECTION_UNIDIRECTION = "unidirection"
@@ -674,6 +675,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.fail("Mismatches on Meta Information on xdcr-replicated items!")
 
     def verify_results(self, verify_src=False):
+        dest_key_index = 1
         if len(self.ord_keys) == 2:
             src_nodes = self.get_servers_in_cluster(self.src_master)
             dest_nodes = self.get_servers_in_cluster(self.dest_master)
@@ -854,7 +856,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
             self._setup_topology_chain()
         elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
-            self._set_toplogy_star()
+            self._set_topology_star()
+        elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_RING:
+            self._set_topology_ring()
         else:
             raise "Not supported cluster topology : %s", self._cluster_topology_str
 
@@ -881,7 +885,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             dest_key_index += 1
 
-    def _set_toplogy_star(self):
+    def _set_topology_star(self):
         src_master_identified = False
         for key in self._clusters_keys_olst:
             nodes = self._clusters_dic[key]
@@ -893,7 +897,24 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             dest_cluster_name = self._cluster_names_dic[key]
             self.dest_master = nodes[0]
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
-            self.sleep(30)
+
+    def _set_topology_ring(self):
+        src_master_identified = False
+        src_cluster_name = ""
+        dest_cluster_name = ""
+        for key in self._clusters_keys_olst:
+            nodes = self._clusters_dic[key]
+            if not src_master_identified:
+                src_cluster_name = self._cluster_names_dic[key]
+                self.src_master = nodes[0]
+                src_master_identified = True
+                continue
+            dest_cluster_name = self._cluster_names_dic[key]
+            self.dest_master = nodes[0]
+            self._join_clusters(self._cluster_names_dic[key-1], self._clusters_dic[key-1][0],
+                                dest_cluster_name, self.dest_master)
+        self._join_clusters(dest_cluster_name, self.dest_master, src_cluster_name, self.src_master)
+        self.sleep(30)
 
     def _load_data_chain(self):
         for key in self._clusters_keys_olst:
@@ -935,12 +956,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _replicate_clusters(self, src_master, dest_cluster_name):
         rest_conn_src = RestConnection(src_master)
-        for bucket in self._get_cluster_buckets(src_master):
+        for bucket in self.buckets:
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
                 bucket.name, dest_cluster_name)
             self._start_replication_time[bucket.name] = datetime.now()
             self.sleep(5)
-        if self._get_cluster_buckets(src_master):
+        if self.buckets:
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
 
     def _load_gen_data(self, cname, node):
