@@ -807,6 +807,8 @@ class RemoteMachineShellConnection:
                 else:
                     success &= self.log_command_output(output, error, track_words)
 
+        output, error = self.execute_command("rm -f *-diag.zip")
+        self.log_command_output(output, error, track_words)
         return success
 
     def install_server_win(self, build, version, startserver=True):
@@ -846,6 +848,8 @@ class RemoteMachineShellConnection:
             time.sleep(30)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
+            output, error = self.execute_command("rm -f *-diag.zip")
+            self.log_command_output(output, error, track_words)
             return success
 
 
