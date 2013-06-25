@@ -13,7 +13,6 @@ from memcached.helper.old_kvstore import ClientKeyValueStore
 from old_tasks import task, taskmanager
 from remote.remote_util import RemoteMachineShellConnection
 from threading import Thread, Event
-from viewtests import ViewBaseTests
 import copy
 import datetime
 import json
