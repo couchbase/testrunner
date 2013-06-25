@@ -489,7 +489,7 @@ class RemoteMachineShellConnection:
             log.info(path_to_version)
             f = sftp.open(os.path.join(path_to_version, version_file), 'r+')
             tmp_str = f.read().strip()
-            full_version = tmp_str.replace("-rel","")
+            full_version = tmp_str.replace("-rel", "")
             if full_version == "1.6.5.4-win64":
                 full_version = "1.6.5.4"
             build_name = short_version = full_version
@@ -933,19 +933,19 @@ class RemoteMachineShellConnection:
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
 
             exist = self.file_exists(version_path, version_file)
-            log.info("Is VERSION file existed? {0}".format(exist))
+            log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
-                log.info("VERSION file exists.  Start to uninstall {0} server".format(product))
+                log.info("VERSION file exists.  Start to uninstall {0} on {1} server".format(product, self.ip))
                 build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
                 log.info('Build name: {0}'.format(build_name))
                 build_name = build_name.rstrip() + ".exe"
-                log.info('Check if {0} is in tmp directory'.format(build_name))
+                log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:  # if not exist in tmp dir, start to download that version build
                     build = query.find_build(builds, product_name, os_type, info.architecture_type, full_version)
                     downloaded = self.download_binary_in_win(build.url, short_version)
                     if downloaded:
-                        log.info('Successful download {0}.exe'.format(short_version))
+                        log.info('Successful download {0}.exe on {1} server'.format(short_version, self.ip))
                     else:
                         log.error('Download {0}.exe failed'.format(short_version))
                 dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
@@ -956,7 +956,7 @@ class RemoteMachineShellConnection:
                 self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
-                log.info('sleep for 5 seconds before running task schedule uninstall')
+                log.info('sleep for 5 seconds before running task schedule uninstall on {0}'.format(self.ip))
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
@@ -970,7 +970,7 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
                 self.log_command_output(output, error)
             else:
-                log.info("No couchbase server on this server.  Free to install")
+                log.info("No couchbase server on {0} server. Free to install".format(self.ip))
         elif type in ["ubuntu", "centos", "red hat"]:
             # uninstallation command is different
             if type == "ubuntu":
