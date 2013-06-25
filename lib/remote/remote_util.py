@@ -1507,8 +1507,10 @@ class RemoteMachineShellConnection:
         info = self.extract_remote_info()
         type = info.type.lower()
         if type == 'windows':
-            backup_command = "%scbbackup.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
-            backup_file_location = "/cygdrive/c%s" % (backup_location)
+            backup_command = "%scbbackup.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
+            backup_file_location = "C:%s" % (backup_location)
+            output, error = self.execute_command("taskkill /F /T /IM cbbackup.exe")
+            self.log_command_output(output, error)
         if info.distribution_type.lower() == 'mac':
             backup_command = "%scbbackup" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
@@ -1523,6 +1525,9 @@ class RemoteMachineShellConnection:
 
         command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
                                            cluster_ip, cluster_port, backup_file_location, command_options_string)
+        if type == 'windows':
+            command = "cmd /c \"%s\" \"%s%s@%s:%s\" \"%s\" %s" % (backup_command, "http://", login_info,
+                                               cluster_ip, cluster_port, backup_file_location, command_options_string)
 
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
@@ -1552,7 +1557,7 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 
-    def execute_cbtransfer(self, source, destination, bucket):
+    def execute_cbtransfer(self, source, destination, command_options=''):
         transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         info = self.extract_remote_info()
         type = info.type.lower()
@@ -1561,9 +1566,9 @@ class RemoteMachineShellConnection:
         if info.distribution_type.lower() == 'mac':
             transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        command = "%s %s %s -b %s -B %s -v -v -v" % (transfer_command, source, destination, bucket, bucket)
+        command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
         if type == 'windows':
-            command = "cmd /c \"%s\" \"%s\" \"%s\" -b %s -B %s" % (transfer_command, source, destination, bucket, bucket)
+            command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command, source, destination, command_options)
         output, error = self.execute_command(command.format(command))
         self.log_command_output(output, error)
 

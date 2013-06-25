@@ -35,6 +35,8 @@ class BackupBaseTest(BaseTestCase):
         if not self.input.param("skip_cleanup", True):
             if self.times_teardown_called > 1 :
                 if self.os == 'windows':
+                    output, error = self.shell.execute_command("taskkill /F /T /IM cbbackup.exe")
+                    self.shell.log_command_output(output, error)
                     self.shell.delete_files("/cygdrive/c%s" % (self.backup_location))
                 else:
                     self.shell.delete_files(self.backup_location)
@@ -44,6 +46,8 @@ class BackupBaseTest(BaseTestCase):
         if self.input.param("skip_cleanup", True):
             if self.case_number > 1 or self.times_teardown_called > 1:
                 if self.os == 'windows':
+                    output, error = self.shell.execute_command("taskkill /F /T /IM cbbackup.exe")
+                    self.shell.log_command_output(output, error)
                     self.shell.delete_files("/cygdrive/c%s" % (self.backup_location))
                 else:
                     self.shell.delete_files(self.backup_location)

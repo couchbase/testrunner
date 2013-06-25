@@ -60,6 +60,8 @@ class RecoveryUseTransferTests(TransferBaseTest):
 
         transfer_source = "couchstore-files://%s" % (COUCHBASE_DATA_PATH)
         if self.os == 'windows':
+            output, error = self.shell.execute_command("taskkill /F /T /IM cbtransfer.exe")
+            self.shell.log_command_output(output, error)
             self.shell.delete_files("/cygdrive/c%s" % self.win_data_location)
             self.shell.execute_command("mkdir /cygdrive/c%s" % self.win_data_location)
             self.shell.execute_command("cp -rf %s /cygdrive/c/tmp/" % (WIN_COUCHBASE_DATA_PATH))
@@ -69,7 +71,7 @@ class RecoveryUseTransferTests(TransferBaseTest):
             transfer_destination = "http://%s@%s:%s" % (self.couchbase_login_info,
                                                         self.server_recovery.ip,
                                                         self.server_recovery.port)
-            self.shell.execute_cbtransfer(transfer_source, transfer_destination, bucket.name)
+            self.shell.execute_cbtransfer(transfer_source, transfer_destination, "-b %s -B %s" % (bucket.name, bucket.name))
         del kvs_before
 
         time.sleep(self.expire_time + 1)
@@ -97,8 +99,10 @@ class RecoveryUseTransferTests(TransferBaseTest):
         bucket_names = []
 
         if self.os == 'windows':
-            self.shell.delete_files("/cygdrive/c/%s" % self.backup_location)
-            self.shell.create_directory("/cygdrive/c/%s" % self.backup_location)
+            output, error = self.shell.execute_command("taskkill /F /T /IM cbtransfer.exe")
+            self.shell.log_command_output(output, error)
+            self.shell.delete_files("/cygdrive/c%s" % self.backup_location)
+            self.shell.create_directory("/cygdrive/c%s" % self.backup_location)
         else:
             self.shell.delete_files(self.backup_location)
             self.shell.create_directory(self.backup_location)
@@ -115,7 +119,8 @@ class RecoveryUseTransferTests(TransferBaseTest):
         for bucket in self.buckets:
             kvs_before[bucket.name] = bucket.kvs[1]
             bucket_names.append(bucket.name)
-            self.shell.execute_cbtransfer(transfer_source, transfer_destination, bucket.name)
+
+        self.shell.execute_cbtransfer(transfer_source, transfer_destination)
 
         self._all_buckets_delete(self.server_origin)
         if self.default_bucket:

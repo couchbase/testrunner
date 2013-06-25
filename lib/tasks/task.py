@@ -190,7 +190,7 @@ class BucketCreateTask(Task):
                     self.state = FINISHED
                     return
         except Exception as e:
-            self.log.error("Unexpected error: %s" % str(error))
+            self.log.error("Unexpected error: %s" % str(e))
             self.log.warn("vbucket map not ready after try {0}".format(self.retries))
             if self.retries >= 5:
                 self.state = FINISHED
