@@ -246,7 +246,12 @@ class RebalanceTask(Task):
         self.to_add = to_add
         self.to_remove = to_remove
         self.start_time = None
-        self.rest = RestConnection(self.servers[0])
+        try:
+            self.rest = RestConnection(self.servers[0])
+        except ServerUnavailableException, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
         self.retry_get_progress = 0
 
     def execute(self, task_manager):
