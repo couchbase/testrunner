@@ -130,7 +130,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def _get_build(self, server, version, remote, is_amazon=False):
         info = remote.extract_remote_info()
-        builds, changes = BuildQuery().get_all_builds()
+        builds, changes = BuildQuery().get_all_builds(timeout=self.wait_timeout * 5)
         self.log.info("finding build %s for machine %s" % (version, server))
         result = re.search('r', version)
 
@@ -143,7 +143,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 find_membase_build(builds, '%s-enterprise' % (self.product), info.deliverable_type,
                                    info.architecture_type, version.strip(), is_amazon=is_amazon)
         if appropriate_build is None:
-            self.log.info("builds are: %s \n. Remote is %s. Result is: %s" % (builds, remote, result))
+            self.log.info("builds are: %s \n. Remote is %s, %s. Result is: %s" % (builds, remote.ip, remote.username, result))
             raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 

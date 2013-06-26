@@ -5,6 +5,7 @@ from datetime import datetime
 import time
 import urllib2
 import re
+import socket
 import BeautifulSoup
 
 
@@ -146,13 +147,13 @@ class BuildQuery(object):
     def get_sustaining_latest_builds(self):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
 
-    def get_all_builds(self):
+    def get_all_builds(self, timeout=None):
         try:
             latestbuilds, latestchanges =\
-                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds')
+                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', timeout=timeout)
         except:
             latestbuilds, latestchanges =\
-                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds')
+                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', timeout=timeout)
 
         try:
             sustaining_builds, sustaining_changes =\
@@ -167,7 +168,7 @@ class BuildQuery(object):
 
 
     #baseurl = 'http://builds.hq.northscale.net/latestbuilds/'
-    def _get_and_parse_builds(self, build_page):
+    def _get_and_parse_builds(self, build_page, timeout=None):
         builds = []
         changes = []
         page = None
@@ -175,6 +176,8 @@ class BuildQuery(object):
         #try this five times
         for i in range(0, 5):
             try:
+                if timeout:
+                    socket.setdefaulttimeout(timeout)
                 page = urllib2.urlopen(build_page + '/index.html')
                 soup = BeautifulSoup.BeautifulSoup(page)
                 break
