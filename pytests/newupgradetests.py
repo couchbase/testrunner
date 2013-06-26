@@ -448,4 +448,4 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
             if not FIND_MASTER:
                 raise Exception("After rebalance in 2.0 nodes, 2.0 doesn't become the master ")
-        self.verification(self.servers[self.nodes_init : self.num_servers])
+        self.verification(new_servers)
