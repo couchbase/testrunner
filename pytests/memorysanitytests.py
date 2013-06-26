@@ -8,7 +8,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
-from couchbase.documentgenerator import BlobGenerator
+from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from basetestcase import BaseTestCase
 
 class MemorySanity(BaseTestCase):
@@ -72,3 +72,32 @@ class MemorySanity(BaseTestCase):
                 assert mem_usage[bucket.name] <= initial_memory_usage[bucket.name] + self.bufferspace, msg
         else:
             self.log.info("Verification skipped, as there weren't any repetitions..");
+
+    '''
+    Test created based on MB-8432
+    steps:
+    create a bucket size of 100M
+    load data enough to create a DGM
+    check the "tc_malloc_allocated" stat is within 100M bound.
+    '''
+    def memory_quota_default_bucket(self):
+        resident_ratio = self.input.param("resident_ratio", 50)
+        delta_items = 200000
+        mc = MemcachedClientHelper.direct_client(self.master, self.default_bucket_name)
+
+        self.log.info("LOAD PHASE")
+        end_time = time.time() + self.wait_timeout * 30
+        while (int(mc.stats()["vb_active_perc_mem_resident"]) == 0 or\
+               int(mc.stats()["vb_active_perc_mem_resident"]) > resident_ratio) and\
+              time.time() < end_time:
+            self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
+            gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+                                    start=self.num_items, end=(self.num_items + delta_items))
+            self._load_all_buckets(self.master, gen, 'create', 0)
+            self.num_items += delta_items
+            self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
+        memory_mb = int(mc.stats("memory")["total_allocated_bytes"])/(1024 * 1024)
+        self.log.info("total_allocated_bytes is %s" % memory_mb)
+        self.assertTrue(memory_mb <= self.quota, "total_allocated_bytes %s should be within %s" %(
+                                                  memory_mb, self.quota))
+
