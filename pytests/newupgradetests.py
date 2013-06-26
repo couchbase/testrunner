@@ -106,6 +106,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
                 self.sleep(self.sleep_time)
+                if self.wait_expire:
+                    self.sleep(self.expire_time)
                 if self.input.param('remove_manifest_files', False):
                     for file in ['manifest.txt', 'manifest.xml', 'VERSION.txt,']:
                         output, error = remote.execute_command("rm -rf /opt/couchbase/{0}".format(file))
