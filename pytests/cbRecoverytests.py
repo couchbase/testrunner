@@ -27,9 +27,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         self.assertEquals(settings.enabled, False)
 
     def wait_for_failover_or_assert(self, master, autofailover_count, timeout):
-        rest = RestConnection(master)
         time_start = time.time()
-        time_max_end = time_start + timeout + 60
+        time_max_end = time_start + 300
         failover_count = 0
         while time.time() < time_max_end:
             failover_count = self.get_failover_count(master)
@@ -38,6 +37,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
             self.sleep(30)
 
         if failover_count != autofailover_count:
+            rest = RestConnection(master)
             self.log.warn("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
             self.fail("{0} node(s) failed over, expected {1} in {2} seconds".
                             format(failover_count, autofailover_count, time.time() - time_start))
@@ -134,8 +134,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                if _count_ <= self._num_replicas:
-                    rest.reset_autofailover()
+                rest.reset_autofailover()
                 _count_ += 1
 
         elif "firewall_block" in self.failover_reason:
@@ -154,8 +153,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                if _count_ <= self._num_replicas:
-                    rest.reset_autofailover()
+                rest.reset_autofailover()
                 _count_ += 1
 
     def vbucket_map_checker(self, map_before, map_after, initial_set, final_set):
@@ -206,6 +204,13 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         self.flag_val = self._input.param("setflag", 0)
         self.failed_nodes = []
         self._ifautofail = 0
+        for server in self._servers:
+            rest = RestConnection(server)
+            rest.reset_autofailover()
+            shell = RemoteMachineShellConnection(server)
+            o, r = shell.execute_command("iptables -F")
+            shell.log_command_output(o, r)
+            shell.disconnect()
 
     def tearDown(self):
         if self._ifautofail == 1:
