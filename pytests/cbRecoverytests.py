@@ -126,15 +126,17 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                 Autofailover will not auto failover nodes, if it could
                 result in data loss, so force failover
                 """
-                if _count_ > 1:
+                if _count_ > self.num_replicas:
                     time.sleep(10)
                     for item in rest.node_statuses():
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
+                            _count_ += 1
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                rest.reset_autofailover()
+                if _count_ < self.num_replicas:
+                    rest.reset_autofailover()
                 _count_ += 1
 
         elif "firewall_block" in self.failover_reason:
@@ -145,15 +147,17 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                 Autofailover will not auto failover nodes, if it could
                 result in data loss, so force failover
                 """
-                if _count_ > 1:
+                if _count_ > self.num_replicas:
                     time.sleep(10)
                     for item in rest.node_statuses():
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
+                            _count_ += 1
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                rest.reset_autofailover()
+                if _count_ < self.num_replicas:
+                    rest.reset_autofailover()
                 _count_ += 1
 
     def vbucket_map_checker(self, map_before, map_after, initial_set, final_set):
