@@ -702,6 +702,7 @@ class RemoteMachineShellConnection:
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
+        deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
@@ -721,7 +722,10 @@ class RemoteMachineShellConnection:
         # run task schedule to upgrade Membase server
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
-        self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        deleted = self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        if not deleted:
+            log.error("Uninstall was failed at node {0}".format(self.ip))
+            sys.exit()
         self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
         log.info("installed version:")
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
@@ -931,6 +935,7 @@ class RemoteMachineShellConnection:
             bat_file = "uninstall.bat"
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
+            deleted = False
 
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
@@ -961,7 +966,10 @@ class RemoteMachineShellConnection:
                 # run schedule task uninstall couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+                deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+                if not deleted:
+                    log.error("Uninstall was failed at node {0}".format(self.ip))
+                    sys.exit()
                 log.info('sleep 30 seconds before running the next job ...')
                 time.sleep(30)
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
@@ -990,6 +998,7 @@ class RemoteMachineShellConnection:
         version_file = 'VERSION.txt'
         bat_file = "uninstall.bat"
         task = "uninstall"
+        deleted = False
 
         info = self.extract_remote_info()
         ex_type = info.deliverable_type
@@ -1030,7 +1039,10 @@ class RemoteMachineShellConnection:
             # run schedule task uninstall couchbase server
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
-            self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+            deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+            if not deleted:
+                log.error("Uninstall was failed at node {0}".format(self.ip))
+                sys.exit()
             log.info('sleep 15 seconds before running the next job ...')
             time.sleep(15)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
@@ -1056,6 +1068,7 @@ class RemoteMachineShellConnection:
             os_type = "exe"
             task = "uninstall"
             bat_file = "uninstall.bat"
+            deleted = False
             product_name = "membase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Membase/Server/"
 
@@ -1090,7 +1103,10 @@ class RemoteMachineShellConnection:
                 # run schedule task uninstall Couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+                deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+                if not deleted:
+                    log.error("Uninstall was failed at node {0}".format(self.ip))
+                    sys.exit()
                 log.info('sleep 30 seconds before running the next job ...')
                 time.sleep(30)
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
