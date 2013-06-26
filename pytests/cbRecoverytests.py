@@ -126,7 +126,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                 Autofailover will not auto failover nodes, if it could
                 result in data loss, so force failover
                 """
-                if _count_ > self.num_replicas:
+                if _count_ > self._num_replicas:
                     time.sleep(10)
                     for item in rest.node_statuses():
                         if node.ip == item.ip:
@@ -135,7 +135,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                if _count_ < self.num_replicas:
+                if _count_ < self._num_replicas:
                     rest.reset_autofailover()
                 _count_ += 1
 
@@ -147,7 +147,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                 Autofailover will not auto failover nodes, if it could
                 result in data loss, so force failover
                 """
-                if _count_ > self.num_replicas:
+                if _count_ > self._num_replicas:
                     time.sleep(10)
                     for item in rest.node_statuses():
                         if node.ip == item.ip:
@@ -156,7 +156,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                if _count_ < self.num_replicas:
+                if _count_ < self._num_replicas:
                     rest.reset_autofailover()
                 _count_ += 1
 
