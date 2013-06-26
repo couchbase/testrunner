@@ -134,7 +134,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                #rest.reset_autofailover()
+                rest.reset_autofailover()
                 _count_ += 1
 
         elif "firewall_block" in self.failover_reason:
@@ -153,7 +153,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                #rest.reset_autofailover()
+                rest.reset_autofailover()
                 _count_ += 1
 
     def vbucket_map_checker(self, map_before, map_after, initial_set, final_set):
