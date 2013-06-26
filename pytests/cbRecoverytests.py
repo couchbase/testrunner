@@ -131,11 +131,10 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                     for item in rest.node_statuses():
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
-                            _count_ += 1
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                if _count_ < self._num_replicas:
+                if _count_ <= self._num_replicas:
                     rest.reset_autofailover()
                 _count_ += 1
 
@@ -152,11 +151,10 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                     for item in rest.node_statuses():
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
-                            _count_ += 1
                             break
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
-                if _count_ < self._num_replicas:
+                if _count_ <= self._num_replicas:
                     rest.reset_autofailover()
                 _count_ += 1
 
