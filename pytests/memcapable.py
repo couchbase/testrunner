@@ -1056,6 +1056,9 @@ class WarmUpMemcachedTest(unittest.TestCase):
     def _do_warmup(self, howmany, timeout_in_seconds=1800):
         # max_time is in micro seconds
         self._insert_data(howmany)
+        if int(howmany) < 50:
+            self.log.info("sleep 10 seconds for small number items insert correctly into bucket")
+            time.sleep(10)
         curr_items = int(self.onenodemc.stats()["curr_items"])
         uptime = int(self.onenodemc.stats()["uptime"])
         RebalanceHelper.wait_for_stats(self.master, "default", 'ep_queue_size', 0)
