@@ -291,6 +291,8 @@ class CreateDeleteViewTests(ViewBaseTest):
 
     def test_invalid_map_fn_view(self):
         self._load_doc_data_all_buckets()
+        self.log.info("sleep in 5 seconds before create invalid map fn view")
+        time.sleep(5)
         views = [View("view1", 'function (doc) { emit(doc.age, doc.first_name);',
                       red_func=None, dev_view=False),
                  View("view1", self.default_map_func,
