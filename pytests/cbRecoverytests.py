@@ -120,8 +120,6 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         rest = RestConnection(master)
         if "stop_server" in self.failover_reason:
             for node in self.failed_nodes:
-                shell = RemoteMachineShellConnection(node)
-                shell.stop_couchbase()
                 """
                 Autofailover will not auto failover nodes, if it could
                 result in data loss, so force failover
@@ -132,6 +130,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
                             break
+                shell = RemoteMachineShellConnection(node)
+                shell.stop_couchbase()
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
                 rest.reset_autofailover()
@@ -139,8 +139,6 @@ class CBRbaseclass(XDCRReplicationBaseTest):
 
         elif "firewall_block" in self.failover_reason:
             for node in self.failed_nodes:
-                shell = RemoteMachineShellConnection(node)
-                o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
                 """
                 Autofailover will not auto failover nodes, if it could
                 result in data loss, so force failover
@@ -151,6 +149,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
                             break
+                shell = RemoteMachineShellConnection(node)
+                o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
                 rest.reset_autofailover()
