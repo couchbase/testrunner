@@ -130,6 +130,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
                             break
+                    _count_ += 1
+                    continue
                 shell = RemoteMachineShellConnection(node)
                 shell.stop_couchbase()
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
@@ -149,6 +151,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
                             break
+                    _count_ += 1
+                    continue
                 shell = RemoteMachineShellConnection(node)
                 o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
