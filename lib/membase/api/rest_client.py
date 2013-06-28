@@ -1258,6 +1258,7 @@ class RestConnection(object):
                       proxyPort=11211,
                       bucketType='membase',
                       replica_index=1,
+                      threadsNumber=3,
                       flushEnabled=1):
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
@@ -1271,6 +1272,7 @@ class RestConnection(object):
                                        'proxyPort': proxyPort,
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
+                                       'threadsNumber': threadsNumber,
                                        'flushEnabled': flushEnabled})
         elif authType == 'none':
             params = urllib.urlencode({'name': bucket,
@@ -1280,6 +1282,7 @@ class RestConnection(object):
                                        'proxyPort': proxyPort,
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
+                                       'threadsNumber': threadsNumber,
                                        'flushEnabled': flushEnabled})
         elif authType == 'sasl':
             params = urllib.urlencode({'name': bucket,
@@ -1290,6 +1293,7 @@ class RestConnection(object):
                                        'proxyPort': self.get_nodes_self().moxi,
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
+                                       'threadsNumber': threadsNumber,
                                        'flushEnabled': flushEnabled})
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()

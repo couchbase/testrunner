@@ -13,6 +13,7 @@ class PerfDefaults:
     batch                   =    50
     kind                    =    "nonjson"
     mem_quota               =    6000
+    threadsNumber           =    3
     num_nodes               =    10
     conf_file               =    "default.conf"
     bucket                  =    "default"
