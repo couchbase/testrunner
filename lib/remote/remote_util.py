@@ -97,13 +97,13 @@ class RemoteMachineShellConnection:
         try:
             self._ssh_client.connect(hostname=ip, username=username, key_filename=pkey_location)
         except paramiko.AuthenticationException:
-            log.info("Authentication failed")
+            log.info("Authentication failed for {0}".format(self.ip))
             exit(1)
         except paramiko.BadHostKeyException:
-            log.info("Invalid Host key")
+            log.info("Invalid Host key for {0}".format(self.ip))
             exit(1)
         except Exception:
-            log.info("Can't establish SSH session")
+            log.info("Can't establish SSH session with {0}".format(self.ip))
             exit(1)
 
     def __init__(self, serverInfo):
