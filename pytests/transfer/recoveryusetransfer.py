@@ -46,6 +46,8 @@ class RecoveryUseTransferTests(TransferBaseTest):
             kvs_before[bucket.name] = bucket.kvs[1]
             bucket_names.append(bucket.name)
 
+        del self.buckets
+        self.buckets = []
         if self.default_bucket:
             self.cluster.create_default_bucket(self.server_recovery, self.bucket_size, self.num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
