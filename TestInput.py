@@ -66,7 +66,6 @@ class TestInputServer(object):
         self.cli_path = ''
         self.data_path = ''
         self.index_path = ''
-        self.operating_system = ''
 
     def __str__(self):
         #ip_str = "ip:{0}".format(self.ip)
@@ -245,8 +244,6 @@ class TestInputParser():
                     server.data_path = global_properties['data_path']
                 if server.index_path == '' and 'index_path' in global_properties:
                     server.index_path = global_properties['index_path']
-                if server.operating_system == '' and 'operating_system' in global_properties:
-                    server.operating_system = global_properties['operating_system']
         return servers
 
     @staticmethod

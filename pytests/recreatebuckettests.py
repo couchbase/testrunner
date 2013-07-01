@@ -3,7 +3,6 @@ import uuid
 import TestInput
 import logger
 import datetime
-import time
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 

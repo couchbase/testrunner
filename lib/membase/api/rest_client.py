@@ -207,7 +207,6 @@ class RestConnection(object):
         self.username = username
         self.password = password
         self.port = 8091
-        self.operating_system = ""
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         for iteration in xrange(3):
@@ -243,13 +242,11 @@ class RestConnection(object):
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
-            self.operating_system = serverInfo["operating_system"]
         else:
             self.ip = serverInfo.ip
             self.username = serverInfo.rest_username
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
-            self.operating_system = serverInfo.operating_system
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         #for Node is unknown to this cluster error
