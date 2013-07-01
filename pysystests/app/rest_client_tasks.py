@@ -503,7 +503,10 @@ def add_back_nodes(rest, servers='', nodes=[]):
         servers = nodes[:count]
         for server in servers:
             restart(servers=server.split('@')[1], type='soft')
-            time.sleep(60)
+            if cfg.COUCHBASE_OS == "windows":
+                time.sleep(120)
+            else:
+                time.sleep(60)
             logger.error("Add Back node %s" % server)
             rest.add_back_node(server)
             addBackNodes.append(server)
@@ -540,10 +543,16 @@ def restart(servers='', type='soft', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
         node_ssh, node = create_ssh_conn(ip)
         if type is not 'soft':
             logger.error('Hard Restart')
-            cmd = "reboot"
+            if cfg.COUCHBASE_OS == "windows":
+                cmd = "shutdown -r -t 0"
+            else:
+                cmd = "reboot"
         else:
             logger.error('Soft Restart')
-            cmd = "/etc/init.d/couchbase-server restart"
+            if cfg.COUCHBASE_OS == "windows":
+                cmd = "net stop couchbaseserver && net start couchbaseserver"
+            else:
+                cmd = "/etc/init.d/couchbase-server restart"
 
         logger.error(cmd)
         result = node_ssh.execute_command(cmd, node)
