@@ -1796,6 +1796,27 @@ class RemoteMachineShellConnection:
         log.info("start remove tmp files from directory %s" % win_tmp_path)
         self.execute_command("rm -rf '%stmp*'" % win_tmp_path)
 
+    # ps_name_or_id means process name or ID will be suspended
+    def windows_process_utils(self, ps_name_or_id, cmd_file_name, option="")
+        success = False
+        files_path = "cygdrive/c/utils/suspend/"
+        # check to see if suspend files exist in server
+        file_existed = self.file_exists(self, files_path, cmd_file_name):
+        if file_existed:
+            command = "{0}{1} {2} {3}".format(files_path, cmd_file_name, option, ps_name_or_id)
+            o, r = self.execute_command(command)
+            if not r:
+                success = True
+                self.log_command_output(o, r)
+                log.info("sleep 30 seconds for windows to execute completely")
+                time.sleep(30)
+            else:
+                log.error("Command didn't run successfully. Error: {0}".format(r))
+        else:
+            log.error("executable file {0} does not exist".format(cmd_file_name))
+        return success
+
+
 class RemoteUtilHelper(object):
 
     @staticmethod
@@ -1806,6 +1827,11 @@ class RemoteUtilHelper(object):
             shell.execute_command('netsh advfirewall set publicprofile state on')
             shell.execute_command('netsh advfirewall set privateprofile state on')
             log.info("enabled firewall on {0}".format(server))
+            suspend_erlang = shell.windows_process_utils("pssuspend.exe", "erl.exe", option="")
+            if suspend_erlang:
+                log.info("erlang process is suspended")
+            else:
+                log.error("erlang process failed to suspend")
         else:
             # Reject incoming connections on port 1000->60000
             o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
