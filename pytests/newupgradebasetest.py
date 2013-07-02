@@ -6,7 +6,7 @@ import traceback
 from threading import Thread
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedError
-from memcached.helper.data_helper import VBucketAwareMemcached
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -33,6 +33,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.upgrade_versions = [self.input.param('released_upgrade_version', None)]
 
         self.initial_build_type = self.input.param('initial_build_type', None)
+        self.stop_persistence = self.input.param('stop_persistence', False)
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None
@@ -123,9 +124,24 @@ class NewUpgradeBaseTest(BaseTestCase):
         gc.collect()
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self._bucket_creation()
+        if self.stop_persistence:
+            for server in servers:
+                for bucket in self.buckets:
+                    client = MemcachedClientHelper.direct_client(server, bucket)
+                    client.stop_persistence()
+            self.sleep(10)
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
-        self._wait_for_stats_all_buckets(servers)
+        if not self.stop_persistence:
+            self._wait_for_stats_all_buckets(servers)
+        else:
+            for bucket in self.buckets:
+                drain_rate = 0
+                for server in servers:
+                    client = MemcachedClientHelper.direct_client(server, bucket)
+                    drain_rate += int(client.stats()["ep_queue_size"])
+                self.assertEqual(self.num_items * (self.num_replicas + 1), drain_rate,
+                                 "Persistence is stopped, drain rate is incorrect")
         self.change_settings()
 
     def _get_build(self, server, version, remote, is_amazon=False):
