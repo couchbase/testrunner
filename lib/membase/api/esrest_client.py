@@ -352,6 +352,9 @@ class EsRestConnection(RestConnection):
     def remove_all_replications(self):
         pass
 
+    def is_cluster_mixed(self):
+        return False
+
 def parse_addr(addr):
     ip = addr[addr.rfind('/')+1:addr.rfind(':')]
     port = addr[addr.rfind(':')+1:-1]
