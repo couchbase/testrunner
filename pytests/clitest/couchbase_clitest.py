@@ -567,6 +567,8 @@ class CouchbaseCliTest(CliBaseTest):
 
     def testBucketModification(self):
         cli_command = "bucket-edit"
+        bucket_password = self.input.param("bucket_password", None)
+        bucket_port = self.input.param("bucket_port", 11211)
         self.testBucketCreation()
         bucket_port_new = self.input.param("bucket_port_new", None)
         bucket_password_new = self.input.param("bucket_password_new", None)
