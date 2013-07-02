@@ -243,6 +243,7 @@ class CouchbaseCliTest(CliBaseTest):
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
         options += (" --enable-index-replica={0}".format(enable_index_replica), "")[enable_index_replica is None]
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
+        options += (" --bucket-password={0}".format(bucket_password), "")[bucket_password is None]
         options += (" --wait", "")[wait]
         cli_command = "bucket-create"
 
@@ -381,53 +382,6 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertEqual(output, ["(u'none', None)"])
         remote_client.disconnect()
 
-
-    def testBucketCreation(self):
-        bucket_name = self.input.param("bucket", "default")
-        bucket_type = self.input.param("bucket_type", "couchbase")
-        bucket_port = self.input.param("bucket_port", 11211)
-        bucket_replica = self.input.param("bucket_replica", 1)
-        bucket_password = self.input.param("bucket_password", None)
-        bucket_ramsize = self.input.param("bucket_ramsize", 200)
-        wait = self.input.param("wait", False)
-        enable_flush = self.input.param("enable_flush", None)
-        enable_index_replica = self.input.param("enable_index_replica", None)
-
-        remote_client = RemoteMachineShellConnection(self.master)
-        rest = RestConnection(self.master)
-        self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
-                        bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
-        buckets = rest.get_buckets()
-        result = True
-        if len(buckets) != 1:
-            self.log.error("Expected to ge only 1 bucket")
-            result = False
-        bucket = buckets[0]
-        if bucket_name != bucket.name:
-            self.log.error("Bucket name is not correct")
-            result = False
-        if not (bucket_port == bucket.nodes[0].moxi or bucket_port == bucket.port):
-            self.log.error("Bucket port is not correct")
-            result = False
-        if bucket_type == "couchbase" and "membase" != bucket.type or\
-            (bucket_type == "memcached" and "memcached" != bucket.type):
-            self.log.error("Bucket type is not correct")
-            result = False
-        if bucket_type == "couchbase" and bucket_replica != bucket.numReplicas:
-            self.log.error("Bucket num replica is not correct")
-            result = False
-        if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
-            self.log.error("Bucket password is not correct")
-            result = False
-        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), int(int(buckets[0].stats.ram) * 1.05)):
-            self.log.error("Bucket RAM size is not correct")
-            result = False
-
-        if not result:
-            self.fail("Bucket was created with incorrect properties")
-
-        remote_client.disconnect()
-
     def testNodeInit(self):
         server = self.servers[-1]
         remote_client = RemoteMachineShellConnection(server)
@@ -563,3 +517,104 @@ class CouchbaseCliTest(CliBaseTest):
             rest.force_eject_node()
             self.sleep(5)
             rest.init_cluster()
+
+    def testBucketCreation(self):
+        bucket_name = self.input.param("bucket", "default")
+        bucket_type = self.input.param("bucket_type", "couchbase")
+        bucket_port = self.input.param("bucket_port", 11211)
+        bucket_replica = self.input.param("bucket_replica", 1)
+        bucket_password = self.input.param("bucket_password", None)
+        bucket_ramsize = self.input.param("bucket_ramsize", 200)
+        wait = self.input.param("wait", False)
+        enable_flush = self.input.param("enable_flush", None)
+        enable_index_replica = self.input.param("enable_index_replica", None)
+
+        remote_client = RemoteMachineShellConnection(self.master)
+        rest = RestConnection(self.master)
+        self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
+                        bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
+        buckets = rest.get_buckets()
+        result = True
+        if len(buckets) != 1:
+            self.log.error("Expected to ge only 1 bucket")
+            result = False
+        bucket = buckets[0]
+        if bucket_name != bucket.name:
+            self.log.error("Bucket name is not correct")
+            result = False
+        if not (bucket_port == bucket.nodes[0].moxi or bucket_port == bucket.port):
+            self.log.error("Bucket port is not correct")
+            result = False
+        if bucket_type == "couchbase" and "membase" != bucket.type or\
+            (bucket_type == "memcached" and "memcached" != bucket.type):
+            self.log.error("Bucket type is not correct")
+            result = False
+        if bucket_type == "couchbase" and bucket_replica != bucket.numReplicas:
+            self.log.error("Bucket num replica is not correct")
+            result = False
+        if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
+            self.log.error("Bucket password is not correct")
+            result = False
+        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), int(int(buckets[0].stats.ram) * 1.05)):
+            self.log.error("Bucket RAM size is not correct")
+            result = False
+
+        if not result:
+            self.fail("Bucket was created with incorrect properties")
+
+        remote_client.disconnect()
+
+
+    def testBucketModification(self):
+        cli_command = "bucket-edit"
+        self.testBucketCreation()
+        bucket_port_new = self.input.param("bucket_port_new", None)
+        bucket_password_new = self.input.param("bucket_password_new", None)
+        bucket_ramsize_new = self.input.param("bucket_ramsize_new", None)
+        enable_flush_new = self.input.param("enable_flush_new", None)
+        enable_index_replica_new = self.input.param("enable_index_replica_new", None)
+        bucket_ramsize_new = self.input.param("bucket_ramsize_new", None)
+        bucket = self.input.param("bucket", "default")
+        rest = RestConnection(self.master)
+        remote_client = RemoteMachineShellConnection(self.master)
+
+        options = "--bucket={0}".format(bucket)
+        options += (" --enable-flush={0}".format(enable_flush_new), "")[enable_flush_new is None]
+        options += (" --enable-index-replica={0}".format(enable_index_replica_new), "")[enable_index_replica_new is None]
+        options += (" --bucket-port={0}".format(bucket_port_new), "")[bucket_port_new is None]
+        options += (" --bucket-password={0}".format(bucket_password_new), "")[bucket_password_new is None]
+        options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), "")[bucket_ramsize_new is None]
+
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+
+        if bucket_password_new is not None:
+            bucket_password_new = bucket_password
+        if bucket_port_new is not None:
+            bucket_port = bucket_port_new
+        if bucket_ramsize_new is not None:
+            bucket_ramsize = bucket_ramsize_new
+
+        buckets = rest.get_buckets()
+        result = True
+        if len(buckets) != 1:
+            self.log.error("Expected to ge only 1 bucket")
+            result = False
+        bucket = buckets[0]
+        if not (bucket_port == bucket.nodes[0].moxi or bucket_port == bucket.port):
+            self.log.error("Bucket port is not correct")
+            result = False
+        if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
+            self.log.error("Bucket password is not correct")
+            result = False
+        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), int(int(buckets[0].stats.ram) * 1.05)):
+            self.log.error("Bucket RAM size is not correct")
+            result = False
+
+        if not result:
+            self.fail("Bucket was created with incorrect properties")
+
+        remote_client.disconnect()
+
+
+
+
