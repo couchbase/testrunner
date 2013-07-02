@@ -44,7 +44,8 @@ class RecreateMembaseBuckets(unittest.TestCase):
     #create bucket-load some keys-delete bucket-recreate bucket
     def test_default_moxi(self):
         name = 'default'
-        for serverInfo in self.servers:
+        serverInfo = self.servers[0]
+        if serverInfo.ip != "":
             rest = RestConnection(serverInfo)
             replicaNumber = 1
             proxyPort = rest.get_nodes_self().moxi
@@ -80,7 +81,8 @@ class RecreateMembaseBuckets(unittest.TestCase):
 
     def test_default_dedicated(self):
         name = 'recreate-non-default-{0}'.format(uuid.uuid4())
-        for serverInfo in self.servers:
+        serverInfo = self.servers[0]
+        if serverInfo.ip != "":
             rest = RestConnection(serverInfo)
             replicaNumber = 1
             proxyPort = rest.get_nodes_self().memcached + 2000
@@ -118,7 +120,8 @@ class RecreateMembaseBuckets(unittest.TestCase):
 
     def test_default_moxi_sasl(self):
         name = 'new-bucket-{0}'.format(uuid.uuid4())
-        for serverInfo in self.servers:
+        serverInfo = self.servers[0]
+        if serverInfo.ip != "":
             rest = RestConnection(serverInfo)
             replicaNumber = 1
             proxyPort = rest.get_nodes_self().moxi
