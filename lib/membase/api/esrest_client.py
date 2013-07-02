@@ -44,7 +44,7 @@ class EsRestConnection(RestConnection):
 
         for index in indices:
             bucket = Bucket()
-            stats = self.conn.indices.stats()['_all']['indices'][index]
+            stats = self.conn.indices.stats()['indices'][index]
             bucket.name = index
             bucket.type = "es"
             bucket.port = self.port
