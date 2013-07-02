@@ -331,6 +331,40 @@ class ViewBaseTests(unittest.TestCase):
         self.created_views[view_name] = bucket
         return view_name
 
+    @staticmethod
+    def _load_docs(self, num_docs, prefix, verify=True, bucket='default', expire=0, flag=0):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        smart = VBucketAwareMemcached(rest, bucket)
+        doc_names = []
+        for i in range(0, num_docs):
+            key = doc_name = "{0}-{1}".format(prefix, i)
+            doc_names.append(doc_name)
+            value = {"name": doc_name, "age": i}
+            smart.set(key, expire, flag, json.dumps(value))
+            # loop till value is set
+        RebalanceHelper.wait_for_persistence(master, bucket)
+        self.log.info("inserted {0} json documents".format(num_docs))
+        if verify:
+            ViewBaseTests._verify_keys(self, doc_names, prefix)
+
+        return doc_names
+
+    @staticmethod
+    def _verify_keys(self, doc_names, prefix):
+        master = self.servers[0]
+        rest = RestConnection(master)
+        bucket = "default"
+
+        results = rest.all_docs(bucket)
+        result_keys = ViewBaseTests._get_keys(self, results)
+
+        # result_keys also contains the design document, but this doesn't
+        # matter if we compare like this
+        if set(doc_names) - set(result_keys):
+            self.fail("returned doc names have different values than expected")
+
+
 class ViewBasicTests(unittest.TestCase):
     def setUp(self):
         ViewBaseTests.common_setUp(self)
@@ -391,6 +425,60 @@ class ViewBasicTests(unittest.TestCase):
         params = {"startkey": endkey, "endkey": startkey}
         self.assertRaises(Exception, rest.query_view, view_name, view_name,
                           bucket, params)
+
+class ViewCreationDeletionTests(unittest.TestCase):
+
+    def setUp(self):
+        ViewBaseTests.common_setUp(self)
+
+    def tearDown(self):
+        ViewBaseTests.common_tearDown(self)
+
+    '''
+    Test scenario:
+    1) upload the dev and production design docs
+    2) query both with stale=false
+    3) delete the development design doc
+    4) query the production one with stale=ok
+    5) Verify that the results you got in step 4 are exactly the same as the ones you got in step 2
+    '''
+    def test_create_delete_similar_views(self):
+        ddoc_name_prefix = self.input.param("ddoc_name_prefix", "ddoc")
+        view_name = self.input.param("view_name", "test_view")
+        map_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
+        rest = RestConnection(self.servers[0])
+        ddocs = [DesignDocument(ddoc_name_prefix + "1", [View(view_name, map_fn,
+                                                             dev_view=False)],
+                                options={"updateMinChanges":0, "replicaUpdateMinChanges":0}),
+                DesignDocument(ddoc_name_prefix + "2", [View(view_name, map_fn,
+                                                            dev_view=True)],
+                               options={"updateMinChanges":0, "replicaUpdateMinChanges":0})]
+
+        ViewBaseTests._load_docs(self, self.num_docs, "test_")
+        for ddoc in ddocs:
+            results = self.create_ddoc(rest, 'default', ddoc)
+
+        try:
+            cluster = Cluster()
+            cluster.delete_view(self.servers[0], ddocs[1].name, ddocs[1].views[0])
+        finally:
+            cluster.shutdown()
+
+        results_new = rest.query_view(ddocs[0].name, ddocs[0].views[0].name, 'default',
+                                  {"stale" : "ok", "full_set" : "true"})
+        self.assertEquals(results.get(u'rows', []), results_new.get(u'rows', []),
+                          "Results returned previosly %s don't match with current %s" % (
+                          results.get(u'rows', []), results_new.get(u'rows', [])))
+
+    def create_ddoc(self, rest, bucket, ddoc):
+        ddoc_to_create = deepcopy(ddoc)
+        ddoc_to_create.set_name(("", "dev_")[ddoc.views[0].dev_view] + ddoc_to_create.name)
+        rest.create_design_document(bucket, ddoc_to_create)
+        time.sleep(1)
+        return rest.query_view(ddoc_to_create.name, ddoc_to_create.views[0].name, bucket,
+                                      {"stale" : "false", "full_set" : "true"})
+
+
 
 class ViewPerformanceTests(unittest.TestCase):
 
