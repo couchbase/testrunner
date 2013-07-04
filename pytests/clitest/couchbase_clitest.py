@@ -631,7 +631,6 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ['SUCCESS: bucket-edit'])
 
-
         cli_command = "bucket-flush --force"
         options = "--bucket={0}".format(bucket)
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
@@ -641,10 +640,44 @@ class CouchbaseCliTest(CliBaseTest):
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ['SUCCESS: bucket-delete'])
 
-
         remote_client.disconnect()
 
 
+    def testSettingCompacttion(self):
+        '''setting-compacttion OPTIONS:
+        --compaction-db-percentage=PERCENTAGE     at which point database compaction is triggered
+        --compaction-db-size=SIZE[MB]             at which point database compaction is triggered
+        --compaction-view-percentage=PERCENTAGE   at which point view compaction is triggered
+        --compaction-view-size=SIZE[MB]           at which point view compaction is triggered
+        --compaction-period-from=HH:MM            allow compaction time period from
+        --compaction-period-to=HH:MM              allow compaction time period to
+        --enable-compaction-abort=[0|1]           allow compaction abort when time expires
+        --enable-compaction-parallel=[0|1]        allow parallel compaction for database and view'''
+        compaction_db_percentage = self.input.param("compaction-db-percentage", None)
+        compaction_db_size = self.input.param("compaction-db-size", None)
+        compaction_view_percentage = self.input.param("compaction-view-percentage", None)
+        compaction_view_size = self.input.param("compaction-view-size", None)
+        compaction_period_from = self.input.param("compaction-period-from", None)
+        compaction_period_to = self.input.param("compaction-period-to", None)
+        enable_compaction_abort = self.input.param("enable-compaction-abort", None)
+        enable_compaction_parallel = self.input.param("enable-compaction-parallel", None)
+        bucket = self.input.param("bucket", "default")
+        output = self.input.param("output", '')
+        rest = RestConnection(self.master)
+        remote_client = RemoteMachineShellConnection(self.master)
+        self.testBucketCreation()
+        cli_command = "setting-compacttion"
+        options = "--bucket={0}".format(bucket)
+        options += (" --compaction-db-percentage={0}".format(compaction_db_percentage), "")[compaction_db_percentage is None]
+        options += (" --compaction-db-size={0}".format(compaction_db_size), "")[compaction_db_size is None]
+        options += (" --compaction-view-percentage={0}".format(compaction_view_percentage), "")[compaction_view_percentage is None]
+        options += (" --compaction-view-size={0}".format(compaction_view_size), "")[compaction_view_size is None]
+        options += (" --compaction-period-from={0}".format(compaction_period_from), "")[compaction_period_from is None]
+        options += (" --compaction-period-to={0}".format(compaction_period_to), "")[compaction_period_to is None]
+        options += (" --enable-compaction-abort={0}".format(enable_compaction_abort), "")[enable_compaction_abort is None]
+        options += (" --enable-compaction-parallel={0}".format(enable_compaction_parallel), "")[enable_compaction_parallel is None]
 
-
-
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ['SUCCESS: bucket-edit'])
+        cluster_status = rest.cluster_status()
+        remote_client.disconnect()
