@@ -345,6 +345,8 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def check_seqno(self, seqno_expected, comparator='=='):
         for bucket in self.buckets:
+            if bucket.type == 'memcached':
+                continue
             ready = BucketOperationHelper.wait_for_memcached(self.master,
                                                           bucket.name)
             self.assertTrue(ready, "wait_for_memcached failed")

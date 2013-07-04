@@ -35,7 +35,7 @@ class BaseTestCase(unittest.TestCase):
             self.standard_buckets = self.input.param("standard_buckets", 0)
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.memcached_buckets = self.input.param("memcached_buckets", 0)
-            self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets
+            self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets + self.memcached_buckets
             self.num_servers = self.input.param("servers", len(self.servers))
             # initial number of items in the cluster
             self.nodes_init = self.input.param("nodes_init", 1)
@@ -280,6 +280,13 @@ class BaseTestCase(unittest.TestCase):
         stats_tasks = []
         for bucket in self.buckets:
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            if bucket.type == 'memcached':
+                items_actual = 0
+                for server in servers:
+                    client = MemcachedClientHelper.direct_client(server, bucket)
+                    items_actual += int(client.stats()["curr_items"])
+                self.assertEqual(items, items_actual, "Items are not correct")
+                continue
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                                'curr_items', '==', items))
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
@@ -364,6 +371,8 @@ class BaseTestCase(unittest.TestCase):
         tasks = []
         for server in servers:
             for bucket in self.buckets:
+                if bucket.type == 'memcached':
+                    continue
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                    'ep_queue_size', ep_queue_size_cond, ep_queue_size))
         for task in tasks:
@@ -385,6 +394,8 @@ class BaseTestCase(unittest.TestCase):
         if len(self.buckets) > 1:
             batch_size = 1
         for bucket in self.buckets:
+            if bucket.type == 'memcached':
+                continue
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
                                                         only_store_hash, batch_size, replica_to_read))
         for task in tasks:
