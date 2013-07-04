@@ -255,6 +255,35 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     server.data_path = old_paths[server.ip][0]
                     server.index_path = old_paths[server.ip][1]
 
+    def offline_cluster_upgrade_with_reinstall(self):
+        self._install(self.servers[:self.nodes_init])
+        self.operations(self.servers[:self.nodes_init])
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+        if self.during_ops:
+            for opn in self.during_ops:
+                getattr(self, opn)()
+        num_nodes_reinstall = self.input.param('num_nodes_reinstall', 1)
+        stoped_nodes = self.servers[self.nodes_init - (self.nodes_init - num_nodes_reinstall):self.nodes_init]
+        nodes_reinstall = self.servers[:num_nodes_reinstall]
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
+        for upgrade_version in self.upgrade_versions:
+            for server in stoped_nodes:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.disconnect()
+            self.sleep(self.sleep_time)
+            upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
+            self.force_reinstall(nodes_reinstall)
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
+            self.verification(self.servers[:self.nodes_init])
+
     def online_upgrade_rebalance_in_with_ops(self):
         gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
         def modify_data():

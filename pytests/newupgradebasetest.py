@@ -364,3 +364,29 @@ class NewUpgradeBaseTest(BaseTestCase):
                                 msg="seqno {0} !{1} {2} for key:{3}".
                                 format(seqno, comparator, seqno_expected, valid_key))
             client.done()
+
+    def force_reinstall(self, servers):
+        for server in servers:
+            try:
+                remote = RemoteMachineShellConnection(server)
+                appropriate_build = self._get_build(server, self.initial_version, remote)
+                self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(self.initial_version))
+                remote.download_build(appropriate_build)
+                remote.install_server(appropriate_build, force=True)
+                self.log.info("upgrade {0} to version {1} is completed".format(server.ip, self.initial_version))
+                remote.disconnect()
+                self.sleep(10)
+                if self.is_linux:
+                    self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
+                else:
+                    self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, wait_if_warmup=True, check_service=True)
+            except Exception, e:
+                print traceback.extract_stack()
+                if queue is not None:
+                    queue.put(False)
+                    if not self.is_linux:
+                        remote = RemoteMachineShellConnection(server)
+                        output, error = remote.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
+                        remote.log_command_output(output, error)
+                        remote.disconnect()
+                    raise e

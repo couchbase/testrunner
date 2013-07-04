@@ -746,7 +746,8 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
         self.log_command_output(output, error)
 
-    def install_server(self, build, startserver=True, path='/tmp', vbuckets=None, swappiness=10):
+    def install_server(self, build, startserver=True, path='/tmp', vbuckets=None, swappiness=10,
+                       force=False):
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -782,9 +783,15 @@ class RemoteMachineShellConnection:
                 environment = "INSTALL_DONT_START_SERVER=1 "
             log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
             if info.deliverable_type == 'rpm':
-                output, error = self.execute_command('{0}rpm -i /tmp/{1}'.format(environment, build.name))
+                if force:
+                    output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'.format(environment, build.name))
+                else:
+                    output, error = self.execute_command('{0}rpm -i /tmp/{1}'.format(environment, build.name))
             elif info.deliverable_type == 'deb':
-                output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
+                if force:
+                    output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'.format(environment, build.name))
+                else:
+                    output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
             success &= self.log_command_output(output, error, track_words)
             self.create_directory(path)
             output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
