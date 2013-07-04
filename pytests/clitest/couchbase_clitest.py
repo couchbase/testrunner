@@ -569,6 +569,7 @@ class CouchbaseCliTest(CliBaseTest):
         cli_command = "bucket-edit"
         bucket_password = self.input.param("bucket_password", None)
         bucket_port = self.input.param("bucket_port", 11211)
+        enable_flush = self.input.param("enable_flush", None)
         self.testBucketCreation()
         bucket_port_new = self.input.param("bucket_port_new", None)
         bucket_password_new = self.input.param("bucket_password_new", None)
@@ -588,6 +589,7 @@ class CouchbaseCliTest(CliBaseTest):
         options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), "")[bucket_ramsize_new is None]
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ['SUCCESS: bucket-edit'])
 
         if bucket_password_new is not None:
             bucket_password_new = bucket_password
@@ -615,7 +617,33 @@ class CouchbaseCliTest(CliBaseTest):
         if not result:
             self.fail("Bucket was created with incorrect properties")
 
+        options = ""
+        cli_command = "bucket-flush"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ['Running this command will totally PURGE database data from disk.Do you really want to do it? (Yes/No)TIMED OUT: command: bucket-flush: localhost:8091, most likely bucket is not flushed'])
+        if enable_flush:
+            cli_command = "bucket-flush --force"
+            options = "--bucket={0}".format(bucket)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ['Database data will be purged from disk ...', 'ERROR: unable to bucket-flush; please check your username (-u) and password (-p); (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
+            cli_command = "bucket-edit"
+            options = "--bucket={0} --enable-flush=0 --bucket-ramsize=500".format(bucket)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ['SUCCESS: bucket-edit'])
+
+
+        cli_command = "bucket-flush --force"
+        options = "--bucket={0}".format(bucket)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ['SUCCESS: bucket-edit'])
+
+        cli_command = "bucket-delete"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ['SUCCESS: bucket-delete'])
+
+
         remote_client.disconnect()
+
 
 
 
