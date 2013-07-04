@@ -215,6 +215,9 @@ class RemoteMachineShellConnection:
             else:
                 o, r = self.execute_command("/etc/init.d/membase-server start")
             self.log_command_output(o, r)
+        elif os == "mac":
+            o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
+            self.log_command_output(o, r)
         else:
             self.log.error("don't know operating system or product version")
 
@@ -233,6 +236,11 @@ class RemoteMachineShellConnection:
             else:
                 o, r = self.execute_command("/etc/init.d/membase-server stop")
             self.log_command_output(o, r)
+        elif os == "mac":
+            o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}' | xargs kill -9")
+            self.log_command_output(o, r)
+            o, r = self.execute_command("killall -9 epmd")
+            self.log_command_output(o, r)
         else:
             self.log.error("don't know operating system or product version")
 
@@ -250,6 +258,12 @@ class RemoteMachineShellConnection:
         if info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
                 return True
+        elif info.distribution_type.lower() == 'mac':
+            output, error = self.execute_command('ls %s%s' % (testconstants.MAC_CB_PATH, testconstants.VERSION_FILE))
+            self.log_command_output(output, error)
+            for line in output:
+                if line.find('No such file or directory') == -1:
+                    return True
         elif info.type.lower() == "linux":
             if self.file_exists(testconstants.LINUX_CB_PATH, testconstants.VERSION_FILE):
                 return True
@@ -314,6 +328,15 @@ class RemoteMachineShellConnection:
                  "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O setup.exe';ls -l;".format(url))
             self.log_command_output(output, error)
             return self.file_exists('/cygdrive/c/tmp/', 'setup.exe')
+        elif info.distribution_type.lower() == 'mac':
+            output, error = self.execute_command('cd ~/Downloads ; rm -rf couchbase-server* ; rm -rf Couchbase\ Server.app ; curl -O {0}'.format(url))
+            self.log_command_output(output, error)
+            output, error = self.execute_command('ls ~/Downloads/%s' % filename)
+            self.log_command_output(output, error)
+            for line in output:
+                if line.find('No such file or directory') == -1:
+                    return True
+            return False
         else:
         # try to push this build into
         # depending on the os
@@ -817,6 +840,17 @@ class RemoteMachineShellConnection:
                     self.log_command_output(output, error, track_words)
                 else:
                     success &= self.log_command_output(output, error, track_words)
+        elif info.deliverable_type in ["zip"]:
+            o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
+            self.log_command_output(o, r)
+            time.sleep(60)
+            output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
+            self.log_command_output(output, error)
+            time.sleep(60)
+            output, error = self.execute_command("mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/")
+            self.log_command_output(output, error)
+            output, error = self.execute_command("open /Applications/Couchbase\ Server.app")
+            self.log_command_output(output, error)
 
         output, error = self.execute_command("rm -f *-diag.zip")
         self.log_command_output(output, error, track_words)
@@ -999,6 +1033,13 @@ class RemoteMachineShellConnection:
                 self.log_command_output(output, error)
             self.terminate_processes(info, terminate_process_list)
             self.remove_folders(linux_folders)
+        elif info.distribution_type.lower() == 'mac':
+            self.stop_server(os='mac')
+            self.terminate_processes(info, terminate_process_list)
+            output, error = self.execute_command("rm -rf /Applications/Couchbase\ Server.app")
+            self.log_command_output(output, error)
+            output, error = self.execute_command("rm -rf ~/Library/Application\ Support/Couchbase")
+            self.log_command_output(output, error)
 
     def couchbase_win_uninstall(self, product, version, os_name, query):
         builds, changes = query.get_all_builds()
@@ -1386,6 +1427,11 @@ class RemoteMachineShellConnection:
         if info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/couchbase-server stop", info, use_channel=True)
             self.log_command_output(o, r)
+        if info.distribution_type.lower() == "mac":
+            o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}' | xargs kill -9")
+            self.log_command_output(o, r)
+            o, r = self.execute_command("killall -9 epmd")
+            self.log_command_output(o, r)
 
     def start_couchbase(self):
         info = self.extract_remote_info()
@@ -1394,6 +1440,9 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         if info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/couchbase-server start", info)
+            self.log_command_output(o, r)
+        if info.distribution_type.lower() == "mac":
+            o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
 
     def pause_memcached(self):

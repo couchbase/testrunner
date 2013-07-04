@@ -291,7 +291,7 @@ class BuildQuery(object):
         version_item = ''
         for item in list:
             if item.endswith('.setup.exe') or item.endswith('rpm') or\
-               item.endswith('deb') or item.endswith('tar.gz'):
+               item.endswith('deb') or item.endswith('tar.gz') or item.endswith('zip'):
                 version_item = item
                 break
         if version_item != '':
@@ -303,6 +303,8 @@ class BuildQuery(object):
                 return version_item[:version_item.index('.deb')]
             elif version_item.endswith('.rpm'):
                 return version_item[:version_item.index('.rpm')]
+            elif version_item.endswith('.zip'):
+                return version_item[:version_item.index('.zip')]
         return ''
 
     def _product_deliverable_type(self, build_id=''):
@@ -310,7 +312,7 @@ class BuildQuery(object):
         version_item = ''
         for item in list:
             if item.endswith('.setup.exe') or item.endswith('rpm') or\
-               item.endswith('deb') or item.endswith('tar.gz'):
+               item.endswith('deb') or item.endswith('tar.gz') or item.endswith('zip'):
                 version_item = item
                 break
         if version_item != '':
@@ -322,6 +324,8 @@ class BuildQuery(object):
                 return 'deb'
             elif version_item.endswith('.rpm'):
                 return 'rpm'
+            elif version_item.endswith('.zip'):
+                return 'zip'
         return ''
 
     def _product_time(self, build_description):
