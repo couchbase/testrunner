@@ -89,8 +89,9 @@ class RebalanceProgressTests(RebalanceBaseTest):
             #no vbuckets moving for unchanged nodes
             #docsTotal should not change
             #docsTransferred should go increasing
-            self._check_stats(servers_in, previous_stats, new_stats, "ingoing",
+            self._check_stats(servers_in, previous_stats, new_stats, "outgoing",
                               docs_total=0, docs_transf=0)
+            self._check_stats(servers_in, previous_stats, new_stats, "ingoing")
             self._check_stats(servers_unchanged, previous_stats, new_stats, "ingoing",
                               active_vb=0, replica_vb=0)
             self._check_stats(servers_unchanged, previous_stats, new_stats, "outgoing",
