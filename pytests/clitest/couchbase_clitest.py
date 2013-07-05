@@ -250,6 +250,12 @@ class CouchbaseCliTest(CliBaseTest):
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertTrue("SUCCESS: bucket-create" in output[0])
 
+    def _teardown_xdcr(self):
+        for server in self.servers:
+            rest = RestConnection(server)
+            rest.remove_all_remote_clusters()
+            rest.remove_all_replications()
+            rest.remove_all_recoveries()
 
     def testHelp(self):
         remote_client = RemoteMachineShellConnection(self.master)
@@ -643,7 +649,7 @@ class CouchbaseCliTest(CliBaseTest):
 
         remote_client.disconnect()
 
-
+    #MB-8566
     def testSettingCompacttion(self):
         '''setting-compacttion OPTIONS:
         --compaction-db-percentage=PERCENTAGE     at which point database compaction is triggered
@@ -682,3 +688,62 @@ class CouchbaseCliTest(CliBaseTest):
         self.assertEqual(output, ['SUCCESS: bucket-edit'])
         cluster_status = rest.cluster_status()
         remote_client.disconnect()
+
+    def testXDCRSetup(self):
+        '''xdcr-setup OPTIONS:
+        --create                           create a new xdcr configuration
+        --edit                             modify existed xdcr configuration
+        --delete                           delete existed xdcr configuration
+        --xdcr-cluster-name=CLUSTERNAME    cluster name
+        --xdcr-hostname=HOSTNAME           remote host name to connect to
+        --xdcr-username=USERNAME           remote cluster admin username
+        --xdcr-password=PASSWORD           remtoe cluster admin password'''
+        remote_client = RemoteMachineShellConnection(self.master)
+        try:
+            #rest = RestConnection(self.master)
+            #xdcr_cluster_name & xdcr_hostname=the number of server in ini file to add to master as replication
+            xdcr_cluster_name = self.input.param("xdcr-cluster-name", None)
+            xdcr_hostname = self.input.param("xdcr-hostname", None)
+            xdcr_username = self.input.param("xdcr-username", None)
+            xdcr_password = self.input.param("xdcr-password", None)
+            output_error = ""
+            ip = None
+            if xdcr_cluster_name is not None:
+                ip = self.servers[xdcr_cluster_name].ip
+#            if ip is not None:
+#                output_error = 'SUCCESS: init {0}'.format(ip)
+            output_error = self.input.param("output_error", 'SUCCESS: init HOSTIP').replace(";", ",")
+            if ip is not None:
+                output_error = output_error.replace("HOSTIP", ip)
+            cli_command = "xdcr-setup"
+            options = "--create"
+            options += (" --xdcr-cluster-name={0}".format(ip), "")[xdcr_cluster_name is None]
+            if xdcr_hostname is not None:
+                options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
+            options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
+            options += (" --xdcr-password={0}".format(xdcr_password), "")[xdcr_password is None]
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual([s.rstrip() for s in output], [s for s in output_error.split(',')])
+
+            if "SUCCESS: init" in output_error:
+                #MB-8570 add verification when will be fixed
+                options = options.replace("--create ", "--edit ")
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+
+            if "SUCCESS: init" in output_error and xdcr_cluster_name is None:
+                #MB-8573 couchbase-cli: quotes are not supported when try to remove remote xdcr cluster that has white spaces in the name
+                options = "--delete --xdcr-cluster-name={0}".format("remote%20cluster")
+            else:
+                options = "--delete --xdcr-cluster-name={0}".format(self.servers[xdcr_cluster_name].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+
+            if "SUCCESS: init" in output_error:
+                self.assertEqual(output, ["SUCCESS: delete {0}".format(self.servers[xdcr_cluster_name].ip)])
+            else:
+                self.assertEqual(output, ["ERROR: unable to delete xdcr remote site localhost (404) Object Not Found", "unknown remote cluster"])
+
+
+        finally:
+            remote_client.disconnect()
+            self._teardown_xdcr()
+
