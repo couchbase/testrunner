@@ -510,7 +510,8 @@ class CouchbaseCliTest(CliBaseTest):
                 options += "--cluster-init-ramsize={0} ".format(cluster_init_ramsize)
 
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=None, password=None)
-            self.assertEqual(output, ['ERROR: unable to init localhost (400) Bad Request', "[u'Username and password are required.']"])
+            self.assertEqual(output[0], 'ERROR: unable to init localhost (400) Bad Request')
+            self.assertTrue(output[1] == "[u'Username and password are required.']" or output[1] == "[u'The password must be at least six characters.']")
             remote_client.disconnect()
         finally:
             rest = RestConnection(server)
