@@ -299,7 +299,7 @@ if __name__ == "__main__":
         if len(name) > 237:
             name = os.path.join(name[:220] + time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())).replace("'", "")
         if params:
-            log_name = os.path.join(logs_folder_abspath, name + ".log")
+            log_name = os.path.join(logs_folder_abspath, name + ".log").replace("'", "")
             log_config_filename = os.path.join(logs_folder_abspath, name + ".logging.conf")
         else:
             dotnames = name.split('.')
