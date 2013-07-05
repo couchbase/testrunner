@@ -43,12 +43,6 @@ class ClusterOperationHelper(object):
                     rebalanced = False
         return all_nodes_added and rebalanced
 
-    # For a clearer API
-    @staticmethod
-    def remove_and_rebalance(servers, wait_for_rebalance=True):
-        return ClusterOperationHelper.cleanup_cluster(
-            servers, wait_for_rebalance)
-
     @staticmethod
     def add_all_nodes_or_assert(master, all_servers, rest_settings, test_case):
         log = logger.Logger.get_logger()

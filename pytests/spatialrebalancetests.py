@@ -29,7 +29,7 @@ class SpatialRebalanceTests(unittest.TestCase):
         prefix = str(uuid.uuid4())[:7]
 
         # Make sure we are fully de-clustered
-        ClusterOperationHelper.remove_and_rebalance(self.helper.servers)
+        ClusterOperationHelper.cleanup_cluster(self.helper.servers)
 
         self.helper.create_index_fun(design_name, prefix)
         inserted_keys = self.helper.insert_docs(num_docs, prefix)
@@ -45,7 +45,7 @@ class SpatialRebalanceTests(unittest.TestCase):
         # spatial view
         results = self.helper.get_results(design_name, num_docs)
         result_keys = self.helper.get_keys(results)
-        self.assertEqual(len(result_keys), num_docs-len(deleted_keys))
+        self.assertEqual(len(result_keys), num_docs - len(deleted_keys))
         self.helper.verify_result(inserted_keys, deleted_keys + result_keys)
 
 
@@ -68,7 +68,7 @@ class SpatialRebalanceTests(unittest.TestCase):
 
         # Start destroying the cluster and rebalancing it without waiting
         # until it's finished
-        ClusterOperationHelper.remove_and_rebalance(self.helper.servers,
+        ClusterOperationHelper.cleanup_cluster(self.helper.servers,
                                                     False)
 
         deleted_keys = self.helper.delete_docs(num_deleted_docs, prefix)
@@ -78,7 +78,7 @@ class SpatialRebalanceTests(unittest.TestCase):
         # spatial view
         results = self.helper.get_results(design_name, num_docs)
         result_keys = self.helper.get_keys(results)
-        self.assertEqual(len(result_keys), num_docs-len(deleted_keys))
+        self.assertEqual(len(result_keys), num_docs - len(deleted_keys))
         self.helper.verify_result(inserted_keys, deleted_keys + result_keys)
 
 
@@ -93,7 +93,7 @@ class SpatialRebalanceTests(unittest.TestCase):
         prefix = str(uuid.uuid4())[:7]
 
         # Make sure we are fully de-clustered
-        ClusterOperationHelper.remove_and_rebalance(self.helper.servers)
+        ClusterOperationHelper.cleanup_cluster(self.helper.servers)
 
         self.helper.create_index_fun(design_name)
         inserted_keys = self.helper.insert_docs(num_docs, prefix)
