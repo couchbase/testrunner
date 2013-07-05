@@ -762,7 +762,7 @@ class RestConnection(object):
 
     def remove_remote_cluster(self, name):
         #example : name:two
-        msg = "removing remote cluster name:{0}".format(name)
+        msg = "removing remote cluster name:{0}".format(name.replace(' ', '%20'))
         log.info(msg)
         api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(name)
         params = urllib.urlencode({})
