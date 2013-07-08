@@ -1771,3 +1771,47 @@ class RemoteUtilHelper(object):
             shell.disconnect()
         time.sleep(10)
 
+    @staticmethod
+    def use_hostname_for_server_settings(server):
+        shell = RemoteMachineShellConnection(server)
+        info = shell.extract_remote_info()
+        version = RestConnection(server).get_nodes_self().version
+        hostname = info.hostname[0]
+        shell.stop_couchbase()
+        time.sleep(5)
+        if version.startswith("1.8.0") or version.startswith("1.8.1") or\
+           version.startswith("2.0.0") or version.startswith("2.0.1"):
+            if info.type.lower() == "windows":
+                cmd = 'cat "C:\Program Files\Couchbase\Server\bin\service_register.bat"'
+                old_reg = shell.execute_command_raw(cmd)
+                new_start = '\n'.join(old_start[0]).replace("ns_1@%IP_ADDR%", "ns_1@%s" % hostname)
+                cmd = 'echo "%s" > "C:\Program Files\Couchbase\Server\bin\service_register.bat"' % new_start
+                shell.execute_command_raw(cmd)
+                cmd = '"C:\Program Files\Couchbase\Server\bin\service_register.bat"'
+                shell.execute_command_raw(cmd)
+                cmd = 'rm -rf  "C:\Program Files\Couchbase \Server\var\lib\couchbase\mnesia\*"'
+                shell.execute_command_raw(cmd)
+            else:
+                cmd = "cat  /opt/couchbase/bin/couchbase-server"
+                old_start = shell.execute_command_raw(cmd)
+                new_start = '\n'.join(old_start[0]).replace("-run ns_bootstrap -- \\",
+                                      "-run ns_bootstrap -- \\\n        -name ns_1@%s \\" % hostname)
+                cmd = "echo '%s' > /opt/couchbase/bin/couchbase-server" % new_start
+                shell.execute_command_raw(cmd)
+                time.sleep(2)
+                cmd = 'rm -rf /opt/couchbase/var/lib/couchbase/data/*'
+                shell.execute_command_raw(cmd)
+                cmd = 'rm -rf /opt/couchbase/var/lib/couchbase/mnesia/*'
+                shell.execute_command_raw(cmd)
+                cmd = 'rm -rf /opt/couchbase/var/lib/couchbase/config/config.dat'
+                shell.execute_command_raw(cmd)
+        else:
+            if info.type.lower() == "windows":
+                cmd = 'echo "%s" > "C:\Program Files\Couchbase\Server\var\lib\couchbase\ip"' % hostname
+                shell.execute_command_raw(cmd)
+            else:
+                cmd = 'echo "%s" > /opt/couchbase/var/lib/couchbase/ip' % hostname
+                shell.execute_command_raw(cmd)
+        shell.start_couchbase()
+        shell.disconnect()
+        return hostname

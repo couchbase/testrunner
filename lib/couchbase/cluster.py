@@ -150,17 +150,18 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_rebalance(self, servers, to_add, to_remove):
+    def async_rebalance(self, servers, to_add, to_remove, use_hostnames=False):
         """Asyncronously rebalances a cluster
 
         Parameters:
             servers - All servers participating in the rebalance ([TestInputServers])
             to_add - All servers being added to the cluster ([TestInputServers])
             to_remove - All servers being removed from the cluster ([TestInputServers])
+            use_hostnames - True if nodes should be added using hostnames (Boolean)
 
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
-        _task = RebalanceTask(servers, to_add, to_remove)
+        _task = RebalanceTask(servers, to_add, to_remove, use_hostnames=use_hostnames)
         self.task_manager.schedule(_task)
         return _task
 
@@ -258,17 +259,18 @@ class Cluster(object):
         _task = self.async_init_node(server, async_init_node, disabled_consistent_view)
         return _task.result()
 
-    def rebalance(self, servers, to_add, to_remove, timeout=None):
+    def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False):
         """Syncronously rebalances a cluster
 
         Parameters:
             servers - All servers participating in the rebalance ([TestInputServers])
             to_add - All servers being added to the cluster ([TestInputServers])
             to_remove - All servers being removed from the cluster ([TestInputServers])
+            use_hostnames - True if nodes should be added using their hostnames (Boolean)
 
         Returns:
             boolean - Whether or not the rebalance was successful"""
-        _task = self.async_rebalance(servers, to_add, to_remove)
+        _task = self.async_rebalance(servers, to_add, to_remove, use_hostnames)
         return _task.result(timeout)
 
     def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, timeout=None, flag=0, only_store_hash=True, batch_size=1):

@@ -10,7 +10,7 @@ from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientH
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase.document import DesignDocument, View
 from couchbase.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
@@ -20,6 +20,7 @@ from pprint import pprint
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
+        self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '1.8.1-942-rel')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
@@ -108,6 +109,11 @@ class NewUpgradeBaseTest(BaseTestCase):
                     sys.exit("some nodes were not install successfully!")
         if self.rest is None:
             self._new_master(self.master)
+        if self.use_hostnames:
+            for server in self.servers[:self.nodes_init]:
+                hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
+                server.hostname = hostname
+
 
 
     def operations(self, servers):
@@ -118,7 +124,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
         if len(servers) > 1:
-            self.cluster.rebalance([servers[0]], servers[1:], [])
+            self.cluster.rebalance([servers[0]], servers[1:], [],
+                                   use_hostnames=self.use_hostnames)
 
         self.buckets = []
         gc.collect()
@@ -217,6 +224,11 @@ class NewUpgradeBaseTest(BaseTestCase):
 
 
     def verification(self, servers, check_items=True):
+        if self.use_hostnames:
+            for server in servers:
+                new_hostname = RestConnection(server).get_nodes_self().hostname
+                self.assertEqual("%s:%s" % (server.hostname, server.port), new_hostname,
+                                 "Hostname is incorrect for server %s." % server.ip)
         if self.master.ip != self.rest.ip or \
            self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
             if self.port:
