@@ -1804,6 +1804,41 @@ class ViewQueryTests(BaseTestCase):
         self._query_all_views(data_set.views, generator_load,
                               verify_expected_keys=True)
 
+    def test_concurrent_threads(self):
+        num_ddocs = self.input.param("num_ddocs", 8)
+        #threads per view
+        num_threads = self.input.param("threads", 11)
+
+        data_set = SimpleDataSet(self.master, self.cluster, self.num_docs)
+        generator_load = data_set.generate_docs(data_set.views[0], start=0,
+                                                end=self.num_docs)
+        for ddoc_index in xrange(num_ddocs):
+            view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, "value_%s");}}' % ddoc_index
+            data_set.views.append(QueryView(self.master, self.cluster, fn_str=view_fn))
+        data_set.add_stale_queries(stale_param="false", limit=self.limit)
+        self.load(data_set, generator_load)
+
+        query_threads = []
+        for t_index in xrange(num_threads):
+            t = StoppableThread(target=self._query_all_views,
+                                name="query-{0}".format(t_index),
+                                args=(data_set.views, generator_load, None,
+                                False, [], 1))
+            query_threads.append(t)
+            t.start()
+
+        while True:
+            if not query_threads:
+                break
+            self.thread_stopped.wait(60)
+            if self.thread_crashed.is_set():
+                for t in query_threads:
+                    t.stop()
+                break
+            else:
+                query_threads = [d for d in query_threads if d.is_alive()]
+                self.thread_stopped.clear()
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
