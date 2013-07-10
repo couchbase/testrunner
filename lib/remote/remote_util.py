@@ -1782,16 +1782,26 @@ class RemoteUtilHelper(object):
         if version.startswith("1.8.0") or version.startswith("1.8.1") or\
            version.startswith("2.0.0") or version.startswith("2.0.1"):
             if info.type.lower() == "windows":
-                cmd = 'cat "C:\Program Files\Couchbase\Server\bin\service_register.bat"'
+                o = shell.execute_batch_command('ipconfig')
+                suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1]
+                suffix_dns = suffix_dns_row[0].split(':')[1].strip()
+                hostname = '%s.%s' % (hostname, suffix_dns)
+
+                cmd = "'C:/Program Files/Couchbase/Server/bin/service_unregister.bat'"
+                shell.execute_command_raw(cmd)
+                cmd = 'cat "C:\\Program Files\\Couchbase\\Server\\bin\\service_register.bat"'
                 old_reg = shell.execute_command_raw(cmd)
-                new_start = '\n'.join(old_start[0]).replace("ns_1@%IP_ADDR%", "ns_1@%s" % hostname)
-                cmd = 'echo "%s" > "C:\Program Files\Couchbase\Server\bin\service_register.bat"' % new_start
+                new_start = '\n'.join(old_reg[0]).replace("ns_1@%IP_ADDR%", "ns_1@%s" % hostname)
+                cmd = "echo '%s' > 'C:\\Program Files\\Couchbase\\Server\\bin\\service_register.bat'" % new_start
                 shell.execute_command_raw(cmd)
-                cmd = '"C:\Program Files\Couchbase\Server\bin\service_register.bat"'
+                cmd = "'C:/Program Files/Couchbase/Server/bin/service_register.bat'"
                 shell.execute_command_raw(cmd)
-                cmd = 'rm -rf  "C:\Program Files\Couchbase \Server\var\lib\couchbase\mnesia\*"'
+                cmd = 'rm -rf  "C:/Program Files/Couchbase/Server/var/lib/couchbase/mnesia/*"'
                 shell.execute_command_raw(cmd)
             else:
+                o = shell.execute_command_raw('nslookup %s' % hostname)
+                suffix_dns_row = [row for row in o[0] if row.find("Name:") != -1]
+                hostname = suffix_dns_row[0].split(':')[1].strip()
                 cmd = "cat  /opt/couchbase/bin/couchbase-server"
                 old_start = shell.execute_command_raw(cmd)
                 new_start = '\n'.join(old_start[0]).replace("-run ns_bootstrap -- \\",
@@ -1810,6 +1820,9 @@ class RemoteUtilHelper(object):
                 cmd = 'echo "%s" > "C:\Program Files\Couchbase\Server\var\lib\couchbase\ip"' % hostname
                 shell.execute_command_raw(cmd)
             else:
+                o = shell.execute_command_raw('nslookup %s' % hostname)
+                suffix_dns_row = [row for row in o[0] if row.find("Name:") != -1]
+                hostname = suffix_dns_row[0].split(':')[1].strip()
                 cmd = 'echo "%s" > /opt/couchbase/var/lib/couchbase/ip' % hostname
                 shell.execute_command_raw(cmd)
         shell.start_couchbase()
