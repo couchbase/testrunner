@@ -29,12 +29,11 @@ if "--purge" in sys.argv:
     # cleaning up seriesly database (fast and slow created by cbtop)
     if cfg.SERIESLY_IP != '':
         from seriesly import Seriesly
-        os.system("curl -X DELETE http://{0}:3133/fast".format(cfg.SERIESLY_IP))
-        os.system("curl -X DELETE http://{0}:3133/slow".format(cfg.SERIESLY_IP))
-        os.system("curl -X DELETE http://{0}:3133/event".format(cfg.SERIESLY_IP))
-        os.system("curl -X DELETE http://{0}:3133/atop".format(cfg.SERIESLY_IP))
-
         seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
+        dbs = seriesly.list_dbs()
+        for db in dbs:
+            seriesly.drop_db(db)
+
         seriesly.create_db('event')
 
 
