@@ -1751,6 +1751,25 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
+    def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket, item_size, command_options):
+        cbworkloadgen_command = "%scbworkloadgen" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
+
+        if info.distribution_type.lower() == 'mac':
+            cbworkloadgen_command = "%scbworkloadgen" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+
+        if type == 'windows':
+            cbworkloadgen_command = "%scbworkloadgen.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+
+        command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command, self.ip, self.port,
+                                                                          ratio, num_items, bucket, item_size,
+                                                                          command_options, username, password)
+
+        output, error = self.execute_command(command.format(command))
+        self.log_command_output(output, error)
+        return output, error
+
     def execute_batch_command(self, command):
         remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
         o, r = self.execute_command_raw(remote_command)
