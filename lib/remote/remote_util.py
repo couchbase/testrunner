@@ -739,6 +739,7 @@ class RemoteMachineShellConnection:
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
+        return output, error
 
     def membase_upgrade_win(self, architecture, windows_name, version):
         task = "upgrade"

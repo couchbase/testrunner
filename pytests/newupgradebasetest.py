@@ -153,8 +153,9 @@ class NewUpgradeBaseTest(BaseTestCase):
                                     drain_rate, self.num_items * (self.num_replicas + 1)))
         self.change_settings()
 
-    def _get_build(self, server, version, remote, is_amazon=False):
-        info = remote.extract_remote_info()
+    def _get_build(self, server, version, remote, is_amazon=False, info=None):
+        if info is None:
+            info = remote.extract_remote_info()
         builds, changes = BuildQuery().get_all_builds(timeout=self.wait_timeout * 5)
         self.log.info("finding build %s for machine %s" % (version, server))
         result = re.search('r', version)
@@ -174,13 +175,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 
-    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False):
+    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None):
         try:
             remote = RemoteMachineShellConnection(server)
-            appropriate_build = self._get_build(server, upgrade_version, remote)
+            appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
             self.assertTrue(remote.download_build(appropriate_build),"Build wasn't downloaded!")
-            remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
+            o, e = remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             remote.disconnect()
             self.sleep(10)
@@ -191,6 +192,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             if not skip_init:
                 self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             self.sleep(self.sleep_time)
+            return o, e
         except Exception, e:
             print traceback.extract_stack()
             if queue is not None:

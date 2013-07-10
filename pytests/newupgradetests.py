@@ -1,7 +1,7 @@
 import Queue
 import copy
 from newupgradebasetest import NewUpgradeBaseTest
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
@@ -16,6 +16,9 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
 
     def tearDown(self):
         super(SingleNodeUpgradeTests, self).tearDown()
+        if self.input.param("op", None) == "close_port":
+            remote = RemoteMachineShellConnection(self.master)
+            remote.disable_firewall()
 
     def test_upgrade(self):
         self._install([self.master])
@@ -42,6 +45,35 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
             remote.disconnect()
             self.sleep(30)
             self.verification([self.master])
+
+    def test_upgrade_negative(self):
+        op = self.input.param("op", None)
+        if op is None:
+            self.fail("operation should be specified")
+        if op == "higher_version":
+            tmp = self.initial_version
+            self.initial_version = self.upgrade_versions[0]
+            self.upgrade_versions = [tmp,]
+        info = None
+        if op == "wrong_arch":
+            remote = RemoteMachineShellConnection(self.master)
+            info = remote.extract_remote_info()
+            info.architecture_type = ('x86_64','x86')[info.architecture_type == 'x86']
+        self._install([self.master])
+        self.operations([self.master])
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
+        try:
+            if op == "close_port":
+                RemoteUtilHelper.enable_firewall(self.master)
+            for upgrade_version in self.upgrade_versions:
+                self._upgrade(upgrade_version, self.master, info=info)
+        except Exception, ex:
+            self.log.info("Exception %s appeared as expected" % ex)
+            self.log.info("Check that old version is working fine")
+            self.verification([self.master])
+        else:
+            self.fail("Upgrade should fail!")
+        remote.disconnect()
 
 class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
