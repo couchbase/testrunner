@@ -90,6 +90,8 @@ class BaseTestCase(unittest.TestCase):
                     self.cluster.rebalance(self.servers, self.servers[1:], [])
                 elif str(self.__class__).find('memorysanitytests.MemorySanity') != -1:
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
+                elif str(self.__class__).find('negativetests.NegativeTests') != -1:
+                    self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
 
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test

@@ -238,10 +238,10 @@ class XDCRBaseTest(unittest.TestCase):
 
         self.init_parameters_extended()
 
-        self._doc_ops = self._input.param("doc-ops", None)
+        self._doc_ops = self._input.param("doc-ops", "None")
         if self._doc_ops is not None:
             self._doc_ops = self._doc_ops.split("-")
-        self._doc_ops_dest = self._input.param("doc-ops-dest", None)
+        self._doc_ops_dest = self._input.param("doc-ops-dest", "None")
         # semi-colon separator is not accepted for some reason here
         if self._doc_ops_dest is not None:
             self._doc_ops_dest = self._doc_ops_dest.split("-")
