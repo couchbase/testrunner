@@ -148,20 +148,20 @@ class RebalanceProgressTests(RebalanceBaseTest):
                                       server.ip, current_stat, previous_stat))
             if docs_total is not None:
                 self.assertTrue(current_stat['docsTotal'] == docs_total,
-                                "DocTotal for %s is %s, but should be %s" % (
-                                        server.ip, current_stat['docsTotal'], docs_total))
+                                "DocTotal for %s is %s, but should be %s. Stat %s" % (
+                                        server.ip, current_stat['docsTotal'], docs_total, current_stat))
             if docs_transf is not None:
                 self.assertTrue(current_stat['docsTransferred'] == docs_transf,
-                                "docsTransferred for %s is %s, but should be %s" % (
-                                        server.ip, current_stat['docsTotal'], docs_transf))
+                                "docsTransferred for %s is %s, but should be %s. Stat %s" % (
+                                        server.ip, current_stat['docsTotal'], docs_transf, current_stat))
             if active_vb is not None:
                 self.assertTrue(current_stat['activeVBucketsLeft'] == active_vb,
-                                "docsTransferred for %s is %s, but should be %s" % (
-                                        server.ip, current_stat['activeVBucketsLeft'], active_vb))
+                                "docsTransferred for %s is %s, but should be %s. Stat %s" % (
+                                        server.ip, current_stat['activeVBucketsLeft'], active_vb, current_stat))
             if replica_vb is not None:
                 self.assertTrue(current_stat['replicaVBucketsLeft'] == replica_vb,
-                                "docsTransferred for %s is %s, but should be %s" % (
-                                        server.ip, current_stat['activeVBucketsLeft'], active_vb))
+                                "docsTransferred for %s is %s, but should be %s. Stat %s" % (
+                                        server.ip, current_stat['activeVBucketsLeft'], active_vb, current_stat))
             self.log.info("Checked stat: %s" % new_stats)
 
     def _get_detailed_progress(self):
