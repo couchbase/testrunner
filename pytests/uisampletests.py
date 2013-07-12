@@ -34,15 +34,35 @@ class BucketTests(BaseUITestCase):
     def setUp(self):
         super(BucketTests, self).setUp()
         self.helper = BaseHelper(self)
+        self.helper.login()
 
     def tearDown(self):
         super(BucketTests, self).tearDown()
 
     def test_add_bucket(self):
         bucket = Bucket(parse_bucket=self.input)
-        self.helper.login()
         NavigationHelper(self).navigate('Data Buckets')
         BucketHelper(self).create(bucket)
+
+    def test_bucket_stats_mb_8538(self):
+        self.bucket = Bucket()
+        NavigationHelper(self).navigate('Data Buckets')
+        BucketHelper(self).create(self.bucket)
+
+        NavigationHelper(self).navigate('Views')
+        view_name = 'test_view_ui'
+        DdocViewHelper(self).create_view(view_name, view_name)
+
+        NavigationHelper(self).navigate('Data Buckets')
+        BucketHelper(self).open_stats(self.bucket)
+        total_views_st = BucketHelper(self).get_stat("views total disk size")
+        view_st = BucketHelper(self).get_stat("disk size", block="view")
+        self.assertEquals(total_views_st, view_st,
+                          "Stats should be equal, but views total disk size is %s"
+                          " and disk size from view section is %s" % (
+                            total_views_st, view_st))
+        self.log.info("Stat 'views total disk size' and 'disk size' are %s"
+                      " as expected" % total_views_st)
 
 class InitializeTest(BaseUITestCase):
     def setUp(self):
@@ -390,6 +410,15 @@ class BucketTestsControls():
     def edit_btn(self):
         return self.helper.find_control('bucket','edit_btn')
 
+    def bucket_stats(self, stat):
+        return self.helper.find_control('bucket_stats', 'value_stat', text=stat)
+
+    def bucket_stat_view_block(self):
+        return self.helper.find_control('bucket_stats','view_stats_block')
+
+    def bucket_stat_from_view_block(self, stat):
+        return self.helper.find_control('bucket_stats','value_stat', parent_locator='view_stats_block', text=stat)
+
 class NodeInitializeControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
@@ -732,6 +761,35 @@ class BucketHelper():
 
     def open_documents(self, bucket):
         self.controls.bucket_info(bucket.name).documents.click()
+
+    def open_stats(self, bucket):
+        self.controls.bucket_info(bucket.name).name.click()
+        self.tc.log.info("Stats page is opened")
+
+    def open_view_block_stats(self):
+        self.wait.until(lambda fn:
+                            self.controls.bucket_stat_view_block().is_displayed(),
+                            "stat view block is not displayed in %d sec" % (
+                                                  self.wait._timeout))
+        self.controls.bucket_stat_view_block().click()
+        self.tc.log.info("Stats page is opened")
+
+    def get_stat(self, stat, block=None):
+        if block is None:
+            self.wait.until(lambda fn:
+                            self.controls.bucket_stats(stat).is_displayed(),
+                            "stat %s is not displayed in %d sec" % (
+                                                  stat, self.wait._timeout))
+            return self.controls.bucket_stats(stat).get_text()
+        elif block == 'view':
+            self.open_view_block_stats()
+            self.wait.until(lambda fn:
+                            self.controls.bucket_stat_from_view_block(stat).is_displayed(),
+                            "stat %s is not displayed in %d sec" % (
+                                                  stat, self.wait._timeout))
+            return self.controls.bucket_stat_from_view_block(stat).get_text()
+        else:
+            raise Exception("Block is not implemented yet!!!")
 
 class NodeInitializeHelper():
     def __init__(self, tc):
