@@ -12,8 +12,6 @@ import random
 import struct
 import exceptions
 import zlib
-import urllib2
-import json
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
@@ -48,7 +46,6 @@ class MemcachedClient(object):
         self._createConn()
         self.r = random.Random()
         self.vbucket_count = 1024
-        self.bucketType = self.get_bucket_type()
 
     def _createConn(self):
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -538,22 +535,10 @@ class MemcachedClient(object):
         return self._doCmd(memcacheConstants.CMD_RESET_REPLICATION_CHAIN, '', '', '', 0)
 
     def _set_vbucket(self, key, vbucket= -1):
-        if vbucket < 0 and "membase" in self.bucketType:
+        if vbucket < 0:
             self.vbucketId = (((zlib.crc32(key)) >> 16) & 0x7fff) & (self.vbucket_count - 1)
-        elif vbucket < 0 and "memcached" in self.bucketType:
-            self.vbucketId = 0
         else:
             self.vbucketId = vbucket
-
-    def get_bucket_type(self):
-        # get bucket type from web console
-        node_url = "http://{0}:8091/pools/default/buckets".format(self.host)
-        r = json.loads(urllib2.urlopen(node_url).read())
-        for k in r[0]:
-            if "bucketType" in k:
-                return r[0]["bucketType"]
-            else:
-                raise exceptions.EOFError("bucketType does not exist in node {0}".format(self.host))
 
 def error_to_str(errno):
     if errno == 0x01:
