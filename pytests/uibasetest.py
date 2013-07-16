@@ -235,6 +235,9 @@ class Control():
     def mouse_over(self):
         ActionChains(self.selenium).move_to_element(self.web_element).perform()
 
+    def get_inner_html(self):
+        return self.web_element.get_attribute("outerHTML")
+
 class ControlsHelper():
     def __init__(self, driver):
         self.driver = driver
@@ -246,7 +249,7 @@ class ControlsHelper():
     def find_control(self, section, locator, parent_locator=None, text=None):
         by = self._find_by(section, locator, parent_locator)
         if text:
-            by = by.format(text)
+           by = by.format(text)
         return Control(self.driver, by=by)
 
     def find_controls(self, section, locator, parent_locator=None):

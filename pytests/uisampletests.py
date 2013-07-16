@@ -338,6 +338,46 @@ class ROuserTests(BaseUITestCase):
         self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().reduce_fn.get_attribute("class").find("read_only") != -1,
                         "Can edit reduce fn")
 
+class  RebalanceProgressTests(BaseUITestCase):
+    def setUp(self):
+        super(RebalanceProgressTests, self).setUp()
+        self.helper = ServerHelper(self)
+        BaseHelper(self).login()
+        num_buckets = self.input.param("num_buckets", 1)
+        self.buckets = []
+        NavigationHelper(self).navigate('Data Buckets')
+        for i in xrange(num_buckets):
+            bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
+            BucketHelper(self).create(bucket)
+            self.buckets.append(bucket)
+
+    def tearDown(self):
+        super(RebalanceProgressTests, self).tearDown()
+
+    def test_rebalance_in(self):
+        NavigationHelper(self).navigate('Server Nodes')
+        self.helper.add(self.input)
+        self.helper.start_rebalancing()
+        transfer_out_stat = self.helper.get_server_rebalance_progress(self.servers[0], 'out')
+        transfer_in_stat = self.helper.get_server_rebalance_progress(self.servers[1], 'in')
+        self.verify_stats(transfer_out_stat)
+        self.verify_stats(transfer_in_stat)
+
+    def verify_stats(self, stats):
+        bucket_presence = False
+        for bucket in self.buckets:
+            bucket_presence = re.match(r'.*Bucket\:.*{0}.*(1 out of 1)*'.format(self.buckets[0].name),
+                                 stats["bucket"]) is not None
+            if bucket_presence:
+                break
+        self.assertTrue(bucket_presence, "Bucket in stats %s has incorrect format" % stats)
+        self.assertTrue(int(stats["total_transfer"].split(':')[1].strip()) >
+                        int(stats["estimated_transfer"].split(':')[1].strip()),
+                        "total_transfer should be greater than estimated  in stats %s" % stats)
+        self.assertTrue(re.match(r'.*Number of Active# vBuckets and Replica# vBuckets to transfer:.*Active#-.*Replica#-.*',
+                                 stats["vbuckets"]) is not None,
+                        "VBuckets in stats %s has incorrect format" % stats)
+
 '''
 Controls classes for tests
 '''
@@ -377,6 +417,23 @@ class ServerTestControls():
         self.failover_btns = self.helper.find_controls('server_nodes','failover_btn')
         self.remove_btns = self.helper.find_controls('server_nodes','remove_btn')
         return self
+
+    def server_info(self, server_ip):
+        self.server_arrow = self.helper.find_control('server_info', 'server_arrow',
+                                                     parent_locator='server_row',
+                                                     text=server_ip)
+        self.server_arrow_opened = self.helper.find_control('server_info', 'server_arrow_opened',
+                                                     parent_locator='server_row',
+                                                     text=server_ip)
+        return self
+
+    def server_info_rebalance_progress(self, server_ip, direction):
+        if direction == 'in':
+            parent = 'rebalance_progress_in'
+        else:
+            parent = 'rebalance_progress_out'
+        return self.helper.find_control('server_info', 'rebalance_progress',
+                                                  text=server_ip)
 
 class BucketTestsControls():
     def __init__(self, driver):
@@ -673,7 +730,7 @@ class ServerHelper():
         return btn.get_attribute('class').find('disabled') == -1
 
     def add(self, input):
-        self.tc.log.info("trying add server %s" % (input.param("add_server_ip", "10.1.3.72:8091")))
+        self.tc.log.info("trying add server %s" % (input.param("add_server_ip", self.tc.servers[1].ip)))
         self.wait.until(lambda fn: self.controls.add_server_btn.is_displayed(),
                         "Add Server btn is not displayed in %d sec" % (self.wait._timeout))
         self.controls.add_server_btn.click()
@@ -688,23 +745,73 @@ class ServerHelper():
         self.wait.until_not(lambda fn:
                             self.controls.add_server_dialog().add_server_pop_up.is_displayed(),
                             "Add server pop up is not closed in %d sec" % self.wait._timeout)
-        self.tc.log.info("added server %s" % (input.param("add_server_ip", "10.1.3.72:8091")))
+        self.tc.log.info("added server %s" % (self.tc.servers[1].ip))
 
     def fill_server_info(self, input):
-        self.controls.add_server_dialog().ip_address.type(input.param("add_server_ip", "10.1.3.72:8091"))
+        self.controls.add_server_dialog().ip_address.type(input.param("add_server_ip", self.tc.servers[1].ip))
         self.controls.add_server_dialog().username.type(input.membase_settings.rest_username)
         self.controls.add_server_dialog().password.type(input.membase_settings.rest_password)
 
     def rebalance(self):
+        self.start_rebalancing()
+        self.wait.until_not(lambda fn: self._is_btn_enabled(self.controls.rebalance_btn),
+                            "Rebalance btn is enabled in %d sec" % (self.wait._timeout))
+        time.sleep(5)
+        self.tc.log.info("Cluster rebalanced")
+
+    def start_rebalancing(self):
         self.wait.until(lambda fn: self.controls.num_pend_rebalance.is_displayed(),
                         "Number of pending rebalance servers is not displayed in %d sec" % (self.wait._timeout))
         self.wait.until(lambda fn: self._is_btn_enabled(self.controls.rebalance_btn),
                         "Rebalance btn is not enabled in %d sec" % (self.wait._timeout))
         self.controls.rebalance_btn.click()
         self.tc.log.info("Start rebalancing")
-        self.wait.until_not(lambda fn: self._is_btn_enabled(self.controls.rebalance_btn),
-                            "Rebalance btn is enabled in %d sec" % (self.wait._timeout))
-        time.sleep(5)
+
+    def open_server_stats(self, server):
+        self.tc.log.info("Open stats for server % s" % server.ip)
+        for i in [1,2,3]:
+            try:
+                self.controls.server_info(server.ip).server_arrow.click()
+                break
+            except:
+                pass
+        self.wait.until(lambda fn:
+                        self.controls.server_info(server.ip).server_arrow_opened.is_displayed(),
+                        "Server info %s is not enabled in %d sec" % (server.ip, self.wait._timeout*3))
+        time.sleep(3)
+        self.tc.log.info("Stats for %s are opened" % server.ip)
+
+    def close_server_stats(self, server):
+        self.tc.log.info("Close stats for server % s" % server.ip)
+        for i in [1,2,3]:
+            try:
+                self.controls.server_info(server.ip).server_arrow_opened.click()
+                break
+            except:
+                pass
+        time.sleep(3)
+        self.tc.log.info("Stats for %s are closed" % server.ip)
+
+    def is_server_stats_opened(self, server):
+        return (self.controls.server_info(server.ip).server_info(server.ip).server_arrow_opened.is_present() and\
+               self.controls.server_info(server.ip).server_info(server.ip).server_arrow_opened.is_displayed())
+
+    def get_server_rebalance_progress(self, server, direction):
+        if not self.is_server_stats_opened(server):
+            self.open_server_stats(server)
+        src = self.controls.server_info_rebalance_progress(server.ip, direction).get_inner_html()
+        print src
+        src = src.split("Data being transferred %s" % direction)[1]
+        stats = {}
+        stats["bucket"] = "Bucket:%s" % src.split("<span>Bucket:</span>")[1].split("</p>")[0].replace('\n',' ')
+        stats["total_transfer"] = "Total number of keys to be transferred:%s" %\
+                        src.split("Total number of keys to be transferred:</span>")[1].split("</p>")[0].replace('\n',' ')
+        stats["estimated_transfer"] = "Estimated number of keys transferred:%s" %\
+                        src.split("Estimated number of keys transferred:</span>")[1].split("</p>")[0].replace('\n',' ')
+        stats["vbuckets"] = "Number of Active# vBuckets and Replica# vBuckets to transfer:%s" %\
+                         src.split("vBuckets to transfer:")[1].split("</p>")[0].replace('\n',' ').replace('</span>',' ')
+        self.close_server_stats(server)
+        return stats
 
 class BucketHelper():
     def __init__(self, tc):
