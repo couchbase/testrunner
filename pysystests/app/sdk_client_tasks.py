@@ -8,16 +8,19 @@ memcached tasks
 
 from __future__ import absolute_import
 from app.celery import celery
+from celery import Task
 import random
 import string
 import sys
 import copy
 import time
 import zlib
+import imp
 
 sys.path=["../lib"] + sys.path
 from mc_bin_client import MemcachedClient, MemcachedError
 from app.rest_client_tasks import create_rest
+import couchbase
 
 from cache import CacheHelper
 from celery.utils.log import get_task_logger
@@ -29,135 +32,126 @@ from random import randint
 
 import testcfg as cfg
 
-###
-SDK_IP = '127.0.0.1'
-SDK_PORT = 50008
-SDK_PORT2 = 50009
-###
+### import sdk ###
+try:
+    # workaround required to remove relative paths
+    while True:
+        del sys.path[sys.path.index('../lib')]
+except ValueError:
+    pass
+
+imp.reload(couchbase)
+from couchbase import Couchbase
 
 
+class PersistedCB(Task):
+    _conn = None
+    _bucket = None
+    _hosts = None
+    _stale_count = 0
 
-@celery.task
+    @property
+    def couchbaseClient(self):
+        if self._conn is None or self._stale_count >= 100:
+            addr = self._hosts[random.randint(0,len(self._hosts) - 1)].split(':')
+            host = addr[0]
+            port = 8091
+            if len(addr) > 1:
+                port = addr[1]
+
+            logger.error("connecting sdk: %s" % host)
+            self._conn = Couchbase.connect(bucket = self._bucket, host=host, port=port)
+            self._stale_count = 0
+        self._stale_count = self._stale_count + 1
+        return self._conn
+
+    def set_hosts(self, hosts):
+        if self._hosts is not None:
+            if (len(hosts) != len(self._hosts)):
+                # host list miss match
+                self._conn = None
+            else:
+                for _h in hosts:
+                   if _h not in self._hosts:
+                       # new host list
+                       self._conn = None
+                       break
+
+        self._hosts = hosts
+
+    def set_bucket(self, bucket):
+        self._bucket = bucket
+
+    def close(self):
+        del self._conn
+        self._conn = None
+
+@celery.task(base = PersistedCB)
 def mset(keys, template, bucket = "default", isupdate = False, password = "", hosts = None):
+
+    mset.set_hosts(hosts)
+    mset.set_bucket(bucket)
+    cb = mset.couchbaseClient
 
     # decode magic strings in template before sending to sdk
     # python pass-by-reference updates attribute in function
     rawTemplate = copy.deepcopy(template)
     decodeMajgicStrings(rawTemplate)
-
-    message = {"command" : "mset",
-               "args" : keys,
-               "template" : rawTemplate,
-               "bucket" : bucket,
-               "password" : password,
-               "hosts"  : hosts}
-    rc = _send_msg(message)
+    msg = {}
+    for key in keys:
+       msg[key] = rawTemplate
+    try:
+        cb.set_multi(msg)
+    except Exception:
+        mget._conn = None
 
     return keys, rawTemplate
 
-@celery.task
+@celery.task(base = PersistedCB)
 def mget(keys, bucket = "default", password = "", hosts = None):
-    message = {"command" : "mget",
-               "bucket" : bucket,
-               "password" : password,
-               "args" : keys,
-               "hosts" : hosts}
-    return  _send_msg(message)
+    mset.set_hosts(hosts)
+    mset.set_bucket(bucket)
+    cb = mset.couchbaseClient
+
+    try:
+        cb.get_multi(keys)
+    except Exception:
+        mget._conn = None
+
+    #TODO: return failures
+
+
+@celery.task(base = PersistedCB)
+def mdelete(keys, bucket = "default", password = "", hosts = None):
+    mdelete.set_hosts(hosts)
+    mdelete.set_bucket(bucket)
+    cb = mdelete.couchbaseClient
+    try:
+        cb.delete_multi(keys)
+    except Exception:
+        mdelete._conn = None
+
+    #TODO: return failures
+
 
 @celery.task
 def set(key, value, bucket = "default", password = ""):
-    message = {"command" : "set",
-               "bucket" : bucket,
-               "password" : password,
-               "args" : [key, 0, 0, value]}
-    return  _send_msg(message)
+
+    cb = Couchbase.connect(bucket = self._bucket, host=cfg.COUCHBASE_IP)
+    cb.set({key : value})
 
 @celery.task
 def get(key, bucket = "default", password = ""):
 
-    message = {"command" : "get",
-               "bucket" : bucket,
-               "password" : password,
-               "args" : [key]}
-    return  _send_msg(message)
-
+    cb = Couchbase.connect(bucket = self._bucket, host=cfg.COUCHBASE_IP)
+    rc = cb.get(key)
+    return rc
 
 @celery.task
 def delete(key, bucket = "default", password = ""):
-    message = {"command" : "delete",
-               "bucket" : bucket,
-               "password" : password,
-               "args" : [key]}
-    return  _send_msg(message)
 
-@celery.task
-def mdelete(keys, bucket = "default", password = "", hosts = None):
-    message = {"command" : "mdelete",
-               "bucket" : bucket,
-               "password" : password,
-               "args" : keys,
-               "hosts" : hosts}
-    return  _send_msg(message)
-
-def _send_msg(message, response=False):
-
-    hostConfig =  {"cb_ip" : cfg.COUCHBASE_IP,
-                   "cb_port" : cfg.COUCHBASE_PORT}
-
-
-    if 'hosts' in message and message['hosts'] is not None:
-        if len(message['hosts']) > 0:
-                hosts = message['hosts']
-                host = hosts[random.randint(0,len(hosts) - 1)]
-
-                if host is not None:
-                    hostConfig["cb_ip"], hostConfig["cb_port"] = host.split(":")
-                else:
-                    # cluster status with no hosts means cluster down
-                    return
-
-    message.update(hostConfig)
-
-    rc = None
-    blocking = response
-
-    try:
-        port = randint(50008, 50011)
-        sdk_client = eventlet.connect((SDK_IP, port))
-        sdk_client.setblocking(blocking)
-        sdk_client.settimeout(5)
-        sdk_client.sendall(json.dumps(message))
-        if response:
-            time.sleep(1)
-            sdk_client.sendall('\0')
-            rc = sdk_client.recv(1024)
-
-    except Exception as ex:
-        logger.info(ex)
-        logger.info("message suppressed: %s" % message["command"])
-
-    return rc
-
-"""
-" sdk op_latency task.
-"
-" op: (set,get,delete).
-" args: operation arguments. i.e set => ('key', 0, 0, 'val')
-"
-" returns amount of time required to complete operation via sdks
-"""
-@celery.task
-def sdk_op_latency(op, args, bucket = "default", password = ""):
-
-    message = {"command" : "latency",
-               "bucket" : bucket,
-               "password" : password,
-               "op" : op,
-               "args" : args}
-
-    latency = _send_msg(message, response = True)
-
-    return latency
+    cb = Couchbase.connect(bucket = self._bucket, host=cfg.COUCHBASE_IP)
+    rc = cb.delete(key)
 
 """
 " raw mc op_latency task.
