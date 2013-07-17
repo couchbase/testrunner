@@ -13,7 +13,7 @@ class PerfDefaults:
     batch                   =    50
     kind                    =    "nonjson"
     mem_quota               =    6000
-    threadsNumber           =    3
+    threads_number          =    3          # mrw thread number, the name corresponds to ns_server setting
     num_nodes               =    10
     conf_file               =    "default.conf"
     bucket                  =    "default"

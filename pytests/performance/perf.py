@@ -163,7 +163,7 @@ class PerfBase(unittest.TestCase):
 
         for bucket in self.buckets:
             bucket_ram_quota = self.parami('mem_quota', PerfDefaults.mem_quota)
-            bucket_threads_num = self.parami('threadsNumber', PerfDefaults.threadsNumber)
+            bucket_threads_num = self.parami('threads_number', PerfDefaults.threads_number)
             bucket_ram_quota /= max(self.parami('num_buckets', 1),
                                     self.parami('xdcr_num_buckets', 1))
             replicas = self.parami('replicas', getattr(self, 'replicas', 1))

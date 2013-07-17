@@ -35,12 +35,16 @@ if [ -z ${mem_quota} ] ; then
     mem_quota=`grep mem_quota ${test_conf} | head -n 1`
 fi
 
+if [ -z ${threadsNumber} ]; then
+    threads_number=`grep threads_number ${test_conf} | head -n 1`
+fi
+
 if [ -z ${index_replicas} ]; then
     index_replicas=1
 fi
 
 if [ ${skip_run} != "1" ]; then
-   python -m pytests.performance.do_cluster -i ${ini_file} -c ${test_conf} -p load_phase=0,index_phase=0,access_phase=0,num_nodes=${1},mem_quota=${mem_quota},index_replicas=${index_replicas} setUp
+   python -m pytests.performance.do_cluster -i ${ini_file} -c ${test_conf} -p load_phase=0,index_phase=0,access_phase=0,num_nodes=${1},mem_quota=${mem_quota},index_replicas=${index_replicas},threadsNumber=${threads_number} setUp
 else
    echo "No Cluster setup run"
 fi
