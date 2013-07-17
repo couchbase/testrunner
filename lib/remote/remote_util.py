@@ -1801,7 +1801,7 @@ class RemoteMachineShellConnection:
         success = False
         files_path = "cygdrive/c/utils/suspend/"
         # check to see if suspend files exist in server
-        file_existed = self.file_exists(self, files_path, cmd_file_name):
+        file_existed = self.file_exists(self, files_path, cmd_file_name)
         if file_existed:
             command = "{0}{1} {2} {3}".format(files_path, cmd_file_name, option, ps_name_or_id)
             o, r = self.execute_command(command)
