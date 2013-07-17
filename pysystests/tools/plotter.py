@@ -29,7 +29,7 @@ def get_cluster_ips():
 
 def parse_args():
     """Parse CLI arguments"""
-    usage = "usage: %prog cluster-name bucket1,bucket2\n\n" +\
+    usage = "usage: %prog cluster-name bucket1,bucket2\n\n" + \
             "Example: python tools/plotter.py cluster_kv default,saslbucket"
 
     parser = OptionParser(usage)
@@ -46,20 +46,15 @@ def plot_use_cbmonitor(snapshot_name, cluster_name, start_time, end_time):
 
     payload = {'name': snapshot_name, 'cluster': cluster_name, 'ts_from': start_time, 'ts_to': end_time}
     print "Adding snapshot" + json.dumps(payload)
+
     r = requests.post('http://%s:8000/cbmonitor/add_snapshot/' % cfg.SERIESLY_IP, data=payload)
     r.raise_for_status()
 
-    retry = 0
-    while True:
-        r = requests.get('http://%s:8000/media/%s.pdf' % (cfg.SERIESLY_IP, urllib.quote(snapshot_name, ' ')))
-        if r.status_code == 200:
-            break
-        else:
-            print "Retry the pdf report link for %s" % (snapshot_name)
-            time.sleep(60)
-        retry = retry +1
-        if retry >= 10:
-            sys.exit(1)
+    time.sleep(30)
+
+    r = requests.post('http://%s:8000/cbmonitor/pdf/' % cfg.SERIESLY_IP, data={'snapshot':snapshot_name})
+    r.raise_for_status()
+
 
     os.system('rm -f *.pdf')
     os.system('wget \"http://%s:8000/media/%s.pdf\"' % (cfg.SERIESLY_IP, urllib.quote(snapshot_name, ' ')))
@@ -105,7 +100,7 @@ def store_avg_value(db, metric, start_time, end_time):
     avg_value = None
     if len(values) >= 1:
         for x in values:
-            sum = sum +x
+            sum = sum + x
         avg_value = sum / len(values)
 
     return avg_value
@@ -128,7 +123,7 @@ def store_90th_avg_value(buckets, start_time, end_time, run_id, i):
             ns_server_db = "ns_serverdefault" + bucket + ip
             dict_90th['ns_server'][bucket][ip] = {}
             dict_avg['ns_server'][bucket][ip] = {}
-            db = Seriesly(cfg.SERIESLY_IP, 3133)[ns_server_db]
+            db = Seriesly(cfg.SERIESLY_IP, 3133)[ns_server_db[0:ns_server_db.find(":")]]
             if ns_server_stats is None:
                 ns_server_stats = db.get_all().values()[0].keys()
             print "Store ns server stats for bucket %s on node %s" % (bucket, ip)
@@ -137,13 +132,14 @@ def store_90th_avg_value(buckets, start_time, end_time, run_id, i):
                 dict_90th['ns_server'][bucket][ip][metric] = store_90th_value(db, metric, start_time, end_time)
                 dict_avg['ns_server'][bucket][ip][metric] = store_avg_value(db, metric, start_time, end_time)
 
+
     dict_90th['atop'] = {}
     dict_avg['atop'] = {}
     for ip in ips:
         atop_db = "atopdefault" + ip
         dict_90th['atop'][ip] = {}
         dict_avg['atop'][ip] = {}
-        db = Seriesly(cfg.SERIESLY_IP, 3133)[atop_db]
+        db = Seriesly(cfg.SERIESLY_IP, 3133)[atop_db[0:atop_db.find(":")]]
         if atop_stats is None:
             atop_stats = db.get_all().values()[0].keys()
         print "Store atop stats for node %s" % (ip)
@@ -199,11 +195,11 @@ def plot_all_phases(cluster_name, buckets):
         start_time = phases_info[i].values()[0]
         start_time = int(start_time[:10])
         end_time = 0
-        if i == num_phases-1:
+        if i == num_phases - 1:
             end_time = str(time.time())
             end_time = int(end_time[:10])
         else:
-            end_time = phases_info[i+1].values()[0]
+            end_time = phases_info[i + 1].values()[0]
             end_time = int(end_time[:10])
 
         start_time_snapshot = datetime.datetime.fromtimestamp(start_time).strftime('%m/%d/%Y %H:%M')
@@ -223,5 +219,5 @@ def main():
     buckets = args[1].split(",")
     plot_all_phases(args[0], buckets)
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
