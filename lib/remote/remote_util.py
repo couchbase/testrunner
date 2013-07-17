@@ -1797,7 +1797,7 @@ class RemoteMachineShellConnection:
         self.execute_command("rm -rf '%stmp*'" % win_tmp_path)
 
     # ps_name_or_id means process name or ID will be suspended
-    def windows_process_utils(self, ps_name_or_id, cmd_file_name, option="")
+    def windows_process_utils(self, ps_name_or_id, cmd_file_name, option=""):
         success = False
         files_path = "cygdrive/c/utils/suspend/"
         # check to see if suspend files exist in server
