@@ -50,12 +50,11 @@ def plot_use_cbmonitor(snapshot_name, cluster_name, start_time, end_time):
     try:
         r = requests.post('http://%s:8000/cbmonitor/add_snapshot/' % cfg.SERIESLY_IP, data=payload)
         r.raise_for_status()
+        time.sleep(30)
     except requests.exceptions.HTTPError as e:
         print e
         print "Uable to create snapshot. Snapshot maybe already exists"
         pass
-
-    time.sleep(30)
 
     try:
         #BaseReport, BaseXdcrReport,FullReport
@@ -178,7 +177,6 @@ def store_90th_avg_value(buckets, start_time, end_time, run_id, i):
             dict_90th['atop'][ip][metric] = store_90th_value(db, metric, start_time, end_time)
             dict_avg['atop'][ip][metric] = store_avg_value(db, metric, start_time, end_time)
 
-
     dict_90th['latency'] = {}
     dict_avg['latency'] = {}
     for bucket in buckets:
@@ -247,6 +245,10 @@ def plot_all_phases(cluster_name, buckets):
         store_report(run_id, i)
 
         store_90th_avg_value(buckets, start_time, end_time, run_id, i)
+
+    storage_folder = os.getcwd() + "/" + run_id + "/"
+    print "data stored in %s" % (storage_folder)
+    return storage_folder
 
 
 def main():
