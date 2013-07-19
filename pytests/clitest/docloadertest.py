@@ -120,6 +120,8 @@ class docloaderTests(CliBaseTest):
 
         ddoc_names = []
         command = "find %s/design_docs/ -name *.json | cut -d \"/\" -f3" % (file)
+        if self.os == 'mac':
+            command = "find %s/design_docs/ -name *.json | cut -d \"/\" -f4" % (file)
         output, error = self.shell.execute_command(command.format(command))
         self.shell.log_command_output(output, error)
 
