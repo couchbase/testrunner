@@ -185,7 +185,7 @@ def plot_all_phases(cluster_name, buckets):
 
     num_phases = len(phases_info.keys())
 
-    run_id = phases_info[1]['run_id']
+    run_id = phases_info[1]['desc']
     run_id = run_id.replace(" ", "_")
     run_id = run_id.replace(",", "_")
 

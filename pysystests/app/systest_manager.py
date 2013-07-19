@@ -269,7 +269,7 @@ def add_phase_to_db(phase, phase_key, name, desc):
 
     if cfg.SERIESLY_IP != '':
         seriesly = Seriesly(cfg.SERIESLY_IP, 3133)
-        seriesly.event.append({str(phase_key): {str(phase['name']): str(time.time()), 'run_id': name+ '-' + desc}})
+        seriesly.event.append({str(phase_key): {str(phase['name']): str(time.time()), 'name': name, 'desc': desc}})
 
 @celery.task(base = PersistedMQ, ignore_result=True)
 def runPhase(phase, rcq = None):
