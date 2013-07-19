@@ -142,6 +142,8 @@ class RebalanceHelper():
                 log.info("unable to collect stats from server {0}".format(master))
                 verified = True  #TODO: throw ex and assume caller catches
                 break
+            # wait for 5 seconds for the next check
+            time.sleep(5)
 
         return verified
 
