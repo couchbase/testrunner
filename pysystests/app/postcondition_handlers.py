@@ -6,6 +6,7 @@ import types
 
 sys.path=["../lib"] + sys.path
 from mc_bin_client import MemcachedClient, MemcachedError
+import app
 from app.rest_client_tasks import create_rest
 import testcfg as cfg
 from app.celery import celery
@@ -73,7 +74,9 @@ def parse_condition(postconditions):
 """ This parser works for systest_manager"""
 
 def parse_condition_dict(postconditions):
-    condition_map = {}
+    condition_map = {
+                     "cluster_check": False
+                    }
 
     if "conditions" in postconditions:
         match_equality(postconditions['conditions'], condition_map)
@@ -92,6 +95,10 @@ def parse_condition_dict(postconditions):
 
     if "target" in postconditions:
         condition_map['target_value'] = postconditions['target']
+
+    if "cluster_check" in postconditions:
+        if postconditions['cluster_check'] == 'True':
+            condition_map['cluster_check'] = True
 
     return condition_map
 
@@ -183,10 +190,19 @@ def epengine_stat_checker(workload):
     else:
         params = parse_condition(postcondition)
 
-    host, port = get_ep_hostip_from_params(params)
+    random_host, port = get_ep_hostip_from_params(params)
 
-    statChecker = EPStatChecker(host, port)
-    return statChecker.check(postcondition)
+    status = True
+    all_hosts = [random_host]
+    if params['cluster_check'] == True:
+        clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
+        all_hosts = clusterStatus.get_all_hosts()
+
+    for host in all_hosts:
+        statChecker = EPStatChecker(host.split(":")[0], port)
+        status &= statChecker.check(postcondition)
+
+    return status
 
 def active_tasks_stat_checker(workload):
 
@@ -217,8 +233,18 @@ def active_tasks_stat_checker(workload):
     return status
 
 def get_ep_hostip_from_params(params):
-    host = params.get('ip') or cfg.COUCHBASE_IP
+    app.workload_manager.updateClusterStatus()
+    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
+    random_host = None
+    try:
+        random_host = clusterStatus.get_random_host().split(":")[0]
+    except AttributeError:
+        logger.error("Can not fetch cluster status information")
+        pass
+
+    host = params.get('ip') or random_host or cfg.COUCHBASE_IP
     port = params.get('port') or 11210
+
     return host, int(port)
 
 class StatChecker(object):

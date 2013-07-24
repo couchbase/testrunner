@@ -313,7 +313,7 @@ def perform_admin_tasks(adminMsg, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     autoFailoverNodes = auto_failover_nodes(rest, auto_failover_servers, only_failover, adminMsg["involve_orchestrator"], cluster_id)
 
     app.workload_manager.updateClusterStatus()
-    clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
+    clusterStatus = CacheHelper.clusterstatus(cluster_id)
     rest = clusterStatus.node_rest()
     addBackNodes = add_back_nodes(rest, add_back_servers, autoFailoverNodes+failoverNodes)
     toBeEjectedNodes.extend(failoverNodes)
@@ -392,7 +392,7 @@ def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     if servers.find('.') != -1 or servers == '':
         servers = servers.split()
     else:
-        clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
+        clusterStatus = CacheHelper.clusterstatus(cluster_id)
         count = int(servers)
         if (len(clusterStatus.all_available_hosts) - len(clusterStatus.nodes)) >= int(count):
             servers = list(set(clusterStatus.all_available_hosts) - set(clusterStatus.get_all_hosts()))
@@ -410,7 +410,7 @@ def pick_nodesToRemove(servers='', involve_orchestrator=False, cluster_id=cfg.CB
     if servers.find('.') != -1 or servers == '':
         servers = servers.split()
     else:
-        clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
+        clusterStatus = CacheHelper.clusterstatus(cluster_id)
         count = int(servers)
         temp_count = count
         servers = []
@@ -529,7 +529,7 @@ def restart(servers='', type='soft', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     if servers.find('.') != -1 or servers == '':
         servers = servers.split()
     else:
-        clusterStatus = CacheHelper.clusterstatus(cluster_id) or ClusterStatus(cluster_id)
+        clusterStatus = CacheHelper.clusterstatus(cluster_id)
         count = int(servers)
         if len(clusterStatus.nodes) >= int(count):
             servers = clusterStatus.get_all_hosts()

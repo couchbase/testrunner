@@ -203,9 +203,9 @@
                     "name" : "restart_one_no_load",
                     "desc" :  "CR-1",
                     "workload" : [{"spec" : "g:100,coq:defaultph2keys,ops:0",
-                                  "conditions" : {"post": {"conditions": "ep_warmup_thread = complete"}}},
+                                  "conditions" : {"post": {"conditions": "ep_warmup_thread = complete", "cluster_check": "True"}}},
                                   {"spec": "b:saslbucket,pwd:password,g:100,coq:saslph2keys,ops:0",
-                                  "conditions" : {"post": {"conditions": "ep_warmup_thread = complete"}}}],
+                                  "conditions" : {"post": {"conditions": "ep_warmup_thread = complete", "cluster_check": "True"}}}],
                     "cluster" :  {"soft_restart" : "1"}
                 },
 
@@ -214,9 +214,9 @@
                     "name" : "restart_one_with_load",
                     "desc" :  "CR-2",
                     "workload" : [{"spec": "s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,coq:defaultph1keys,ccq:defaultph2keys,ops:15000",
-                                   "conditions" : {"post": {"conditions": "ep_warmup_thread = complete"}}},
+                                   "conditions" : {"post": {"conditions": "ep_warmup_thread = complete", "cluster_check": "True"}}},
                                   {"spec": "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,coq:saslph1keys,ccq:saslph2keys,ops:15000",
-                                   "conditions" : {"post": {"conditions": "ep_warmup_thread = complete"}}}],
+                                   "conditions" : {"post": {"conditions": "ep_warmup_thread = complete", "cluster_check": "True"}}}],
                     "query" : ["ddoc:ddoc1,view:view1,bucket:default,t:default,qps:50,limit:50,include:startkey_docid endkey_docid,idx:key",
                                "ddoc:ddoc1,view:view2,bucket:default,t:default,qps:50,limit:50,include:startkey_docid endkey_docid",
                                "ddoc:ddoc2,view:view1,bucket:saslbucket,password:password,t:default,qps:50,limit:50,include:startkey_docid endkey_docid,idx:key",
@@ -228,8 +228,11 @@
                 {
                     "name" : "restart_all",
                     "desc" :  "CR-3",
-                    "cluster" : {"soft_restart" : "8"},
-                    "runtime": 7200
+                    "workload" : [{"spec" : "g:100,coq:defaultph2keys,ops:0",
+                                  "conditions" : {"post": {"conditions": "ep_warmup_thread = complete", "cluster_check": "True"}}},
+                                  {"spec": "b:saslbucket,pwd:password,g:100,coq:saslph2keys,ops:0",
+                                  "conditions" : {"post": {"conditions": "ep_warmup_thread = complete", "cluster_check": "True"}}}],
+                    "cluster" : {"soft_restart" : "8"}
                 }
         }
 }
