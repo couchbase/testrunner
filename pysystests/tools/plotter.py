@@ -57,9 +57,13 @@ def plot_use_cbmonitor(snapshot_name, cluster_name, start_time, end_time):
 
     time.sleep(30)
 
-    r = requests.post('http://%s:8000/cbmonitor/pdf/' % cfg.SERIESLY_IP, data={'snapshot':snapshot_name})
-    r.raise_for_status()
-
+    try:
+        #BaseReport, BaseXdcrReport,FullReport
+        r = requests.post('http://%s:8000/cbmonitor/pdf/' % cfg.SERIESLY_IP, data={'snapshot':snapshot_name, 'report':'FullReport'}, timeout=300)
+        r.raise_for_status()
+    except Exception, e:
+        print e
+        print "impossible to generate pdf report"
 
     os.system('rm -f *.pdf')
     os.system('wget \"http://%s:8000/media/%s.pdf\"' % (cfg.SERIESLY_IP, urllib.quote(snapshot_name, ' ')))
@@ -204,7 +208,7 @@ def plot_all_phases(cluster_name, buckets):
             end_time = str(time.time())
             end_time = int(end_time[:10])
         else:
-            end_time = phases_info[i + 1][[name for name in phases_info[i+1].keys() if (name != 'name' and name != 'desc')][0]]
+            end_time = phases_info[i + 1][[name for name in phases_info[i + 1].keys() if (name != 'name' and name != 'desc')][0]]
             end_time = int(end_time[:10])
 
         start_time_snapshot = datetime.datetime.fromtimestamp(start_time).strftime('%m/%d/%Y %H:%M')
