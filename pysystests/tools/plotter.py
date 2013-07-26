@@ -125,21 +125,38 @@ def store_90th_avg_value(buckets, start_time, end_time, run_id, i):
 
     dict_90th['ns_server'] = {}
     dict_avg['ns_server'] = {}
+    time.sleep(2)
+    connection = Seriesly(cfg.SERIESLY_IP, 3133)
     for bucket in buckets:
+        toolbar_width = 41
+        sys.stdout.write("[%s] indicator\n" % ("*" * toolbar_width))
+        sys.stdout.flush()
         dict_90th['ns_server'][bucket] = {}
         dict_avg['ns_server'][bucket] = {}
         for ip in ips:
             ns_server_db = "ns_serverdefault" + bucket + ip
+            if ":" in ns_server_db:
+                ns_server_db = ns_server_db[0:ns_server_db.find(":")]
             dict_90th['ns_server'][bucket][ip] = {}
             dict_avg['ns_server'][bucket][ip] = {}
-            db = Seriesly(cfg.SERIESLY_IP, 3133)[ns_server_db[0:ns_server_db.find(":")]]
+            if  ns_server_db not in connection.list_dbs():
+                print "db %s was not found" % (ns_server_db)
+                continue
+            db = connection[ns_server_db]
             if ns_server_stats is None:
                 ns_server_stats = db.get_all().values()[0].keys()
             print "Store ns server stats for bucket %s on node %s" % (bucket, ip)
-
+            sys.stdout.write("[")
+            num = 1
             for metric in ns_server_stats:
                 dict_90th['ns_server'][bucket][ip][metric] = store_90th_value(db, metric, start_time, end_time)
                 dict_avg['ns_server'][bucket][ip][metric] = store_avg_value(db, metric, start_time, end_time)
+                if num % (len(ns_server_stats) / toolbar_width) == 0:
+                    sys.stdout.write("=")
+                    sys.stdout.flush()
+                    time.sleep(0.5)
+                num += 1
+            sys.stdout.write("]\n")
 
 
     dict_90th['atop'] = {}
@@ -148,14 +165,19 @@ def store_90th_avg_value(buckets, start_time, end_time, run_id, i):
         atop_db = "atopdefault" + ip
         dict_90th['atop'][ip] = {}
         dict_avg['atop'][ip] = {}
-        db = Seriesly(cfg.SERIESLY_IP, 3133)[atop_db[0:atop_db.find(":")]]
+        if ":" in atop_db:
+           atop_db = atop_db[0:atop_db.find(":")]
+        if  atop_db not in connection.list_dbs():
+            print "db %s was not found" % (atop_db)
+            continue
+        db = connection[atop_db]
         if atop_stats is None:
             atop_stats = db.get_all().values()[0].keys()
         print "Store atop stats for node %s" % (ip)
-
         for metric in atop_stats:
             dict_90th['atop'][ip][metric] = store_90th_value(db, metric, start_time, end_time)
             dict_avg['atop'][ip][metric] = store_avg_value(db, metric, start_time, end_time)
+
 
     dict_90th['latency'] = {}
     dict_avg['latency'] = {}
@@ -163,12 +185,16 @@ def store_90th_avg_value(buckets, start_time, end_time, run_id, i):
         dict_90th['latency'][bucket] = {}
         dict_avg['latency'][bucket] = {}
         latency_db = "%slatency" % bucket
-        db = Seriesly(cfg.SERIESLY_IP, 3133)[latency_db]
+        if latency_db not in connection.list_dbs():
+            print "db %s was not found" % (latency_db)
+            continue
+        db = connection[latency_db]
         print "Store latency stats for bucket %s" % (bucket)
 
         for metric in latency_stats:
             dict_90th['latency'][bucket][metric] = store_90th_value(db, metric, start_time, end_time)
             dict_avg['latency'][bucket][metric] = store_avg_value(db, metric, start_time, end_time)
+
 
     os.system('rm -f %s/phase%d/*.txt' % (run_id, i))
     json.dump(dict_90th, open("%s/phase%d/90percentile.txt" % (run_id, i), 'w'))
