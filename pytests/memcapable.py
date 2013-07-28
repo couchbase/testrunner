@@ -1098,7 +1098,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
             if (time.time() - start) <= timeout_in_seconds:
                 stats = self.onenodemc.stats()
                 present_count = int(stats["curr_items"])
-                self.log.info("curr_items : {0}".format(present_count))
+                self.log.warn("curr_items : {0}".format(present_count))
                 time.sleep(1)
             else:
 
@@ -1106,6 +1106,8 @@ class WarmUpMemcachedTest(unittest.TestCase):
 
         self.log.info("ep curr_items : {0}, inserted_items {1}".format(present_count, curr_items))
         stats = self.onenodemc.stats()
+        if "ep_warmup_time" not in stats:
+            self.log.error("'ep_warmup_time' was not found in stats:{0}".format(stats))
         warmup_time = int(stats["ep_warmup_time"])
         self.log.info("ep_warmup_time is {0}".format(warmup_time))
 
