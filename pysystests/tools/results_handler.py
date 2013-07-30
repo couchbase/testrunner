@@ -12,14 +12,14 @@ CBFS_HOST = 'http://cbfs.hq.couchbase.com:8484'
 
 def parse_args():
     parser = OptionParser()
-    parser.add_option("-c", "--cluster", dest="cluster_name", help="cluster name(CB_CLUSTER_TAG)")
-    parser.add_option("-b", "--buckets", dest="buckets", help="list of buckets")
-    parser.add_option("-v", "--version", dest="version", help="build version")
-    parser.add_option("-V", "--version_to_compare", dest="version_to_compare", help="version build to compare")
-    parser.add_option("-r", "--release_number", dest="release_number", help="release_number")
-    parser.add_option("-R", "--release_to_compare", dest="release_to_compare", help="compare with release")
-    parser.add_option("-p", "--platform", dest="platform", help="platform")
-    parser.add_option("-t", "--test_name", dest="test_name", help="test_name")
+    parser.add_option("-c", "--cluster", dest="cluster_name", help="cluster name; not required, it's taken from testcfg(CB_CLUSTER_TAG), if not specified")
+    parser.add_option("-b", "--buckets", dest="buckets", help="list of buckets; not required, it's taken all buckets from the cluster if it is alive")
+    parser.add_option("-v", "--version", dest="version", help="build version;  not required, it's taken from seriesly DB by tag 'build'")
+    parser.add_option("-V", "--version_to_compare", dest="version_to_compare", help="build version to compare; not required, comparative part will be omitted in this case")
+    parser.add_option("-r", "--release_number", dest="release_number", help="release number; required")
+    parser.add_option("-R", "--release_to_compare", dest="release_to_compare", help="release number for comparison; not required, comparative part will be omitted in this case")
+    parser.add_option("-p", "--platform", dest="platform", help="platform version; required")
+    parser.add_option("-t", "--test_name", dest="test_name", help="test name; not required, it's taken from seriesly DB by tag 'name'")
 
     options, args = parser.parse_args()
 

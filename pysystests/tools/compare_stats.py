@@ -110,7 +110,7 @@ def compare_stats(file1, file2):
                             percentage = int(100 * (data[files[0]][block][sublock][stat] - data[files[1]][block][sublock][stat]) / (data[files[0]][block][sublock][stat]))
                             temp += "%s" % percentage
                             json_dict[block][sublock][stat]["diff"] = ["+", "-"][percentage >= 0] + str(percentage) + "%"
-                            if percentage > 5:
+                            if percentage > 10:
                                 print "percentage %s:%s:%s:%s %s - %s=%s" % (os.path.dirname(files[1]).split(os.sep)[-1], block, sublock, stat, data[files[1]][block][sublock][stat], data[files[0]][block][sublock][stat], percentage)
                         else:
                             temp += "0"
