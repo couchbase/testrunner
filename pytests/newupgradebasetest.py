@@ -22,7 +22,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         super(NewUpgradeBaseTest, self).setUp()
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
-        self.initial_version = self.input.param('initial_version', '1.8.1-942-rel')
+        self.initial_version = self.input.param('initial_version', '1.8.1')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
