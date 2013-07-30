@@ -60,7 +60,8 @@ def store_report_cbfs(release_number, platform, test_name='', test_build=''):
 
     print "Upload test report to system-test-results/%s/%s/%s/%s folder on CBFS" % (release_number, platform, test_name, test_build)
 
-    os.system('find system-test-results/%s/%s/%s/%s -name "*.txt" or -name "*.html" or -name "*.json" -print0 | xargs -0 -I file curl -X PUT -H \"Content-Type:text/plain\" -v --data-binary @file %s/file' % (release_number, platform, test_name, test_build, CBFS_HOST))
+    #spaces are very important here. Example: find . -type f \( -name "*.txt" -o -name "*.html" -o -name "*.json" \)
+    os.system('find system-test-results/%s/%s/%s/%s -type f \( -name "*.txt" -o -name "*.html" -o -name "*.json" \) -print0 | xargs -0 -I file curl -X PUT -H \"Content-Type:text/plain\" -v --data-binary @file %s/file' % (release_number, platform, test_name, test_build, CBFS_HOST))
 
     os.system('find system-test-results/ -name "*.pdf" -print0 | xargs -0 -I file curl -X PUT -H \"Content-Type:application/pdf\" -v --data-binary @file %s/file' % CBFS_HOST)
 
