@@ -132,10 +132,16 @@ def store_90th_avg_value(buckets, start_time, end_time, run_id, i):
         sys.stdout.flush()
         dict_90th['ns_server'][bucket] = {}
         dict_avg['ns_server'][bucket] = {}
-        for ip in ips:
+
+        #empty ip string appended with bucket name is the ns_server db name for entire cluster
+        cluster_ips = ips
+        cluster_ips.append('')
+        for ip in cluster_ips:
             ns_server_db = "ns_serverdefault" + bucket + ip
             if ":" in ns_server_db:
                 ns_server_db = ns_server_db[0:ns_server_db.find(":")]
+            if ip == '':
+                ip = 'cluster'
             dict_90th['ns_server'][bucket][ip] = {}
             dict_avg['ns_server'][bucket][ip] = {}
             if  ns_server_db not in connection.list_dbs():
@@ -144,7 +150,7 @@ def store_90th_avg_value(buckets, start_time, end_time, run_id, i):
             db = connection[ns_server_db]
             if ns_server_stats is None:
                 ns_server_stats = db.get_all().values()[0].keys()
-            print "Store ns server stats for bucket %s on node %s" % (bucket, ip)
+            print "Store ns server stats for bucket %s on %s" % (bucket, ip)
             sys.stdout.write("[")
             num = 1
             for metric in ns_server_stats:
@@ -238,7 +244,7 @@ def plot_all_phases(cluster_name, buckets):
         start_time_snapshot = datetime.datetime.fromtimestamp(start_time).strftime('%m/%d/%Y %H:%M')
         end_time_snapshot = datetime.datetime.fromtimestamp(end_time).strftime('%m/%d/%Y %H:%M')
 
-        snapshot_name = "phase-%d-%s" % (i, phases_info[i].keys()[0])
+        snapshot_name = "phase-%d-%s" % (i, [name for name in phases_info[i].keys() if (name != 'name' and name != 'desc')][0])
 
         plot_use_cbmonitor(snapshot_name, cluster_name, start_time_snapshot, end_time_snapshot)
 
