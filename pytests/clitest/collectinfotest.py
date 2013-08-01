@@ -5,8 +5,8 @@ import testconstants
 import time
 import logger
 
-LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log",
-                      "ns_server.couchdb.log", "ns_server.debug.log",
+LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log", "ddocs.log", "ini.log", "syslog.tar.gz",
+                      "ns_server.couchdb.log", "ns_server.debug.log", "ns_server.babysitter.log",
                       "ns_server.error.log", "ns_server.info.log",
                       "ns_server.views.log", "stats.log",
                       "memcached.log", "ns_server.mapreduce_errors.log",
@@ -21,6 +21,7 @@ class collectinfoTests(CliBaseTest):
         self.doc_ops = self.input.param("doc_ops", None)
         self.expire_time = self.input.param("expire_time", 5)
         self.value_size = self.input.param("value_size", 256)
+        self.node_down = self.input.param("node_down", False)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
 
@@ -54,16 +55,28 @@ class collectinfoTests(CliBaseTest):
 
         self.shell.delete_files("%s.zip" % (self.log_filename))
         self.shell.delete_files("cbcollect_info*") #This is the folder generated after unzip the log package
+
+        if self.node_down:
+            if self.os == 'linux':
+                output, error = self.shell.execute_command("killall -9 memcached & killall -9 beam.smp")
+                self.shell.log_command_output(output, error)
+
         output, error = self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
-        info = self.shell.extract_remote_info()
-        type = info.type.lower()
-        if type != "windows":
+
+        if self.os != "windows":
             if len(error) > 0:
                 raise Exception("Command throw out error message. Please check the output of remote_util")
             for output_line in output:
                 if output_line.find("ERROR") >= 0 or output_line.find("Error") >= 0:
                     raise Exception("Command throw out error message. Please check the output of remote_util")
         self.verify_results(self.log_filename)
+
+        if self.node_down:
+            if self.os == 'linux':
+                output, error = self.shell.execute_command("/etc/init.d/couchbase-server restart")
+                self.shell.log_command_output(output, error)
+                time.sleep(self.wait_timeout)
+
 
     def verify_results(self, file):
         os = "linux"
@@ -96,15 +109,16 @@ class collectinfoTests(CliBaseTest):
                    self.log.error("The log zip file miss %s" % (x))
 
             missing_buckets = False
-            for bucket in self.buckets:
-                command = "grep %s cbcollect_info*/stats.log" % (bucket.name)
-                output, error = self.shell.execute_command(command.format(command))
-                self.shell.log_command_output(output, error)
-                if len(error) > 0:
-                    raise Exception("uable to grep key words. Check grep command output for help")
-                if len(output) == 0:
-                    missing_buckets = True
-                    self.log.error("%s stats are missed in stats.log" % (bucket.name))
+            if not self.node_down:
+                for bucket in self.buckets:
+                    command = "grep %s cbcollect_info*/stats.log" % (bucket.name)
+                    output, error = self.shell.execute_command(command.format(command))
+                    self.shell.log_command_output(output, error)
+                    if len(error) > 0:
+                        raise Exception("uable to grep key words. Check grep command output for help")
+                    if len(output) == 0:
+                        missing_buckets = True
+                        self.log.error("%s stats are missed in stats.log" % (bucket.name))
 
             command = "du -s cbcollect_info*/*"
             output, error = self.shell.execute_command(command.format(command))

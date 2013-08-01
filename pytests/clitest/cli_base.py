@@ -11,6 +11,13 @@ class CliBaseTest(BaseTestCase):
         self.r = random.Random()
         self.vbucket_count = 1024
         self.shell = RemoteMachineShellConnection(self.master)
+        info = self.shell.extract_remote_info()
+        type = info.type.lower()
+        self.os = 'linux'
+        if type == 'windows':
+            self.os = 'windows'
+        if info.distribution_type.lower() == 'mac':
+            self.os = 'mac'
         self.couchbase_usrname = "%s" % (self.input.membase_settings.rest_username)
         self.couchbase_password = "%s" % (self.input.membase_settings.rest_password)
         self.command_options = self.input.param("command_options", None)
