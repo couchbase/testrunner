@@ -209,7 +209,7 @@ class BaseTestCase(unittest.TestCase):
     def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
         return int(ratio / float(num_buckets) * float(mem_quota))
 
-    def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
+    def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None, password='password'):
         if not num_buckets:
             return
         if server_id is None:
@@ -220,10 +220,10 @@ class BaseTestCase(unittest.TestCase):
         for i in range(num_buckets):
             name = 'bucket' + str(i)
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name,
-                                                                      'password',
+                                                                      password,
                                                                       bucket_size,
                                                                       self.num_replicas))
-            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword='password',
+            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword=password,
                                        num_replicas=self.num_replicas, bucket_size=bucket_size,
                                        master_id=server_id));
         for task in bucket_tasks:

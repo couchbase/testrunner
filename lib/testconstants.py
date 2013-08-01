@@ -27,3 +27,5 @@ WIN_COUCHBASE_BIN_PATH_RAW = 'C:\Program Files\Couchbase\Server\\bin\\'
 WIN_TMP_PATH = '/cygdrive/c/tmp/'
 MAC_COUCHBASE_BIN_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/bin/"
 MAC_CB_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/"
+LINUX_COUCHBASE_LOGS_PATH = '/opt/couchbase/var/lib/couchbase/logs'
+WIN_COUCHBASE_LOGS_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/logs/'

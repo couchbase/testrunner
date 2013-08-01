@@ -1992,3 +1992,26 @@ class RemoteUtilHelper(object):
         shell.start_couchbase()
         shell.disconnect()
         return hostname
+
+    @staticmethod
+    def is_text_present_in_logs(server, text_for_search, logs_to_check='debug'):
+        shell = RemoteMachineShellConnection(server)
+        info = shell.extract_remote_info()
+        if info.type.lower() != "windows":
+            path_to_log = testconstants.LINUX_COUCHBASE_LOGS_PATH
+        else:
+            path_to_log = testconstants.WIN_COUCHBASE_LOGS_PATH
+        log_files = []
+        files = shell.list_files(path_to_log)
+        for f in files:
+            if f["file"].startswith(logs_to_check):
+                log_files.append(f["file"])
+        is_txt_found = False
+        for f in log_files:
+            o, r = shell.execute_command("cat {0}/{1} | grep '{2}'".format(path_to_log,
+                                                                          f,
+                                                                          text_for_search))
+            if ' '.join(o).find(text_for_search) != -1:
+                is_txt_found = True
+                break
+        return is_txt_found
