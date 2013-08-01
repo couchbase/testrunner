@@ -430,3 +430,25 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             msg = 'tried to create {0} buckets, created {1}'.format(bucket_count, len(buckets))
             log.error(msg)
             self.fail(msg=msg)
+
+    def test_valid_length(self):
+        max_len = 100
+        name_len = self.input.param('name_length', 100)
+        name = 'a' * name_len
+        master = self.servers[0]
+        rest = RestConnection(master)
+        proxyPort = rest.get_nodes_self().moxi
+        try:
+            rest.create_bucket(bucket=name, ramQuotaMB=200,
+                                authType='sasl', proxyPort=proxyPort)
+            if name_len <= max_len:
+                msg = 'failed to start up bucket with valid length'
+                self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
+            else:
+                self.fail('Bucket with invalid length created')
+        except BucketCreationException as ex:
+            self.log.error(ex)
+            if name_len <= max_len:
+                self.fail('could not create bucket with valid length')
+            else:
+                self.log.info('bucket with invalid length not created as expected')
