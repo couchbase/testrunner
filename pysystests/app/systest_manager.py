@@ -48,7 +48,7 @@ def systestManager(testQueue = "systest_manager_default"):
                     # handle runlist
                     for test in testMsg['runlist']:
                         testMsg = loadTestFromFile(test, suffix)
-                        testMsg['loop'] = False
+                        testMsg['loop'] = ''
                         launchSystest(testMsg)
 
                 elif testMsg is not None:
@@ -77,15 +77,40 @@ def loadTestFromFile(name, suffix="js"):
 
     return testMsg
 
-def launchSystest(testMsg):
+def parsePhaseRangeInfo(range):
+    range = range.replace("[", "")
+    range = range.replace("]", "")
+    str_len = len(range)
+    loop_start = None
+    loop_end = None
+
+    if range != '':
+        if range.find(":") == -1:
+            loop_start = int(range)
+            loop_end = int(range)
+        elif range.find(":") == str_len - 1:
+            loop_start = int(range.split(':')[0])
+        elif range.find(":") == 0:
+            loop_end = int(range.split(':')[1])
+        else:
+            loop_start = int(range.split(':')[0])
+            loop_end = int(range.split(':')[1])
+
+    return loop_start, loop_end
+
+
+def launchSystest(testMsg, loop=False):
 
     name = "<test name>"
     desc = "<test description>"
+    phases_to_loop = ''
 
     if "name" in testMsg:
         name = testMsg["name"]
     if "desc" in testMsg:
         desc = testMsg["desc"]
+    if "loop" in testMsg:
+        phases_to_loop = testMsg["loop"]
 
     logger.error('\n')
     logger.error('###################################')
@@ -98,6 +123,18 @@ def launchSystest(testMsg):
     keys = phases.keys()
     keys = [int(k) for k in keys]
     keys.sort()
+
+    loop_start, loop_end = parsePhaseRangeInfo(phases_to_loop)
+    if loop:
+        if loop_start is None and loop_end is not None:
+            keys = keys[:loop_end]
+        elif loop_end is None and loop_start is not None:
+            keys = keys[loop_start:]
+        elif loop_start is not None and loop_end is not None:
+            if loop_start == loop_end:
+                keys = [keys[loop_start]]
+            else:
+                keys = keys[loop_start:loop_end]
 
     for phase_key in keys:
 
@@ -129,8 +166,8 @@ def launchSystest(testMsg):
             cacheVariable(phase['cache'])
 
 
-    if 'loop' in testMsg and testMsg['loop']:
-        launchSystest(testMsg)
+    if phases_to_loop != '':
+        launchSystest(testMsg, True)
 
     logger.error('\n')
     logger.error('###### Test Complete!  ######')
