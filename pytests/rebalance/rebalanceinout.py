@@ -251,15 +251,16 @@ class RebalanceInOutTests(RebalanceBaseTest):
                               end=self.num_items)
 
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
+            self.log.info("iteration #{0}".format(i))
             tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=100)
             tasks.extend(self._async_load_all_buckets(self.master, gen_expire, "update", 10, batch_size=100))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            self.sleep(30)
+            self.sleep(5)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             for task in tasks:
-                task.result()
+                task.result(self.wait_timeout * 30)
             self._load_all_buckets(self.master, gen_expire, "create", 0)
             self.verify_cluster_stats(self.servers[:self.num_servers])
 
