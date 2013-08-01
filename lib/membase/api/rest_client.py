@@ -1121,7 +1121,7 @@ class RestConnection(object):
     def get_buckets(self):
         #get all the buckets
         buckets = []
-        api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets/')
+        api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets?basic_stats=true')
         status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
         if status:
@@ -1224,9 +1224,9 @@ class RestConnection(object):
 
     def get_bucket(self, bucket='default', num_attempt=1, timeout=1):
         bucketInfo = None
-        api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
+        api = '%s%s%s?basic_stats=true' % (self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
-            api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
+            api = '%s%s%s?basic_stats=true' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
         status, content, header = self._http_request(api)
         num = 1
         while not status and num_attempt > num:
@@ -1798,9 +1798,7 @@ class NodePort(object):
 
 class BucketStats(object):
     def __init__(self):
-        self.quotaPercentUsed = 0
         self.opsPerSec = 0
-        self.diskFetches = 0
         self.itemCount = 0
         self.diskUsed = 0
         self.memUsed = 0
@@ -1932,10 +1930,7 @@ class RestParser(object):
         #vBucketServerMap
         bucketStats = BucketStats()
         log.debug('stats:{0}'.format(stats))
-        bucketStats.quotaPercentUsed = stats['quotaPercentUsed']
         bucketStats.opsPerSec = stats['opsPerSec']
-        if 'diskFetches' in stats:
-            bucketStats.diskFetches = stats['diskFetches']
         bucketStats.itemCount = stats['itemCount']
         if bucket.type != "memcached":
             bucketStats.diskUsed = stats['diskUsed']
