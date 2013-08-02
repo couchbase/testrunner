@@ -148,7 +148,7 @@ class AutoFailoverTests(unittest.TestCase):
         self.assertEquals(settings.enabled, False)
 
     def test_valid_timeouts(self):
-        timeouts = [30, 31, 300, 3600, 300000]
+        timeouts = [30, 31, 300, 3600]
         for timeout in timeouts:
             status = self.rest.update_autofailover_settings(True, timeout)
             if not status:
@@ -242,7 +242,7 @@ class AutoFailoverTests(unittest.TestCase):
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
 
     def test_invalid_timeouts(self):
-        timeouts = [-360, -60, 0, 15, 29]
+        timeouts = [-360, -60, 0, 15, 29, 300000]
         for timeout in timeouts:
             status = self.rest.update_autofailover_settings(True, timeout)
             if status:
