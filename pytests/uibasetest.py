@@ -284,13 +284,15 @@ class BaseHelperControls():
         self._user_field = helper.find_control('login', 'user_field')
         self._user_password = helper.find_control('login', 'password_field')
         self._login_btn = helper.find_control('login', 'login_btn')
+        self._logout_btn = helper.find_control('login', 'logout_btn')
+        self.error = helper.find_control('login', 'error')
 
 class BaseHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = BaseHelperControls(tc.driver)
 
-    def login(self, user = None, password = None):
+    def login(self, user=None, password=None):
         self.tc.log.info("Try to login to application")
         if not user:
             user =  self.tc.input.membase_settings.rest_username
@@ -300,3 +302,9 @@ class BaseHelper():
         self.controls._user_password.type(password)
         self.controls._login_btn.click()
         self.tc.log.info("user %s is logged in" % user)
+
+    def logout(self):
+        self.tc.log.info("Try to logout")
+        self.controls._logout_btn.click()
+        time.sleep(3)
+        self.tc.log.info("You are logged out")

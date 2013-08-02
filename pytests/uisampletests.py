@@ -216,6 +216,87 @@ class SettingsTests(BaseUITestCase):
         time.sleep(self.input.param("auto_failover_timeout", 40))
         time.sleep(10)
 
+class ROuserTests(BaseUITestCase):
+    def setUp(self):
+        super(ROuserTests, self).setUp()
+        self.helper = BaseHelper(self)
+        self.helper.login()
+        if not self.input.param('skip_preparation', False):
+            self.log.info("create bucket, view for check")
+            self.bucket = Bucket()
+            NavigationHelper(self).navigate('Data Buckets')
+            BucketHelper(self).create(self.bucket)
+            NavigationHelper(self).navigate('Views')
+            self.view_name = 'test_view_ui'
+            DdocViewHelper(self).create_view(self.view_name, self.view_name)
+
+    def tearDown(self):
+        RestConnection(self.servers[0]).delete_ro_user()
+        super(ROuserTests, self).tearDown()
+
+    def test_read_only_user(self):
+        username = self.input.param('username', 'myrouser')
+        password = self.input.param('password', 'myropass')
+
+        NavigationHelper(self).navigate('Settings')
+        SettingsHelper(self).navigate('Account Management')
+        SettingsHelper(self).create_user(username, password)
+        self.log.info("Login with just created user")
+        self.helper.logout()
+        self.helper.login(user=username, password=password)
+        self.verify_read_only(self.bucket, self.view_name)
+
+    def test_delete_read_only_user(self):
+        username = self.input.param('username', 'myrouser')
+        password = self.input.param('password', 'myropass')
+
+        NavigationHelper(self).navigate('Settings')
+        SettingsHelper(self).navigate('Account Management')
+        SettingsHelper(self).create_user(username, password)
+        SettingsHelper(self).delete_user()
+
+        self.helper.logout()
+        self.helper.login(user=username, password=password)
+        time.sleep(3)
+        self.assertTrue(self.helper.controls.error.is_displayed(), "Able to login")
+        self.log.info("Unable to login as expected. %s" % self.helper.controls.error.get_text())
+
+    def test_negative_read_only_user(self):
+        username = self.input.param('username', 'myrouser')
+        password = self.input.param('password', 'myropass')
+        verify_password = self.input.param('verify_password', None)
+        error = self.input.param('error', '')
+
+        NavigationHelper(self).navigate('Settings')
+        SettingsHelper(self).navigate('Account Management')
+        try:
+            SettingsHelper(self).create_user(username, password, verify_password)
+        except Exception, ex:
+            self.assertTrue(str(ex).find(error) != -1, "Error message is incorrect. Expected %s, actual %s" % (error, str(ex)))
+        else:
+            self.fail("Error %s expected but not appeared" % error)
+
+    def verify_read_only(self, bucket, view):
+        navigator = NavigationHelper(self)
+        self.log.info("Servers check")
+        navigator.navigate('Server Nodes')
+        for btn in ServerHelper(self).controls.server_row_controls().failover_btns:
+            self.assertFalse(btn.is_displayed(), "There is failover btn")
+        for btn in ServerHelper(self).controls.server_row_controls().remove_btns:
+            self.assertFalse(btn.is_displayed(), "There is remove btn")
+        self.log.info("Bucket check")
+        navigator.navigate('Data Buckets')
+        BucketHelper(self).controls.bucket_info(bucket.name).arrow.click()
+        self.assertFalse(BucketHelper(self).controls.edit_btn().is_displayed(),
+                         "Bucket can be edited")
+        self.log.info("Views check")
+        navigator.navigate('Views')
+        DdocViewHelper(self).open_view(view)
+        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().map_fn.get_attribute("class").find("read_only") != -1,
+                        "Can edit map fn")
+        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().reduce_fn.get_attribute("class").find("read_only") != -1,
+                        "Can edit reduce fn")
+
 '''
 Controls classes for tests
 '''
@@ -249,6 +330,11 @@ class ServerTestControls():
         self.confirm_server_addition = self.helper.find_control('server_nodes', 'confirm_server_addition')
         self.add_server_confirm_btn = self.helper.find_control('server_nodes', 'add_server_dialog_btn',
                                                                parent_locator='confirm_server_addition')
+        return self
+
+    def server_row_controls(self):
+        self.failover_btns = self.helper.find_controls('server_nodes','failover_btn')
+        self.remove_btns = self.helper.find_controls('server_nodes','remove_btn')
         return self
 
 class BucketTestsControls():
@@ -300,6 +386,9 @@ class BucketTestsControls():
 
     def warning_pop_up(self, text):
         return self.helper.find_control('errors', 'warning_pop_up', text=text)
+
+    def edit_btn(self):
+        return self.helper.find_control('bucket','edit_btn')
 
 class NodeInitializeControls():
     def __init__(self, driver):
@@ -386,6 +475,11 @@ class DdocViewControls():
                                                         parent_locator='random_doc')
         return self
 
+    def view_map_reduce_fn(self):
+        self.map_fn = self.helper.find_control('view_screen', 'map_fn')
+        self.reduce_fn = self.helper.find_control('view_screen', 'reduce_fn')
+        return self
+
 class DocumentsControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
@@ -470,6 +564,23 @@ class SettingsTestControls():
         self.save_btn = self.helper.find_control('settings', 'save_btn', parent_locator='auto_failover_screen')
         self.done_btn = self.helper.find_control('settings', 'done_btn', parent_locator='auto_failover_screen')
         return self
+
+    def user_create_info(self):
+        self.username = self.helper.find_control('user', 'username')
+        self.password = self.helper.find_control('user', 'password')
+        self.verify_password = self.helper.find_control('user', 'verify_password')
+        self.create_btn = self.helper.find_control('user', 'create_btn')
+        self.delete_btn = self.helper.find_control('user', 'delete_btn')
+        return self
+
+    def user_error_msgs(self):
+        return self.helper.find_controls('user', 'error_msg')
+
+    def confirmation_user_delete(self):
+        self.confirmation_dlg = self.helper.find_control('confirm_delete_ro','dlg')
+        self.delete_btn  = self.helper.find_control('confirm_delete_ro','confirm_btn', parent_locator='dlg')
+        return self
+
 '''
 Helpers
 '''
@@ -752,7 +863,7 @@ class DdocViewHelper():
         self.tc.log.info('trying open view %s' % view_name)
         self.controls.create_pop_up().view_row(view_name).name.click()
         self.wait.until(lambda fn:
-                        self.controls.view_screen().random_document.is_displayed(),
+                        self.controls.view_map_reduce_fn().map_fn.is_displayed(),
                         "view screen is not opened")
         self.tc.log.info('view screen is opened successfully')
 
@@ -955,6 +1066,49 @@ class SettingsHelper():
                          self.controls.auto_failover_info().save_btn.get_attribute('disabled') == 'true'),
                         "Save btn is not selected in %d sec" % (self.wait._timeout))
         self.tc.log.info("Save btn is selected")
+
+    def is_user_created(self):
+        return self.controls.user_create_info().delete_btn.is_displayed()
+
+    def is_error_present(self):
+        if self.get_error_msg():
+            return True
+        return False
+
+    def get_error_msg(self):
+        msgs = []
+        for control in self.controls.user_error_msgs():
+            if control.is_displayed() and control.get_text() != '':
+                msgs.append(control.get_text())
+        return msgs
+
+    def delete_user(self):
+        self.tc.log.info("Delete RO user")
+        self.controls.user_create_info().delete_btn.click()
+        self.wait.until(lambda fn: self.controls.confirmation_user_delete().delete_btn.is_displayed(),
+                        "Confirmation pop up didn't appear in %d sec" % (self.wait._timeout))
+        self.controls.confirmation_user_delete().delete_btn.click()
+        self.wait.until(lambda fn: self.controls.user_create_info().username.is_displayed(),
+                        "Username is not displayed in %d sec" % (self.wait._timeout))
+        self.tc.log.info("RO user is deleted")
+
+    def create_user(self, user, pwd, verify_pwd = None):
+        if verify_pwd is None:
+            verify_pwd = pwd
+        self.tc.log.info("Try to create user %s" % user)
+        self.wait.until(lambda fn: self.controls.user_create_info().username.is_displayed(),
+                        "Username is not displayed in %d sec" % (self.wait._timeout))
+        self.controls.user_create_info().username.type(user)
+        self.controls.user_create_info().password.type(pwd)
+        self.controls.user_create_info().verify_password.type(verify_pwd)
+        self.controls.user_create_info().create_btn.click()
+        self.wait.until(lambda fn: self.is_user_created() or self.is_error_present(),
+                        "No reaction for create btn in %d sec" % (self.wait._timeout))
+        if self.is_error_present():
+            error = self.get_error_msg()
+            self.tc.log.error("User %s not created. error %s" % (user, error))
+            raise Exception("ERROR while creating user: %s" % error)
+        self.tc.log.info("User %s created" % user)
 '''
 Objects
 '''

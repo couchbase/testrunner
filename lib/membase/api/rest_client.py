@@ -1677,6 +1677,11 @@ class RestConnection(object):
                 break
         return result
 
+    def delete_ro_user(self):
+        api = self.baseUrl + 'settings/readOnlyUser'
+        status, content, header = self._http_request(api, 'DELETE', '')
+        return status
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
