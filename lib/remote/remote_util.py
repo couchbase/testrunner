@@ -2044,14 +2044,14 @@ class RemoteUtilHelper(object):
     @staticmethod
     def use_hostname_for_server_settings(server):
         shell = RemoteMachineShellConnection(server)
-        shell.info = shell.extract_remote_info()
+        info = shell.extract_remote_info()
         version = RestConnection(server).get_nodes_self().version
-        hostname = shell.info.hostname[0]
-        shell.stop_couchbase()
+        hostname = info.hostname[0]
         time.sleep(5)
         if version.startswith("1.8.0") or version.startswith("1.8.1") or\
            version.startswith("2.0.0") or version.startswith("2.0.1"):
-            if shell.info.type.lower() == "windows":
+            shell.stop_couchbase()
+            if info.type.lower() == "windows":
                 o = shell.execute_batch_command('ipconfig')
                 suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1]
                 suffix_dns = suffix_dns_row[0].split(':')[1].strip()
@@ -2085,16 +2085,14 @@ class RemoteUtilHelper(object):
                 shell.execute_command_raw(cmd)
                 cmd = 'rm -rf /opt/couchbase/var/lib/couchbase/config/config.dat'
                 shell.execute_command_raw(cmd)
-        else:
-            if shell.info.type.lower() == "windows":
-                cmd = 'echo "%s" > "C:\Program Files\Couchbase\Server\var\lib\couchbase\ip"' % hostname
-                shell.execute_command_raw(cmd)
-            else:
-                o = shell.execute_command_raw('nslookup %s' % hostname)
-                suffix_dns_row = [row for row in o[0] if row.find("Name:") != -1]
-                hostname = suffix_dns_row[0].split(':')[1].strip()
                 cmd = 'echo "%s" > /opt/couchbase/var/lib/couchbase/ip' % hostname
                 shell.execute_command_raw(cmd)
+        else:
+            o = shell.execute_command_raw('nslookup %s' % hostname)
+            suffix_dns_row = [row for row in o[0] if row.find("Name:") != -1]
+            hostname = suffix_dns_row[0].split(':')[1].strip()
+            RestConnection(server).rename_node(hostname)
+            shell.stop_couchbase()
         shell.start_couchbase()
         shell.disconnect()
         return hostname

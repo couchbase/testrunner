@@ -19,7 +19,7 @@ from builds.build_query import BuildQuery
 import logging.config
 from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 import TestInput
 
@@ -325,8 +325,7 @@ class CouchbaseServerInstaller(Installer):
 
                 # Optionally change node name and restart server
                 if params.get('use_domain_names', 0):
-                    remote_client.set_node_name(server.ip)
-                    rest.rename_node(server.ip)
+                    RemoteUtilHelper.use_hostname_for_server_settings(server)
 
                 # Make sure that data_path and index_path are writable by couchbase user
                 for path in set(filter(None, [server.data_path, server.index_path])):
