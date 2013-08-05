@@ -157,6 +157,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.log.info("finding build %s for machine %s" % (version, server))
         result = re.search('r', version)
 
+        if re.match(r'[1-9].[0-9].[0-9]-[0-9]+$', version):
+            version = version + "-rel"
         if result is None:
             appropriate_build = BuildQuery().\
                 find_membase_release_build('%s-enterprise' % (self.product), info.deliverable_type,
