@@ -452,3 +452,22 @@ class RebalanceInTests(RebalanceBaseTest):
         rest.change_bucket_props(bucket_to_change, saslPassword=new_pass)
         rebalance = self.cluster.async_rebalance(servs_result, servs_in_second, [])
         rebalance.result()
+
+    '''
+    test changes password of cluster during rebalance.
+    http://www.couchbase.com/issues/browse/MB-6459
+    '''
+    def rebalance_in_with_cluster_password_change(self):
+        new_password = self.input.param("new_password", "new_pass")
+        servs_result = self.servers[:self.nodes_init + self.nodes_in]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
+                                                 [])
+        old_pass = self.master.rest_password
+        self.sleep(10, "Wait for rebalance have some progress")
+        self.change_password(new_password=new_password)
+        try:
+            rebalance.result()
+            self.verify_cluster_stats()
+        finally:
+            self.change_password(new_password=old_pass)

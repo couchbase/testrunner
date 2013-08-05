@@ -27,6 +27,7 @@ class FailoverBaseTest(BaseTestCase):
         self.dgm_run = self.input.param("dgm_run", True)
         self.gen_create = BlobGenerator('loadOne', 'loadOne_', self._value_size, end=self.num_items)
         self.add_back_flag = False
+        self.during_ops = self.input.param("during_ops", None)
         self.log.info("==============  FailoverBaseTest setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
         rest = RestConnection(self.master)
@@ -168,17 +169,34 @@ class FailoverTests(FailoverBaseTest):
             time.sleep(60)
             rest.rebalance(otpNodes=[node.id for node in nodes],
                                ejectedNodes=[node.id for node in chosen])
-            msg = "rebalance failed while removing failover nodes {0}".format(chosen)
-            self.assertTrue(rest.monitorRebalance(stop_if_loop=True), msg=msg)
-            for failed in chosen:
-                for server in _servers_:
-                    if server.ip == failed.ip:
-                         _servers_.remove(server)
-                         self._cleanup_nodes.append(server)
+            if self.during_ops:
+                self.sleep(5, "Wait for some progress in rebalance")
+                if self.during_ops == "change_password":
+                    old_pass = self.master.rest_password
+                    self.change_password(new_password=self.input.param("new_password", "new_pass"))
+                    rest = RestConnection(self.master)
+                elif self.during_ops == "change_port":
+                    self.change_port(new_port=self.input.param("new_port", "9090"))
+                    rest = RestConnection(self.master)
+            try:
+                msg = "rebalance failed while removing failover nodes {0}".format(chosen)
+                self.assertTrue(rest.monitorRebalance(stop_if_loop=True), msg=msg)
+                for failed in chosen:
+                    for server in _servers_:
+                        if server.ip == failed.ip:
+                             _servers_.remove(server)
+                             self._cleanup_nodes.append(server)
 
-        log.info("Begin VERIFICATION ...")
-        RebalanceHelper.wait_for_replication(_servers_, self.cluster)
-        self.verify_cluster_stats(_servers_, self.master)
+                log.info("Begin VERIFICATION ...")
+                RebalanceHelper.wait_for_replication(_servers_, self.cluster)
+                self.verify_cluster_stats(_servers_, self.master)
+            finally:
+                if self.during_ops:
+                     if self.during_ops == "change_password":
+                         self.change_password(new_password=old_pass)
+                     elif self.during_ops == "change_port":
+                         self.change_port(new_port='8091',
+                                          current_port=self.input.param("new_port", "9090")) 
 
 
     def stop_server(self, node):

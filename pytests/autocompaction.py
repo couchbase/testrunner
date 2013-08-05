@@ -29,6 +29,7 @@ class AutoCompactionTests(BaseTestCase):
         self.autocompaction_value = self.input.param("autocompaction_value", 0)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         self.is_crashed = Event()
+        self.during_ops = self.input.param("during_ops", None)
 
     @staticmethod
     def insert_key(serverInfo, bucket_name, count, size):
@@ -103,6 +104,17 @@ class AutoCompactionTests(BaseTestCase):
                                                                              int(update_item_size)))
 
             generator_update = BlobGenerator('compact', 'compact-', int(update_item_size), start=0, end=(items * 1000))
+
+            if self.during_ops:
+                if self.during_ops == "change_port":
+                    self.change_port(new_port=self.input.param("new_port", "9090"))
+                    rest = RestConnection(self.servers[0])
+                    self.master.port = self.input.param("new_port", "9090")
+                elif self.during_ops == "change_password":
+                    old_pass = self.master.rest_password
+                    self.change_password(new_password=self.input.param("new_password", "new_pass"))
+                    rest = RestConnection(self.servers[0])
+                    self.master.rest_password = self.input.param("new_password", "new_pass")
             insert_thread = Thread(target=self.load,
                                    name="insert",
                                    args=(self.master, self.autocompaction_value,
@@ -116,6 +128,12 @@ class AutoCompactionTests(BaseTestCase):
                 elif compact_run:
                     self.log.info("auto compaction run successfully")
             except Exception, ex:
+                if self.during_ops:
+                     if self.during_ops == "change_password":
+                         self.change_password(new_password=old_pass)
+                     elif self.during_ops == "change_port":
+                         self.change_port(new_port='8091',
+                                          current_port=self.input.param("new_port", "9090"))
                 if str(ex).find("enospc") != -1:
                     self.is_crashed.set()
                     self.log.error("Disk is out of space, unable to load more data")
@@ -127,6 +145,12 @@ class AutoCompactionTests(BaseTestCase):
                 insert_thread.join()
         else:
             self.log.error("Unknown error")
+        if self.during_ops:
+                     if self.during_ops == "change_password":
+                         self.change_password(new_password=old_pass)
+                     elif self.during_ops == "change_port":
+                         self.change_port(new_port='8091',
+                                          current_port=self.input.param("new_port", "9090"))
 
 
     def _viewFragmentationThreshold(self):

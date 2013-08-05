@@ -662,3 +662,40 @@ class BaseTestCase(unittest.TestCase):
                 except:
                     pass
         client.close()
+
+    def change_password(self, new_password="new_password"):
+        nodes = RestConnection(self.master).node_statuses()
+        remote_client = RemoteMachineShellConnection(self.master)
+        options = "--cluster-init-password=%s" % new_password
+        cli_command = "cluster-init"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                            cluster_host="localhost:8091",
+                                                            user=self.master.rest_username,
+                                                            password=self.master.rest_password)
+        self.log.info(output)
+        if error:
+            raise Exception("Password didn't change! %s" % error)
+        for node in nodes:
+            for server in self.servers:
+                if server.ip == node.ip and int(server.port) == int(node.port):
+                    server.rest_password = new_password
+                    break
+
+    def change_port(self, new_port="9090", current_port='8091'):
+        nodes = RestConnection(self.master).node_statuses()
+        remote_client = RemoteMachineShellConnection(self.master)
+        options = "--cluster-init-port=%s" % new_port
+        cli_command = "cluster-init"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                            cluster_host="localhost:%s" % current_port,
+                                                            user=self.master.rest_username,
+                                                            password=self.master.rest_password)
+        self.log.info(output)
+        if error:
+            raise Exception("Port didn't change! %s" % error)
+        self.port = new_port
+        for node in nodes:
+            for server in self.servers:
+                if server.ip == node.ip and int(server.port) == int(node.port):
+                    server.port = new_port
+                    break

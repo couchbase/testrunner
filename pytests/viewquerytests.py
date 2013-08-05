@@ -137,6 +137,59 @@ class ViewQueryTests(BaseTestCase):
         data_set.add_startkey_endkey_queries(limit=self.limit)
         self._query_test_init(data_set)
 
+    def test_simple_dataset_startkey_endkey_queries_with_pass_change(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Start querying(different combinations of
+               stratkey. endkey, descending, inclusive_end, parameters)
+            3. Change cluster password
+            4.Perform same queries
+        '''
+        data_set = SimpleDataSet(self.master, self.cluster, self.num_docs)
+        data_set.add_startkey_endkey_queries(limit=self.limit)
+        generator_load = data_set.generate_docs(data_set.views[0], start=0,
+                                                end=self.num_docs)
+        self.load(data_set, generator_load)
+        self._query_all_views(data_set.views, generator_load,
+                              verify_expected_keys=True)
+        old_pass = self.master.rest_password
+        self.change_password(new_password=self.input.param("new_password", "new_pass"))
+        try:
+            self._query_all_views(data_set.views, generator_load,
+                                  verify_expected_keys=True, retries=1)
+        finally:
+            self.change_password(new_password=old_pass)
+
+    def test_simple_dataset_startkey_endkey_queries_with_port_change(self):
+        '''
+        Test uses simple data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Start querying(different combinations of
+               stratkey. endkey, descending, inclusive_end, parameters)
+            3. Change cluster port
+            4.Perform same queries
+        '''
+        data_set = SimpleDataSet(self.master, self.cluster, self.num_docs)
+        data_set.add_startkey_endkey_queries(limit=self.limit)
+        generator_load = data_set.generate_docs(data_set.views[0], start=0,
+                                                end=self.num_docs)
+        self.load(data_set, generator_load)
+        self._query_all_views(data_set.views, generator_load,
+                              verify_expected_keys=True)
+
+        self.change_port(new_port=self.input.param("new_port", "9090"))
+        try:
+            self._query_all_views(data_set.views, generator_load,
+                                  verify_expected_keys=True, retries=1)
+        finally:
+            self.change_port(new_port='8091',
+                             current_port=self.input.param("new_port", "9090"))
+
     def test_reproduce_mb_7193_queries(self):
         '''
         Test uses simple data set:
