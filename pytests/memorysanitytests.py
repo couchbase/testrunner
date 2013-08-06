@@ -5,6 +5,9 @@ import time
 import sys
 import uuid
 import logger
+import string
+import random
+import math
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -13,11 +16,13 @@ from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedClient, MemcachedError
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from couchbase.stats_tools import StatsCommon
 
 class MemorySanity(BaseTestCase):
 
     def setUp(self):
         super(MemorySanity, self).setUp()
+        self.kv_verify = self.input.param('kv_verify', True)
         self.log.info("==============  MemorySanityTest setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
         self.gen_create = BlobGenerator('loadOne', 'loadOne_', self.value_size, end=self.num_items)
@@ -104,16 +109,23 @@ class MemorySanity(BaseTestCase):
         self.assertTrue(memory_mb <= self.quota, "total_allocated_bytes %s should be within %s" %(
                                                   memory_mb, self.quota))
 
+
+    def random_str_generator(self, size=4, chars=string.ascii_uppercase + string.digits):
+        return ''.join(random.choice(chars) for x in range(size))
+
     """
     Test to load items of a specified size.
     Append a selected list of keys, until
     the items are match a desired size.
     """
     def test_items_append(self):
-        self.desired_item_size = self.input.param("desired_item_size", 1024)
+        self.desired_item_size = self.input.param("desired_item_size", 2048)
+        self.append_size = self.input.param("append_size", 1024)
+        self.fixed_append_size = self.input.param("fixed_append_size", True)
         self.append_ratio = self.input.param("append_ratio", 0.5)
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=10000, pause_secs=5, timeout_secs=100)
+
         for bucket in self.buckets:
             verify_dict = {}
             vkeys, dkeys = bucket.kvs[1].key_set()
@@ -128,23 +140,50 @@ class MemorySanity(BaseTestCase):
                     break
                 selected_keys.append(key)
 
+            awareness = VBucketAwareMemcached(RestConnection(self.master), bucket.name)
+            if self.kv_verify:
+                for key in selected_keys:
+                    value = awareness.memcached(key).get(key)[2]
+                    verify_dict[key] = value
+
             self.log.info("Bucket: {0}".format(bucket.name))
             self.log.info("Appending to have items whose initial size was "
-                            + "{0} to equal or cross a size of {1}".format(
-                                            self.value_size, self.desired_item_size))
-            self.log.info("Item-appending of {0} items starting ..".format(
-                                                        len(selected_keys)+1))
-            awareness = VBucketAwareMemcached(RestConnection(self.master), bucket.name)
-            for key in selected_keys:
-                value = awareness.memcached(key).get(key)[2]
-                verify_dict[key] = value
-                while len(value) < self.desired_item_size:
-                    awareness.memcached(key).append(key, "abcdefghijklmnopqrstuvwxyz")
-                    verify_dict[key] = verify_dict[key] + "abcdefghijklmnopqrstuvwxyz"
-                    value = awareness.memcached(key).get(key)[2]
+                            + "{0} to equal or cross a size of {1}".format(self.value_size, self.desired_item_size))
+            self.log.info("Item-appending of {0} items starting ..".format(len(selected_keys)+1))
+
+            index = 3
+            while self.value_size < self.desired_item_size:
+                str_len = self.append_size
+                if not self.fixed_append_size:
+                    str_len = int(math.pow(2, index))
+
+                for key in selected_keys:
+                    random_string = self.random_str_generator(str_len)
+                    awareness.memcached(key).append(key, random_string)
+
+                    if self.kv_verify:
+                        verify_dict[key] = verify_dict[key] + random_string
+
+                self.value_size += str_len
+                index += 1
+
             self.log.info("The appending of {0} items ended".format(len(selected_keys)+1))
 
             msg = "Bucket:{0}".format(bucket.name)
+            self.log.info("VERIFICATION <" + msg + ">: Phase 0 - Check the gap between "
+                      + "mem_used by the bucket and total_allocated_bytes")
+            stats = StatsCommon()
+            mem_used_stats = stats.get_stats(self.servers, bucket, 'memory', 'mem_used')
+            total_allocated_bytes_stats = stats.get_stats(self.servers, bucket, 'memory', 'total_allocated_bytes')
+            total_fragmentation_bytes_stats = stats.get_stats(self.servers, bucket, 'memory', 'total_fragmentation_bytes')
+
+            for server in self.servers:
+                self.log.info("In {0} bucket {1}, total_fragmentation_bytes + the total_allocated_bytes = {2}"
+                              .format(server.ip, bucket.name, (int(total_fragmentation_bytes_stats[server]) + int(total_allocated_bytes_stats[server]))))
+                self.log.info("In {0} bucket {1}, mem_used = {2}".format(server.ip, bucket.name, mem_used_stats[server]))
+                self.log.info("In {0} bucket {1}, the difference between acutal memory used by memcached and mem_used is {2} times"
+                              .format(server.ip, bucket.name, float(int(total_fragmentation_bytes_stats[server]) + int(total_allocated_bytes_stats[server]))/float(mem_used_stats[server])))
+
             self.log.info("VERIFICATION <" + msg + ">: Phase1 - Check if any of the "
                     + "selected keys have value less than the desired value size")
             for key in selected_keys:
@@ -152,9 +191,12 @@ class MemorySanity(BaseTestCase):
                 if len(value) < self.desired_item_size:
                     self.fail("Failed to append enough to make value size surpass the "
                                 + "size, for key {0}".format(key))
-            self.log.info("VERIFICATION <" + msg + ">: Phase2 - Check if the content "
-                    + "after the appends match whats expected")
-            for k in verify_dict:
-                if awareness.memcached(key).get(k)[2] != verify_dict[k]:
-                    self.fail("Content at key {0}: not what's expected.".format(k))
-            self.log.info("VERIFICATION <" + msg + ">: Successful")
+
+            if self.kv_verify:
+                self.log.info("VERIFICATION <" + msg + ">: Phase2 - Check if the content "
+                        + "after the appends match whats expected")
+                for k in verify_dict:
+                    if awareness.memcached(key).get(k)[2] != verify_dict[k]:
+                        self.fail("Content at key {0}: not what's expected.".format(k))
+                self.log.info("VERIFICATION <" + msg + ">: Successful")
+
