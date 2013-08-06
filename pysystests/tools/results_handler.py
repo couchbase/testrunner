@@ -7,8 +7,22 @@ from membase.api.rest_client import RestConnection
 import plotter
 import store_report
 import compare_stats
+import json
+from seriesly import Seriesly
 
 CBFS_HOST = 'http://cbfs.hq.couchbase.com:8484'
+
+index_html = """<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+      <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+      <title>index.html file</title>
+      </head>
+    <body style="font-family: Arial;border: 0 none;">
+      %s
+      </body>
+    </html>"""
+
+
 
 def parse_args():
     parser = OptionParser()
@@ -20,14 +34,50 @@ def parse_args():
     parser.add_option("-R", "--release_to_compare", dest="release_to_compare", help="release number for comparison; not required, comparative part will be omitted in this case")
     parser.add_option("-p", "--platform", dest="platform", help="platform version; required")
     parser.add_option("-t", "--test_name", dest="test_name", help="test name; not required, it's taken from seriesly DB by tag 'name'")
+    parser.add_option("-f", "--json_test_file", dest="json_test_file", help="json test file; required")
 
     options, args = parser.parse_args()
 
-    if None in [options.release_number, options.platform]:
+    if None in [options.release_number, options.platform, options.json_test_file]:
         parser.print_help()
         sys.exit()
 
+    if not os.path.exists(options.json_test_file):
+            sys.exit("json file {0} was not found".format(options.json_test_file))
+
     return options, args
+
+
+def generate_index_file(storage_folder, test_file):
+    db_event = Seriesly(cfg.SERIESLY_IP, 3133)['event']
+    all_event_docs = db_event.get_all()
+    phases_info = {}
+    for doc in all_event_docs.itervalues():
+        phases_info[int(doc.keys()[0])] = doc.values()[0]
+    phases_info.keys().sort()
+    num_phases = len(phases_info.keys())
+    run_id = phases_info[1]['desc']
+    run_id = run_id.replace(" ", "_")
+    run_id = run_id.replace(",", "_")
+    content = ""
+
+    json_data = open(test_file)
+    tests = json.load(json_data)
+
+    for i in range(num_phases)[1:]:
+        sub_folder = storage_folder + "phase" + str(i) + "/"
+        content += "<a style=\"font-family:arial;color:black;font-size:20px;\" href=\"%s\">%s</a><p>" % ("phase" + str(i) , "phase" + str(i))
+        if str(i) in tests["phases"]:
+            content += json.dumps(tests["phases"][str(i)], indent=10, sort_keys=True) + "<p>"
+        files = [ f for f in os.listdir(sub_folder) if os.path.isfile(os.path.join(sub_folder, f))]
+        for f in files:
+            content += "<a href=\"%s\">&nbsp;&nbsp;&nbsp;&nbsp;%s</a><p>" % ("phase" + str(i) + "/" + f, f)
+
+    html_path = storage_folder + "index.html"
+    file1 = open(html_path, 'w')
+    file1.write(index_html % content)
+
+
 
 
 def main():
@@ -84,9 +134,11 @@ def main():
             for f in files:
                 os.system("wget %s/%s/%s -O %s/%s" % (CBFS_HOST, url_folder, f, url_folder, f))
 
-        compare_stats.compare_by_folders(storage_folder, "system-test-results/%s/%s/%s/%s" % (release_to_compare, platform, test_name, version_to_compare))
-
+    compare_stats.compare_by_folders(storage_folder, "system-test-results/%s/%s/%s/%s" % (release_to_compare, platform, test_name, version_to_compare))
+    generate_index_file(storage_folder, options.json_test_file)
     store_report.store_report_cbfs(release_number, platform)
+
+
 
 if __name__ == "__main__":
     main()

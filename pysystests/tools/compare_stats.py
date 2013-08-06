@@ -6,7 +6,7 @@ html_head = """
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-  <title>Google Visualization API Sample</title>
+  <title>Compare stats</title>
   <script type="text/javascript" src="http://www.google.com/jsapi">
   </script>"""
 script_template = """<script type="text/javascript">
@@ -54,8 +54,9 @@ def compare_stats(file1, file2):
         for block in data[data_file]:
             if block == "ns_server":
                 for sublock in data[data_file][block]:
-                    temp_ns_server_json[data_file][block + "_" + sublock] = {}
-                    temp_ns_server_json[data_file][block + "_" + sublock] = data[data_file][block][sublock]
+                    if sublock != '':
+                        temp_ns_server_json[data_file][block + "_" + sublock] = {}
+                        temp_ns_server_json[data_file][block + "_" + sublock] = data[data_file][block][sublock]
 
 
     for data_file in data:
@@ -66,15 +67,20 @@ def compare_stats(file1, file2):
     blocks = {}
     for block in data[files[0]]:
         blocks[block] = {}
-        for sub_block in data[files[0]][block]:
-            blocks[block][sub_block] = {}
+        for sublock in data[files[0]][block]:
+            if sublock != '':
+                blocks[block][sublock] = {}
 
     content = html_head
 
+    information = '<p style=\"color:red;font-size:18px;\">Differences of more than 10 percent</p>'
     for block in blocks:
+        information += "<p>" + block
         json_dict[block] = {}
         table = "data.addColumn('string', '%s');" % (block)
         for sublock in blocks[block]:
+            if sublock == '':
+                 continue
             json_dict[block][sublock] = {}
             for i in xrange(len(files)):
                 table += ("data.addColumn('string', '%s:f%s');" % (sublock, i + 1)).replace(":8091", "")
@@ -82,8 +88,12 @@ def compare_stats(file1, file2):
         column_counter = 0
         temp = ""
         for sublock in  blocks[block]:
+            if sublock == '':
+                continue
             for stat in  data[files[0]][block][sublock]:
                 for sublock in  blocks[block]:
+                    if sublock == '':
+                        continue
                     json_dict[block][sublock][stat] = {}
                     if column_counter == 0:
                         temp += "['%s', " % stat
@@ -106,12 +116,14 @@ def compare_stats(file1, file2):
                         temp += "'%s'," % cell
                         column_counter += 1
                     if isInt:
-                        if data[files[0]][block][sublock][stat] != 0:
+                        if data[files[0]][block][sublock][stat] != 0 and  data[files[1]][block][sublock][stat]:
                             percentage = int(100 * (data[files[0]][block][sublock][stat] - data[files[1]][block][sublock][stat]) / (data[files[0]][block][sublock][stat]))
                             temp += "%s" % percentage
                             json_dict[block][sublock][stat]["diff"] = ["+", "-"][percentage >= 0] + str(percentage) + "%"
                             if percentage > 10:
-                                print "percentage %s:%s:%s:%s %s - %s=%s" % (os.path.dirname(files[1]).split(os.sep)[-1], block, sublock, stat, data[files[1]][block][sublock][stat], data[files[0]][block][sublock][stat], percentage)
+                                diff_str = "%s:%s %s - %s=+%s%%" % (sublock, stat, data[files[1]][block][sublock][stat], data[files[0]][block][sublock][stat], percentage)
+                                information += "<p style=\"font-family:arial;color:grey;font-size:12px;\">&nbsp;&nbsp;" + diff_str + "</p>"
+                                print diff_str
                         else:
                             temp += "0"
                     else:
@@ -137,14 +149,18 @@ def compare_stats(file1, file2):
     """
     content += "<p>LEGEND</p>"
     content += """<ul>
-    <li>f1:%s</li>
-    <li>f2:%s</li>
+    <li>f1: %s</li>
+    <li>f2: %s</li>
     </ul>""" % (file1, file2)
     for block in blocks:
-        num_rows = len(data[files[0]][block][data[files[0]][block].keys()[0]].keys())
+        if data[files[0]][block].keys()[0] == '':
+            num_rows = len(data[files[0]][block][data[files[0]][block].keys()[1]].keys())
+        else:
+            num_rows = len(data[files[0]][block][data[files[0]][block].keys()[0]].keys())
         num_columns = len(data[files[0]][block].keys()) * 3 + 1
         content += "<p style=\"background-color:green;\">%s</p>" % (block)
-        content += table_template.format(block, num_columns * 110, 22 * num_rows + 35)
+        content += table_template.format(block, num_columns * 111, 22 * num_rows + 35)
+    content += information
 
 
     content += """</body>
