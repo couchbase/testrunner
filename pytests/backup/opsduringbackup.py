@@ -89,35 +89,47 @@ class OpsDuringBackupTests(BackupBaseTest):
 
             if("expire" in self.doc_ops):
                 mutate_threads.append(self._async_load_all_buckets(self.master, gen_expire, "update", self.expire_time, 1, 0, True, batch_size=20000))
+            if("change_password" in self.doc_ops):
+                old_pass = self.master.rest_password
+                self.change_password(new_password=self.input.param("new_password", "new_pass"))
+            if("change_port" in self.doc_ops):
+                self.change_port(new_port=self.input.param("new_port", "9090"))
+        try:
+            first_backup_thread = Thread(target=self.shell.execute_cluster_backup,
+                                         name="backup",
+                                         args=(self.couchbase_login_info, self.backup_location, self.command_options))
+            first_backup_thread.start()
+            first_backup_thread.join()
 
-        first_backup_thread = Thread(target=self.shell.execute_cluster_backup,
-                                     name="backup",
-                                     args=(self.couchbase_login_info, self.backup_location, self.command_options))
-        first_backup_thread.start()
-        first_backup_thread.join()
+            for t in mutate_threads:
+                for task in t:
+                    task.result()
 
-        for t in mutate_threads:
-            for task in t:
-                task.result()
+            kvs_before = {}
+            for bucket in self.buckets:
+                kvs_before[bucket.name] = bucket.kvs[1]
+            self._all_buckets_delete(self.master)
+            gc.collect()
 
-        kvs_before = {}
-        for bucket in self.buckets:
-            kvs_before[bucket.name] = bucket.kvs[1]
-        self._all_buckets_delete(self.master)
-        gc.collect()
+            if self.default_bucket:
+                self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
+                self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
+            self._create_sasl_buckets(self.master, self.sasl_buckets)
+            self._create_standard_buckets(self.master, self.standard_buckets)
 
-        if self.default_bucket:
-            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="", num_replicas=self.num_replicas, bucket_size=self.bucket_size))
-        self._create_sasl_buckets(self.master, self.sasl_buckets)
-        self._create_standard_buckets(self.master, self.standard_buckets)
-
-        for bucket in self.buckets:
-            bucket.kvs[1] = kvs_before[bucket.name]
-        del kvs_before
-        gc.collect()
-        bucket_names = [bucket.name for bucket in self.buckets]
-        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
-        time.sleep(self.expire_time) #system sleeps for expired items
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-        #TODO implement verification for this test case
+            for bucket in self.buckets:
+                bucket.kvs[1] = kvs_before[bucket.name]
+            del kvs_before
+            gc.collect()
+            bucket_names = [bucket.name for bucket in self.buckets]
+            self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+            time.sleep(self.expire_time) #system sleeps for expired items
+            self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+            #TODO implement verification for this test case
+        finally:
+            if self.doc_ops:
+                if "change_password" in self.doc_ops:
+                    self.change_password(new_password=old_pass)
+                elif "change_port" in self.doc_ops:
+                    self.change_port(new_port='8091',
+                                     current_port=self.input.param("new_port", "9090"))
