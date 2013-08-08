@@ -23,6 +23,7 @@ class MembaseBuild(object):
         self.architecture_type = ''
         self.toy = ''
         self.change = None # a MembaseChange
+        self.url_latest_build = ''
 
     def __repr__(self):
         return self.__str__()
@@ -113,8 +114,10 @@ class BuildQuery(object):
         build.build_number = 0
         if deliverable_type == "exe":
             build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.setup.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
+            build.url_latest_build = 'http://builds.hq.northscale.net/latestbuilds/{0}_{1}_{3}.setup.{2}'.format(product, os_architecture, deliverable_type, build_details)
         else:
             build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
+            build.url_latest_build = 'http://builds.hq.northscale.net/latestbuilds/{0}_{1}_{3}.{2}'.format(product, os_architecture, deliverable_type, build_details)
         # This points to the Internal s3 account to look for release builds
         if is_amazon:
             build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)

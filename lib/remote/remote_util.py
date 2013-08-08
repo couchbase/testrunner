@@ -297,7 +297,7 @@ class RemoteMachineShellConnection:
             raise Exception("stopping standalone moxi is not supported on windows")
 
     def download_build(self, build):
-        return self.download_binary(build.url, build.deliverable_type, build.name)
+        return self.download_binary(build.url, build.deliverable_type, build.name, latest_url=build.url_latest_build)
 
     def disable_firewall(self):
         info = self.extract_remote_info()
@@ -310,7 +310,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command('/sbin/iptables -t nat -F')
             self.log_command_output(output, error)
 
-    def download_binary(self, url, deliverable_type, filename):
+    def download_binary(self, url, deliverable_type, filename, latest_url=None):
         info = self.extract_remote_info()
         self.disable_firewall()
         if info.type.lower() == 'windows':
@@ -348,6 +348,9 @@ class RemoteMachineShellConnection:
             log.info('get md5 sum for local and remote')
             output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
             self.log_command_output(output, error)
+            if str(error).find('No such file or directory') != -1 and latest_url != '':
+                url = latest_url
+            output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
             log.info('comparing md5 sum and downloading if needed')
             output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
             self.log_command_output(output, error)

@@ -177,7 +177,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
-            remote.download_build(appropriate_build)
+            self.assertTrue(remote.download_build(appropriate_build),"Build wasn't downloaded!")
             remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             remote.disconnect()
