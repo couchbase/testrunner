@@ -176,7 +176,7 @@ class Installer(object):
         remote_client.disconnect()
         if ok:
             builds, changes = BuildQuery().get_all_builds()
-            releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1"]
+            releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             for name in names:
                 if version in releases_version:
                      build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,

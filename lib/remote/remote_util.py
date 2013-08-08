@@ -357,11 +357,11 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
             self.log_command_output(output, error)
             log.info('get md5 sum for local and remote')
-            output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
+            output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
             self.log_command_output(output, error)
             if str(error).find('No such file or directory') != -1 and latest_url != '':
                 url = latest_url
-            output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
+                output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
             log.info('comparing md5 sum and downloading if needed')
             output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
             self.log_command_output(output, error)
