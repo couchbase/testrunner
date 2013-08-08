@@ -254,17 +254,18 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def is_couchbase_installed(self):
-        info = self.extract_remote_info()
-        if info.type.lower() == 'windows':
+        if getattr(self, "info", None) is None:
+            self.info = self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
                 return True
-        elif info.distribution_type.lower() == 'mac':
+        elif self.info.distribution_type.lower() == 'mac':
             output, error = self.execute_command('ls %s%s' % (testconstants.MAC_CB_PATH, testconstants.VERSION_FILE))
             self.log_command_output(output, error)
             for line in output:
                 if line.find('No such file or directory') == -1:
                     return True
-        elif info.type.lower() == "linux":
+        elif self.info.type.lower() == "linux":
             if self.file_exists(testconstants.LINUX_CB_PATH, testconstants.VERSION_FILE):
                 return True
         return False
@@ -300,21 +301,26 @@ class RemoteMachineShellConnection:
         return self.download_binary(build.url, build.deliverable_type, build.name, latest_url=build.url_latest_build)
 
     def disable_firewall(self):
-        info = self.extract_remote_info()
-        if info.type.lower() == "windows":
-            self.execute_command('netsh advfirewall set publicprofile state off', info)
+        if getattr(self, "info", None) is None:
+            self.info = self.extract_remote_info()
+        if self.info.type.lower() == "windows":
+            self.execute_command('netsh advfirewall set publicprofile state off')
             self.execute_command('netsh advfirewall set privateprofile state off')
+            # for details see RemoteUtilHelper.enable_firewall for windows
+            self.execute_command('netsh advfirewall firewall delete rule name="block erl.exe in"')
+            self.execute_command('netsh advfirewall firewall delete rule name="block erl.exe out"')
         else:
-            output, error = self.execute_command('/sbin/iptables -F', info)
+            output, error = self.execute_command('/sbin/iptables -F')
             self.log_command_output(output, error)
             output, error = self.execute_command('/sbin/iptables -t nat -F')
             self.log_command_output(output, error)
 
     def download_binary(self, url, deliverable_type, filename, latest_url=None):
-        info = self.extract_remote_info()
+        if getattr(self, "info", None) is None:
+            self.info = self.extract_remote_info()
         self.disable_firewall()
-        if info.type.lower() == 'windows':
-            self.execute_command('taskkill /F /T /IM msiexec32.exe', info)
+        if self.info.type.lower() == 'windows':
+            self.execute_command('taskkill /F /T /IM msiexec32.exe')
             self.execute_command('taskkill /F /T /IM msiexec.exe')
             self.execute_command('taskkill /F /T IM setup.exe')
             self.execute_command('taskkill /F /T /IM ISBEW64.*')
@@ -328,7 +334,7 @@ class RemoteMachineShellConnection:
                  "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O setup.exe';ls -l;".format(url))
             self.log_command_output(output, error)
             return self.file_exists('/cygdrive/c/tmp/', 'setup.exe')
-        elif info.distribution_type.lower() == 'mac':
+        elif self.info.distribution_type.lower() == 'mac':
             output, error = self.execute_command('cd ~/Downloads ; rm -rf couchbase-server* ; rm -rf Couchbase\ Server.app ; curl -O {0}'.format(url))
             self.log_command_output(output, error)
             output, error = self.execute_command('ls ~/Downloads/%s' % filename)
@@ -343,7 +349,7 @@ class RemoteMachineShellConnection:
         # build.product has the full name
         # first remove the previous file if it exist ?
         # fix this :
-            output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename), info)
+            output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
             self.log_command_output(output, error)
             log.info('get md5 sum for local and remote')
             output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
@@ -1196,13 +1202,11 @@ class RemoteMachineShellConnection:
         return success
 
     def execute_command(self, command, info=None, debug=True, use_channel=False):
-
         info = info or getattr(self, "info", None)
         if info is None:
-            info = self.extract_remote_info()
-            self.info = info
+            self.info = self.extract_remote_info()
 
-        if info.type.lower() == 'windows':
+        if self.info.type.lower() == 'windows':
             self.use_sudo = False
 
         if self.use_sudo :
@@ -1804,7 +1808,7 @@ class RemoteMachineShellConnection:
         success = False
         files_path = "cygdrive/c/utils/suspend/"
         # check to see if suspend files exist in server
-        file_existed = self.file_exists(self, files_path, cmd_file_name)
+        file_existed = self.file_exists(files_path, cmd_file_name)
         if file_existed:
             command = "{0}{1} {2} {3}".format(files_path, cmd_file_name, option, ps_name_or_id)
             o, r = self.execute_command(command)
@@ -1816,7 +1820,14 @@ class RemoteMachineShellConnection:
             else:
                 log.error("Command didn't run successfully. Error: {0}".format(r))
         else:
-            log.error("executable file {0} does not exist".format(cmd_file_name))
+            o, r = self.execute_command("netsh advfirewall firewall add rule name=\"block erl.exe in\" dir=in action=block program=\"%ProgramFiles%\Couchbase\Server\\bin\erl.exe\"")
+            if not r:
+                success = True
+                self.log_command_output(o, r)
+            o, r = self.execute_command("netsh advfirewall firewall add rule name=\"block erl.exe out\" dir=out action=block program=\"%ProgramFiles%\Couchbase\Server\\bin\erl.exe\"")
+            if not r:
+                success = True
+                self.log_command_output(o, r)
         return success
 
 
@@ -1826,6 +1837,7 @@ class RemoteUtilHelper(object):
     def enable_firewall(server, bidirectional=False, xdcr=False):
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info()
+        shell.info = info
         if info.type.lower() == "windows":
             shell.execute_command('netsh advfirewall set publicprofile state on')
             shell.execute_command('netsh advfirewall set privateprofile state on')
