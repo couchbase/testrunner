@@ -24,7 +24,7 @@ class cbstatsTests(CliBaseTest):
             for bucket in self.buckets:
                 output, error = self.shell.execute_cbstats(bucket, self.command)
                 self.verify_results(output, error)
-                if self.command == "allocator":
+                if self.command in ["allocator", "kvtimings", "timings"]:
                     self.log.warn("We will not verify exact values for this stat")
                 else:
                     self._verify_direct_client_stats(bucket, self.command, output)
