@@ -1802,6 +1802,28 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
+    def execute_cbhealthchecker(self, username, password, command_options=None):
+        command_options_string = ""
+        if command_options is not None:
+            command_options_string = ' '.join(command_options)
+
+        cbhealthchecker_command = "%scbhealthchecker" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        info = self.extract_remote_info()
+        type = info.type.lower()
+        if info.distribution_type.lower() == 'mac':
+            cbhealthchecker_command = "%scbhealthchecker" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+
+        if type == 'windows':
+            cbhealthchecker_command = "%scbhealthchecker" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+
+        command = "%s -u %s -p %s -c %s:%s %s" % (cbhealthchecker_command,
+                                                username, password, self.ip,
+                                                self.port, command_options_string)
+
+        output, error = self.execute_command(command.format(command))
+        self.log_command_output(output, error)
+        return output, error
+
     def execute_batch_command(self, command):
         remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
         o, r = self.execute_command_raw(remote_command)
