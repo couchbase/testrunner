@@ -1040,10 +1040,12 @@ class RestConnection(object):
     #convoluted logic which figures out if the rebalance failed or suceeded
     def rebalance_statuses(self):
         rebalanced = None
-        api = self.baseUrl + 'pools/rebalanceStatuses'
+        api = self.baseUrl + 'pools/rebalanceStatuses?waitChange=1'
         status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
         if status:
+            if 'balanced' not in json_parsed:
+                return False
             rebalanced = json_parsed['balanced']
         return rebalanced
 
