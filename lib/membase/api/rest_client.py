@@ -1247,7 +1247,7 @@ class RestConnection(object):
     def delete_bucket(self, bucket='default'):
         api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
-            api = '%s%s%s' % s (self.baseUrl, 'pools/default/buckets/', bucket.name)
+            api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
         status, content, header = self._http_request(api, 'DELETE')
         return status
 
@@ -1684,6 +1684,12 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'DELETE', '')
         return status
 
+    def create_ro_user(self, username, password):
+        api = self.baseUrl + 'settings/readOnlyUser'
+        params = urllib.urlencode({'username' : username, 'password' : password})
+        log.info('settings/readOnlyUser params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
