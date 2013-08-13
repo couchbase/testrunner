@@ -297,7 +297,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._optimistic_xdcr_threshold = self._input.param("optimistic_xdcr_threshold", 256)
         if self.src_master.ip != self.dest_master.ip:  #Only if it's not a cluster_run
             if self._optimistic_xdcr_threshold != 256:
-                self.set_environ_param('XDCR_OPTIMISTIC_REPLICATION_THRESHOLD', self._optimistic_xdcr_threshold)
+                self.set_xdcr_param('xdcrOptimisticReplicationThreshold', self._optimistic_xdcr_threshold)
 
         self.log.info("Initializing input parameters completed.")
 
@@ -927,20 +927,17 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 break
             self.log.info("Completed Load")
 
-    def set_environ_param(self, _parameter, value):
-        self.log.info("Setting {0} to {1} ..".format(_parameter, value))
-        for server in self.src_nodes:
-            shell = RemoteMachineShellConnection(server)
-            shell.set_environment_variable(_parameter, value)
+    def set_xdcr_param(self, param, value):
+        self.log.info("Setting {0} to {1} ..".format(param, value))
+        RestConnection(self.src_master[0]).set_internalSetting(param, value)
+
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-            for server in self.dest_nodes:
-                shell = RemoteMachineShellConnection(server)
-                shell.set_environment_variable(_parameter, value)
+            RestConnection(self.dest_master[0]).set_internalSetting(param, value)
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         if src_master.ip != dest_master.ip:
             if self._failover is not None or self._warmup is not None:
-                self.set_environ_param('XDCR_FAILURE_RESTART_INTERVAL', 1)
+                self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(self._timeout / 2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)

@@ -1490,6 +1490,18 @@ class RestConnection(object):
             param = json_parsed[param]
             return param
 
+    def set_internalSetting(self, param, value):
+        "Set any internal setting"
+        api = self.baseUrl + "internalSettings"
+
+        if isinstance(value, bool):
+            value = str(value).lower()
+
+        params = urllib.urlencode({param : value})
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('Update internal setting {0}={1}'.format(param, value))
+        return status
+
     def set_reb_cons_view(self, disable):
         """Enable/disable consistent view for rebalance tasks"""
         api = self.baseUrl + "internalSettings"

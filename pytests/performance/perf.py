@@ -225,25 +225,21 @@ class PerfBase(unittest.TestCase):
         xdcr_latency_optimization = self.param('xdcr_latency_optimization', None)
 
         if max_concurrent_reps_per_doc:
-            env_var = 'MAX_CONCURRENT_REPS_PER_DOC'
+            param = 'xdcrMaxConcurrentReps'
             value = max_concurrent_reps_per_doc
         elif xdcr_doc_batch_size_kb:
-            env_var = 'XDCR_DOC_BATCH_SIZE_KB'
+            param = 'xdcrDocBatchSizeKb'
             value = xdcr_doc_batch_size_kb
         elif xdcr_checkpoint_interval:
-            env_var = 'XDCR_CHECKPOINT_INTERVAL'
+            param = 'xdcrCheckpointInterval'
             value = xdcr_checkpoint_interval
-        elif xdcr_latency_optimization:
-            env_var = 'XDCR_LATENCY_OPTIMIZATION'
-            value = xdcr_latency_optimization
         else:
             return
 
-        self.log.info("changing {0} to {1}".format(env_var, value))
+        self.log.info("changing {0} to {1}".format(param, value))
 
-        for server in self.input.servers:
-            rc = RemoteMachineShellConnection(server)
-            rc.set_environment_variable(env_var, value)
+        for servers in self.input.clusters.values():
+            RestConnection(servers[0]).set_internalSetting(param, value)
 
     def set_ep_compaction(self, comp_ratio):
         """Set up ep_engine side compaction ratio"""
