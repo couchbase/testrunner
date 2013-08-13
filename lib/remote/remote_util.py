@@ -1262,6 +1262,15 @@ class RemoteMachineShellConnection:
         stderro.close()
         return output, error
 
+    def execute_non_sudo_command(self, command, info=None, debug=True, use_channel=False):
+
+        info = info or getattr(self, "info", None)
+        if info is None:
+            info = self.extract_remote_info()
+            self.info = info
+
+        return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
+
     def terminate_process(self, info=None, process_name=''):
         if self.info is None:
             self.info = self.extract_remote_info()
