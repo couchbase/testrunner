@@ -43,17 +43,10 @@ class cbstatsTests(CliBaseTest):
 
 
     def verify_results(self, output, error):
-<<<<<<< HEAD
         if len(error) > 0 and '\n'.join(error).find("DeprecationWarning") == -1:
             raise Exception("Command throw out error message. Please check the output of remote_util")
         else:
             if '\n'.join(output).lower().find("not found") != -1:
-=======
-        if len(error) > 0  and error.find("DeprecationWarning") == -1:
-            raise Exception("Command throw out error message. Please check the output of remote_util")
-        else:
-            if '\n'.join(output).lower().find("error") != -1:
->>>>>>> 4b40e9a... CBQE-1507: fix cbstats key tests
                 raise Exception("Command throw out error message. Please check the output of remote_util")
             elif output.__len__() < 1:
                 raise Exception("Command does not throw out error message but the output is empty. Please check the output of remote_util")
